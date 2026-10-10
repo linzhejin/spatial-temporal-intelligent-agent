@@ -14,6 +14,7 @@ from vision.floodwater_training import (
     evaluate_visible_water_model,
     train_visible_water_model,
     validate_visible_water_manifest,
+    validate_visible_water_training_files,
     validate_visible_water_training_manifest,
 )
 
@@ -161,6 +162,67 @@ def test_campus_training_manifest_rejects_reused_flight_and_unsafe_paths():
                                         dict(manifest["samples"][1], group_id="flight-1")]}
     with pytest.raises(ValueError, match="conflicts with its flight split"):
         validate_visible_water_training_manifest(reused)
+
+
+def test_campus_training_files_preflight_dimensions_labels_and_exact_duplicate_leakage(tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    (tmp_path / "train").mkdir()
+    (tmp_path / "validation").mkdir()
+    Image.new("RGB", (32, 24), (20, 40, 60)).save(tmp_path / "train" / "image.jpg")
+    Image.new("L", (32, 24), 0).save(tmp_path / "train" / "mask.png")
+    Image.new("RGB", (32, 24), (60, 40, 20)).save(tmp_path / "validation" / "image.jpg")
+    Image.fromarray(np.full((24, 32), 255, dtype=np.uint8)).save(
+        tmp_path / "validation" / "mask.png",
+    )
+    manifest = {
+        "task": "visible_water_road_segmentation",
+        "samples": [
+            {"sample_id": "a", "split": "train", "group_id": "flight-a",
+             "image": "train/image.jpg", "mask": "train/mask.png",
+             "road_surface_polygon": [[0, 0], [1, 0], [1, 1]]},
+            {"sample_id": "b", "split": "validation", "group_id": "flight-b",
+             "image": "validation/image.jpg", "mask": "validation/mask.png",
+             "road_surface_polygon": [[0, 0], [1, 0], [1, 1]]},
+        ],
+    }
+
+    result = validate_visible_water_training_files(tmp_path, manifest)
+
+    assert result["sample_count"] == 2
+    assert len(result["content_sha256"]) == 64
+
+    Image.new("RGB", (32, 24), (20, 40, 60)).save(tmp_path / "validation" / "image.jpg")
+    with pytest.raises(ValueError, match="identical image content across train/validation splits"):
+        validate_visible_water_training_files(tmp_path, manifest)
+
+    Image.new("RGB", (32, 24), (80, 40, 20)).save(tmp_path / "train" / "image.jpg")
+    manifest["samples"][0]["road_surface_polygon"] = [[0, 0], [0.5, 0], [1, 0]]
+    with pytest.raises(ValueError, match="road polygon has zero area"):
+        validate_visible_water_training_files(tmp_path, manifest)
+
+
+def test_campus_training_files_preflight_rejects_bad_mask_and_dimension_mismatch(tmp_path):
+    import numpy as np
+    from PIL import Image
+
+    Image.new("RGB", (32, 24), (20, 40, 60)).save(tmp_path / "image.jpg")
+    Image.new("L", (31, 24), 0).save(tmp_path / "mask.png")
+    sample = {"sample_id": "a", "split": "train", "group_id": "flight-a",
+              "image": "image.jpg", "mask": "mask.png"}
+
+    with pytest.raises(ValueError, match="dimensions differ"):
+        validate_visible_water_training_files(tmp_path, {"samples": [sample]})
+
+    Image.fromarray(np.full((24, 32), 127, dtype=np.uint8)).save(tmp_path / "mask.png")
+    with pytest.raises(ValueError, match="only 0 and 255"):
+        validate_visible_water_training_files(tmp_path, {"samples": [sample]})
+
+    Image.new("L", (32, 24), 0).save(tmp_path / "mask.jpg")
+    sample["mask"] = "mask.jpg"
+    with pytest.raises(ValueError, match="mask must be a PNG"):
+        validate_visible_water_training_files(tmp_path, {"samples": [sample]})
 
 
 def test_prepare_cli_dry_run_reports_split_counts_without_writing_frames(tmp_path, capsys):

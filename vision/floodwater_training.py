@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import csv
+import hashlib
+import json
 import math
 import os
 import random
@@ -271,6 +273,94 @@ def validate_visible_water_training_manifest(manifest: object) -> dict:
         if present_groups[split] != set(normalized_groups[split]):
             raise ValueError(f"every declared {split} flight must have at least one sample")
     return {**manifest, "split_groups": normalized_groups, "samples": normalized_samples}
+
+
+def validate_visible_water_training_files(dataset_root, manifest: dict) -> dict:
+    """Preflight every train/validation image and mask before model startup."""
+    from PIL import Image
+    import numpy as np
+
+    root = Path(dataset_root).resolve(strict=True)
+    records = []
+    seen_image_content = {}
+    total_bytes = 0
+
+    def _resolve_file(relative_path: str, sample_id: str, kind: str) -> Path:
+        try:
+            resolved = (root / relative_path).resolve(strict=True)
+            resolved.relative_to(root)
+        except (OSError, ValueError) as error:
+            raise ValueError(
+                f"sample {sample_id} {kind} is missing or resolves outside the dataset",
+            ) from error
+        if not resolved.is_file():
+            raise ValueError(f"sample {sample_id} {kind} is not a file")
+        return resolved
+
+    def _sha256(path: Path) -> tuple[str, int]:
+        digest = hashlib.sha256()
+        size = 0
+        with path.open("rb") as source:
+            for block in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(block)
+                size += len(block)
+        return digest.hexdigest(), size
+
+    for sample in manifest["samples"]:
+        sample_id = sample["sample_id"]
+        image_path = _resolve_file(sample["image"], sample_id, "image")
+        mask_path = _resolve_file(sample["mask"], sample_id, "mask")
+        try:
+            with Image.open(image_path) as image:
+                image.verify()
+            with Image.open(image_path) as image:
+                image_size = image.size
+            with Image.open(mask_path) as mask_image:
+                mask_format = mask_image.format
+                mask = np.asarray(mask_image.convert("L"))
+        except (OSError, ValueError) as error:
+            raise ValueError(f"sample {sample_id} image or mask cannot be decoded") from error
+
+        if mask_format != "PNG":
+            raise ValueError(f"sample {sample_id} mask must be a PNG")
+        if mask.ndim != 2 or mask.shape[::-1] != image_size:
+            raise ValueError(f"sample {sample_id} image and mask dimensions differ")
+        if not np.isin(np.unique(mask), (0, 255)).all():
+            raise ValueError(f"sample {sample_id} mask must contain only 0 and 255")
+
+        polygon = sample.get("road_surface_polygon")
+        if polygon is not None:
+            twice_area = sum(
+                float(polygon[index][0]) * float(polygon[(index + 1) % len(polygon)][1])
+                - float(polygon[(index + 1) % len(polygon)][0]) * float(polygon[index][1])
+                for index in range(len(polygon))
+            )
+            if abs(twice_area) <= 1e-12:
+                raise ValueError(f"sample {sample_id} road polygon has zero area")
+
+        image_hash, image_bytes = _sha256(image_path)
+        mask_hash, mask_bytes = _sha256(mask_path)
+        previous = seen_image_content.get(image_hash)
+        current_group = (sample["split"], sample["group_id"])
+        if previous is not None and previous[0] != current_group[0]:
+            raise ValueError("identical image content across train/validation splits")
+        seen_image_content[image_hash] = current_group
+        total_bytes += image_bytes + mask_bytes
+        records.append({
+            "sample_id": sample_id,
+            "split": sample["split"],
+            "group_id": sample["group_id"],
+            "image_sha256": image_hash,
+            "mask_sha256": mask_hash,
+        })
+
+    canonical = json.dumps(records, ensure_ascii=False, sort_keys=True,
+                           separators=(",", ":")).encode("utf-8")
+    return {
+        "sample_count": len(records),
+        "validated_bytes": total_bytes,
+        "content_sha256": hashlib.sha256(canonical).hexdigest(),
+    }
 
 
 class VisibleWaterDataset:

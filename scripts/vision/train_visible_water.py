@@ -21,6 +21,7 @@ from vision.floodnet_training import (  # noqa: E402
 from vision.floodwater_training import (  # noqa: E402
     VisibleWaterDataset,
     train_visible_water_model,
+    validate_visible_water_training_files,
     validate_visible_water_training_manifest,
 )
 
@@ -73,6 +74,11 @@ def main(argv: list[str] | None = None) -> int:
 
     train_samples = [sample for sample in manifest["samples"] if sample["split"] == "train"]
     validation_samples = [sample for sample in manifest["samples"] if sample["split"] == "validation"]
+    try:
+        data_preflight = validate_visible_water_training_files(args.dataset_root, manifest)
+    except (OSError, ValueError) as error:
+        parser.error(str(error))
+
     import torch
     from torch.utils.data import DataLoader
 
@@ -121,6 +127,7 @@ def main(argv: list[str] | None = None) -> int:
         "dataset": manifest["dataset"],
         "dataset_license": manifest.get("license", "not_declared"),
         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "training_data_preflight": data_preflight,
         "split_unit": manifest["split_unit"],
         "dataset_task": manifest["task"],
         "split_group_counts": {
