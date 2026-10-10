@@ -1,5 +1,8 @@
 import csv
 import shutil
+import subprocess
+import sys
+from pathlib import Path
 
 import pytest
 
@@ -11,6 +14,7 @@ from vision.floodwater_training import (
     evaluate_visible_water_model,
     train_visible_water_model,
     validate_visible_water_manifest,
+    validate_visible_water_training_manifest,
 )
 
 
@@ -92,6 +96,73 @@ def test_training_manifest_rejects_test_samples_and_cross_split_group_leakage(tm
         validate_visible_water_manifest(leaked)
 
 
+def test_campus_training_manifest_uses_manual_flight_groups_and_excludes_test_frames():
+    manifest = {
+        "schema_version": 1,
+        "task": "visible_water_road_segmentation",
+        "dataset": "WHU UAV pilot",
+        "split_unit": "flight_id",
+        "mask_encoding": "binary_0_255",
+        "label_source": "manual",
+        "split_groups": {
+            "train": ["flight-1"],
+            "validation": ["flight-2"],
+            "test": ["flight-3"],
+        },
+        "samples": [
+            {"sample_id": "flight-1-frame-1", "split": "train", "group_id": "flight-1",
+             "image": "train/frame-1.jpg", "mask": "train/frame-1.png",
+             "road_surface_polygon": [[0.1, 0.2], [0.9, 0.2], [0.9, 0.8]]},
+            {"sample_id": "flight-2-frame-1", "split": "validation", "group_id": "flight-2",
+             "image": "validation/frame-1.jpg", "mask": "validation/frame-1.png",
+             "road_surface_polygon": [[0.1, 0.2], [0.9, 0.2], [0.9, 0.8]]},
+        ],
+    }
+
+    validated = validate_visible_water_training_manifest(manifest)
+
+    assert [item["split"] for item in validated["samples"]] == ["train", "validation"]
+    assert validated["split_unit"] == "flight_id"
+
+    test_leak = {**manifest, "samples": [*manifest["samples"], {
+        "sample_id": "flight-3-frame-1", "split": "test", "group_id": "flight-3",
+        "image": "test/frame-1.jpg", "mask": "test/frame-1.png",
+        "road_surface_polygon": [[0.1, 0.2], [0.9, 0.2], [0.9, 0.8]],
+    }]}
+    with pytest.raises(ValueError, match="test samples must not enter model training"):
+        validate_visible_water_training_manifest(test_leak)
+
+
+def test_campus_training_manifest_rejects_reused_flight_and_unsafe_paths():
+    manifest = {
+        "schema_version": 1,
+        "task": "visible_water_road_segmentation",
+        "dataset": "WHU UAV pilot",
+        "split_unit": "flight_id",
+        "mask_encoding": "binary_0_255",
+        "label_source": "manual",
+        "split_groups": {
+            "train": ["flight-1"], "validation": ["flight-2"], "test": ["flight-3"],
+        },
+        "samples": [
+            {"sample_id": "a", "split": "train", "group_id": "flight-1",
+             "image": "../outside.jpg", "mask": "train/a.png",
+             "road_surface_polygon": [[0, 0], [1, 0], [1, 1]]},
+            {"sample_id": "b", "split": "validation", "group_id": "flight-2",
+             "image": "validation/b.jpg", "mask": "validation/b.png",
+             "road_surface_polygon": [[0, 0], [1, 0], [1, 1]]},
+        ],
+    }
+
+    with pytest.raises(ValueError, match="image must stay inside the dataset"):
+        validate_visible_water_training_manifest(manifest)
+
+    reused = {**manifest, "samples": [dict(manifest["samples"][0], image="train/a.jpg"),
+                                        dict(manifest["samples"][1], group_id="flight-1")]}
+    with pytest.raises(ValueError, match="conflicts with its flight split"):
+        validate_visible_water_training_manifest(reused)
+
+
 def test_prepare_cli_dry_run_reports_split_counts_without_writing_frames(tmp_path, capsys):
     chunks, samples = _tiny_metadata(tmp_path)
     corpus = tmp_path / "corpus"
@@ -114,6 +185,17 @@ def test_visible_water_training_cli_help_is_available():
         train_main(["--help"])
 
     assert exit_info.value.code == 0
+
+
+def test_visible_water_training_cli_help_does_not_load_torch_runtime():
+    script = Path("scripts/vision/train_visible_water.py").resolve()
+
+    completed = subprocess.run(
+        [sys.executable, str(script), "--help"], capture_output=True, check=False,
+    )
+
+    assert completed.returncode == 0, completed.stderr.decode("utf-8", "replace")
+    assert b"--dataset-root" in completed.stdout
 
 
 def test_visible_water_dataset_maps_255_to_foreground_class(tmp_path):
@@ -139,6 +221,29 @@ def test_visible_water_dataset_maps_255_to_foreground_class(tmp_path):
     assert labels.dtype == torch.long
     assert set(torch.unique(labels).tolist()) == {0, 1}
     assert labels[0].tolist() == [0] * 16 + [1] * 16
+
+
+def test_visible_water_dataset_limits_campus_training_labels_to_road_roi(tmp_path):
+    import numpy as np
+    import torch
+    from PIL import Image
+
+    Image.new("RGB", (32, 32), (20, 40, 60)).save(tmp_path / "frame.jpg")
+    Image.fromarray(np.full((32, 32), 255, dtype=np.uint8)).save(tmp_path / "mask.png")
+    dataset = VisibleWaterDataset(
+        tmp_path,
+        [{"image": "frame.jpg", "mask": "mask.png", "split": "train",
+          "group_id": "flight-a",
+          "road_surface_polygon": [[0, 0], [0.5, 0], [0.5, 1], [0, 1]]}],
+        tile_size=32,
+        augment=False,
+        random_crop=False,
+    )
+
+    _, labels = dataset[0]
+
+    assert torch.all(labels[:, :8] == 1)
+    assert torch.all(labels[:, 24:] == 0)
 
 
 def test_binary_water_evaluator_reports_foreground_iou():

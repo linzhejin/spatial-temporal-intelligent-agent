@@ -1,4 +1,4 @@
-"""Train a research-only binary visible-water model from Floodwater frames."""
+"""Train a research-only binary visible-water model from video or flight splits."""
 from __future__ import annotations
 
 import argparse
@@ -21,7 +21,7 @@ from vision.floodnet_training import (  # noqa: E402
 from vision.floodwater_training import (  # noqa: E402
     VisibleWaterDataset,
     train_visible_water_model,
-    validate_visible_water_manifest,
+    validate_visible_water_training_manifest,
 )
 
 
@@ -34,12 +34,9 @@ def _sha256(path: Path) -> str:
 
 
 def main(argv: list[str] | None = None) -> int:
-    import torch
-    from torch.utils.data import DataLoader
-
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--dataset-root", type=Path, required=True,
-                        help="Floodwater v1.0.0 root containing derived/frames and source masks")
+                        help="dataset root containing the relative image/mask paths in the manifest")
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--output-dir", type=Path, required=True,
                         help="research artifact directory outside the application repository")
@@ -68,12 +65,17 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("dataset root and manifest must exist")
     try:
         manifest_bytes = args.manifest.read_bytes()
-        manifest = validate_visible_water_manifest(json.loads(manifest_bytes.decode("utf-8-sig")))
+        manifest = validate_visible_water_training_manifest(
+            json.loads(manifest_bytes.decode("utf-8-sig")),
+        )
     except (OSError, UnicodeError, json.JSONDecodeError, ValueError) as error:
         parser.error(str(error))
 
     train_samples = [sample for sample in manifest["samples"] if sample["split"] == "train"]
     validation_samples = [sample for sample in manifest["samples"] if sample["split"] == "validation"]
+    import torch
+    from torch.utils.data import DataLoader
+
     torch.set_num_threads(args.threads)
     torch.set_num_interop_threads(1)
     set_training_seed(args.seed)
@@ -117,15 +119,21 @@ def main(argv: list[str] | None = None) -> int:
     report = {
         "task": "binary_visible_water_segmentation",
         "dataset": manifest["dataset"],
-        "dataset_license": manifest["license"],
+        "dataset_license": manifest.get("license", "not_declared"),
         "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
         "split_unit": manifest["split_unit"],
-        "split_source_video_counts": {
+        "dataset_task": manifest["task"],
+        "split_group_counts": {
             split: len(manifest["split_groups"][split])
             for split in ("train", "validation", "test")
         },
+        "label_source": manifest.get(
+            "label_source",
+            "sam2_assisted_pseudo_labels" if manifest["task"] == "visible_water_segmentation"
+            else "not_declared",
+        ),
         "sample_counts": {"train": len(train_data), "validation": len(validation_data),
-                           "pseudo_test_used": 0, "manual_test_used": 0},
+                           "held_out_test_used": 0},
         "class_order": ["background_or_non_water", "visible_water"],
         "training_config": {
             "seed": args.seed,
@@ -140,7 +148,7 @@ def main(argv: list[str] | None = None) -> int:
             "water_crop_probability": 0.6,
             "num_workers": 0,
             "pin_memory": device.type == "cuda",
-            "validation_crop": "fixed center crop from every validation image",
+            "validation_crop": "fixed center tile; centered on road ROI when provided",
         },
         "training": training,
         "onnx_export": export,
@@ -148,11 +156,10 @@ def main(argv: list[str] | None = None) -> int:
         "onnx_sha256": _sha256(onnx_path),
         "elapsed_seconds": round(time.monotonic() - started, 2),
         "artifacts_status": "local research only; not enabled or deployed",
-        "limitations": manifest["limitations"] + [
-            "Training labels are SAM2-assisted pseudo-labels.",
-            "The manual evaluation set is not used for checkpoint selection or threshold fitting.",
-            "Validation uses a deterministic center crop and is only a model-selection signal.",
-            "The dataset license and derived-weight deployment rights require review before distribution.",
+        "limitations": list(manifest.get("limitations", [])) + [
+            "The declared test split is not used for training, checkpoint selection, or threshold fitting.",
+            "Validation uses one deterministic center tile per sample and is only a model-selection signal.",
+            "Dataset permissions and derived-weight deployment rights must be checked before distribution.",
             "A strong public-set result still requires campus UAV evaluation for shallow road water.",
         ],
     }

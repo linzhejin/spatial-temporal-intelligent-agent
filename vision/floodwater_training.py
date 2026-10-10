@@ -192,6 +192,87 @@ def validate_visible_water_manifest(manifest: object) -> dict:
     return {**manifest, "split_groups": normalized_groups, "samples": normalized_samples}
 
 
+def validate_visible_water_training_manifest(manifest: object) -> dict:
+    """Validate public-video or flight-disjoint binary-water training data.
+
+    The test split is declared for provenance and leakage checks but test frames
+    are forbidden in this training manifest. Campus samples must be manually
+    labeled, road-scoped binary masks from a separate flight-level split.
+    """
+    if isinstance(manifest, dict) and manifest.get("task") == "visible_water_segmentation":
+        return validate_visible_water_manifest(manifest)
+    if (not isinstance(manifest, dict) or manifest.get("schema_version") != 1
+            or manifest.get("task") != "visible_water_road_segmentation"
+            or manifest.get("split_unit") != "flight_id"):
+        raise ValueError(
+            "campus water training manifest must use schema v1 and flight_id splits",
+        )
+    if not str(manifest.get("dataset") or "").strip():
+        raise ValueError("campus water dataset name is required")
+    if manifest.get("mask_encoding") != "binary_0_255":
+        raise ValueError("campus training masks must use binary_0_255 encoding")
+    if manifest.get("label_source") != "manual":
+        raise ValueError("campus visible-water training requires manually labeled masks")
+
+    groups = manifest.get("split_groups")
+    if not isinstance(groups, dict):
+        raise ValueError("campus water split_groups are required")
+    normalized_groups = {}
+    for split in ("train", "validation", "test"):
+        values = groups.get(split)
+        if not isinstance(values, list) or not values:
+            raise ValueError(f"split_groups.{split} must contain at least one flight")
+        normalized = [str(value).strip() for value in values]
+        if any(not value for value in normalized) or len(normalized) != len(set(normalized)):
+            raise ValueError(f"split_groups.{split} contains an empty or duplicate flight")
+        normalized_groups[split] = normalized
+    all_groups = [group for values in normalized_groups.values() for group in values]
+    if len(all_groups) != len(set(all_groups)):
+        raise ValueError("flight appears in multiple splits")
+
+    samples = manifest.get("samples")
+    if not isinstance(samples, list) or not samples:
+        raise ValueError("campus water training samples must not be empty")
+    sample_ids, image_paths, mask_paths = set(), set(), set()
+    present_groups = {"train": set(), "validation": set()}
+    normalized_samples = []
+    for index, sample in enumerate(samples):
+        if not isinstance(sample, dict):
+            raise ValueError(f"sample {index} must be an object")
+        sample_id = str(sample.get("sample_id") or "").strip()
+        split = str(sample.get("split") or "").strip()
+        group_id = str(sample.get("group_id") or "").strip()
+        if split == "test":
+            raise ValueError("test samples must not enter model training")
+        if split not in ("train", "validation") or not sample_id or not group_id:
+            raise ValueError(f"sample {index} requires a sample ID, split, and flight group")
+        if group_id not in normalized_groups[split]:
+            raise ValueError(f"sample {sample_id} conflicts with its flight split")
+        image = _metadata_path(sample.get("image"), f"sample {sample_id} image")
+        mask = _metadata_path(sample.get("mask"), f"sample {sample_id} mask")
+        polygon = sample.get("road_surface_polygon")
+        if not isinstance(polygon, list) or len(polygon) < 3:
+            raise ValueError(f"sample {sample_id} requires a road_surface_polygon")
+        for point in polygon:
+            if (not isinstance(point, (list, tuple)) or len(point) != 2
+                    or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                           or not math.isfinite(float(value)) or not 0 <= value <= 1
+                           for value in point)):
+                raise ValueError(f"sample {sample_id} has an invalid normalized road polygon")
+        if sample_id in sample_ids or image in image_paths or mask in mask_paths:
+            raise ValueError("campus training manifest contains duplicate sample or file paths")
+        sample_ids.add(sample_id)
+        image_paths.add(image)
+        mask_paths.add(mask)
+        present_groups[split].add(group_id)
+        normalized_samples.append({**sample, "sample_id": sample_id, "split": split,
+                                   "group_id": group_id, "image": image, "mask": mask})
+    for split in ("train", "validation"):
+        if present_groups[split] != set(normalized_groups[split]):
+            raise ValueError(f"every declared {split} flight must have at least one sample")
+    return {**manifest, "split_groups": normalized_groups, "samples": normalized_samples}
+
+
 class VisibleWaterDataset:
     """Read RGB frames and 0/255 masks, returning 0=background and 1=water tiles."""
 
@@ -268,12 +349,30 @@ class VisibleWaterDataset:
         if not np.isin(values, (0, 255)).all():
             raise ValueError(f"visible-water mask must contain only 0 and 255: {sample['mask']}")
         image = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        road_roi = None
+        polygon = sample.get("road_surface_polygon")
+        if polygon is not None:
+            height, width = mask.shape
+            points = np.asarray([
+                [round(float(point[0]) * (width - 1)),
+                 round(float(point[1]) * (height - 1))]
+                for point in polygon
+            ], dtype=np.int32)
+            road_roi = np.zeros((height, width), dtype=np.uint8)
+            cv2.fillPoly(road_roi, [points], 1)
+            if not road_roi.any():
+                raise ValueError(f"road_surface_polygon is empty for sample {sample['sample_id']}")
+            mask = np.where(road_roi != 0, mask, 0).astype(np.uint8, copy=False)
         tile = self.tile_size
         height, width = mask.shape
         if height < tile or width < tile:
             pad_height, pad_width = max(0, tile - height), max(0, tile - width)
             image = np.pad(image, ((0, pad_height), (0, pad_width), (0, 0)), mode="reflect")
             mask = np.pad(mask, ((0, pad_height), (0, pad_width)), mode="constant", constant_values=0)
+            if road_roi is not None:
+                road_roi = np.pad(
+                    road_roi, ((0, pad_height), (0, pad_width)), mode="constant", constant_values=0,
+                )
             height, width = mask.shape
         if self.random_crop:
             positive = np.argwhere(mask == 255)
@@ -281,12 +380,24 @@ class VisibleWaterDataset:
                 center_y, center_x = positive[random.randrange(len(positive))]
                 x = min(max(0, int(center_x) - tile // 2), width - tile)
                 y = min(max(0, int(center_y) - tile // 2), height - tile)
+            elif road_roi is not None:
+                road_pixels = np.argwhere(road_roi != 0)
+                center_y, center_x = road_pixels[random.randrange(len(road_pixels))]
+                x = min(max(0, int(center_x) - tile // 2), width - tile)
+                y = min(max(0, int(center_y) - tile // 2), height - tile)
             else:
                 x = random.randint(0, width - tile)
                 y = random.randint(0, height - tile)
         else:
-            x = max(0, (width - tile) // 2)
-            y = max(0, (height - tile) // 2)
+            if road_roi is not None:
+                road_y, road_x = np.where(road_roi != 0)
+                center_x = int((road_x.min() + road_x.max()) / 2)
+                center_y = int((road_y.min() + road_y.max()) / 2)
+                x = min(max(0, center_x - tile // 2), width - tile)
+                y = min(max(0, center_y - tile // 2), height - tile)
+            else:
+                x = max(0, (width - tile) // 2)
+                y = max(0, (height - tile) // 2)
         image = image[y:y + tile, x:x + tile]
         mask = mask[y:y + tile, x:x + tile]
         if self.augment and random.random() < 0.5:
