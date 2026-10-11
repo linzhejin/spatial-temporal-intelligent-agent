@@ -28,6 +28,7 @@ from vision.visible_water_evaluation import (  # noqa: E402
     binary_segmentation_counts,
     bootstrap_iou_interval,
     discover_manual_pairs,
+    manual_evaluation_limitations,
     metrics_from_counts,
     validate_binary_water_mask,
     visible_water_prediction_mask,
@@ -139,12 +140,7 @@ def evaluate(model_path: Path, dataset_root: Path, *, threads: int = 2,
         ),
         "bootstrap": {"unit": "image_id", "seed": bootstrap_seed, "replicates": replicates},
         "elapsed_seconds": round(time.monotonic() - started, 2),
-        "limitations": [
-            "The archive does not establish that manual images are source-video-disjoint from model training data.",
-            "This FloodNet checkpoint predicts post-disaster scene classes and was not trained for binary all-water labels.",
-            "This evaluates whole-image visible water, not road-only flooding or shallow campus water.",
-            "This benchmark does not authorize production deployment of the model or dataset-derived weights.",
-        ],
+        "limitations": manual_evaluation_limitations(class_count=class_count),
         "per_image": [
             {"sample_id": pair["sample_id"], **row, "iou": metrics_from_counts(row)["iou"]}
             for pair, row in zip(pairs, image_counts)

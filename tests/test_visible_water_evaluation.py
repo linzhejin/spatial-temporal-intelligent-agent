@@ -2,6 +2,7 @@ import numpy as np
 import pytest
 from PIL import Image
 from pathlib import Path
+import vision.visible_water_evaluation as water_evaluation
 
 from vision.visible_water_evaluation import (
     binary_segmentation_counts,
@@ -77,3 +78,23 @@ def test_prediction_mask_uses_explicit_water_classes_for_each_model_contract():
     assert visible_water_prediction_mask(labels, class_count=10).tolist() == [[False, False, False, True, True, False]]
     with pytest.raises(ValueError, match="class_count must be 2 or 10"):
         visible_water_prediction_mask(labels, class_count=5)
+
+
+def test_manual_eval_report_describes_binary_visible_water_model_correctly():
+    report_limitations = getattr(water_evaluation, "manual_evaluation_limitations", None)
+    assert callable(report_limitations)
+    limitations = report_limitations(class_count=2)
+
+    assert any("two-class visible-water model" in item for item in limitations)
+    assert not any("FloodNet checkpoint" in item for item in limitations)
+
+
+def test_manual_eval_report_keeps_floodnet_semantic_warning_for_ten_class_model():
+    report_limitations = getattr(water_evaluation, "manual_evaluation_limitations", None)
+    assert callable(report_limitations)
+    limitations = report_limitations(class_count=10)
+
+    assert any("FloodNet" in item and "ten-class" in item for item in limitations)
+
+    with pytest.raises(ValueError, match="class_count must be 2 or 10"):
+        report_limitations(class_count=5)

@@ -16,6 +16,28 @@ def visible_water_prediction_mask(class_labels, *, class_count: int):
     raise ValueError("class_count must be 2 or 10")
 
 
+def manual_evaluation_limitations(*, class_count: int) -> list[str]:
+    """Describe what a global visible-water score does and does not validate."""
+    if class_count == 2:
+        model_note = (
+            "The two-class visible-water model predicts generic visible water; it does not "
+            "classify road flooding, water depth, or road access safety."
+        )
+    elif class_count == 10:
+        model_note = (
+            "The ten-class FloodNet checkpoint predicts post-disaster scene classes; its "
+            "flooded-road and water labels are not a binary road-flooding decision."
+        )
+    else:
+        raise ValueError("class_count must be 2 or 10")
+    return [
+        "The archive does not establish that manual images are source-video-disjoint from model training data.",
+        model_note,
+        "This evaluates whole-image visible water, not road-only flooding or shallow campus water.",
+        "This benchmark does not authorize production deployment of the model or dataset-derived weights.",
+    ]
+
+
 def discover_manual_pairs(dataset_root, *, expected_count: int | None = None) -> list[dict]:
     """Match manually annotated images and masks by sample ID."""
     root = Path(dataset_root).resolve()
