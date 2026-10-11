@@ -1,9 +1,11 @@
 """CPU-only aerial image/video inference and bounded, review-only analysis."""
 from __future__ import annotations
 
-import os
+import hashlib
+import json
 import logging
 import math
+import os
 import time
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,61 @@ VISDRONE_CLASSES = (
 )
 logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
+# Bump this when detector/tracker/segment aggregation semantics change.
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 1
+
+
+def _checkpoint_model_identity(model) -> dict | None:
+    if model is None:
+        return None
+    identity = {
+        name: getattr(model, name, None)
+        for name in (
+            "model_id", "model_version", "confidence_threshold",
+            "tracking_low_confidence_threshold", "threshold", "min_area_ratio",
+            "flood_probability_threshold", "class_count",
+        )
+    }
+    model_path = getattr(model, "model_path", None)
+    if model_path:
+        identity["model_path"] = str(model_path)
+        try:
+            stat = Path(model_path).stat()
+        except (OSError, TypeError, ValueError):
+            pass
+        else:
+            identity["model_file"] = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
+    return identity
+
+
+def _video_checkpoint_fingerprint(*, path: Path, width: int, height: int,
+                                  fps: float, total_frames: int | None,
+                                  target_fps: float, stride: int, segment_limit: int,
+                                  dense_trigger_threshold: float, dense_window_seconds: float,
+                                  camera_stabilized: bool, regions: list[dict] | None,
+                                  anchor_gcj: dict | None, detector, accident_model,
+                                  flood_segmenter) -> str:
+    source_stat = path.stat()
+    contract = {
+        "analysis_revision": VIDEO_CHECKPOINT_ANALYSIS_REVISION,
+        "source": {"size": source_stat.st_size, "mtime_ns": source_stat.st_mtime_ns},
+        "video": {"width": width, "height": height, "fps": round(fps, 6),
+                  "total_frames": total_frames},
+        "sampling": {"target_fps": target_fps, "stride": stride,
+                     "segment_limit": segment_limit},
+        "accident_dense_sampling": {"trigger_threshold": dense_trigger_threshold,
+                                    "window_seconds": dense_window_seconds},
+        "camera_stabilized": bool(camera_stabilized),
+        "regions": regions or [],
+        "anchor_gcj": anchor_gcj,
+        "models": {
+            "detector": _checkpoint_model_identity(detector),
+            "accident": _checkpoint_model_identity(accident_model),
+            "flood": _checkpoint_model_identity(flood_segmenter),
+        },
+    }
+    encoded = json.dumps(contract, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 class VisionConfigurationError(RuntimeError):
@@ -539,7 +596,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
     frames: list[list[dict]] = []
     transforms: list[list[list[float]] | None] = [None]
     frame_indices: list[int] = []
-    completed_segments = list((resume_state or {}).get("segments", []))
+    completed_segments = []
     width = height = 0
     sample_interval = 1.0
     duration_seconds = None
@@ -614,9 +671,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             ))
             if not math.isfinite(dense_window_seconds) or dense_window_seconds < 0:
                 dense_window_seconds = 2.0
-            accident_dense_until_frame = int(
-                (resume_state or {}).get("accident_dense_until_frame", -1)
-            )
+            accident_dense_until_frame = -1
             try:
                 progress_interval_seconds = float(getattr(
                     config, "VISION_PROGRESS_UPDATE_SECONDS", 2.0,
@@ -627,7 +682,54 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 progress_interval_seconds = 2.0
             last_live_progress_at = started
             segment_limit = max(5, int(getattr(config, "VISION_SEGMENT_FRAMES", config.VISION_MAX_VIDEO_FRAMES)))
-            frame_index = int((resume_state or {}).get("next_frame_index", 0))
+            checkpoint_fingerprint = _video_checkpoint_fingerprint(
+                path=path, width=width, height=height, fps=fps, total_frames=total_frames,
+                target_fps=target_fps, stride=stride, segment_limit=segment_limit,
+                dense_trigger_threshold=dense_trigger_threshold,
+                dense_window_seconds=dense_window_seconds,
+                camera_stabilized=camera_stabilized, regions=regions,
+                anchor_gcj=anchor_gcj, detector=detector,
+                accident_model=accident_model, flood_segmenter=flood_segmenter,
+            )
+
+            def report_checkpoint_reset():
+                if progress_callback:
+                    progress_callback({
+                        "progress": {
+                            "phase": "analyzing", "percent": 0,
+                            "frames_analyzed": 0, "total_frames": total_frames,
+                            "total_sampled_frames": total_sampled_frames,
+                            "analyzed_through_seconds": 0.0,
+                            "duration_seconds": round(duration_seconds, 3) if duration_seconds else None,
+                        },
+                        "checkpoint": {
+                            "next_frame_index": 0, "segments": [],
+                            "accident_dense_until_frame": -1,
+                            "analysis_fingerprint": checkpoint_fingerprint,
+                        },
+                    })
+
+            saved_checkpoint = resume_state or {}
+            checkpoint_has_work = bool(
+                saved_checkpoint.get("next_frame_index")
+                or saved_checkpoint.get("segments")
+            )
+            checkpoint_matches = (
+                saved_checkpoint.get("analysis_fingerprint") == checkpoint_fingerprint
+            )
+            if checkpoint_has_work and not checkpoint_matches:
+                # Never combine completed segments produced under different
+                # weights, thresholds, ROIs, or sampling rules.
+                report_checkpoint_reset()
+            else:
+                completed_segments = list(saved_checkpoint.get("segments", []))
+                accident_dense_until_frame = int(
+                    saved_checkpoint.get("accident_dense_until_frame", -1)
+                )
+            frame_index = (
+                int(saved_checkpoint.get("next_frame_index", 0))
+                if checkpoint_matches else 0
+            )
             if frame_index:
                 seeked = (
                     hasattr(capture, "set")
@@ -649,15 +751,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     frame_index = 0
                     accident_dense_until_frame = -1
                     completed_segments = []
-                    if progress_callback:
-                        progress_callback({
-                            "progress": {"phase": "analyzing", "percent": 0,
-                                         "frames_analyzed": 0, "total_frames": total_frames,
-                                         "total_sampled_frames": total_sampled_frames,
-                                         "analyzed_through_seconds": 0.0,
-                                         "duration_seconds": round(duration_seconds, 3) if duration_seconds else None},
-                            "checkpoint": {"next_frame_index": 0, "segments": []},
-                        })
+                    report_checkpoint_reset()
             previous_gray = None
             previous_scale = 1.0
 
@@ -697,6 +791,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     "next_frame_index": next_frame_index,
                     "segments": completed_segments,
                     "accident_dense_until_frame": accident_dense_until_frame,
+                    "analysis_fingerprint": checkpoint_fingerprint,
                 }
                 if progress_callback:
                     progress_callback({
@@ -745,6 +840,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             "next_frame_index": next_frame_index,
                             "segments": completed_segments,
                             "accident_dense_until_frame": accident_dense_until_frame,
+                            "analysis_fingerprint": checkpoint_fingerprint,
                         },
                     })
 

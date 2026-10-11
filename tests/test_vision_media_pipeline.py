@@ -612,21 +612,64 @@ def test_interrupted_video_resumes_after_last_completed_segment(tmp_path, monkey
     assert calls_before_resume == 450
 
 
+def test_video_checkpoint_is_discarded_when_detector_revision_changes(tmp_path, monkeypatch):
+    import config
+
+    source = tmp_path / "campus.mp4"
+    source.write_bytes(b"fake-video")
+    FakeCV2._total_frames = 1000
+    monkeypatch.setitem(sys.modules, "cv2", FakeCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 50)
+    checkpoint = {}
+
+    class StopAfterFirstSegment(RuntimeError):
+        pass
+
+    def interrupt(payload):
+        checkpoint.update(payload["checkpoint"])
+        raise StopAfterFirstSegment
+
+    with pytest.raises(StopAfterFirstSegment):
+        analyze_media(
+            source, "video", None, camera_stabilized=True,
+            detector=FakeDetector(), progress_callback=interrupt,
+        )
+
+    detector = FakeDetector()
+    detector.model_version = "fixture-v2"
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True,
+        detector=detector, resume_state=checkpoint,
+    )
+
+    assert detector.calls == 500
+    assert result["video_coverage"]["sampled_frames"] == 500
+
+
 def test_resume_restarts_from_zero_and_replaces_checkpoint_when_decoder_cannot_seek(tmp_path, monkeypatch):
     import config
 
     source = tmp_path / "no-seek.mp4"
     source.write_bytes(b"fake-video")
     FakeCV2._total_frames = 100
-    monkeypatch.setattr(FakeCV2, "_seek_supported", False)
+    monkeypatch.setattr(FakeCV2, "_seek_supported", True)
     monkeypatch.setitem(sys.modules, "cv2", FakeCV2)
     monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
     monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 20)
-    checkpoint = {
-        "next_frame_index": 50,
-        "segments": [{"start_seconds": 0.0, "end_seconds": 4.8,
-                      "metrics": {"frames_analyzed": 25}, "candidates": []}],
-    }
+    checkpoint = {}
+
+    def stop_after_first_segment(payload):
+        checkpoint.update(payload["checkpoint"])
+        raise RuntimeError("pause after segment")
+
+    with pytest.raises(RuntimeError, match="pause after segment"):
+        analyze_media(
+            source, "video", None, camera_stabilized=True, detector=FakeDetector(),
+            resume_state=None, progress_callback=stop_after_first_segment,
+        )
+
+    monkeypatch.setattr(FakeCV2, "_seek_supported", False)
     progress = []
     detector = FakeDetector()
 
@@ -638,7 +681,9 @@ def test_resume_restarts_from_zero_and_replaces_checkpoint_when_decoder_cannot_s
     assert result["video_coverage"]["sampled_frames"] == 50
     assert result["video_coverage"]["segment_count"] == 3
     assert detector.calls == 50
-    assert progress[0]["checkpoint"] == {"next_frame_index": 0, "segments": []}
+    assert progress[0]["checkpoint"]["next_frame_index"] == 0
+    assert progress[0]["checkpoint"]["segments"] == []
+    assert progress[0]["checkpoint"]["analysis_fingerprint"]
 
 
 def test_video_with_missing_declared_tail_frames_is_not_reported_as_complete(tmp_path, monkeypatch):
