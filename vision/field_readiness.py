@@ -9,7 +9,7 @@ from pathlib import Path
 from vision.campus_detection_evaluation import validate_campus_detection_manifest
 from vision.campus_water_data import build_campus_flight_plan
 from vision.event_evaluation import validate_event_manifest
-from vision.specialized_evaluation import validate_split_manifest
+from vision.specialized_evaluation import summarize_binary_counts, validate_split_manifest
 
 
 def _sha256(path: Path) -> str:
@@ -64,6 +64,20 @@ def _metric(row: object, field: str):
             or not math.isfinite(float(value)) or not 0 <= value <= 1):
         return None
     return float(value)
+
+
+def _valid_cluster_interval(value: object, *, expected_group_count: int) -> bool:
+    if not isinstance(value, dict):
+        return False
+    lower = _metric(value, "lower_95")
+    upper = _metric(value, "upper_95")
+    repetitions = value.get("bootstrap_repetitions")
+    group_count = value.get("resampling_group_count")
+    return bool(
+        lower is not None and upper is not None and lower <= upper
+        and type(group_count) is int and group_count == expected_group_count
+        and type(repetitions) is int and repetitions >= 100
+    )
 
 
 def _report_check(
@@ -301,12 +315,26 @@ def audit_campus_field_readiness(
         event_issues.extend(event_report_check["issues"])
         event_status = "invalid"
     event_test_groups = event_validated["split_groups"]["test"] if event_validated else []
+    event_kind_test_groups = {kind: set() for kind in event_kinds}
+    event_kind_positive_groups = {kind: set() for kind in event_kinds}
+    if event_validated:
+        for sample in event_validated["samples"]:
+            group_id = sample["group_id"]
+            for kind in sample["event_kinds"]:
+                event_kind_test_groups[kind].add(group_id)
+            for event in sample["events"]:
+                event_kind_positive_groups[event["kind"]].add(group_id)
+
     event_counts = None
     event_targets = None
+    event_intervals_ready = False
+    event_sample_details_ready = False
     if event_report_value:
         metrics = event_report_value.get("event_metrics")
         by_kind = metrics.get("by_kind") if isinstance(metrics, dict) else None
         if isinstance(by_kind, dict):
+            if set(by_kind) != set(event_kinds):
+                event_issues.append("event report event-kind metrics do not match manifest")
             event_counts = {
                 kind: {
                     "tp": _count(row.get("counts"), "tp"),
@@ -318,6 +346,165 @@ def audit_campus_field_readiness(
             for kind, counts in event_counts.items():
                 if any(value is None for value in counts.values()):
                     event_issues.append(f"report has invalid {kind} event counts")
+
+            event_metrics = metrics if isinstance(metrics, dict) else {}
+            expected_samples = {sample["sample_id"]: sample for sample in event_validated["samples"]} \
+                if event_validated else {}
+            sample_details = event_metrics.get("samples")
+            if (not isinstance(sample_details, dict)
+                    or set(sample_details) != set(expected_samples)):
+                event_issues.append("event report missing per-sample miss details")
+            else:
+                event_sample_details_ready = True
+                sample_kind_totals = {
+                    kind: {"tp": 0, "fp": 0, "fn": 0} for kind in event_kinds
+                }
+                for sample_id, sample in expected_samples.items():
+                    detail = sample_details.get(sample_id)
+                    counts = detail.get("counts") if isinstance(detail, dict) else None
+                    counts_by_kind = detail.get("counts_by_kind") if isinstance(detail, dict) else None
+                    matched = detail.get("matches") if isinstance(detail, dict) else None
+                    missed = detail.get("unmatched_event_ids") if isinstance(detail, dict) else None
+                    extra = detail.get("unmatched_candidate_ids") if isinstance(detail, dict) else None
+                    actual_by_id = {event["event_id"]: event["kind"] for event in sample["events"]}
+                    actual_ids = set(actual_by_id)
+                    tp, fp, fn = (_count(counts, key) for key in ("tp", "fp", "fn"))
+                    matched_event_ids = [item.get("event_id") for item in matched
+                                         if isinstance(item, dict)] if isinstance(matched, list) else []
+                    matched_candidate_ids = [item.get("candidate_id") for item in matched
+                                             if isinstance(item, dict)] if isinstance(matched, list) else []
+                    if (not isinstance(detail, dict)
+                            or detail.get("group_id") != sample["group_id"]
+                            or not isinstance(matched, list)
+                            or not isinstance(missed, list)
+                            or not isinstance(extra, list)
+                            or any(not isinstance(item, str) or not item for item in missed + extra)
+                            or any(not isinstance(item, dict)
+                                   or not isinstance(item.get("event_id"), str)
+                                   or not item.get("event_id")
+                                   or not isinstance(item.get("candidate_id"), str)
+                                   or not item.get("candidate_id")
+                                   or item.get("kind") not in sample["event_kinds"]
+                                   or actual_by_id.get(item.get("event_id")) != item.get("kind")
+                                   for item in matched)
+                            or len(set(matched_event_ids)) != len(matched_event_ids)
+                            or len(set(matched_candidate_ids)) != len(matched_candidate_ids)
+                            or len(set(extra)) != len(extra)
+                            or set(matched_event_ids) & set(missed)
+                            or set(matched_event_ids) | set(missed) != actual_ids
+                            or not set(missed).issubset(actual_ids)
+                            or len(set(missed)) != len(missed)
+                            or set(matched_candidate_ids) & set(extra)
+                            or tp != len(matched) or fp != len(extra) or fn != len(missed)
+                            or tp + fn != len(actual_ids)
+                            or detail.get("ground_truth_event_count") != len(actual_ids)
+                            or detail.get("candidate_count") != tp + fp):
+                        event_sample_details_ready = False
+                        event_issues.append(f"event report has invalid per-sample miss details: {sample_id}")
+                        continue
+
+                    expected_kinds = set(sample["event_kinds"])
+                    if not isinstance(counts_by_kind, dict) or set(counts_by_kind) != expected_kinds:
+                        event_sample_details_ready = False
+                        event_issues.append(f"event report has invalid per-sample kind counts: {sample_id}")
+                        continue
+                    matched_by_kind = {kind: 0 for kind in expected_kinds}
+                    missed_by_kind = {kind: 0 for kind in expected_kinds}
+                    for item in matched:
+                        matched_by_kind[item["kind"]] += 1
+                    for event_id in missed:
+                        missed_by_kind[actual_by_id[event_id]] += 1
+                    parsed_kind_counts = {}
+                    for kind in expected_kinds:
+                        kind_counts = {
+                            key: _count(counts_by_kind.get(kind), key)
+                            for key in ("tp", "fp", "fn")
+                        }
+                        if (any(value is None for value in kind_counts.values())
+                                or kind_counts["tp"] != matched_by_kind[kind]
+                                or kind_counts["fn"] != missed_by_kind[kind]):
+                            event_sample_details_ready = False
+                            event_issues.append(
+                                f"event report has inconsistent per-sample kind counts: {sample_id}.{kind}"
+                            )
+                            break
+                        parsed_kind_counts[kind] = kind_counts
+                    if not event_sample_details_ready:
+                        continue
+                    if any(sum(row[key] for row in parsed_kind_counts.values()) != value
+                           for key, value in (("tp", tp), ("fp", fp), ("fn", fn))):
+                        event_sample_details_ready = False
+                        event_issues.append(
+                            f"event report kind counts do not sum to per-sample counts: {sample_id}"
+                        )
+                        continue
+                    for kind, kind_counts in parsed_kind_counts.items():
+                        for key, value in kind_counts.items():
+                            sample_kind_totals[kind][key] += value
+
+                if event_sample_details_ready:
+                    for kind in event_kinds:
+                        if sample_kind_totals.get(kind) != (event_counts or {}).get(kind):
+                            event_sample_details_ready = False
+                            event_issues.append(
+                                f"event report aggregate counts do not match per-sample details: {kind}"
+                            )
+
+            interval_checks = {}
+            for kind in event_kinds:
+                row = by_kind.get(kind)
+                expected_groups = len(event_kind_test_groups.get(kind, set()))
+                if not isinstance(row, dict):
+                    interval_checks[kind] = False
+                    continue
+                reported_group_count = row.get("flight_group_count")
+                if reported_group_count != expected_groups:
+                    event_issues.append(f"event report flight_group_count mismatch: {kind}")
+                ci_by_metric = row.get("flight_cluster_bootstrap_95_ci")
+                intervals_valid = isinstance(ci_by_metric, dict)
+                if not intervals_valid:
+                    event_issues.append(f"event report missing confidence interval: {kind}")
+                else:
+                    for metric_name in ("precision", "recall", "f1"):
+                        if metric_name not in ci_by_metric:
+                            intervals_valid = False
+                            event_issues.append(
+                                f"event report missing confidence interval: {kind}.{metric_name}"
+                            )
+                            continue
+                        interval = ci_by_metric[metric_name]
+                        if expected_groups < 2:
+                            if interval is not None:
+                                intervals_valid = False
+                                event_issues.append(
+                                    f"event report has invalid confidence interval: {kind}.{metric_name}"
+                                )
+                        elif not _valid_cluster_interval(
+                                interval, expected_group_count=expected_groups):
+                            intervals_valid = False
+                            event_issues.append(
+                                f"event report has invalid confidence interval: {kind}.{metric_name}"
+                            )
+                interval_checks[kind] = intervals_valid
+                counts = event_counts.get(kind, {}) if event_counts else {}
+                if all(counts.get(key) is not None for key in ("tp", "fp", "fn")):
+                    expected_metrics = summarize_binary_counts(**counts)
+                    reported_metrics = row.get("metrics") if isinstance(row, dict) else None
+                    if (not isinstance(reported_metrics, dict)
+                            or any(_metric(reported_metrics, metric) is None
+                                   or not math.isclose(
+                                       _metric(reported_metrics, metric), expected_metrics[metric],
+                                       rel_tol=0, abs_tol=1e-6,
+                                   ) for metric in ("precision", "recall", "f1"))):
+                        event_issues.append(f"event report metrics do not match counts: {kind}")
+                truth_count = sum(
+                    1 for sample in expected_samples.values()
+                    for event in sample["events"] if event["kind"] == kind
+                )
+                if (counts.get("tp") is not None and counts.get("fn") is not None
+                        and counts["tp"] + counts["fn"] != truth_count):
+                    event_issues.append(f"event report ground-truth count mismatch: {kind}")
+
             event_targets = {
                 kind: {
                     "precision": _metric(row.get("metrics"), "precision")
@@ -326,6 +513,9 @@ def audit_campus_field_readiness(
                     if isinstance(row, dict) else None,
                     "precision_target": 0.90,
                     "recall_target": 0.80,
+                    "test_flight_count": len(event_kind_test_groups.get(kind, set())),
+                    "positive_test_flight_count": len(event_kind_positive_groups.get(kind, set())),
+                    "flight_coverage_met": len(event_kind_test_groups.get(kind, set())) >= 3,
                     "met": bool(
                         isinstance(row, dict)
                         and _metric(row.get("metrics"), "precision") is not None
@@ -336,6 +526,10 @@ def audit_campus_field_readiness(
                 }
                 for kind, row in by_kind.items()
             }
+            event_intervals_ready = bool(interval_checks) and all(interval_checks.values())
+        elif event_report_value:
+            event_issues.append("event report missing event-kind metrics")
+
     event_claim_ready = (
         event_status == "ready" and len(event_test_groups) >= 3
         and all(event_counts and event_counts.get(kind, {}).get("tp") is not None
@@ -344,6 +538,10 @@ def audit_campus_field_readiness(
                 for kind in event_kinds)
         and all(event_targets and event_targets.get(kind, {}).get("met") is True
                 for kind in event_kinds)
+        and all(len(event_kind_test_groups.get(kind, set())) >= 3
+                and len(event_kind_positive_groups.get(kind, set())) > 0
+                for kind in event_kinds)
+        and event_intervals_ready and event_sample_details_ready
     )
     if event_issues:
         event_status = "invalid"
@@ -362,12 +560,14 @@ def audit_campus_field_readiness(
     )
     water_check = {"status": "missing", "file": None, "issues": []}
     water_test_groups = []
+    water_test_samples = []
     if visible_water_manifest is not None and water_manifest_value is not None:
         try:
             validated_water_manifest = validate_split_manifest(
                 water_manifest_value, task="visible_water_road_segmentation",
             )
             water_test_groups = validated_water_manifest["split_groups"]["test"]
+            water_test_samples = validated_water_manifest["samples"]
             if water_manifest_value.get("label_source") != "manual":
                 water_issues.append("visible-water manifest label_source must be manual")
             if water_manifest_value.get("annotation_pending") is True:
@@ -414,6 +614,97 @@ def audit_campus_field_readiness(
             water_iou = water_metrics.get("iou") if isinstance(water_metrics, dict) else None
             if _metric(water_metrics, "iou") is None or _metric(water_metrics, "iou") < 0.60:
                 water_report_issues.append("road-region IoU target 0.60")
+            if isinstance(water_metrics, dict):
+                if water_metrics.get("sample_count") != len(water_test_samples):
+                    water_report_issues.append("water metric sample_count does not match manifest")
+                if water_metrics.get("flight_count") != len(water_test_groups):
+                    water_report_issues.append("water metric flight_count does not match manifest")
+                water_counts = {
+                    key: _count(water_metrics, key) for key in ("tp", "fp", "fn")
+                }
+                if any(value is None for value in water_counts.values()):
+                    water_report_issues.append("water metric counts are missing or invalid")
+                else:
+                    expected_iou = summarize_binary_counts(**water_counts)["iou"]
+                    reported_iou = _metric(water_metrics, "iou")
+                    if (expected_iou is None or reported_iou is None
+                            or not math.isclose(reported_iou, expected_iou,
+                                                rel_tol=0, abs_tol=1e-6)):
+                        water_report_issues.append("water IoU does not match counts")
+                water_interval = water_metrics.get("group_bootstrap_95_ci_iou")
+                if not _valid_cluster_interval(
+                        water_interval, expected_group_count=len(water_test_groups)):
+                    water_report_issues.append("visible-water report missing or invalid confidence interval")
+
+                sample_ids = {
+                    str(sample.get("sample_id") or Path(sample["image"]).stem): sample
+                    for sample in water_test_samples
+                }
+                sample_rows = water_metrics.get("per_sample")
+                if (not isinstance(sample_rows, list)
+                        or any(not isinstance(row, dict) for row in sample_rows)
+                        or {str(row.get("sample_id") or "") for row in sample_rows}
+                        != set(sample_ids)
+                        or len({str(row.get("sample_id") or "") for row in sample_rows})
+                        != len(sample_rows)):
+                    water_report_issues.append("visible-water report missing per-sample diagnostics")
+                else:
+                    sample_counts_by_group = {}
+                    sample_states_by_group = {}
+                    sample_diagnostics_ready = True
+                    for row in sample_rows:
+                        sample_id = str(row.get("sample_id") or "")
+                        sample = sample_ids[sample_id]
+                        counts = {key: _count(row, key) for key in ("tp", "fp", "fn")}
+                        group_id = str(sample.get("group_id") or "")
+                        if (row.get("group_id") != group_id
+                                or any(value is None for value in counts.values())
+                                or not isinstance(row.get("negative_sample"), bool)
+                                or not isinstance(row.get("false_alarm"), bool)
+                                or (row.get("false_alarm") and not row.get("negative_sample"))):
+                            sample_diagnostics_ready = False
+                            continue
+                        group_counts = sample_counts_by_group.setdefault(
+                            group_id, {"tp": 0, "fp": 0, "fn": 0},
+                        )
+                        group_states = sample_states_by_group.setdefault(
+                            group_id, {"negative_samples": [], "sample_false_alarms": []},
+                        )
+                        group_states["negative_samples"].append(row["negative_sample"])
+                        group_states["sample_false_alarms"].append(row["false_alarm"])
+                        for key, value in counts.items():
+                            group_counts[key] += value
+                    if not sample_diagnostics_ready:
+                        water_report_issues.append("visible-water report has invalid per-sample diagnostics")
+                    else:
+                        total_counts = {
+                            key: sum(row[key] for row in sample_counts_by_group.values())
+                            for key in ("tp", "fp", "fn")
+                        }
+                        if any(_count(water_metrics, key) != value
+                               for key, value in total_counts.items()):
+                            water_report_issues.append("water totals do not match per-sample diagnostics")
+                        for group_id, counts in sample_counts_by_group.items():
+                            reported = (water_metrics.get("per_group", {}).get(group_id)
+                                        if isinstance(water_metrics.get("per_group"), dict) else None)
+                            if (not isinstance(reported, dict)
+                                    or any(_count(reported, key) != value
+                                           for key, value in counts.items())):
+                                water_report_issues.append(
+                                    f"water flight totals do not match per-sample diagnostics: {group_id}"
+                                )
+                            else:
+                                states = sample_states_by_group[group_id]
+                                expected_negative_flight = all(states["negative_samples"])
+                                expected_false_alarm = (
+                                    expected_negative_flight and any(states["sample_false_alarms"])
+                                )
+                                if (reported.get("negative_flight") != expected_negative_flight
+                                        or reported.get("false_alarm") != expected_false_alarm):
+                                    water_report_issues.append(
+                                        "water flight diagnostics do not match per-sample diagnostics: "
+                                        f"{group_id}"
+                                    )
             water_group_metrics = (
                 water_metrics.get("per_group") if isinstance(water_metrics, dict) else None
             )
@@ -432,6 +723,28 @@ def audit_campus_field_readiness(
                 )
                 if not has_positive_flight or not has_negative_flight:
                     water_report_issues.append("test set requires positive and negative water flights")
+                for group_id, row in water_group_metrics.items():
+                    if (not isinstance(row, dict)
+                            or not isinstance(row.get("negative_flight"), bool)
+                            or not isinstance(row.get("false_alarm"), bool)
+                            or (row.get("false_alarm") and not row.get("negative_flight"))):
+                        water_report_issues.append(
+                            f"invalid positive/negative water flight diagnostics: {group_id}"
+                        )
+                negative_rows = [row for row in water_group_metrics.values()
+                                 if isinstance(row, dict) and row.get("negative_flight") is True]
+                expected_false_alarm_rate = (
+                    sum(bool(row.get("false_alarm")) for row in negative_rows) / len(negative_rows)
+                    if negative_rows else None
+                )
+                reported_false_alarm_rate = _metric(
+                    water_metrics, "negative_flight_false_alarm_rate",
+                )
+                if (expected_false_alarm_rate is None
+                        or reported_false_alarm_rate is None
+                        or not math.isclose(reported_false_alarm_rate, expected_false_alarm_rate,
+                                            rel_tol=0, abs_tol=1e-6)):
+                    water_report_issues.append("negative-flight false-alarm rate is missing or inconsistent")
             water_check = {
                 "status": "ready" if not water_report_issues else "invalid",
                 "file": str(water_report_path.resolve()),
