@@ -245,6 +245,12 @@ def test_paired_campus_detection_comparison_uses_same_flights_and_reports_ci(tmp
     assert report["paired_inputs"]["same_thresholds"] is True
     assert report["whole_frame"]["inference_path"] == "whole_frame"
     assert report["road_roi_tiled"]["inference_path"] == "road_roi_tiled"
+    runtime = report["inference_runtime"]
+    assert runtime["whole_frame"]["elapsed_seconds"] >= 0
+    assert runtime["road_roi_tiled"]["elapsed_seconds"] >= 0
+    assert runtime["whole_frame"]["seconds_per_image"] >= 0
+    assert runtime["road_roi_tiled"]["seconds_per_image"] >= 0
+    assert "不作为稳定性能基准" in runtime["measurement_note"]
     vehicle_f1 = report["road_roi_minus_whole_frame"]["vehicle"]["f1"]
     assert vehicle_f1["difference"] == 1.0
     assert vehicle_f1["flight_cluster_bootstrap_95_ci"]["resampling_group_count"] == 2

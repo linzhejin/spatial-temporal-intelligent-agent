@@ -287,14 +287,18 @@ def run_campus_detection_path_comparison(
         "detector_factory": detector_factory,
         "image_loader": image_loader,
     }
+    whole_frame_started = time.perf_counter()
     whole_frame = run_campus_detection_evaluation(
         manifest, dataset_root, model_path,
         inference_path="whole_frame", **common,
     )
+    whole_frame_elapsed = max(0.0, time.perf_counter() - whole_frame_started)
+    road_roi_started = time.perf_counter()
     road_roi_tiled = run_campus_detection_evaluation(
         manifest, dataset_root, model_path,
         inference_path="road_roi_tiled", **common,
     )
+    road_roi_elapsed = max(0.0, time.perf_counter() - road_roi_started)
 
     identical_fields = (
         "task", "dataset", "split", "split_unit", "flight_group_count", "image_count",
@@ -360,6 +364,16 @@ def run_campus_detection_path_comparison(
                 "flight_cluster_bootstrap_95_ci": interval,
             }
 
+    image_count = whole_frame["image_count"]
+
+    def runtime_row(elapsed_seconds: float) -> dict:
+        return {
+            "elapsed_seconds": round(elapsed_seconds, 6),
+            "seconds_per_image": (
+                round(elapsed_seconds / image_count, 6) if image_count else None
+            ),
+        }
+
     return {
         "task": whole_frame["task"],
         "dataset": whole_frame["dataset"],
@@ -381,6 +395,18 @@ def run_campus_detection_path_comparison(
             "bootstrap_unit": "flight_id",
             "bootstrap_repetitions": bootstrap_repetitions,
             "seed": seed,
+        },
+        "inference_runtime": {
+            "whole_frame": runtime_row(whole_frame_elapsed),
+            "road_roi_tiled": runtime_row(road_roi_elapsed),
+            "road_roi_over_whole_frame_ratio": (
+                round(road_roi_elapsed / whole_frame_elapsed, 4)
+                if whole_frame_elapsed > 0 else None
+            ),
+            "measurement_note": (
+                "单次串行全量评测，含模型初始化、图像读取和解码；第二条路径可能受系统缓存影响，"
+                "仅作本次运行记录，不作为稳定性能基准。"
+            ),
         },
         "source_image_sha256_by_sample": whole_frame["source_image_sha256_by_sample"],
         "whole_frame": whole_frame,
