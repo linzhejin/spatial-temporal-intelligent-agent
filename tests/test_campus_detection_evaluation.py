@@ -24,6 +24,10 @@ def _manifest():
             {
                 "sample_id": "a-1", "group_id": "flight-a", "image": "test/a.jpg",
                 "width": 100, "height": 80,
+                "observation_regions": [{
+                    "id": "lane-a", "kind": "vehicle_lane",
+                    "polygon": [[0.0, 0.0], [0.5, 0.0], [0.5, 0.5], [0.0, 0.5]],
+                }],
                 "objects": [
                     {"label": "pedestrian", "box": [0, 0, 10, 20]},
                     {"label": "vehicle", "box": [20, 20, 40, 40]},
@@ -32,6 +36,10 @@ def _manifest():
             {
                 "sample_id": "b-1", "group_id": "flight-b", "image": "test/b.jpg",
                 "width": 100, "height": 80,
+                "observation_regions": [{
+                    "id": "lane-b", "kind": "vehicle_lane",
+                    "polygon": [[0.0, 0.0], [0.75, 0.0], [0.75, 0.75], [0.0, 0.75]],
+                }],
                 "objects": [
                     {"label": "ignore", "box": [50, 50, 70, 70]},
                 ],
@@ -46,6 +54,11 @@ def test_campus_detection_manifest_requires_disjoint_flights_and_complete_test_g
     validated = validate_campus_detection_manifest(manifest)
 
     assert validated["samples"][0]["objects"][1]["label"] == "vehicle"
+
+    legacy = copy.deepcopy(manifest)
+    for sample in legacy["samples"]:
+        sample.pop("observation_regions")
+    assert validate_campus_detection_manifest(legacy)["samples"][0]["observation_regions"] == []
 
     overlap = copy.deepcopy(manifest)
     overlap["split_groups"]["train"].append("flight-a")
@@ -135,6 +148,100 @@ def test_campus_detection_runner_reports_flight_clustered_metrics_and_provenance
     assert report["groups"]["vehicle"]["flight_cluster_bootstrap_95_ci"]["recall"][
         "resampling_group_count"
     ] == 2
+    assert report["inference_path"] == "whole_frame"
+
+
+def test_campus_detection_runner_uses_production_roi_tiling_when_requested(tmp_path):
+    manifest = validate_campus_detection_manifest(_manifest())
+    dataset_root = tmp_path / "data"
+    (dataset_root / "test").mkdir(parents=True)
+    for sample in manifest["samples"]:
+        (dataset_root / sample["image"]).write_bytes(sample["sample_id"].encode("ascii"))
+    model_path = tmp_path / "detector.onnx"
+    model_path.write_bytes(b"detector")
+
+    class Detector:
+        def __init__(self, *_args, **_kwargs):
+            self.region_calls = []
+
+        def detect(self, _frame):
+            raise AssertionError("ROI evaluation must not silently use whole-frame inference")
+
+        def detect_regions(self, frame, regions):
+            self.region_calls.append((frame.shape, regions))
+            return [
+                {"label": "pedestrian", "confidence": 0.9, "box": [0, 0, 10, 20]},
+                {"label": "car", "confidence": 0.8, "box": [20, 20, 40, 40]},
+            ]
+
+    detectors = []
+
+    def make_detector(*args, **kwargs):
+        detector = Detector()
+        detectors.append(detector)
+        return detector
+
+    report = run_campus_detection_evaluation(
+        manifest, dataset_root, model_path,
+        confidence_threshold=0.5, iou_threshold=0.5,
+        detector_factory=make_detector,
+        image_loader=lambda _path: np.zeros((80, 100, 3), dtype=np.uint8),
+        bootstrap_repetitions=100, inference_path="road_roi_tiled",
+    )
+
+    assert report["inference_path"] == "road_roi_tiled"
+    assert report["roi_sample_count"] == 2
+    assert report["roi_region_count_by_sample"] == {"a-1": 1, "b-1": 1}
+    assert len(detectors[0].region_calls) == 2
+
+
+def test_road_roi_evaluation_requires_regions_and_covers_all_positive_labels(tmp_path):
+    manifest = validate_campus_detection_manifest(_manifest())
+    dataset_root = tmp_path / "data"
+    (dataset_root / "test").mkdir(parents=True)
+    for sample in manifest["samples"]:
+        (dataset_root / sample["image"]).write_bytes(sample["sample_id"].encode("ascii"))
+    model_path = tmp_path / "detector.onnx"
+    model_path.write_bytes(b"detector")
+    def create(*_args, **_kwargs):
+        return object()
+
+    without_regions = copy.deepcopy(manifest)
+    without_regions["samples"][0]["observation_regions"] = []
+    with pytest.raises(ValueError, match="requires a vehicle_lane, pedestrian, or road_surface ROI"):
+        run_campus_detection_evaluation(
+            without_regions, dataset_root, model_path, inference_path="road_roi_tiled",
+            detector_factory=create, image_loader=lambda _path: np.zeros((80, 100, 3)),
+            bootstrap_repetitions=100,
+        )
+
+    uncovered = copy.deepcopy(manifest)
+    uncovered["samples"][0]["observation_regions"][0]["polygon"] = [
+        [0.0, 0.0], [0.25, 0.0], [0.25, 0.25], [0.0, 0.25],
+    ]
+    with pytest.raises(ValueError, match="positive ground-truth box is not fully covered"):
+        run_campus_detection_evaluation(
+            uncovered, dataset_root, model_path, inference_path="road_roi_tiled",
+            detector_factory=create, image_loader=lambda _path: np.zeros((80, 100, 3)),
+            bootstrap_repetitions=100,
+        )
+
+    with pytest.raises(ValueError, match="detect_regions"):
+        run_campus_detection_evaluation(
+            manifest, dataset_root, model_path, inference_path="road_roi_tiled",
+            detector_factory=create, image_loader=lambda _path: np.zeros((80, 100, 3)),
+            bootstrap_repetitions=100,
+        )
+
+
+def test_campus_detection_manifest_validates_observation_region_geometry():
+    manifest = _manifest()
+    manifest["samples"][0]["observation_regions"][0]["polygon"] = [
+        [0.0, 0.0], [0.5, 0.5], [0.0, 1.1],
+    ]
+
+    with pytest.raises(ValueError, match="invalid normalized polygon coordinates"):
+        validate_campus_detection_manifest(manifest)
 
 
 def test_campus_detection_runner_rejects_decoded_dimension_mismatch(tmp_path):

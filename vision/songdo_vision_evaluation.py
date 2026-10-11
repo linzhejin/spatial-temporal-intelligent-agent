@@ -301,6 +301,7 @@ def run_songdo_vision_evaluation(
         report = {
             "dataset": "Songdo Vision v2 test",
             "dataset_version": dataset["info"].get("version"),
+            "inference_path": "whole_frame",
             "dataset_archive": archive_path.name,
             "dataset_archive_sha256": _sha256(archive_path),
             "annotations_sha256": annotations_sha256,
@@ -327,6 +328,7 @@ def run_songdo_vision_evaluation(
                 "The official test split is random by image, not an independent flight or scene split.",
                 "Songdo Vision v2 used the geo-trax detector family to surface some test annotations for human review; related detectors may receive a small favorable bias.",
                 "Metrics are class-aware precision/recall/F1 at one confidence and IoU operating point, not COCO mAP or an event-level congestion score.",
+            "Inference uses the whole-frame detector path and does not measure the production road-ROI tiling path.",
             ],
         }
     return report

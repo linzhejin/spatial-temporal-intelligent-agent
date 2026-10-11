@@ -84,6 +84,7 @@ def test_full_coco_vehicle_scoring_maps_van_to_car_and_excludes_pedestrians(tmp_
     report = _run(archive, model)
 
     assert report["dataset"] == "Songdo Vision v2 test"
+    assert report["inference_path"] == "whole_frame"
     assert report["image_count_evaluated"] == 2
     assert report["official_test_split_complete"] is True
     assert report["by_class"]["car"] == {
@@ -98,6 +99,7 @@ def test_full_coco_vehicle_scoring_maps_van_to_car_and_excludes_pedestrians(tmp_
     assert report["excluded_prediction_count"] == 1
     assert report["dataset_archive_sha256"]
     assert report["annotations_sha256"]
+    assert any("whole-frame" in item for item in report["limitations"])
 
 
 def test_missing_coco_image_fails_instead_of_reporting_partial_benchmark(tmp_path):

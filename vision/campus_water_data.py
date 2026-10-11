@@ -353,6 +353,7 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
                     "image": item["image"],
                     "width": item["width"],
                     "height": item["height"],
+                    "observation_regions": [],
                     "objects": [],
                 }
                 for item in testing_samples
@@ -397,7 +398,7 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
 2. 按 `mask` 路径保存与原图同宽高的灰度 PNG；路面范围内确认的可见水体标为 255，其余像素为 0。积水、湿路反光、阴影、湖面和干路要按标注规范区分；不确定样本应先剔除，不能猜标签。
 3. 只把 train/validation 模板交给 `train_visible_water.py`；test 模板只交给独立评测脚本，不能参与训练、选模型或调阈值。保存原视频和本目录外的备份。
 4. 模板含 `annotation_pending: true`，标注完成后可删除该提示字段；训练器仍会检查文件、尺寸、掩膜像素值和跨 split 的完全重复图像。
-5. `detection-test-template.json` 用于校园人车检测评测。只保留准备人工框选的代表帧，在 `objects` 中逐个填写 `pedestrian`、`vehicle` 或 `ignore` 及像素坐标 `[x1,y1,x2,y2]`；不能把空数组当作尚未标注的占位结果。
+5. `detection-test-template.json` 用于校园人车检测评测。只保留准备人工框选的代表帧，在 `objects` 中逐个填写 `pedestrian`、`vehicle` 或 `ignore` 及像素坐标 `[x1,y1,x2,y2]`；不能把空数组当作尚未标注的占位结果。若还要评测管理端的道路 ROI 分块推理，在 `observation_regions` 中按归一化坐标填写 `vehicle_lane`、`pedestrian` 或 `road_surface` 多边形，例如 `{"id":"lane-1","kind":"vehicle_lane","polygon":[[0.1,0.2],[0.8,0.2],[0.8,0.6],[0.1,0.6]]}`；每个区域 ID 必须唯一，所有要计分的人车框完整落在某个 ROI 内，否则该帧不适合做两种路径的同口径比较。
 6. `event-test-template.json` 指向原始测试航次视频。填写镜头是否稳定、已人工检查的事件类型、观察区域和事件时间段后，再删除 `annotation_pending`；运行评测时 `--dataset-root` 指向原始航拍数据目录。
 
 水体分割结果是影像线索，不是现场封路结论；必须由管理员复核后才可影响路况。

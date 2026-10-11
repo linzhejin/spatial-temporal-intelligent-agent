@@ -232,6 +232,7 @@ def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
     assert detection["samples"][0]["width"] == 32
     assert detection["samples"][0]["height"] == 24
     assert detection["samples"][0]["objects"] == []
+    assert detection["samples"][0]["observation_regions"] == []
     assert events["task"] == "campus_event_detection"
     assert events["event_kinds"] == ["congestion", "crowding", "accident", "flooding"]
     assert events["annotation_pending"] is True

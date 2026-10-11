@@ -62,6 +62,47 @@ def _threshold(value, field: str, *, zero_allowed: bool) -> float:
     return result
 
 
+def _region_crop_boxes(sample: dict) -> list[tuple[int, int, int, int]]:
+    """Mirror OnnxDetector.detect_regions crop bounds for ROI coverage checks."""
+    width, height = sample["width"], sample["height"]
+    boxes = []
+    for region in sample["observation_regions"]:
+        if region["kind"] not in {"vehicle_lane", "pedestrian", "road_surface", "parking"}:
+            continue
+        points = region["polygon"]
+        x1 = max(0, min(width - 1, int(min(point[0] for point in points) * width)))
+        y1 = max(0, min(height - 1, int(min(point[1] for point in points) * height)))
+        x2 = max(x1 + 1, min(width, int(max(point[0] for point in points) * width + 0.999)))
+        y2 = max(y1 + 1, min(height, int(max(point[1] for point in points) * height + 0.999)))
+        box = (x1, y1, x2, y2)
+        if box not in boxes:
+            boxes.append(box)
+    return boxes
+
+
+def _validate_roi_coverage(sample: dict) -> int:
+    if not any(region["kind"] in {"vehicle_lane", "pedestrian", "road_surface"}
+               for region in sample["observation_regions"]):
+        raise ValueError(
+            f"sample {sample['sample_id']} requires a vehicle_lane, pedestrian, or road_surface ROI"
+        )
+    boxes = _region_crop_boxes(sample)
+    if not boxes:
+        raise ValueError(
+            f"sample {sample['sample_id']} requires a vehicle_lane, pedestrian, or road_surface ROI"
+        )
+    for item in sample["objects"]:
+        if item["label"] not in {"pedestrian", "vehicle"}:
+            continue
+        x1, y1, x2, y2 = item["box"]
+        if not any(rx1 <= x1 and ry1 <= y1 and x2 <= rx2 and y2 <= ry2
+                   for rx1, ry1, rx2, ry2 in boxes):
+            raise ValueError(
+                f"sample {sample['sample_id']} positive ground-truth box is not fully covered by an ROI"
+            )
+    return len(boxes)
+
+
 def run_campus_detection_evaluation(
     manifest: dict,
     dataset_root: Path,
@@ -71,11 +112,20 @@ def run_campus_detection_evaluation(
     iou_threshold: float = 0.5,
     bootstrap_repetitions: int = 1000,
     seed: int = 20261011,
+    inference_path: str = "whole_frame",
     detector_factory=None,
     image_loader=None,
 ) -> dict:
     """Run the production detector and aggregate results by independent flight."""
     manifest = validate_campus_detection_manifest(manifest)
+    if inference_path not in {"whole_frame", "road_roi_tiled"}:
+        raise ValueError("inference_path must be whole_frame or road_roi_tiled")
+    roi_region_count_by_sample = {}
+    if inference_path == "road_roi_tiled":
+        roi_region_count_by_sample = {
+            sample["sample_id"]: _validate_roi_coverage(sample)
+            for sample in manifest["samples"]
+        }
     confidence_threshold = _threshold(
         confidence_threshold, "confidence_threshold", zero_allowed=True,
     )
@@ -116,6 +166,9 @@ def run_campus_detection_evaluation(
         model_id=model_manifest.get("model_id"),
         model_version=model_manifest.get("model_revision"),
     )
+    if inference_path == "road_roi_tiled" and not callable(
+            getattr(detector, "detect_regions", None)):
+        raise ValueError("road_roi_tiled evaluation requires a detector with detect_regions")
 
     totals = _empty_counts()
     flight_counts = {
@@ -134,7 +187,10 @@ def run_campus_detection_evaluation(
         if width != sample["width"] or height != sample["height"]:
             raise ValueError(f"decoded dimensions do not match manifest: {sample['sample_id']}")
         started = time.monotonic()
-        predictions = detector.detect(frame)
+        predictions = (
+            detector.detect_regions(frame, sample["observation_regions"])
+            if inference_path == "road_roi_tiled" else detector.detect(frame)
+        )
         inference_seconds.append(time.monotonic() - started)
         counts = evaluate_grouped_frame(
             predictions, sample["objects"],
@@ -184,6 +240,9 @@ def run_campus_detection_evaluation(
         "split_unit": manifest["split_unit"],
         "flight_group_count": len(manifest["split_groups"]["test"]),
         "image_count": len(manifest["samples"]),
+        "inference_path": inference_path,
+        "roi_sample_count": len(roi_region_count_by_sample),
+        "roi_region_count_by_sample": roi_region_count_by_sample,
         "confidence_threshold": confidence_threshold,
         "iou_threshold": iou_threshold,
         "groups": summaries,
@@ -214,6 +273,9 @@ def main() -> int:
     parser.add_argument("--iou", type=float, default=0.5)
     parser.add_argument("--bootstrap-repetitions", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20261011)
+    parser.add_argument("--inference-path", choices=("whole_frame", "road_roi_tiled"),
+                        default="whole_frame",
+                        help="whole-frame baseline or production road-ROI tiled inference")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not args.manifest.is_file():
@@ -225,6 +287,7 @@ def main() -> int:
             json.loads(manifest_bytes.decode("utf-8-sig")),
             args.dataset_root, args.model,
             confidence_threshold=args.confidence, iou_threshold=args.iou,
+            inference_path=args.inference_path,
             bootstrap_repetitions=args.bootstrap_repetitions, seed=args.seed,
         )
         report["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()

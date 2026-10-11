@@ -7,6 +7,7 @@ from pathlib import PurePosixPath, PureWindowsPath
 
 _SPLITS = ("train", "validation", "test")
 _LABELS = {"pedestrian", "vehicle", "ignore"}
+_DETECTION_REGION_KINDS = {"vehicle_lane", "pedestrian", "road_surface", "parking"}
 
 
 def _relative_path(value: object, *, sample_id: str) -> str:
@@ -91,6 +92,44 @@ def validate_campus_detection_manifest(manifest: object) -> dict:
         objects = sample.get("objects")
         if not isinstance(objects, list):
             raise ValueError(f"sample {sample_id} objects must be a list")
+        regions = sample.get("observation_regions", [])
+        if not isinstance(regions, list):
+            raise ValueError(f"sample {sample_id} observation_regions must be a list")
+        normalized_regions = []
+        region_ids = set()
+        for region_index, region in enumerate(regions):
+            region_id = str(region.get("id") or "").strip() if isinstance(region, dict) else ""
+            if not region_id or region_id in region_ids:
+                raise ValueError(
+                    f"sample {sample_id} region {region_index} requires a unique id"
+                )
+            if region.get("kind") not in _DETECTION_REGION_KINDS:
+                raise ValueError(
+                    f"sample {sample_id} region {region_id} has an unsupported detection kind"
+                )
+            polygon = region.get("polygon")
+            if not isinstance(polygon, list) or len(polygon) < 3:
+                raise ValueError(
+                    f"sample {sample_id} region {region_id} requires a polygon with at least three points"
+                )
+            points = []
+            for point in polygon:
+                if (not isinstance(point, (list, tuple)) or len(point) != 2
+                        or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                               or not math.isfinite(float(value)) or not 0 <= value <= 1
+                               for value in point)):
+                    raise ValueError(
+                        f"sample {sample_id} region {region_id} has invalid normalized polygon coordinates"
+                    )
+                points.append((float(point[0]), float(point[1])))
+            area = abs(sum(
+                x1 * y2 - x2 * y1
+                for (x1, y1), (x2, y2) in zip(points, points[1:] + points[:1])
+            )) / 2
+            if area <= 1e-9:
+                raise ValueError(f"sample {sample_id} region {region_id} polygon must have non-zero area")
+            region_ids.add(region_id)
+            normalized_regions.append({**region, "id": region_id, "polygon": points})
         normalized_objects = []
         for object_index, item in enumerate(objects):
             if not isinstance(item, dict) or item.get("label") not in _LABELS:
@@ -111,7 +150,7 @@ def validate_campus_detection_manifest(manifest: object) -> dict:
         normalized_samples.append({
             **sample, "sample_id": sample_id, "group_id": group_id,
             "image": image, "width": width, "height": height,
-            "objects": normalized_objects,
+            "objects": normalized_objects, "observation_regions": normalized_regions,
         })
     if observed_groups != set(normalized_groups["test"]):
         raise ValueError("test groups must all have at least one image")
