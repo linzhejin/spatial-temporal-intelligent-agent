@@ -12,7 +12,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ faa573d ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-10 15:11
+- 版本：codex/aerial-vision-release @ 65f1ca4 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-11 12:11
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 12（最新 012）
 <!-- FACTS:END -->
@@ -23,12 +23,14 @@
 - 指纹只排除明显不同的视角，不是相机标定或地理配准。视频按首帧比对；镜头移动后须重新检查区域，不能把首帧匹配当成整段视频位置不变的证明。
 - 车辆、人流和缓行结果是待核查线索。只有管理员确认后，才可按出行方式与有效期形成提示、缓行或管制；模型不会自动封路。事故与积水识别模型当前保持关闭。
 - 本地软件回归通过不等于模型在武大现场准确。事故/积水开放模型指标未达发布门槛，当前也没有武大无人机标注样本。
+- 校园素材到位后先运行 `scripts/vision/prepare_campus_water_data.py`：按航次和地点隔离训练、验证、测试集，记录拍摄时间、地点、原片及附属文件哈希，完整解码视频并生成独立标注模板。详见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 - 本次场景复用改动、回归和线上验收见[观察场景复用与道路绑定验收](docs/development/24_观察场景复用与道路绑定验收_20261010.md)。
 - 大观察区域的检测已采用重叠切片，避免整幅 1080p/4K 画面缩到模型尺寸后损失过多小目标细节；本机 CPU 耗时和适用边界见[观察区域大图切片推理修复](docs/development/25_观察区域大图切片推理修复_20261010.md)。
 
 - 2026-10-10 当前发布：提交 `0952596` 已推送至 GitHub、Gitee `main` 并快进部署到腾讯云 `/home/ubuntu/campus-spatial-intelligence-agent`。本轮改动只影响视觉 worker 的观察区域推理；部署前影像队列没有 queued/running 任务，无数据库迁移或模型权重更新。
 - 部署后 `whu-walker`、`whu-agent-worker`、`whu-vision-worker` 均为 active；视觉 worker 最新心跳为 ready，公网 `/health` 返回 HTTP 200、`status=ok`。服务器工作目录的未跟踪文件 `cloudflared`、`scripts/_probe_shortest.py`、`wget-log` 保持原样。
 - 本轮全量回归：Python `1035 passed、48 skipped、1 xfailed`，JavaScript `113 passed`；48 项依赖本机没有的独立 PostgreSQL 测试环境。重复 5 次的本机 CPU 测速中，全帧 ROI 切片处理约为普通整帧的 4.41 倍；实际使用应圈窄道路区域，不能称为实时。
+- 2026-10-11 校园航拍数据准备链路提交 `65f1ca4` 已推送 GitHub、Gitee；新增命令行预检、航次/地点隔离、原片哈希、完整抽帧、标注模板和失败保护。提交前全量回归为 Python `1075 passed、49 skipped、1 xfailed`、JavaScript `116 passed`；另用三段真实短视频验证 3 个航次生成 12 张样本。该结果证明数据工具可用，不代表校园积水模型已验收。
 
 ## 当前工作区边界
 
