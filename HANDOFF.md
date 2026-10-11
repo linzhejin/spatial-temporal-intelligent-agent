@@ -1,4 +1,4 @@
-# 珞珈智行项目进度与交接（截至 2026-10-10）
+# 珞珈智行项目进度与交接（截至 2026-10-11）
 
 > 本文件是当前交接入口。先看这里，再按需打开功能验收文档。项目代码、远程分支与线上部署状态分别记录，不把本机最新提交误当成已上线版本。
 
@@ -12,7 +12,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ 65f1ca4 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-11 12:11
+- 版本：codex/aerial-vision-release @ d53c7c2 ｜ origin/main 落后 1 ｜ gitee/main 落后 1 ｜ 生成于 2026-10-11 13:17
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 12（最新 012）
 <!-- FACTS:END -->
@@ -31,6 +31,8 @@
 - 部署后 `whu-walker`、`whu-agent-worker`、`whu-vision-worker` 均为 active；视觉 worker 最新心跳为 ready，公网 `/health` 返回 HTTP 200、`status=ok`。服务器工作目录的未跟踪文件 `cloudflared`、`scripts/_probe_shortest.py`、`wget-log` 保持原样。
 - 本轮全量回归：Python `1035 passed、48 skipped、1 xfailed`，JavaScript `113 passed`；48 项依赖本机没有的独立 PostgreSQL 测试环境。重复 5 次的本机 CPU 测速中，全帧 ROI 切片处理约为普通整帧的 4.41 倍；实际使用应圈窄道路区域，不能称为实时。
 - 2026-10-11 校园航拍数据准备链路提交 `65f1ca4` 已推送 GitHub、Gitee；新增命令行预检、航次/地点隔离、原片哈希、完整抽帧、标注模板和失败保护。提交前全量回归为 Python `1075 passed、49 skipped、1 xfailed`、JavaScript `116 passed`；另用三段真实短视频验证 3 个航次生成 12 张样本。该结果证明数据工具可用，不代表校园积水模型已验收。
+- 2026-10-11 校园航拍分层评测提交 `d53c7c2` 已推送 GitHub、Gitee 并快进部署腾讯云。新增校园人车框级评测，以及拥堵、人流拥挤、事故、积水四类事件的统一视频评测；匹配同时要求事件类型、观察区域和时间区间一致，并按独立航次报告 bootstrap 区间。数据准备工具会生成待人工填写的人车框与完整视频事件模板，评测前校验来源哈希并拒绝重复内容。全量回归为 Python `1090 passed、49 skipped、1 xfailed`、JavaScript `116 passed`；本次改动文件的 Ruff、编译、文档事实和差异检查均通过。
+- 部署后服务器提交为 `d53c7c2`，`whu-walker`、`whu-agent-worker`、`whu-vision-worker` 均为 active，本机和公网 `/health` 返回 `status=ok`，视觉 worker 心跳新鲜。事故与积水可选能力仍为 `false`，没有校园独立航次真值前继续保持关闭；服务器原有未跟踪文件未改动。
 
 ## 当前工作区边界
 
