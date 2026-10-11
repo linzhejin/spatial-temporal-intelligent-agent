@@ -26,6 +26,26 @@ _GROUPS = {
 }
 
 
+def _prediction_group(label: object) -> str | None:
+    category = VISDRONE_CATEGORY_BY_LABEL.get(label)
+    if category in PEDESTRIAN_CATEGORIES:
+        return "pedestrian"
+    if category in VEHICLE_CATEGORIES:
+        return "vehicle"
+    return None
+
+
+def _valid_box(box: object) -> list[float] | None:
+    if (not isinstance(box, (tuple, list)) or len(box) != 4
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not isfinite(value) for value in box)):
+        return None
+    normalized = [float(value) for value in box]
+    if normalized[2] <= normalized[0] or normalized[3] <= normalized[1]:
+        return None
+    return normalized
+
+
 def _iou(left: list[float], right: list[float]) -> float:
     x1 = max(left[0], right[0])
     y1 = max(left[1], right[1])
@@ -128,6 +148,74 @@ def evaluate_visdrone_frame(
     for category, boxes in ground_truth.items():
         group = "pedestrian" if category in PEDESTRIAN_CATEGORIES else "vehicle"
         counts[group]["fn"] += len(boxes) - len(matched.get(category, set()))
+    return counts
+
+
+def evaluate_grouped_frame(
+    predictions: list[dict], annotations: list[dict], *,
+    confidence_threshold: float = 0.369, iou_threshold: float = 0.5,
+) -> dict[str, dict[str, int]]:
+    """Evaluate route-relevant pedestrian/vehicle groups on one campus frame.
+
+    Ground truth labels are ``pedestrian``, ``vehicle``, or ``ignore``. A
+    detector's detailed road-user class is deliberately collapsed to vehicle,
+    because downstream congestion logic uses road-user presence and tracks.
+    """
+    if not 0.0 <= confidence_threshold <= 1.0 or not 0.0 < iou_threshold <= 1.0:
+        raise ValueError("evaluation thresholds must be within valid ranges")
+    if not isinstance(predictions, list) or not isinstance(annotations, list):
+        raise ValueError("predictions and annotations must be lists")
+
+    ground_truth = {group: [] for group in _GROUPS}
+    ignored_boxes = []
+    for index, annotation in enumerate(annotations):
+        if not isinstance(annotation, dict):
+            raise ValueError(f"annotation {index} must be an object")
+        label = annotation.get("label")
+        box = _valid_box(annotation.get("box"))
+        if label not in {"pedestrian", "vehicle", "ignore"} or box is None:
+            raise ValueError(f"annotation {index} has an invalid label or box")
+        if label == "ignore":
+            ignored_boxes.append(box)
+        else:
+            ground_truth[label].append(box)
+
+    matched = {group: set() for group in _GROUPS}
+    counts = {
+        group: {"tp": 0, "fp": 0, "fn": 0, "ignored": 0}
+        for group in _GROUPS
+    }
+    usable_predictions = []
+    for prediction in predictions:
+        if not isinstance(prediction, dict):
+            continue
+        group = _prediction_group(prediction.get("label"))
+        confidence = prediction.get("confidence")
+        box = _valid_box(prediction.get("box"))
+        if (group is None or isinstance(confidence, bool)
+                or not isinstance(confidence, (int, float)) or not isfinite(confidence)
+                or confidence < confidence_threshold or box is None):
+            continue
+        usable_predictions.append((float(confidence), group, box))
+
+    for _confidence, group, box in sorted(usable_predictions, key=lambda row: row[0], reverse=True):
+        best_index, best_overlap = None, 0.0
+        for index, target in enumerate(ground_truth[group]):
+            if index in matched[group]:
+                continue
+            overlap = _iou(box, target)
+            if overlap > best_overlap:
+                best_index, best_overlap = index, overlap
+        if best_index is not None and best_overlap >= iou_threshold:
+            matched[group].add(best_index)
+            counts[group]["tp"] += 1
+        elif any(_iou(box, ignored) >= iou_threshold for ignored in ignored_boxes):
+            counts[group]["ignored"] += 1
+        else:
+            counts[group]["fp"] += 1
+
+    for group, boxes in ground_truth.items():
+        counts[group]["fn"] = len(boxes) - len(matched[group])
     return counts
 
 

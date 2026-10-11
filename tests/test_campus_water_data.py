@@ -210,12 +210,44 @@ def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
     testing = json.loads(
         (tmp_path / "annotation-pack" / "test-template.json").read_text(encoding="utf-8")
     )
+    detection = json.loads(
+        (tmp_path / "annotation-pack" / "detection-test-template.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    events = json.loads(
+        (tmp_path / "annotation-pack" / "event-test-template.json").read_text(
+            encoding="utf-8"
+        )
+    )
     assert {sample["split"] for sample in training["samples"]} == {"train", "validation"}
     assert {flight["split"] for flight in training["flights"]} == {"train", "validation"}
     assert all(len(flight["source_sha256"]) == 64 for flight in training["flights"])
     assert len(testing["samples"]) == 3
     assert {sample["group_id"] for sample in testing["samples"]} == {"flight-03"}
     assert {flight["flight_id"] for flight in testing["flights"]} == {"flight-03"}
+    assert detection["task"] == "campus_object_detection"
+    assert detection["label_source"] == "manual"
+    assert len(detection["samples"]) == 3
+    assert detection["samples"][0]["width"] == 32
+    assert detection["samples"][0]["height"] == 24
+    assert detection["samples"][0]["objects"] == []
+    assert events["task"] == "campus_event_detection"
+    assert events["event_kinds"] == ["congestion", "crowding", "accident", "flooding"]
+    assert events["annotation_pending"] is True
+    assert events["samples"] == [{
+        "sample_id": "flight-03",
+        "video": "raw/flight-03.mp4",
+        "group_id": "flight-03",
+        "site_id": "site-03",
+        "location": "武大试点 03",
+        "captured_at": "2026-10-13T09:30:00+08:00",
+        "source_sha256": worklist["flights"][2]["source_sha256"],
+        "camera_stabilized": None,
+        "event_kinds": [],
+        "observation_regions": [],
+        "events": [],
+    }]
     instructions = (tmp_path / "annotation-pack" / "ANNOTATION.md").read_text(encoding="utf-8")
     assert '\n"' not in instructions
     assert instructions.startswith("# 校园道路可见水体人工标注\n\n1.")

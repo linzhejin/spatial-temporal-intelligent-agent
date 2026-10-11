@@ -258,6 +258,8 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
                         "source_frame_index": frame_index,
                         "timestamp_seconds": round(frame_index / fps, 3),
                         "image": image_rel,
+                        "width": width,
+                        "height": height,
                         "mask": mask_rel,
                         "road_surface_polygon": None,
                         "annotation_status": "pending",
@@ -334,9 +336,60 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
                 for item in testing_samples
             ],
         }
+        detection_test_template = {
+            "schema_version": 1,
+            "task": "campus_object_detection",
+            "dataset": plan["dataset"],
+            "split_unit": "flight_id",
+            "label_source": "manual",
+            "split_groups": plan["split_groups"],
+            "site_splits": plan["site_splits"],
+            "annotation_pending": True,
+            "flights": [item for item in flight_summaries if item["split"] == "test"],
+            "samples": [
+                {
+                    "sample_id": item["sample_id"],
+                    "group_id": item["group_id"],
+                    "image": item["image"],
+                    "width": item["width"],
+                    "height": item["height"],
+                    "objects": [],
+                }
+                for item in testing_samples
+            ],
+        }
+        event_test_template = {
+            "schema_version": 1,
+            "task": "campus_event_detection",
+            "dataset": plan["dataset"],
+            "split_unit": "flight_id",
+            "label_source": "manual",
+            "event_kinds": ["congestion", "crowding", "accident", "flooding"],
+            "split_groups": plan["split_groups"],
+            "site_splits": plan["site_splits"],
+            "annotation_pending": True,
+            "samples": [
+                {
+                    "sample_id": item["flight_id"],
+                    "video": item["source_video"],
+                    "group_id": item["flight_id"],
+                    "site_id": item["site_id"],
+                    "location": item["location"],
+                    "captured_at": item["captured_at"],
+                    "source_sha256": item["source_sha256"],
+                    "camera_stabilized": None,
+                    "event_kinds": [],
+                    "observation_regions": [],
+                    "events": [],
+                }
+                for item in flight_summaries if item["split"] == "test"
+            ],
+        }
         _write_json(staging / "annotation-worklist.json", worklist)
         _write_json(staging / "training-template.json", training_template)
         _write_json(staging / "test-template.json", test_template)
+        _write_json(staging / "detection-test-template.json", detection_test_template)
+        _write_json(staging / "event-test-template.json", event_test_template)
         (staging / "ANNOTATION.md").write_text(
             """# 校园道路可见水体人工标注
 
@@ -344,6 +397,8 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
 2. 按 `mask` 路径保存与原图同宽高的灰度 PNG；路面范围内确认的可见水体标为 255，其余像素为 0。积水、湿路反光、阴影、湖面和干路要按标注规范区分；不确定样本应先剔除，不能猜标签。
 3. 只把 train/validation 模板交给 `train_visible_water.py`；test 模板只交给独立评测脚本，不能参与训练、选模型或调阈值。保存原视频和本目录外的备份。
 4. 模板含 `annotation_pending: true`，标注完成后可删除该提示字段；训练器仍会检查文件、尺寸、掩膜像素值和跨 split 的完全重复图像。
+5. `detection-test-template.json` 用于校园人车检测评测。只保留准备人工框选的代表帧，在 `objects` 中逐个填写 `pedestrian`、`vehicle` 或 `ignore` 及像素坐标 `[x1,y1,x2,y2]`；不能把空数组当作尚未标注的占位结果。
+6. `event-test-template.json` 指向原始测试航次视频。填写镜头是否稳定、已人工检查的事件类型、观察区域和事件时间段后，再删除 `annotation_pending`；运行评测时 `--dataset-root` 指向原始航拍数据目录。
 
 水体分割结果是影像线索，不是现场封路结论；必须由管理员复核后才可影响路况。
 """,
@@ -360,4 +415,6 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
         "worklist": str(target / "annotation-worklist.json"),
         "training_template": str(target / "training-template.json"),
         "test_template": str(target / "test-template.json"),
+        "detection_test_template": str(target / "detection-test-template.json"),
+        "event_test_template": str(target / "event-test-template.json"),
     }
