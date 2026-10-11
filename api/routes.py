@@ -262,6 +262,8 @@ def _parse_vision_observation_regions(value) -> list[dict]:
             "id": region_id,
             "kind": region["kind"], "polygon": points,
         })
+    if normalized and not any(region["kind"] != "exclude" for region in normalized):
+        raise ValueError("排除区域不能单独作为识别范围，请再圈选道路、人行或停车区域。")
     return normalized
 
 

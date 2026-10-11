@@ -93,6 +93,21 @@ def test_onnx_detector_uses_annotated_crop_and_restores_full_frame_coordinates()
     assert session.feed["images"].shape == (1, 3, 960, 960)
 
 
+@pytest.mark.parametrize("regions", [
+    [],
+    [{"id": "exclude-only", "kind": "exclude",
+      "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}],
+])
+def test_onnx_detector_does_not_fall_back_to_full_frame_when_no_inference_region(regions):
+    session = FakeSession()
+    detector = OnnxDetector("model.onnx", session=session, confidence_threshold=0.25)
+
+    with pytest.raises(ValueError, match="排除区域不能单独用于识别"):
+        detector.detect_regions(np.zeros((480, 640, 3), dtype=np.uint8), regions)
+
+    assert session.feed is None
+
+
 def test_onnx_detector_tiles_large_observation_regions_and_merges_seam_duplicates():
     class TiledSession(FakeSession):
         def __init__(self):

@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import random
 import time
 import zipfile
 from collections import Counter, defaultdict
@@ -233,6 +234,8 @@ def run_songdo_vision_evaluation(
     confidence_threshold: float = 0.369,
     iou_threshold: float = 0.5,
     limit: int = 0,
+    sample_seed: int | None = None,
+    inference_path: str = "whole_frame",
     detector_factory=None,
     image_decoder: Callable[[bytes], object] | None = None,
     progress_callback: Callable[[int, int, float], None] | None = None,
@@ -243,6 +246,10 @@ def run_songdo_vision_evaluation(
         raise ValueError("confidence and IoU thresholds must be within their valid ranges")
     if type(limit) is not int or limit < 0:
         raise ValueError("limit must be a non-negative integer")
+    if sample_seed is not None and type(sample_seed) is not int:
+        raise ValueError("sample_seed must be an integer or None")
+    if inference_path not in {"whole_frame", "full_frame_tiled"}:
+        raise ValueError("inference_path must be whole_frame or full_frame_tiled")
     archive_path = Path(archive_path).resolve()
     model_path = Path(model_path).resolve()
     if not archive_path.is_file() or not model_path.is_file():
@@ -265,10 +272,18 @@ def run_songdo_vision_evaluation(
             raise ValueError("COCO annotation JSON is invalid") from error
         dataset, annotations_sha256 = _validate_coco(coco, archive_names)
         image_ids = sorted(dataset["images"])
-        selected_ids = image_ids[:limit] if limit else image_ids
+        if limit and sample_seed is not None:
+            selected_ids = sorted(random.Random(sample_seed).sample(
+                image_ids, min(limit, len(image_ids)),
+            ))
+        else:
+            selected_ids = image_ids[:limit] if limit else image_ids
         detector = detector_factory(
             str(model_path), confidence_threshold=float(confidence_threshold),
         )
+        if inference_path == "full_frame_tiled" and not callable(
+                getattr(detector, "detect_regions", None)):
+            raise ValueError("full_frame_tiled evaluation requires detector.detect_regions")
         totals = {name: {"tp": 0, "fp": 0, "fn": 0} for name in SONGDO_CLASS_NAMES}
         excluded_prediction_count = 0
         inference_seconds = []
@@ -282,7 +297,15 @@ def run_songdo_vision_evaluation(
                     or int(frame.shape[0]) != image_info["height"]):
                 raise ValueError(f"decoded dimensions do not match COCO record: {member_name}")
             inference_started = time.monotonic()
-            predictions = detector.detect(frame)
+            if inference_path == "full_frame_tiled":
+                predictions = detector.detect_regions(frame, [{
+                    "id": "songdo-full-frame",
+                    # This rectangle measures tiling only; it is not a road ROI.
+                    "kind": "vehicle_lane",
+                    "polygon": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+                }])
+            else:
+                predictions = detector.detect(frame)
             inference_seconds.append(time.monotonic() - inference_started)
             frame_counts, excluded = _score_image(
                 predictions,
@@ -301,12 +324,18 @@ def run_songdo_vision_evaluation(
         report = {
             "dataset": "Songdo Vision v2 test",
             "dataset_version": dataset["info"].get("version"),
-            "inference_path": "whole_frame",
+            "inference_path": inference_path,
+            "region_scope": (
+                "entire_image_for_tiling_comparison"
+                if inference_path == "full_frame_tiled" else None
+            ),
             "dataset_archive": archive_path.name,
             "dataset_archive_sha256": _sha256(archive_path),
             "annotations_sha256": annotations_sha256,
             "image_count_in_archive": len(image_ids),
             "image_count_evaluated": len(selected_ids),
+            "evaluated_image_ids": selected_ids,
+            "sample_seed": sample_seed,
             "annotation_count_in_archive": dataset["annotation_count"],
             "official_test_split_complete": full_test_split,
             "evaluation_scope": "full_official_test_split" if full_test_split else "limited_smoke_sample",
@@ -328,7 +357,109 @@ def run_songdo_vision_evaluation(
                 "The official test split is random by image, not an independent flight or scene split.",
                 "Songdo Vision v2 used the geo-trax detector family to surface some test annotations for human review; related detectors may receive a small favorable bias.",
                 "Metrics are class-aware precision/recall/F1 at one confidence and IoU operating point, not COCO mAP or an event-level congestion score.",
-            "Inference uses the whole-frame detector path and does not measure the production road-ROI tiling path.",
+                (
+                    "Full-image tiling is a resolution-preservation proxy only; it does not measure road-only ROI selection."
+                    if inference_path == "full_frame_tiled"
+                    else "Inference uses the whole-frame detector path and does not measure the production tiled path."
+                ),
             ],
         }
     return report
+
+
+def run_songdo_vision_paired_comparison(
+    archive_path: Path,
+    model_path: Path,
+    *,
+    confidence_threshold: float = 0.369,
+    iou_threshold: float = 0.5,
+    limit: int = 0,
+    sample_seed: int | None = None,
+    detector_factory=None,
+    image_decoder: Callable[[bytes], object] | None = None,
+    progress_callback: Callable[[str, int, int, float], None] | None = None,
+) -> dict:
+    """Compare whole-image resizing and tiled inference on identical COCO frames."""
+    started = time.monotonic()
+    common = {
+        "confidence_threshold": confidence_threshold,
+        "iou_threshold": iou_threshold,
+        "limit": limit,
+        "sample_seed": sample_seed,
+        "detector_factory": detector_factory,
+        "image_decoder": image_decoder,
+    }
+
+    def path_progress(path_name: str):
+        if progress_callback is None:
+            return None
+
+        def callback(current: int, total: int, elapsed: float) -> None:
+            progress_callback(path_name, current, total, elapsed)
+
+        return callback
+
+    whole_frame = run_songdo_vision_evaluation(
+        archive_path, model_path, inference_path="whole_frame",
+        progress_callback=path_progress("whole_frame"), **common,
+    )
+    full_frame_tiled = run_songdo_vision_evaluation(
+        archive_path, model_path, inference_path="full_frame_tiled",
+        progress_callback=path_progress("full_frame_tiled"), **common,
+    )
+    invariant_fields = (
+        "dataset_archive_sha256", "annotations_sha256", "model_sha256",
+        "evaluated_image_ids", "confidence_threshold", "iou_threshold",
+    )
+    if any(whole_frame[field] != full_frame_tiled[field] for field in invariant_fields):
+        raise ValueError("paired comparison inputs changed or selected different images")
+
+    deltas = {}
+
+    def metric_delta(tiled_value, whole_value, metric: str):
+        difference = tiled_value - whole_value
+        return difference if metric in {"tp", "fp", "fn"} else round(difference, 4)
+
+    for group in ("by_class", "micro"):
+        whole_metrics, tiled_metrics = whole_frame[group], full_frame_tiled[group]
+        metrics = ("tp", "fp", "fn", "precision", "recall", "f1")
+        if group == "by_class":
+            deltas[group] = {
+                class_name: {
+                    metric: metric_delta(
+                        tiled_metrics[class_name][metric],
+                        whole_metrics[class_name][metric],
+                        metric,
+                    )
+                    for metric in metrics
+                }
+                for class_name in sorted(SONGDO_CLASS_NAMES)
+            }
+        else:
+            deltas[group] = {
+                metric: metric_delta(tiled_metrics[metric], whole_metrics[metric], metric)
+                for metric in metrics
+            }
+
+    return {
+        "dataset": whole_frame["dataset"],
+        "dataset_archive_sha256": whole_frame["dataset_archive_sha256"],
+        "annotations_sha256": whole_frame["annotations_sha256"],
+        "model_sha256": whole_frame["model_sha256"],
+        "confidence_threshold": confidence_threshold,
+        "iou_threshold": iou_threshold,
+        "image_count_evaluated": whole_frame["image_count_evaluated"],
+        "evaluated_image_ids": whole_frame["evaluated_image_ids"],
+        "sample_seed": sample_seed,
+        "comparison": "full_frame_tiled_minus_whole_frame",
+        "paths": {"whole_frame": whole_frame, "full_frame_tiled": full_frame_tiled},
+        "deltas": deltas,
+        "paired_elapsed_seconds": round(time.monotonic() - started, 2),
+        "limitations": [
+            "Full-image tiling tests resolution preservation, not hand-labeled road ROI selection.",
+            "Songdo Vision test images are not independent flight or scene groups; no flight-level confidence interval is reported.",
+            "A limited random image sample is exploratory and cannot replace the complete external test evaluation.",
+            "Sequential path timings are affected by cache and system load and are not a stable throughput benchmark.",
+            "Songdo results do not measure Wuhan University campus performance.",
+        ],
+    }

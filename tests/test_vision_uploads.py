@@ -173,6 +173,14 @@ def test_video_upload_requires_capture_time_and_normalized_roi(monkeypatch, tmp_
     valid = client.post("/api/manager/vision-uploads", json=payload, headers=headers)
     assert valid.status_code == 201
 
+    payload["observation_regions"] = [{
+        "id": "exclude-only", "kind": "exclude",
+        "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+    }]
+    no_inference_area = client.post("/api/manager/vision-uploads", json=payload, headers=headers)
+    assert no_inference_area.status_code == 400
+    assert no_inference_area.get_json()["error"] == "invalid_observation_metadata"
+
     payload["observation_regions"] = [
         {"id": "same", "kind": "vehicle_lane", "polygon": [[0, 0], [1, 0], [1, 1]]},
         {"id": "same", "kind": "road_surface", "polygon": [[0, 0], [1, 0], [1, 1]]},

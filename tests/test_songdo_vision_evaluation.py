@@ -3,6 +3,7 @@ import zipfile
 
 import pytest
 
+import vision.songdo_vision_evaluation as songdo_evaluation
 from vision.songdo_vision_evaluation import run_songdo_vision_evaluation
 
 
@@ -124,6 +125,96 @@ def test_partial_limit_is_explicit_and_cannot_claim_full_test_split(tmp_path):
     assert report["image_count_evaluated"] == 1
     assert report["official_test_split_complete"] is False
     assert report["evaluation_scope"] == "limited_smoke_sample"
+
+
+def test_full_frame_tiled_path_uses_production_region_detector(tmp_path):
+    archive = tmp_path / "songdo-test.zip"
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    _archive(archive)
+
+    class RegionDetector(_Detector):
+        def __init__(self, *args, **kwargs):
+            super().__init__(*args, **kwargs)
+
+        def detect(self, frame):
+            raise AssertionError("full-frame tiled inference must use detect_regions")
+
+        def detect_regions(self, frame, regions):
+            assert regions == [{
+                "id": "songdo-full-frame",
+                "kind": "vehicle_lane",
+                "polygon": [[0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0]],
+            }]
+            return super().detect(frame)
+
+    report = run_songdo_vision_evaluation(
+        archive, model,
+        detector_factory=RegionDetector,
+        image_decoder=lambda payload: _Frame(payload.decode(), 100, 100),
+        inference_path="full_frame_tiled",
+    )
+
+    assert report["inference_path"] == "full_frame_tiled"
+    assert report["region_scope"] == "entire_image_for_tiling_comparison"
+    assert report["image_count_evaluated"] == 2
+
+
+def test_full_frame_tiled_path_fails_when_detector_lacks_region_api(tmp_path):
+    archive = tmp_path / "songdo-test.zip"
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    _archive(archive)
+
+    with pytest.raises(ValueError, match="requires detector.detect_regions"):
+        _run(archive, model, inference_path="full_frame_tiled")
+
+
+def test_songdo_paired_evaluator_compares_identical_frames_and_reports_metric_deltas(tmp_path):
+    archive = tmp_path / "songdo-test.zip"
+    model = tmp_path / "model.onnx"
+    model.write_bytes(b"model")
+    _archive(archive)
+
+    class ComparisonDetector:
+        model_id = "comparison-detector"
+        model_version = "fixture-v1"
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def detect(self, frame):
+            if frame.name == "image-one":
+                return [{"label": "car", "box": [10, 10, 30, 30], "confidence": 0.9}]
+            return []
+
+        def detect_regions(self, frame, regions):
+            assert regions[0]["polygon"] == [
+                [0.0, 0.0], [1.0, 0.0], [1.0, 1.0], [0.0, 1.0],
+            ]
+            if frame.name == "image-one":
+                return [
+                    {"label": "car", "box": [10, 10, 30, 30], "confidence": 0.9},
+                    {"label": "truck", "box": [50, 50, 60, 60], "confidence": 0.8},
+                ]
+            return [{"label": "motor", "box": [20, 20, 30, 30], "confidence": 0.8}]
+
+    report = songdo_evaluation.run_songdo_vision_paired_comparison(
+        archive, model, limit=2, sample_seed=17,
+        detector_factory=ComparisonDetector,
+        image_decoder=lambda payload: _Frame(payload.decode(), 100, 100),
+    )
+
+    assert report["comparison"] == "full_frame_tiled_minus_whole_frame"
+    assert report["image_count_evaluated"] == 2
+    assert report["paths"]["whole_frame"]["evaluated_image_ids"] == [1, 2]
+    assert report["paths"]["whole_frame"]["evaluated_image_ids"] == report["paths"][
+        "full_frame_tiled"
+    ]["evaluated_image_ids"]
+    assert report["deltas"]["by_class"]["truck"]["fn"] == -1
+    assert report["deltas"]["by_class"]["motorcycle"]["fn"] == -1
+    assert report["deltas"]["micro"]["recall"] == 0.6667
+    assert "not hand-labeled road ROI" in report["limitations"][0]
 
 
 @pytest.mark.parametrize("mutate, message", [

@@ -12,7 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from vision.songdo_vision_evaluation import run_songdo_vision_evaluation  # noqa: E402
+from vision.songdo_vision_evaluation import (  # noqa: E402
+    run_songdo_vision_evaluation,
+    run_songdo_vision_paired_comparison,
+)
 
 
 def main() -> int:
@@ -26,7 +29,14 @@ def main() -> int:
     parser.add_argument("--iou", type=float, default=0.5,
                         help="class-aware box matching IoU threshold")
     parser.add_argument("--limit", type=int, default=0,
-                        help="first N images for a smoke sample; 0 evaluates the full official test split")
+                        help="maximum images; 0 evaluates the full official test split")
+    parser.add_argument("--sample-seed", type=int,
+                        help="select a reproducible random subset instead of the first N images")
+    parser.add_argument("--inference-path", choices=("whole_frame", "full_frame_tiled"),
+                        default="whole_frame",
+                        help="whole-frame resizing or full-image tiling proxy")
+    parser.add_argument("--compare-full-frame-tiled", action="store_true",
+                        help="run both paths on the same selected images and report metric deltas")
     parser.add_argument("--cpu-threads", type=int, default=1,
                         help="ONNX Runtime intra-op CPU threads (default: 1)")
     parser.add_argument("--output", type=Path,
@@ -44,25 +54,42 @@ def main() -> int:
     os.environ["VISION_CPU_THREADS"] = str(args.cpu_threads)
     started = time.monotonic()
 
-    def report_progress(current: int, total: int, elapsed: float) -> None:
+    def report_progress(path_name: str, current: int, total: int, elapsed: float) -> None:
         rate = current / elapsed if elapsed else 0.0
         remaining = (total - current) / rate if rate else 0.0
         print(
-            f"evaluated {current}/{total} images; elapsed={elapsed:.1f}s; "
+            f"[{path_name}] evaluated {current}/{total} images; elapsed={elapsed:.1f}s; "
             f"estimated_remaining={remaining:.1f}s",
             file=sys.stderr,
             flush=True,
         )
 
     try:
-        report = run_songdo_vision_evaluation(
-            args.archive,
-            args.model,
-            confidence_threshold=args.confidence,
-            iou_threshold=args.iou,
-            limit=args.limit,
-            progress_callback=report_progress,
-        )
+        if args.compare_full_frame_tiled:
+            if args.inference_path != "whole_frame":
+                parser.error("--inference-path cannot be combined with --compare-full-frame-tiled")
+            report = run_songdo_vision_paired_comparison(
+                args.archive,
+                args.model,
+                confidence_threshold=args.confidence,
+                iou_threshold=args.iou,
+                limit=args.limit,
+                sample_seed=args.sample_seed,
+                progress_callback=report_progress,
+            )
+        else:
+            report = run_songdo_vision_evaluation(
+                args.archive,
+                args.model,
+                confidence_threshold=args.confidence,
+                iou_threshold=args.iou,
+                limit=args.limit,
+                sample_seed=args.sample_seed,
+                inference_path=args.inference_path,
+                progress_callback=lambda current, total, elapsed: report_progress(
+                    args.inference_path, current, total, elapsed,
+                ),
+            )
     except (OSError, ValueError, RuntimeError) as error:
         parser.error(str(error))
 

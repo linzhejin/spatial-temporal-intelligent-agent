@@ -239,7 +239,7 @@ class OnnxDetector:
         return detections
 
     def detect_regions(self, frame, regions: list[dict], *, tracking: bool = False) -> list[dict[str, Any]]:
-        """Run inference on annotated areas, tiling large crops at model-input scale."""
+        """Run inference only on usable annotated areas, tiling large crops as needed."""
         height, width = frame.shape[:2]
         crop_boxes = []
         for region in regions or []:
@@ -264,7 +264,7 @@ class OnnxDetector:
             if box not in crop_boxes:
                 crop_boxes.append(box)
         if not crop_boxes:
-            return self.detect(frame, tracking=tracking)
+            raise ValueError("排除区域不能单独用于识别，请重新圈选道路、人行或停车区域。")
 
         detections = []
         for x1, y1, x2, y2 in crop_boxes:
