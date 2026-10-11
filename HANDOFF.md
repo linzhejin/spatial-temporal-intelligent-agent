@@ -29,6 +29,7 @@
 - 新增校园现场就绪审计 `scripts/vision/audit_campus_field_readiness.py`：检查航次、人工标注、独立测试航次数、报告与权重哈希；未有武大航次和人工真值时会明确禁止宣称校园识别精度。当前本机三个模型权重文件都存在，但校园证据清单与评测报告缺失。
 - 外域演示使用了本机已有的 Songdo Traffic 4K 交通视频（韩国松岛，CC BY 4.0）：5 秒片段 25/25 帧完成分析、镜头补偿 24/24 次转换有效；单帧 58 个检测框、跨片段 64 条车辆轨迹。当前 CPU 单次处理约 106 秒，属于后台离线处理；无人工真值，不能据此报告精度或武大表现。
 - 已增加 Songdo Vision v2 完整 COCO 测试集评测入口；2026-10-11 全量评估 1,084 张图、55,528 个目标，车辆框微平均 precision/recall/F1 为 0.7296/0.9054/0.8080。卡车与摩托车指标较低；该外域固定阈值结果不是拥堵事件或武大校园精度。复现命令、分类指标、来源偏差和报告路径见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
+- 本机公开训练数据核查：Songdo 仅有 test.zip、VisDrone 仅有 val/test，VME 是多来源卫星影像且未找到统一许可；ONNX Runtime 当前只有 CPU 提供器。保持 Songdo test 不参与训练或调参；数据、许可、算力边界与后续可用方案见同一验收记录。
 - 新审计加入后，全量回归为 Python `1094 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 
 - 2026-10-10 当前发布：提交 `0952596` 已推送至 GitHub、Gitee `main` 并快进部署到腾讯云 `/home/ubuntu/campus-spatial-intelligence-agent`。本轮改动只影响视觉 worker 的观察区域推理；部署前影像队列没有 queued/running 任务，无数据库迁移或模型权重更新。
