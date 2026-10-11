@@ -12,7 +12,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ b33430f ｜ origin/main 落后 1 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 07:04
+- 版本：codex/aerial-vision-release @ 108aa06 ｜ origin/main 落后 2 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 07:48
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 12（最新 012）
 <!-- FACTS:END -->
@@ -34,7 +34,8 @@
 - 成对比较入口完成后，本轮全量 Python 回归 `1104 passed、49 skipped、1 xfailed`；校园检测评测专项 `10 passed`，Ruff、compileall 和 `git diff --check` 均通过。并发道路事件测试在全量运行及额外 5 次复跑中通过。
 - 2026-10-12 成对评测耗时记录提交 `e096d8a` 已推送 GitHub、Gitee `main` 并快进同步腾讯云项目目录；该提交只改离线评测工具和文档，未改 Web/Worker 运行逻辑、依赖、数据库或模型，因此没有重启服务。同步后服务器三个服务均为 active，本机与公网 `/health` 均返回 `status=ok`。
 - 本机公开训练数据核查：Songdo 仅有 test.zip、VisDrone 仅有 val/test，VME 是多来源卫星影像且未找到统一许可；ONNX Runtime 当前只有 CPU 提供器。保持 Songdo test 不参与训练或调参；数据、许可、算力边界与后续可用方案见同一验收记录。
-- 新审计加入后，全量回归为 Python `1094 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
+- 最新评测一致性审计回归为 Python `1130 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
+- 2026-10-12 动态 ONNX 批量分块推理专项：Python 全量回归 `1137 passed、49 skipped、1 xfailed`，JavaScript `117 passed`；Ruff、`compileall`、`git diff --check` 和当前事实校验通过。AIDER 五分类权重哈希匹配已评测产物；正常图与事故场景图均完成推理，这只验证模型加载和输出契约，不代表事故事件精度通过。CPU 上 4K Songdo 单帧重复对照中，批次 1 用时 12.33/14.37 秒，批次 4 用时 16.46/15.27 秒，77 个检测框及坐标完全相同；因此默认仍为串行，批处理没有被宣称为加速。该实现尚未提交、推送或部署。
 
 - 2026-10-10 当前发布：提交 `0952596` 已推送至 GitHub、Gitee `main` 并快进部署到腾讯云 `/home/ubuntu/campus-spatial-intelligence-agent`。本轮改动只影响视觉 worker 的观察区域推理；部署前影像队列没有 queued/running 任务，无数据库迁移或模型权重更新。
 - 部署后 `whu-walker`、`whu-agent-worker`、`whu-vision-worker` 均为 active；视觉 worker 最新心跳为 ready，公网 `/health` 返回 HTTP 200、`status=ok`。服务器工作目录的未跟踪文件 `cloudflared`、`scripts/_probe_shortest.py`、`wget-log` 保持原样。

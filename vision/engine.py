@@ -162,38 +162,66 @@ class OnnxDetector:
         if not {"labels", "boxes", "scores"}.issubset(outputs):
             raise VisionConfigurationError("ONNX 模型输出必须包含 labels、boxes 和 scores")
         self.input_size = image_shape[2]
+        batch_dimension = image_shape[0]
+        if isinstance(batch_dimension, int):
+            if batch_dimension != 1:
+                raise VisionConfigurationError("ONNX 模型批次必须为 1 或动态维度")
+            self.tile_batch_size = 1
+        else:
+            try:
+                requested_batch_size = int(os.getenv("VISION_TILE_BATCH_SIZE", "1"))
+            except ValueError as error:
+                raise VisionConfigurationError("VISION_TILE_BATCH_SIZE 必须是 1 到 4 之间的整数") from error
+            if not 1 <= requested_batch_size <= 4:
+                raise VisionConfigurationError("VISION_TILE_BATCH_SIZE 必须是 1 到 4 之间的整数")
+            self.tile_batch_size = requested_batch_size
 
     @staticmethod
-    def _squeeze_batch(value, expected_rank: int):
+    def _normalize_batch_output(value, expected_rank: int, batch_size: int):
         import numpy as np
 
         array = np.asarray(value)
-        if array.ndim == expected_rank + 1 and array.shape[0] == 1:
-            array = array[0]
-        if array.ndim != expected_rank:
+        if array.ndim == expected_rank and batch_size == 1:
+            array = array[None, ...]
+        if array.ndim != expected_rank + 1 or array.shape[0] != batch_size:
             raise VisionConfigurationError("ONNX 模型输出维度无效")
         return array
 
     def detect(self, frame, *, tracking: bool = False) -> list[dict[str, Any]]:
         """Return original-frame pixel boxes and normalized VisDrone labels."""
+        return self._detect_batch([frame], tracking=tracking)[0]
+
+    def _detect_batch(self, frames, *, tracking: bool = False) -> list[list[dict[str, Any]]]:
+        """Infer a small image batch and restore each result to its source frame."""
         import cv2
         import numpy as np
 
-        if frame is None or not hasattr(frame, "shape") or len(frame.shape) != 3 or frame.shape[2] != 3:
-            raise ValueError("待识别画面必须是三通道彩色图像")
-        height, width = frame.shape[:2]
-        _validate_frame_dimensions(width, height)
-        ratio = min(self.input_size / width, self.input_size / height)
-        resized_width = max(1, round(width * ratio))
-        resized_height = max(1, round(height * ratio))
-        resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
-        rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
-        pad_x = (self.input_size - resized_width) // 2
-        pad_y = (self.input_size - resized_height) // 2
-        padded = np.zeros((self.input_size, self.input_size, 3), dtype=np.uint8)
-        padded[pad_y:pad_y + resized_height, pad_x:pad_x + resized_width] = rgb
-        tensor = np.transpose(padded.astype(np.float32) / 255.0, (2, 0, 1))[None, ...]
-        target_size = np.asarray([[self.input_size, self.input_size]], dtype=np.int64)
+        if not frames:
+            return []
+        if len(frames) > self.tile_batch_size:
+            raise ValueError("单次 ONNX 推理批次超过当前模型支持的大小")
+
+        tensors = []
+        transforms = []
+        for frame in frames:
+            if (frame is None or not hasattr(frame, "shape")
+                    or len(frame.shape) != 3 or frame.shape[2] != 3):
+                raise ValueError("待识别画面必须是三通道彩色图像")
+            height, width = frame.shape[:2]
+            _validate_frame_dimensions(width, height)
+            ratio = min(self.input_size / width, self.input_size / height)
+            resized_width = max(1, round(width * ratio))
+            resized_height = max(1, round(height * ratio))
+            resized = cv2.resize(frame, (resized_width, resized_height), interpolation=cv2.INTER_LINEAR)
+            rgb = cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+            pad_x = (self.input_size - resized_width) // 2
+            pad_y = (self.input_size - resized_height) // 2
+            padded = np.zeros((self.input_size, self.input_size, 3), dtype=np.uint8)
+            padded[pad_y:pad_y + resized_height, pad_x:pad_x + resized_width] = rgb
+            tensors.append(np.transpose(padded.astype(np.float32) / 255.0, (2, 0, 1)))
+            transforms.append((width, height, ratio, pad_x, pad_y))
+        tensor = np.stack(tensors, axis=0)
+        target_size = np.full((len(frames), 2), self.input_size, dtype=np.int64)
         try:
             raw = self.session.run(
                 ["labels", "boxes", "scores"],
@@ -203,40 +231,44 @@ class OnnxDetector:
             raise VisionConfigurationError(f"ONNX 推理失败：{error}") from error
         if not isinstance(raw, (tuple, list)) or len(raw) != 3:
             raise VisionConfigurationError("ONNX 模型返回了不支持的结果")
-        labels = self._squeeze_batch(raw[0], 1)
-        boxes = self._squeeze_batch(raw[1], 2)
-        scores = self._squeeze_batch(raw[2], 1)
-        if boxes.shape[-1] != 4 or len(labels) != len(boxes) or len(scores) != len(boxes):
+        labels = self._normalize_batch_output(raw[0], 1, len(frames))
+        boxes = self._normalize_batch_output(raw[1], 2, len(frames))
+        scores = self._normalize_batch_output(raw[2], 1, len(frames))
+        if (boxes.shape[-1] != 4 or labels.shape[1] != boxes.shape[1]
+                or scores.shape[1] != boxes.shape[1]):
             raise VisionConfigurationError("ONNX 模型输出维度不一致")
 
-        detections = []
-        for class_id, box, confidence in zip(labels, boxes, scores):
-            if not np.isfinite(class_id) or not np.isfinite(confidence):
-                continue
-            class_index = int(class_id)
-            confidence = float(confidence)
-            minimum_confidence = (
-                self.tracking_low_confidence_threshold if tracking else self.confidence_threshold
-            )
-            if class_index < 0 or class_index >= len(VISDRONE_CLASSES) or confidence < minimum_confidence:
-                continue
-            if not np.isfinite(box).all():
-                continue
-            x1, y1, x2, y2 = map(float, box)
-            x1 = min(float(width), max(0.0, (x1 - pad_x) / ratio))
-            y1 = min(float(height), max(0.0, (y1 - pad_y) / ratio))
-            x2 = min(float(width), max(0.0, (x2 - pad_x) / ratio))
-            y2 = min(float(height), max(0.0, (y2 - pad_y) / ratio))
-            if x2 <= x1 or y2 <= y1:
-                continue
-            detections.append({
-                "label": VISDRONE_CLASSES[class_index],
-                "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
-                "confidence": round(confidence, 4),
-                "track_id": None,
-            })
-        detections.sort(key=lambda item: item["confidence"], reverse=True)
-        return detections
+        results = []
+        minimum_confidence = (
+            self.tracking_low_confidence_threshold if tracking else self.confidence_threshold
+        )
+        for batch_index, (width, height, ratio, pad_x, pad_y) in enumerate(transforms):
+            detections = []
+            for class_id, box, confidence in zip(labels[batch_index], boxes[batch_index], scores[batch_index]):
+                if not np.isfinite(class_id) or not np.isfinite(confidence):
+                    continue
+                class_index = int(class_id)
+                confidence = float(confidence)
+                if class_index < 0 or class_index >= len(VISDRONE_CLASSES) or confidence < minimum_confidence:
+                    continue
+                if not np.isfinite(box).all():
+                    continue
+                x1, y1, x2, y2 = map(float, box)
+                x1 = min(float(width), max(0.0, (x1 - pad_x) / ratio))
+                y1 = min(float(height), max(0.0, (y1 - pad_y) / ratio))
+                x2 = min(float(width), max(0.0, (x2 - pad_x) / ratio))
+                y2 = min(float(height), max(0.0, (y2 - pad_y) / ratio))
+                if x2 <= x1 or y2 <= y1:
+                    continue
+                detections.append({
+                    "label": VISDRONE_CLASSES[class_index],
+                    "box": [round(x1, 2), round(y1, 2), round(x2, 2), round(y2, 2)],
+                    "confidence": round(confidence, 4),
+                    "track_id": None,
+                })
+            detections.sort(key=lambda item: item["confidence"], reverse=True)
+            results.append(detections)
+        return results
 
     def detect_regions(self, frame, regions: list[dict], *, tracking: bool = False) -> list[dict[str, Any]]:
         """Run inference only on usable annotated areas, tiling large crops as needed."""
@@ -267,6 +299,20 @@ class OnnxDetector:
             raise ValueError("排除区域不能单独用于识别，请重新圈选道路、人行或停车区域。")
 
         detections = []
+        pending_tiles = []
+
+        def infer_pending_tiles():
+            if not pending_tiles:
+                return
+            results = self._detect_batch([tile for tile, _ in pending_tiles], tracking=tracking)
+            for (_, (origin_x, origin_y)), tile_detections in zip(pending_tiles, results):
+                for item in tile_detections:
+                    shifted = dict(item)
+                    bx1, by1, bx2, by2 = map(float, item["box"])
+                    shifted["box"] = [bx1 + origin_x, by1 + origin_y, bx2 + origin_x, by2 + origin_y]
+                    detections.append(shifted)
+            pending_tiles.clear()
+
         for x1, y1, x2, y2 in crop_boxes:
             crop = frame[y1:y2, x1:x2]
             crop_height, crop_width = crop.shape[:2]
@@ -280,14 +326,10 @@ class OnnxDetector:
                 for tile_x in x_offsets:
                     tile = crop[tile_y:min(tile_y + tile_size, crop_height),
                                 tile_x:min(tile_x + tile_size, crop_width)]
-                    for item in self.detect(tile, tracking=tracking):
-                        shifted = dict(item)
-                        bx1, by1, bx2, by2 = map(float, item["box"])
-                        shifted["box"] = [
-                            bx1 + x1 + tile_x, by1 + y1 + tile_y,
-                            bx2 + x1 + tile_x, by2 + y1 + tile_y,
-                        ]
-                        detections.append(shifted)
+                    pending_tiles.append((tile, (x1 + tile_x, y1 + tile_y)))
+                    if len(pending_tiles) >= self.tile_batch_size:
+                        infer_pending_tiles()
+        infer_pending_tiles()
         detections.sort(key=lambda item: item["confidence"], reverse=True)
         deduplicated = []
         for item in detections:

@@ -144,6 +144,86 @@ def test_onnx_detector_tiles_large_observation_regions_and_merges_seam_duplicate
     assert detections[1]["box"] == pytest.approx([2100, 100, 2160, 160])
 
 
+def test_dynamic_batch_model_batches_roi_tiles_and_restores_each_tile_coordinates(monkeypatch):
+    class DynamicBatchSession(FakeSession):
+        def __init__(self):
+            super().__init__(input_shape=("N", 3, 960, 960))
+            self.feeds = []
+
+        def run(self, output_names, input_feed):
+            self.feeds.append(input_feed)
+            count = input_feed["images"].shape[0]
+            return [
+                np.tile(np.asarray([[3]], dtype=np.int64), (count, 1)),
+                np.tile(np.asarray([[[80, 80, 160, 160]]], dtype=np.float32), (count, 1, 1)),
+                np.tile(np.asarray([[0.9]], dtype=np.float32), (count, 1)),
+            ]
+
+    monkeypatch.setenv("VISION_TILE_BATCH_SIZE", "2")
+    session = DynamicBatchSession()
+    detector = OnnxDetector("model.onnx", session=session, confidence_threshold=0.25)
+    frame = np.zeros((1200, 3000, 3), dtype=np.uint8)
+
+    detections = detector.detect_regions(frame, [{
+        "id": "lane", "kind": "vehicle_lane",
+        "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+    }])
+
+    assert [feed["images"].shape[0] for feed in session.feeds] == [2, 1]
+    assert all(feed["images"].shape[1:] == (3, 960, 960) for feed in session.feeds)
+    assert [feed["orig_target_sizes"].tolist() for feed in session.feeds] == [
+        [[960, 960], [960, 960]], [[960, 960]],
+    ]
+    np.testing.assert_allclose([item["box"] for item in detections], [
+        [100, 100, 200, 200], [1000, 100, 1100, 200], [1900, 100, 2000, 200],
+    ])
+
+
+def test_dynamic_batch_model_defaults_to_serial_tiles(monkeypatch):
+    monkeypatch.delenv("VISION_TILE_BATCH_SIZE", raising=False)
+    detector = OnnxDetector(
+        "model.onnx", session=FakeSession(input_shape=("N", 3, 960, 960)),
+    )
+
+    assert detector.tile_batch_size == 1
+
+
+@pytest.mark.parametrize("batch_size", ["0", "5", "not-a-number"])
+def test_dynamic_batch_model_rejects_unsafe_batch_configuration(monkeypatch, batch_size):
+    monkeypatch.setenv("VISION_TILE_BATCH_SIZE", batch_size)
+
+    with pytest.raises(VisionConfigurationError, match="1 到 4 之间的整数"):
+        OnnxDetector("model.onnx", session=FakeSession(input_shape=("N", 3, 960, 960)))
+
+
+def test_static_batch_one_model_keeps_roi_inference_serial(monkeypatch):
+    monkeypatch.setenv("VISION_TILE_BATCH_SIZE", "4")
+
+    class SerialSession(FakeSession):
+        def __init__(self):
+            super().__init__()
+            self.feeds = []
+
+        def run(self, output_names, input_feed):
+            self.feeds.append(input_feed)
+            return super().run(output_names, input_feed)
+
+    session = SerialSession()
+    detector = OnnxDetector("model.onnx", session=session, confidence_threshold=0.25)
+    detector.detect_regions(np.zeros((1200, 2400, 3), dtype=np.uint8), [{
+        "id": "lane", "kind": "vehicle_lane",
+        "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]],
+    }])
+
+    assert len(session.feeds) == 3
+    assert all(feed["images"].shape == (1, 3, 960, 960) for feed in session.feeds)
+
+
+def test_static_multi_item_batch_model_is_rejected():
+    with pytest.raises(VisionConfigurationError, match="批次必须为 1 或动态维度"):
+        OnnxDetector("model.onnx", session=FakeSession(input_shape=(2, 3, 960, 960)))
+
+
 def test_onnx_detector_rejects_model_with_unexpected_signature():
     session = FakeSession(input_shape=(1, 3, "height", "width"))
     with pytest.raises(VisionConfigurationError, match="静态方形输入"):
