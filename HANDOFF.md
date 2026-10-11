@@ -30,8 +30,8 @@
 - 外域演示使用了本机已有的 Songdo Traffic 4K 交通视频（韩国松岛，CC BY 4.0）：5 秒片段 25/25 帧完成分析、镜头补偿 24/24 次转换有效；单帧 58 个检测框、跨片段 64 条车辆轨迹。当前 CPU 单次处理约 106 秒，属于后台离线处理；无人工真值，不能据此报告精度或武大表现。
 - 已增加 Songdo Vision v2 完整 COCO 测试集评测入口；2026-10-11 全量评估 1,084 张图、55,528 个目标，车辆框微平均 precision/recall/F1 为 0.7296/0.9054/0.8080。卡车与摩托车指标较低；该外域固定阈值结果不是拥堵事件或武大校园精度。复现命令、分类指标、来源偏差和报告路径见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 - 这次 Songdo 评测用的是全图缩放，不包含管理端道路 ROI 切片。标注中摩托车中位框高 37 px，全图 4K 缩到 640 输入后约 6 px；不能据此推断 ROI 切片表现，需在道路区域标注样本上做成对比较。
-- 校园人车评测现提供 `whole_frame` 和线上生产的 `road_roi_tiled` 两种推理口径；ROI 模式要求逐帧道路区域完整覆盖计分框，并禁止静默退回整图。当前没有校园航拍人工 ROI 标注，故尚无校园 ROI 对比结果。
-- ROI 评测改造后全量 Python 回归 `1103 passed、49 skipped、1 xfailed`；检测/模板/就绪审计/事件评测及文档事实检查 `38 passed`，Ruff、compileall 和 `git diff --check` 均通过。
+- 校园人车评测现提供 `whole_frame`、线上生产的 `road_roi_tiled` 和一次成对比较入口；比较会按同一批独立航次给出指标差值区间。ROI 模式要求逐帧道路区域覆盖计分框，并禁止静默退回整图。当前没有校园航拍人工 ROI 标注，故尚无校园 ROI 对比结果。
+- 成对比较入口完成后，本轮全量 Python 回归 `1104 passed、49 skipped、1 xfailed`；校园检测评测专项 `10 passed`，Ruff、compileall 和 `git diff --check` 均通过。并发道路事件测试在全量运行及额外 5 次复跑中通过。
 - 本机公开训练数据核查：Songdo 仅有 test.zip、VisDrone 仅有 val/test，VME 是多来源卫星影像且未找到统一许可；ONNX Runtime 当前只有 CPU 提供器。保持 Songdo test 不参与训练或调参；数据、许可、算力边界与后续可用方案见同一验收记录。
 - 新审计加入后，全量回归为 Python `1094 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 

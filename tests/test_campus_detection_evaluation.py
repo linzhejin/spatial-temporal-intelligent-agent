@@ -3,6 +3,7 @@ import copy
 import numpy as np
 import pytest
 
+from scripts.vision import evaluate_campus_detection
 from scripts.vision.evaluate_campus_detection import run_campus_detection_evaluation
 from vision.campus_detection_evaluation import validate_campus_detection_manifest
 from vision.evaluation import evaluate_grouped_frame
@@ -193,6 +194,78 @@ def test_campus_detection_runner_uses_production_roi_tiling_when_requested(tmp_p
     assert report["roi_sample_count"] == 2
     assert report["roi_region_count_by_sample"] == {"a-1": 1, "b-1": 1}
     assert len(detectors[0].region_calls) == 2
+
+
+def test_paired_campus_detection_comparison_uses_same_flights_and_reports_ci(tmp_path):
+    manifest = validate_campus_detection_manifest(_manifest())
+    dataset_root = tmp_path / "data"
+    (dataset_root / "test").mkdir(parents=True)
+    for sample in manifest["samples"]:
+        (dataset_root / sample["image"]).write_bytes(sample["sample_id"].encode("ascii"))
+    model_path = tmp_path / "detector.onnx"
+    model_path.write_bytes(b"detector")
+
+    class Detector:
+        model_id = "paired-detector"
+        model_version = "same-model"
+
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def detect(self, frame):
+            return [{"label": "pedestrian", "confidence": 0.9, "box": [0, 0, 10, 20]}]
+
+        def detect_regions(self, frame, _regions):
+            detections = [
+                {"label": "pedestrian", "confidence": 0.9, "box": [0, 0, 10, 20]},
+            ]
+            if frame.name == "a":
+                detections.append(
+                    {"label": "car", "confidence": 0.8, "box": [20, 20, 40, 40]}
+                )
+            return detections
+
+    class Frame:
+        shape = (80, 100, 3)
+
+        def __init__(self, name):
+            self.name = name
+
+    report = evaluate_campus_detection.run_campus_detection_path_comparison(
+        manifest, dataset_root, model_path,
+        confidence_threshold=0.5, iou_threshold=0.5,
+        detector_factory=Detector,
+        image_loader=lambda path: Frame(path.stem),
+        bootstrap_repetitions=100, seed=31,
+    )
+
+    assert report["inference_path"] == "paired_comparison"
+    assert report["paired_inputs"]["same_source_image_hashes"] is True
+    assert report["paired_inputs"]["same_model_hash"] is True
+    assert report["paired_inputs"]["same_thresholds"] is True
+    assert report["whole_frame"]["inference_path"] == "whole_frame"
+    assert report["road_roi_tiled"]["inference_path"] == "road_roi_tiled"
+    vehicle_f1 = report["road_roi_minus_whole_frame"]["vehicle"]["f1"]
+    assert vehicle_f1["difference"] == 1.0
+    assert vehicle_f1["flight_cluster_bootstrap_95_ci"]["resampling_group_count"] == 2
+
+    without_regions = copy.deepcopy(manifest)
+    for sample in without_regions["samples"]:
+        sample["observation_regions"] = []
+    factory_calls = []
+
+    def should_not_run(*args, **kwargs):
+        factory_calls.append(True)
+        return Detector(*args, **kwargs)
+
+    with pytest.raises(ValueError, match="requires a vehicle_lane, pedestrian, or road_surface ROI"):
+        evaluate_campus_detection.run_campus_detection_path_comparison(
+            without_regions, dataset_root, model_path,
+            detector_factory=should_not_run,
+            image_loader=lambda path: Frame(path.stem),
+            bootstrap_repetitions=100,
+        )
+    assert not factory_calls
 
 
 def test_road_roi_evaluation_requires_regions_and_covers_all_positive_labels(tmp_path):

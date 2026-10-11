@@ -263,6 +263,137 @@ def run_campus_detection_evaluation(
     }
 
 
+def run_campus_detection_path_comparison(
+    manifest: dict,
+    dataset_root: Path,
+    model_path: Path,
+    *,
+    confidence_threshold: float = 0.369,
+    iou_threshold: float = 0.5,
+    bootstrap_repetitions: int = 1000,
+    seed: int = 20261011,
+    detector_factory=None,
+    image_loader=None,
+) -> dict:
+    """Compare whole-frame and production ROI inference on identical test flights."""
+    manifest = validate_campus_detection_manifest(manifest)
+    for sample in manifest["samples"]:
+        _validate_roi_coverage(sample)
+    common = {
+        "confidence_threshold": confidence_threshold,
+        "iou_threshold": iou_threshold,
+        "bootstrap_repetitions": bootstrap_repetitions,
+        "seed": seed,
+        "detector_factory": detector_factory,
+        "image_loader": image_loader,
+    }
+    whole_frame = run_campus_detection_evaluation(
+        manifest, dataset_root, model_path,
+        inference_path="whole_frame", **common,
+    )
+    road_roi_tiled = run_campus_detection_evaluation(
+        manifest, dataset_root, model_path,
+        inference_path="road_roi_tiled", **common,
+    )
+
+    identical_fields = (
+        "task", "dataset", "split", "split_unit", "flight_group_count", "image_count",
+        "confidence_threshold", "iou_threshold", "model", "model_revision", "model_sha256",
+        "model_manifest_sha256", "source_image_sha256_by_sample",
+    )
+    if any(whole_frame[field] != road_roi_tiled[field] for field in identical_fields):
+        raise ValueError("paired inference reports do not use identical data, model, and thresholds")
+    if whole_frame["samples"].keys() != road_roi_tiled["samples"].keys():
+        raise ValueError("paired inference reports contain different test samples")
+    for sample_id, whole_sample in whole_frame["samples"].items():
+        if whole_sample["group_id"] != road_roi_tiled["samples"][sample_id]["group_id"]:
+            raise ValueError("paired inference reports assign a sample to different flight groups")
+
+    flight_ids = sorted({
+        sample["group_id"] for sample in whole_frame["samples"].values()
+    })
+    paired_flight_counts = {
+        flight_id: {
+            path: _empty_counts()
+            for path in ("whole_frame", "road_roi_tiled")
+        }
+        for flight_id in flight_ids
+    }
+    for path, report in (("whole_frame", whole_frame), ("road_roi_tiled", road_roi_tiled)):
+        for sample in report["samples"].values():
+            flight_counts_for_path = paired_flight_counts[sample["group_id"]][path]
+            for group, counts in sample["counts"].items():
+                flight_counts_for_path[group].update(counts)
+
+    def paired_delta_for_batches(batches, group: str, metric: str) -> float | None:
+        scores = {}
+        for path in ("whole_frame", "road_roi_tiled"):
+            combined = {
+                key: sum(batch[path][group][key] for batch in batches)
+                for key in ("tp", "fp", "fn", "ignored")
+            }
+            scores[path] = summarize_detection_counts({group: combined})[group][metric]
+        if scores["whole_frame"] is None or scores["road_roi_tiled"] is None:
+            return None
+        return scores["road_roi_tiled"] - scores["whole_frame"]
+
+    differences = {}
+    for group in ("pedestrian", "vehicle"):
+        differences[group] = {}
+        for metric in ("precision", "recall", "f1"):
+            whole_score = whole_frame["groups"][group][metric]
+            roi_score = road_roi_tiled["groups"][group][metric]
+            point_difference = (
+                round(roi_score - whole_score, 4)
+                if whole_score is not None and roi_score is not None else None
+            )
+            interval = cluster_bootstrap_interval(
+                paired_flight_counts,
+                lambda batches, group=group, metric=metric: paired_delta_for_batches(
+                    batches, group, metric,
+                ),
+                repetitions=bootstrap_repetitions,
+                seed=seed,
+            )
+            differences[group][metric] = {
+                "difference": point_difference,
+                "flight_cluster_bootstrap_95_ci": interval,
+            }
+
+    return {
+        "task": whole_frame["task"],
+        "dataset": whole_frame["dataset"],
+        "split": whole_frame["split"],
+        "split_unit": whole_frame["split_unit"],
+        "flight_group_count": whole_frame["flight_group_count"],
+        "image_count": whole_frame["image_count"],
+        "inference_path": "paired_comparison",
+        "confidence_threshold": whole_frame["confidence_threshold"],
+        "iou_threshold": whole_frame["iou_threshold"],
+        "model": whole_frame["model"],
+        "model_revision": whole_frame["model_revision"],
+        "model_sha256": whole_frame["model_sha256"],
+        "model_manifest_sha256": whole_frame["model_manifest_sha256"],
+        "paired_inputs": {
+            "same_source_image_hashes": True,
+            "same_model_hash": True,
+            "same_thresholds": True,
+            "bootstrap_unit": "flight_id",
+            "bootstrap_repetitions": bootstrap_repetitions,
+            "seed": seed,
+        },
+        "source_image_sha256_by_sample": whole_frame["source_image_sha256_by_sample"],
+        "whole_frame": whole_frame,
+        "road_roi_tiled": road_roi_tiled,
+        "road_roi_minus_whole_frame": differences,
+        "limitations": [
+            "道路 ROI 与全图按同一人工标注目标比较；ROI 外目标须标注为 ignore 或确保样本不含该类目标。",
+            "差值区间按独立航次成对重采样；航次数少时区间不稳定，不能替代更多独立航次。",
+            "检测框指标不等同于拥堵、人流、事故或积水事件识别效果。",
+        ],
+    }
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -273,9 +404,9 @@ def main() -> int:
     parser.add_argument("--iou", type=float, default=0.5)
     parser.add_argument("--bootstrap-repetitions", type=int, default=1000)
     parser.add_argument("--seed", type=int, default=20261011)
-    parser.add_argument("--inference-path", choices=("whole_frame", "road_roi_tiled"),
+    parser.add_argument("--inference-path", choices=("whole_frame", "road_roi_tiled", "compare"),
                         default="whole_frame",
-                        help="whole-frame baseline or production road-ROI tiled inference")
+                        help="whole-frame, production road-ROI tiled, or paired comparison")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if not args.manifest.is_file():
@@ -283,12 +414,18 @@ def main() -> int:
     try:
         manifest_bytes = args.manifest.read_bytes()
         started = time.monotonic()
-        report = run_campus_detection_evaluation(
-            json.loads(manifest_bytes.decode("utf-8-sig")),
-            args.dataset_root, args.model,
+        manifest = json.loads(manifest_bytes.decode("utf-8-sig"))
+        runner = (
+            run_campus_detection_path_comparison
+            if args.inference_path == "compare"
+            else run_campus_detection_evaluation
+        )
+        report = runner(
+            manifest, args.dataset_root, args.model,
             confidence_threshold=args.confidence, iou_threshold=args.iou,
-            inference_path=args.inference_path,
             bootstrap_repetitions=args.bootstrap_repetitions, seed=args.seed,
+            **({} if args.inference_path == "compare"
+               else {"inference_path": args.inference_path}),
         )
         report["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
         report["elapsed_seconds"] = round(time.monotonic() - started, 2)
