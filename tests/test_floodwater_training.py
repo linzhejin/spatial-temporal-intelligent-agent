@@ -72,6 +72,27 @@ def test_manifest_samples_at_one_second_and_excludes_pseudo_test_video(tmp_path)
     assert all(sample["source_video_id"] != "video-c" for sample in manifest["samples"])
 
 
+def test_manifest_can_explicitly_select_test_only_for_separate_evaluation(tmp_path):
+    chunks, samples = _tiny_metadata(tmp_path)
+
+    manifest = build_floodwater_manifest(
+        chunks, samples, sample_period_frames=25, sample_splits=("test",),
+    )
+
+    assert [sample["chunk_frame_index"] for sample in manifest["samples"]] == [0, 25, 50]
+    assert {sample["split"] for sample in manifest["samples"]} == {"test"}
+    assert {sample["source_video_id"] for sample in manifest["samples"]} == {"video-c"}
+    with pytest.raises(ValueError, match="must not contain test split samples"):
+        validate_visible_water_manifest(manifest)
+
+
+def test_manifest_rejects_malformed_requested_split_names(tmp_path):
+    chunks, samples = _tiny_metadata(tmp_path)
+
+    with pytest.raises(ValueError, match="unique train/validation/test"):
+        build_floodwater_manifest(chunks, samples, sample_splits=("train", []))
+
+
 def test_manifest_rejects_source_video_leakage_across_splits(tmp_path):
     chunks, samples = _tiny_metadata(tmp_path)
     content = chunks.read_text(encoding="utf-8").replace("video-b,val", "video-a,val")

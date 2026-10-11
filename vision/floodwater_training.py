@@ -26,15 +26,23 @@ def _canonical_split(value: str | None) -> str | None:
     return "validation" if value == "val" else value
 
 
-def build_floodwater_manifest(chunks_csv, samples_csv, *, sample_period_frames: int = 25) -> dict:
-    """Select sparse train/validation masks while preserving source-video splits.
+def build_floodwater_manifest(chunks_csv, samples_csv, *, sample_period_frames: int = 25,
+                              sample_splits: tuple[str, ...] = ("train", "validation")) -> dict:
+    """Select sparse mask frames while preserving source-video splits.
 
-    Test-source frames are intentionally omitted. The separate manually
-    annotated 700-image set remains external evaluation only.
+    By default, only train and validation frames are selected. Callers may
+    explicitly request a test-only manifest for separate evaluation; the
+    training manifest validator still rejects test samples.
     """
     if (isinstance(sample_period_frames, bool) or not isinstance(sample_period_frames, int)
             or sample_period_frames < 1):
         raise ValueError("sample_period_frames must be a positive integer")
+    if (isinstance(sample_splits, str) or not isinstance(sample_splits, (tuple, list))
+            or not sample_splits or not all(isinstance(split, str) for split in sample_splits)
+            or len(set(sample_splits)) != len(sample_splits)
+            or not set(sample_splits).issubset({"train", "validation", "test"})):
+        raise ValueError("sample_splits must contain unique train/validation/test split names")
+    requested_splits = set(sample_splits)
 
     chunks_path = Path(chunks_csv)
     samples_path = Path(samples_csv)
@@ -90,7 +98,7 @@ def build_floodwater_manifest(chunks_csv, samples_csv, *, sample_period_frames: 
         if not sample_id or sample_id in seen_sample_ids:
             raise ValueError(f"missing or duplicate sample_id in row {index}")
         seen_sample_ids.add(sample_id)
-        if frame_index % sample_period_frames or chunk["split"] == "test":
+        if frame_index % sample_period_frames or chunk["split"] not in requested_splits:
             continue
         mask_path = _metadata_path(row.get("mask_path"), f"sample {sample_id} mask_path")
         video_path = _metadata_path(row.get("video_path"), f"sample {sample_id} video_path")
@@ -111,10 +119,10 @@ def build_floodwater_manifest(chunks_csv, samples_csv, *, sample_period_frames: 
             "video": video_path,
             "label_type": row.get("label_type") or "unknown",
         })
-    if not any(sample["split"] == "train" for sample in selected):
-        raise ValueError("no training samples selected")
-    if not any(sample["split"] == "validation" for sample in selected):
-        raise ValueError("no validation samples selected")
+    split_labels = {"train": "training", "validation": "validation", "test": "test"}
+    for split in sample_splits:
+        if not any(sample["split"] == split for sample in selected):
+            raise ValueError(f"no {split_labels[split]} samples selected")
 
     ordered_groups = {split: sorted(values) for split, values in groups.items()}
     return {
