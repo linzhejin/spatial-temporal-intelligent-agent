@@ -1,4 +1,4 @@
-# 珞珈智行项目进度与交接（截至 2026-10-11）
+# 珞珈智行项目进度与交接（截至 2026-10-12）
 
 > 本文件是当前交接入口。先看这里，再按需打开功能验收文档。项目代码、远程分支与线上部署状态分别记录，不把本机最新提交误当成已上线版本。
 
@@ -12,7 +12,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ 72b6698 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-11 23:45
+- 版本：codex/aerial-vision-release @ e096d8a ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 00:04
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 12（最新 012）
 <!-- FACTS:END -->
@@ -32,6 +32,7 @@
 - 这次 Songdo 评测用的是全图缩放，不包含管理端道路 ROI 切片。标注中摩托车中位框高 37 px，全图 4K 缩到 640 输入后约 6 px；不能据此推断 ROI 切片表现，需在道路区域标注样本上做成对比较。
 - 校园人车评测现提供 `whole_frame`、线上生产的 `road_roi_tiled` 和一次成对比较入口；比较会按同一批独立航次给出指标差值区间，并记录两条路径的单次运行耗时。ROI 模式要求逐帧道路区域覆盖计分框，并禁止静默退回整图。当前没有校园航拍人工 ROI 标注，故尚无校园 ROI 对比结果。
 - 成对比较入口完成后，本轮全量 Python 回归 `1104 passed、49 skipped、1 xfailed`；校园检测评测专项 `10 passed`，Ruff、compileall 和 `git diff --check` 均通过。并发道路事件测试在全量运行及额外 5 次复跑中通过。
+- 2026-10-12 成对评测耗时记录提交 `e096d8a` 已推送 GitHub、Gitee `main` 并快进同步腾讯云项目目录；该提交只改离线评测工具和文档，未改 Web/Worker 运行逻辑、依赖、数据库或模型，因此没有重启服务。同步后服务器三个服务均为 active，本机与公网 `/health` 均返回 `status=ok`。
 - 本机公开训练数据核查：Songdo 仅有 test.zip、VisDrone 仅有 val/test，VME 是多来源卫星影像且未找到统一许可；ONNX Runtime 当前只有 CPU 提供器。保持 Songdo test 不参与训练或调参；数据、许可、算力边界与后续可用方案见同一验收记录。
 - 新审计加入后，全量回归为 Python `1094 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 
