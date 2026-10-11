@@ -35,6 +35,7 @@ def test_optional_model_failure_does_not_disable_other_visual_capabilities():
 
     accident, flood, capabilities = load_optional_models(
         accident_path="bad-aider.onnx", flood_path="valid-flood.onnx",
+        accident_enabled=True, flood_enabled=True,
         accident_loader=AccidentLoader, flood_loader=FloodLoader,
     )
 
@@ -43,6 +44,24 @@ def test_optional_model_failure_does_not_disable_other_visual_capabilities():
     assert capabilities == {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": True,
+    }
+
+
+def test_optional_models_stay_unloaded_until_explicitly_enabled():
+    class MustNotLoad:
+        def __init__(self, *_args, **_kwargs):
+            pytest.fail("optional model was loaded without explicit release approval")
+
+    accident, flood, capabilities = load_optional_models(
+        accident_path="available-aider.onnx", flood_path="available-flood.onnx",
+        accident_loader=MustNotLoad, flood_loader=MustNotLoad,
+    )
+
+    assert accident is None
+    assert flood is None
+    assert capabilities == {
+        "accident_recognition_supported": False,
+        "flood_segmentation_supported": False,
     }
 
 

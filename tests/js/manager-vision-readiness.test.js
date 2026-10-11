@@ -257,7 +257,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261010a/);
-  assert.match(managerHtml, /manager\.js\?v=20261011a/);
+  assert.match(managerHtml, /manager\.js\?v=20261012a/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -612,6 +612,19 @@ test('manager reports optional model load failures accurately instead of claimin
   const status = harness.elements.get('vision-status').textContent;
   assert.match(status, /事故模型权重未能加载/);
   assert.match(status, /积水模型权重文件缺失/);
+});
+
+test('manager explains optional models are intentionally disabled before release approval', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setInferenceReady(true);
+  harness.setOptionalModelStatus({ accident: 'disabled', flood: 'disabled' });
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const status = harness.elements.get('vision-status').textContent;
+  assert.match(status, /事故模型尚未验收，暂不启用/);
+  assert.match(status, /积水模型尚未验收，暂不启用/);
 });
 
 test('canceling route picking prevents a late snap response from selecting a road', async () => {

@@ -1065,6 +1065,7 @@
       function modelLabel(status) {
         return {
           ready: '已启用', not_configured: '未配置', file_missing: '权重文件缺失',
+          disabled: '尚未验收，暂不启用',
           worker_not_ready: '视觉进程未就绪', load_failed: '权重未能加载',
         }[status] || '状态未知';
       }

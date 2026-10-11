@@ -24,7 +24,8 @@ _STOP = threading.Event()
 
 
 def load_optional_models(*, accident_path=None, accident_revision=None,
-                         accident_threshold=None, flood_path=None,
+                         accident_threshold=None, accident_enabled=False, flood_path=None,
+                         flood_enabled=False,
                          flood_revision=None, flood_min_area_ratio=None,
                          accident_loader=OnnxAiderClassifier,
                          flood_loader=OnnxFloodSegmenter):
@@ -34,7 +35,7 @@ def load_optional_models(*, accident_path=None, accident_revision=None,
         "accident_recognition_supported": False,
         "flood_segmentation_supported": False,
     }
-    if accident_path:
+    if accident_enabled and accident_path:
         try:
             accident_model = accident_loader(
                 accident_path, model_version=accident_revision, threshold=accident_threshold,
@@ -42,7 +43,7 @@ def load_optional_models(*, accident_path=None, accident_revision=None,
             capabilities["accident_recognition_supported"] = True
         except Exception:
             logger.exception("Optional accident scene model could not be loaded; capability disabled")
-    if flood_path:
+    if flood_enabled and flood_path:
         try:
             flood_segmenter = flood_loader(
                 flood_path, model_version=flood_revision, min_area_ratio=flood_min_area_ratio,
@@ -215,7 +216,9 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
             accident_path=config.VISION_ACCIDENT_MODEL_PATH,
             accident_revision=config.VISION_ACCIDENT_REVISION,
             accident_threshold=config.VISION_ACCIDENT_THRESHOLD,
+            accident_enabled=config.VISION_ACCIDENT_ENABLED,
             flood_path=config.VISION_FLOOD_MODEL_PATH,
+            flood_enabled=config.VISION_FLOOD_ENABLED,
             flood_revision=config.VISION_FLOOD_REVISION,
             flood_min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
         )

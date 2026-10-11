@@ -117,6 +117,8 @@ def test_manager_vision_status_distinguishes_unconfigured_missing_and_failed_opt
     failed_model.write_bytes(b"not-an-onnx-model")
     monkeypatch.setattr(routes.config, "VISION_ACCIDENT_MODEL_PATH", str(missing_model))
     monkeypatch.setattr(routes.config, "VISION_FLOOD_MODEL_PATH", str(failed_model))
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_ENABLED", True)
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_ENABLED", True)
     monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": False,
@@ -127,6 +129,32 @@ def test_manager_vision_status_distinguishes_unconfigured_missing_and_failed_opt
     assert response.status_code == 200
     status = response.get_json()["data"]["optional_model_status"]
     assert status == {"accident": "file_missing", "flood": "load_failed"}
+
+
+def test_manager_status_keeps_present_optional_models_disabled_by_default(monkeypatch, tmp_path):
+    import api.routes as routes
+
+    client, _csrf = manager_client(monkeypatch, tmp_path)
+    accident_model = tmp_path / "aider.onnx"
+    flood_model = tmp_path / "flood.onnx"
+    accident_model.write_bytes(b"present")
+    flood_model.write_bytes(b"present")
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_MODEL_PATH", str(accident_model))
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_MODEL_PATH", str(flood_model))
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_ENABLED", False)
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_ENABLED", False)
+    monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+        "accident_recognition_supported": True,
+        "flood_segmentation_supported": True,
+    })
+
+    response = client.get("/api/manager/vision-status")
+
+    assert response.status_code == 200
+    data = response.get_json()["data"]
+    assert data["optional_model_status"] == {"accident": "disabled", "flood": "disabled"}
+    assert data["capabilities"]["accident_recognition_supported"] is False
+    assert data["capabilities"]["flood_segmentation_supported"] is False
 
 
 def test_video_upload_requires_capture_time_and_normalized_roi(monkeypatch, tmp_path):

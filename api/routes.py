@@ -2644,11 +2644,12 @@ def _vision_worker_capabilities(database_url=None) -> dict:
         return {}
 
 
-def _vision_optional_model_ready(path_key: str, capability_key: str,
+def _vision_optional_model_ready(path_key: str, enabled_key: str, capability_key: str,
                                  inference_ready: bool, worker_capabilities: dict) -> bool:
     model_path = getattr(config, path_key, "")
     return bool(
-        inference_ready and model_path and Path(model_path).is_file()
+        getattr(config, enabled_key, False) and inference_ready
+        and model_path and Path(model_path).is_file()
         and worker_capabilities.get(capability_key) is True
     )
 
@@ -2768,11 +2769,13 @@ def delete_manager_vision_scene(scene_id):
         return _err("vision_scene_unavailable", "观察场景删除失败，请稍后重试。", 503)
 
 
-def _vision_optional_model_status(path_key: str, capability_key: str,
+def _vision_optional_model_status(path_key: str, enabled_key: str, capability_key: str,
                                   inference_ready: bool, worker_capabilities: dict) -> str:
     model_path = getattr(config, path_key, "")
     if not model_path:
         return "not_configured"
+    if not getattr(config, enabled_key, False):
+        return "disabled"
     if not Path(model_path).is_file():
         return "file_missing"
     if not inference_ready:
@@ -2806,22 +2809,26 @@ def manager_vision_status():
             "congestion_candidate_review": inference_ready,
             "pedestrian_region_counts": inference_ready,
             "accident_recognition_supported": _vision_optional_model_ready(
-                "VISION_ACCIDENT_MODEL_PATH", "accident_recognition_supported",
+                "VISION_ACCIDENT_MODEL_PATH", "VISION_ACCIDENT_ENABLED",
+                "accident_recognition_supported",
                 inference_ready, worker_capabilities,
             ),
             "flood_segmentation_supported": _vision_optional_model_ready(
-                "VISION_FLOOD_MODEL_PATH", "flood_segmentation_supported",
+                "VISION_FLOOD_MODEL_PATH", "VISION_FLOOD_ENABLED",
+                "flood_segmentation_supported",
                 inference_ready, worker_capabilities,
             ),
             "automatic_routing_updates": False,
         },
         "optional_model_status": {
             "accident": _vision_optional_model_status(
-                "VISION_ACCIDENT_MODEL_PATH", "accident_recognition_supported",
+                "VISION_ACCIDENT_MODEL_PATH", "VISION_ACCIDENT_ENABLED",
+                "accident_recognition_supported",
                 inference_ready, worker_capabilities,
             ),
             "flood": _vision_optional_model_status(
-                "VISION_FLOOD_MODEL_PATH", "flood_segmentation_supported",
+                "VISION_FLOOD_MODEL_PATH", "VISION_FLOOD_ENABLED",
+                "flood_segmentation_supported",
                 inference_ready, worker_capabilities,
             ),
         },
