@@ -1097,6 +1097,101 @@ class TestRoadConditionAPI:
         assert len(public_records) == 1
         assert "source" not in public_records[0] and "audit" not in public_records[0]
 
+    @pytest.mark.parametrize("action,cost_multiplier", [
+        ("closure", None),
+        ("slowdown", 1.5),
+        ("notice", None),
+    ])
+    def test_confirmed_vision_candidate_reaches_agent_and_changes_route(
+        self, client, G, monkeypatch, action, cost_multiplier,
+    ):
+        """A manager-confirmed image candidate must survive publication, lookup, and routing."""
+        from agents import tools as agent_tools
+        from spatial.routing import compute_route
+        from storage import database, vision_repository
+
+        job_id = "a6f6c6b1-d237-43fa-8ea2-b01ae48a3e8e"
+        candidate = {
+            "kind": "vehicle_cluster_review",
+            "review_required": True,
+            "auto_publish": False,
+        }
+        job = {
+            "job_id": job_id,
+            "status": "needs_review",
+            "captured_at": time.time(),
+            "candidate_reviews": {},
+            "result": {"candidates": [candidate]},
+        }
+        monkeypatch.setattr(database, "initialize", lambda *_args: None)
+        monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
+
+        def confirm_candidate(*_args, **kwargs):
+            job["candidate_reviews"][str(kwargs["candidate_index"])] = {
+                "status": kwargs["review_status"],
+                "note": kwargs["review_note"],
+                "reviewed_by": kwargs["reviewed_by"],
+            }
+            return job
+
+        monkeypatch.setattr(vision_repository, "review_candidate", confirm_candidate)
+        headers = {"X-Admin-Token": "test-token-xyz"}
+        reviewed = client.post(
+            f"/api/manager/vision-jobs/{job_id}/candidates/0/review",
+            json={"status": "confirmed", "note": "已核对视频，确认该路段需要临时管制。"},
+            headers=headers,
+        )
+        assert reviewed.status_code == 200
+
+        lng, lat = _mid_12_gcj(G)
+        published = client.post("/api/road-conditions", json={
+            "type": "event",
+            "action": action,
+            "affected_modes": ["walk"],
+            "cost_multiplier": cost_multiplier,
+            "name": "航拍复核道路临时封闭",
+            "lng": lng,
+            "lat": lat,
+            "source_vision_job_id": job_id,
+            "source_vision_candidate_index": 0,
+            "field_confirmation": "管理员核对现场信息，确认自强大道该路段暂时不能步行通行。",
+            "end_time": time.time() + 1800,
+        }, headers=headers)
+        assert published.status_code == 201
+
+        conditions = rc.list_conditions(strict=True)
+        assert len(conditions) == 1
+        condition = conditions[0]
+        assert condition["source"]["candidate_index"] == 0
+        assert condition["edge"]["road_name"] == "自强大道"
+
+        tool_result, _ = agent_tools.execute_tool("list_road_conditions", {})
+        agent_condition = tool_result["conditions"][0]
+        assert agent_condition["source_kind"] == "vision_job"
+        assert agent_condition["road_name"] == "自强大道"
+        assert agent_condition["route_effect"] == {
+            "action": action,
+            "affected_modes": ["walk"],
+            "cost_multiplier": cost_multiplier,
+        }
+
+        baseline = compute_route(
+            G, 0, 3, mode="walk", strategy_name="shortest", road_conditions=[],
+        )
+        route = compute_route(
+            G, 0, 3, mode="walk", strategy_name="shortest",
+            road_conditions=conditions,
+        )
+        assert route["road_conditions_applied"] == 1
+        if action == "closure":
+            assert route["recommended"] == [0, 4, 5, 6, 7, 3]
+        else:
+            assert route["recommended"] == [0, 1, 2, 3]
+            if action == "slowdown":
+                assert route["duration_min"] > baseline["duration_min"]
+            else:
+                assert route["duration_min"] == baseline["duration_min"]
+
     def test_completed_vision_job_without_candidates_can_be_registered_manually(self, client, G, monkeypatch):
         from storage import database, vision_repository
 
