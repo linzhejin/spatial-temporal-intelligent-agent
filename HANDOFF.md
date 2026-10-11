@@ -26,6 +26,9 @@
 - 校园素材到位后先运行 `scripts/vision/prepare_campus_water_data.py`：按航次和地点隔离训练、验证、测试集，记录拍摄时间、地点、原片及附属文件哈希，完整解码视频并生成独立标注模板。详见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 - 本次场景复用改动、回归和线上验收见[观察场景复用与道路绑定验收](docs/development/24_观察场景复用与道路绑定验收_20261010.md)。
 - 大观察区域的检测已采用重叠切片，避免整幅 1080p/4K 画面缩到模型尺寸后损失过多小目标细节；本机 CPU 耗时和适用边界见[观察区域大图切片推理修复](docs/development/25_观察区域大图切片推理修复_20261010.md)。
+- 新增校园现场就绪审计 `scripts/vision/audit_campus_field_readiness.py`：检查航次、人工标注、独立测试航次数、报告与权重哈希；未有武大航次和人工真值时会明确禁止宣称校园识别精度。当前本机三个模型权重文件都存在，但校园证据清单与评测报告缺失。
+- 外域演示使用了本机已有的 Songdo Traffic 4K 交通视频（韩国松岛，CC BY 4.0）：5 秒片段 25/25 帧完成分析、镜头补偿 24/24 次转换有效；单帧 58 个检测框、跨片段 64 条车辆轨迹。当前 CPU 单次处理约 106 秒，属于后台离线处理；无人工真值，不能据此报告精度或武大表现。
+- 新审计加入后，全量回归为 Python `1094 passed、49 skipped、1 xfailed`，JavaScript `116 passed`。具体审计边界、命令和现场数据清单见[校园航拍数据准备与验收](docs/development/26_校园航拍数据准备与验收_20261011.md)。
 
 - 2026-10-10 当前发布：提交 `0952596` 已推送至 GitHub、Gitee `main` 并快进部署到腾讯云 `/home/ubuntu/campus-spatial-intelligence-agent`。本轮改动只影响视觉 worker 的观察区域推理；部署前影像队列没有 queued/running 任务，无数据库迁移或模型权重更新。
 - 部署后 `whu-walker`、`whu-agent-worker`、`whu-vision-worker` 均为 active；视觉 worker 最新心跳为 ready，公网 `/health` 返回 HTTP 200、`status=ok`。服务器工作目录的未跟踪文件 `cloudflared`、`scripts/_probe_shortest.py`、`wget-log` 保持原样。
