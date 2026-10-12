@@ -76,6 +76,37 @@ def _in_regions(item: dict, regions: list[dict]) -> bool:
     return any(_inside_polygon(x, y, region["polygon"]) for region in regions)
 
 
+def _polygons_intersect(first: list[list[float]], second: list[list[float]]) -> bool:
+    def orientation(a, b, c):
+        return (b[0] - a[0]) * (c[1] - a[1]) - (b[1] - a[1]) * (c[0] - a[0])
+
+    def segments_intersect(a, b, c, d):
+        ab_c, ab_d = orientation(a, b, c), orientation(a, b, d)
+        cd_a, cd_b = orientation(c, d, a), orientation(c, d, b)
+
+        def on_segment(start, end, point, cross):
+            return (abs(cross) < 1e-9
+                    and min(start[0], end[0]) - 1e-9 <= point[0] <= max(start[0], end[0]) + 1e-9
+                    and min(start[1], end[1]) - 1e-9 <= point[1] <= max(start[1], end[1]) + 1e-9)
+
+        if ab_c * ab_d < 0 and cd_a * cd_b < 0:
+            return True
+        return (
+            on_segment(a, b, c, ab_c) or on_segment(a, b, d, ab_d)
+            or on_segment(c, d, a, cd_a) or on_segment(c, d, b, cd_b)
+        )
+
+    if any(_inside_polygon(x, y, second) for x, y in first):
+        return True
+    if any(_inside_polygon(x, y, first) for x, y in second):
+        return True
+    return any(
+        segments_intersect(first[index - 1], first[index], second[other - 1], second[other])
+        for index in range(len(first))
+        for other in range(len(second))
+    )
+
+
 def _valid_detection(item: Any) -> bool:
     return (
         isinstance(item, dict)
@@ -123,6 +154,46 @@ def _transform_point(matrix, point):
         )
     except (IndexError, TypeError, ValueError, ZeroDivisionError):
         return None
+
+
+def _project_pixel_regions(regions, matrix, frame_width: int, frame_height: int) -> list[dict]:
+    """Project anchor-frame ROIs into a frame, dropping any polygon not fully visible."""
+    if matrix is None:
+        return []
+    projected = []
+    for region in regions:
+        source_points = region["polygon"]
+        try:
+            denominators = [
+                matrix[2][0] * x + matrix[2][1] * y + matrix[2][2]
+                for x, y in source_points
+            ]
+        except (IndexError, TypeError, ValueError):
+            continue
+        if (any(not math.isfinite(float(value)) or abs(float(value)) < 1e-9
+                for value in denominators)
+                or min(denominators) < 0 < max(denominators)):
+            continue
+        points = [_transform_point(matrix, point) for point in source_points]
+        if any(point is None or not all(math.isfinite(float(value)) for value in point)
+               for point in points):
+            continue
+        if any(not 0 <= x <= frame_width or not 0 <= y <= frame_height for x, y in points):
+            continue
+        projected.append({**region, "polygon": [[float(x), float(y)] for x, y in points]})
+    return projected
+
+
+def project_regions_for_frame(regions, matrix, frame_width: int, frame_height: int) -> list[dict]:
+    """Return normalized manager ROIs projected from the anchor frame, if fully visible."""
+    validated = _validated_regions(regions, frame_width, frame_height)
+    return [
+        {
+            **region,
+            "polygon": [[x / frame_width, y / frame_height] for x, y in region["polygon"]],
+        }
+        for region in _project_pixel_regions(validated, matrix, frame_width, frame_height)
+    ]
 
 
 def _candidate(kind: str, confidence: float, reason: str, evidence: dict) -> dict:
@@ -286,6 +357,7 @@ def analyze_observations(
     sample_interval_s: float = 1.0,
     camera_stabilized: bool = False,
     frame_transforms: list[list[list[float]] | None] | None = None,
+    region_transforms: list[list[list[float]] | None] | None = None,
     accident_model_enabled: bool = False,
     regions: list[dict] | None = None,
     min_vehicle_count: int = 6,
@@ -301,8 +373,9 @@ def analyze_observations(
     A missing transform is treated as failed camera-motion estimation. A video
     track-motion estimate requires at least 80% valid frame-to-frame transforms,
     unless the manager explicitly declares a fixed or already stabilized camera.
-    Fixed image ROIs do not follow camera motion, so congestion/crowd candidates
-    still require that declaration and other views require region reassociation.
+    ``region_transforms[i]`` maps the manager's anchor-frame ROI into frame i.
+    Candidate events require reliable frame-to-frame motion compensation and a
+    fully visible ROI mapping for at least 80% of analyzed frames.
     """
     if frame_width <= 0 or frame_height <= 0 or sample_interval_s <= 0:
         raise ValueError("valid frame dimensions and sample interval are required")
@@ -317,17 +390,52 @@ def analyze_observations(
             or min_crowding_duration_s <= 0):
         raise ValueError("minimum crowd observation duration must be finite and positive")
     regions = _validated_regions(regions, frame_width, frame_height)
+    if region_transforms is not None and len(region_transforms) != len(frames):
+        raise ValueError("observation region transforms must match the analyzed frame count")
+    regions_by_frame = []
+    mapping_valid_by_region = {region["id"]: [] for region in regions}
+    for frame_index in range(len(frames)):
+        if region_transforms is not None:
+            frame_regions = _project_pixel_regions(
+                regions, region_transforms[frame_index], frame_width, frame_height,
+            )
+        elif camera_stabilized or len(frames) <= 1:
+            frame_regions = regions
+        elif frame_index == 0:
+            frame_regions = regions
+        else:
+            frame_regions = []
+        regions_by_frame.append(frame_regions)
+        visible_ids = {region["id"] for region in frame_regions}
+        for region_id in mapping_valid_by_region:
+            mapping_valid_by_region[region_id].append(region_id in visible_ids)
+    region_mapping_ratios = {
+        region_id: (sum(validity) / len(validity) if validity else 0.0)
+        for region_id, validity in mapping_valid_by_region.items()
+    }
+
+    def candidate_mapping_ratio(region):
+        required_kinds = {"exclude"}
+        if region["kind"] == "vehicle_lane":
+            required_kinds.add("parking")
+        required_ids = [region["id"]] + [item["id"] for item in regions
+            if item["kind"] in required_kinds
+            and _polygons_intersect(region["polygon"], item["polygon"])]
+        return min((region_mapping_ratios.get(region_id, 0.0) for region_id in required_ids),
+                   default=0.0)
+
     vehicle_regions = [region for region in regions if region["kind"] == "vehicle_lane"]
     pedestrian_regions = [region for region in regions if region["kind"] == "pedestrian"]
-    parking_regions = [region for region in regions if region["kind"] == "parking"]
 
-    def outside_exclusions(item):
-        return not any(_in_regions(item, [region]) for region in regions if region["kind"] == "exclude")
-
-    valid_frames = [
-        [item for item in frame if _valid_detection(item) and outside_exclusions(item)]
-        for frame in frames
-    ]
+    valid_frames = []
+    for frame_index, frame in enumerate(frames):
+        exclusions = [region for region in regions_by_frame[frame_index]
+                      if region["kind"] == "exclude"]
+        valid_frames.append([
+            item for item in frame
+            if _valid_detection(item)
+            and not any(_in_regions(item, [region]) for region in exclusions)
+        ])
     transition_count = max(0, len(valid_frames) - 1)
     valid_transition_count = 0 if camera_stabilized else sum(
         1 for index in range(1, len(valid_frames))
@@ -354,6 +462,8 @@ def analyze_observations(
     vehicle_area_by_region = {region["id"]: [] for region in vehicle_regions}
     track_positions_by_region = {region["id"]: defaultdict(list) for region in vehicle_regions}
     pedestrian_counts_by_region = {region["id"]: [] for region in pedestrian_regions}
+    vehicle_observed_frames = {region["id"]: [] for region in vehicle_regions}
+    pedestrian_observed_frames = {region["id"]: [] for region in pedestrian_regions}
     pedestrian_track_positions_by_region = {
         region["id"]: defaultdict(list) for region in pedestrian_regions
     }
@@ -363,6 +473,13 @@ def analyze_observations(
     class_counts: list[Counter] = []
 
     for frame_index, detections in enumerate(track_frames):
+        frame_regions = regions_by_frame[frame_index]
+        frame_vehicle_regions = [region for region in frame_regions
+                                 if region["kind"] == "vehicle_lane"]
+        frame_pedestrian_regions = [region for region in frame_regions
+                                    if region["kind"] == "pedestrian"]
+        frame_parking_regions = [region for region in frame_regions
+                                 if region["kind"] == "parking"]
         counted_detections = [
             item for item in detections
             if float(item.get("confidence", 0)) >= tracking_high_threshold
@@ -371,18 +488,23 @@ def analyze_observations(
         all_vehicles = [item for item in counted_detections
                         if item["label"].strip().lower() in VEHICLE_LABELS]
         vehicles = (
-            [item for item in all_vehicles if _in_regions(item, vehicle_regions)]
-            if vehicle_regions else all_vehicles
+            [item for item in all_vehicles if _in_regions(item, frame_vehicle_regions)]
+            if vehicle_regions and frame_vehicle_regions else [] if vehicle_regions else all_vehicles
         )
-        if parking_regions:
-            vehicles = [item for item in vehicles if not _in_regions(item, parking_regions)]
+        if frame_parking_regions:
+            vehicles = [item for item in vehicles if not _in_regions(item, frame_parking_regions)]
         vehicle_frames.append(vehicles)
         for region in vehicle_regions:
-            region_vehicles = [item for item in all_vehicles if _in_regions(item, [region])]
-            if parking_regions:
+            mapped_region = next((item for item in frame_vehicle_regions
+                                  if item["id"] == region["id"]), None)
+            if mapped_region is None:
+                continue
+            region_vehicles = [item for item in all_vehicles if _in_regions(item, [mapped_region])]
+            if frame_parking_regions:
                 region_vehicles = [item for item in region_vehicles
-                                   if not _in_regions(item, parking_regions)]
+                                   if not _in_regions(item, frame_parking_regions)]
             region_id = region["id"]
+            vehicle_observed_frames[region_id].append(frame_index)
             vehicle_counts_by_region[region_id].append(len(region_vehicles))
             region_covered = 0.0
             for item in region_vehicles:
@@ -400,14 +522,19 @@ def analyze_observations(
         class_counts.append(Counter(item["label"].strip().lower() for item in counted_detections))
         people = [item for item in counted_detections if item["label"].strip().lower() in PEDESTRIAN_LABELS]
         if pedestrian_regions:
-            people = [item for item in people if _in_regions(item, pedestrian_regions)]
+            people = [item for item in people if _in_regions(item, frame_pedestrian_regions)]
         pedestrian_counts.append(len(people))
         for region in pedestrian_regions:
+            mapped_region = next((item for item in frame_pedestrian_regions
+                                  if item["id"] == region["id"]), None)
+            if mapped_region is None:
+                continue
             region_people = [
                 item for item in counted_detections
                 if item["label"].strip().lower() in PEDESTRIAN_LABELS
-                and _in_regions(item, [region])
+                and _in_regions(item, [mapped_region])
             ]
+            pedestrian_observed_frames[region["id"]].append(frame_index)
             pedestrian_counts_by_region[region["id"]].append(len(region_people))
             nearby_peer_counts_by_region[region["id"]].append(
                 _count_people_with_nearby_peers(region_people)
@@ -432,7 +559,7 @@ def analyze_observations(
             for item in detections:
                 label = item["label"].strip().lower().replace(" ", "_")
                 if label in INCIDENT_LABELS:
-                    for region in vehicle_regions:
+                    for region in frame_vehicle_regions:
                         if _in_regions(item, [region]):
                             accident_detections.append((
                                 frame_index, float(item["confidence"]), label, region["id"],
@@ -477,11 +604,25 @@ def analyze_observations(
     candidates = []
     observed_duration_s = max(0.0, (len(valid_frames) - 1) * sample_interval_s)
 
+    def mapped_duration(frame_indices):
+        return max(0.0, (frame_indices[-1] - frame_indices[0]) * sample_interval_s) \
+            if len(frame_indices) >= 2 else 0.0
+
+    region_mapping_basis = (
+        "operator_declared_stabilized" if camera_stabilized
+        else "homography_projected_from_video_anchor" if region_transforms is not None
+        else "single_frame_anchor" if len(frames) <= 1
+        else "unavailable"
+    )
+
     # Keep every candidate attached to the exact image ROI that produced it.
     # A single frame can show a vehicle cluster, but cannot establish congestion.
     for region in vehicle_regions:
         region_id = region["id"]
         counts = vehicle_counts_by_region[region_id]
+        mapping_ratio = region_mapping_ratios.get(region_id, 0.0)
+        supporting_mapping_ratio = candidate_mapping_ratio(region)
+        region_duration_s = mapped_duration(vehicle_observed_frames[region_id])
         if len(valid_frames) == 1 and counts and counts[0] >= min_vehicle_count:
             candidates.append(_candidate(
                 "vehicle_cluster_review", min(0.9, counts[0] / (min_vehicle_count * 2)),
@@ -499,8 +640,8 @@ def analyze_observations(
             region_stationary_count / len(region_speeds) if region_speeds else 0.0
         )
         if (
-            camera_stabilized and observed_duration_s >= min_congestion_duration_s
-            and motion_compensation_ready
+            motion_compensation_ready and supporting_mapping_ratio >= 0.8
+            and region_duration_s >= min_congestion_duration_s
             and mean(counts) >= min_vehicle_count and len(region_speeds) >= 3
             and region_stationary_ratio >= stationary_ratio_threshold
         ):
@@ -514,20 +655,27 @@ def analyze_observations(
                     "tracked_vehicle_count": len(region_speeds),
                     "stationary_track_ratio": round(region_stationary_ratio, 3),
                     "observed_duration_seconds": round(observed_duration_s, 3),
+                    "region_observed_duration_seconds": round(region_duration_s, 3),
                     "minimum_duration_seconds": float(min_congestion_duration_s),
                     "camera_motion_compensated": bool(camera_stabilized or motion_compensation_ready),
                     "camera_stabilization_basis": "operator_declared" if camera_stabilized else "estimated_transforms",
                     "valid_motion_transition_ratio": round(valid_transition_ratio, 3),
+                    "region_mapping_basis": region_mapping_basis,
+                    "region_mapping_valid_ratio": round(mapping_ratio, 3),
+                    "supporting_regions_mapping_valid_ratio": round(supporting_mapping_ratio, 3),
                 }},
             ))
 
     for region in pedestrian_regions:
         counts = pedestrian_counts_by_region[region["id"]]
+        mapping_ratio = region_mapping_ratios.get(region["id"], 0.0)
+        supporting_mapping_ratio = candidate_mapping_ratio(region)
+        region_duration_s = mapped_duration(pedestrian_observed_frames[region["id"]])
         peer_counts = nearby_peer_counts_by_region[region["id"]]
         pedestrian_speeds = pedestrian_speeds_by_region[region["id"]]
         moving_people = sum(speed > 0.003 for speed in pedestrian_speeds)
         low_motion_people = len(pedestrian_speeds) - moving_people
-        if not camera_stabilized:
+        if not motion_compensation_ready:
             movement_assessment = "camera_motion_uncompensated"
         elif not pedestrian_speeds:
             movement_assessment = "insufficient_track_data"
@@ -536,7 +684,8 @@ def analyze_observations(
         else:
             movement_assessment = "mostly_stationary_in_image"
         peak_peer_count = max(peer_counts, default=0)
-        if (camera_stabilized and observed_duration_s >= min_crowding_duration_s
+        if (motion_compensation_ready and supporting_mapping_ratio >= 0.8
+                and region_duration_s >= min_crowding_duration_s
                 and len(counts) >= 3 and max(counts, default=0) >= 15
                 and sum(count > 0 for count in counts) >= 3):
             candidates.append(_candidate(
@@ -548,6 +697,10 @@ def analyze_observations(
                  "mean_person_count": round(mean(counts), 2),
                  "frames_with_people": sum(count > 0 for count in counts),
                  "observed_duration_seconds": round(observed_duration_s, 3),
+                 "region_observed_duration_seconds": round(region_duration_s, 3),
+                 "region_mapping_basis": region_mapping_basis,
+                 "region_mapping_valid_ratio": round(mapping_ratio, 3),
+                 "supporting_regions_mapping_valid_ratio": round(supporting_mapping_ratio, 3),
                  "minimum_duration_seconds": float(min_crowding_duration_s),
                  "peak_people_with_nearby_peer_count": peak_peer_count,
                  "aggregation_assessment": (
@@ -562,7 +715,7 @@ def analyze_observations(
                  "moving_person_track_count": moving_people,
                  "low_motion_person_track_count": low_motion_people,
                  "movement_basis": (
-                     "稳定画面中的行人轨迹像素位移；不是地面速度。"
+                    "相机变换校正后的行人轨迹像素位移；不是地面速度。"
                  )},
             ))
 
@@ -620,6 +773,9 @@ def analyze_observations(
             "motion_compensation_valid_transitions": valid_transition_count,
             "motion_compensation_transition_count": transition_count,
             "motion_compensation_valid_ratio": round(valid_transition_ratio, 3),
+            "observation_region_mapping_valid_ratios": {
+                region_id: round(ratio, 3) for region_id, ratio in region_mapping_ratios.items()
+            },
             "motion_assessment": (
                 "insufficient_single_frame" if len(valid_frames) < 2
                 else "operator_declared_stabilized" if camera_stabilized
@@ -634,6 +790,7 @@ def analyze_observations(
             "camera_stabilized_assumed": bool(camera_stabilized),
             "observation_region_reassociation_required": bool(
                 regions and transition_count > 0 and not camera_stabilized
+                and any(ratio < 0.8 for ratio in region_mapping_ratios.values())
             ),
             "accident_recognition_supported": False,
             "pedestrian_region_required_for_crowding": True,

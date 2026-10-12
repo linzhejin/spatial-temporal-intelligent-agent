@@ -234,3 +234,122 @@ def summarize_detection_counts(counts: dict[str, dict[str, int]]) -> dict[str, d
             "f1": round(f1, 4),
         }
     return summary
+
+
+def parse_moving_drone_rows(
+    annotation_text: str, *, frame_index: int, image_width: int, image_height: int,
+) -> list[tuple[float, float]]:
+    """Read MovingDroneCrowd MOT rows and return head-box centers for one frame.
+
+    The dataset stores frame indices from zero while its JPEG names start at
+    ``1.jpg``. Its boxes annotate heads, not full pedestrian bodies.
+    """
+    if (isinstance(frame_index, bool) or not isinstance(frame_index, int) or frame_index < 0
+            or isinstance(image_width, bool) or not isinstance(image_width, int) or image_width <= 0
+            or isinstance(image_height, bool) or not isinstance(image_height, int) or image_height <= 0):
+        raise ValueError("frame index and image dimensions must be positive integers")
+    if not isinstance(annotation_text, str):
+        raise ValueError("annotation text must be a string")
+
+    head_points = []
+    for line_number, raw_line in enumerate(annotation_text.splitlines(), start=1):
+        line = raw_line.strip()
+        if not line:
+            continue
+        values = line.split(",")
+        if len(values) != 10:
+            raise ValueError(f"annotation row {line_number} must contain 10 comma-separated fields")
+        try:
+            row_frame = int(values[0].strip())
+            identity = int(values[1].strip())
+            x, y, width, height = (float(value.strip()) for value in values[2:6])
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"annotation row {line_number} contains invalid values") from error
+        center_x, center_y = x + width / 2.0, y + height / 2.0
+        if (row_frame < 0 or identity < 0 or not all(isfinite(value) for value in (x, y, width, height))
+                or width <= 0 or height <= 0):
+            raise ValueError(f"annotation row {line_number} contains invalid or out-of-frame geometry")
+        if not 0 <= center_x < image_width or not 0 <= center_y < image_height:
+            continue
+        if row_frame == frame_index:
+            head_points.append((center_x, center_y))
+    return head_points
+
+
+def evaluate_head_point_frame(
+    predictions: list[dict], head_points: list[tuple[float, float]], *,
+    confidence_threshold: float = 0.369,
+) -> dict[str, int]:
+    """Score person detections by one-to-one coverage of annotated head centers.
+
+    This is a cross-task point-coverage proxy for crowd counting. It is not
+    full-body box IoU, identity tracking accuracy, or an event-level crowding
+    metric. A maximum-cardinality bipartite match prevents one large detection
+    from claiming several people.
+    """
+    if (isinstance(confidence_threshold, bool) or not isinstance(confidence_threshold, (int, float))
+            or not isfinite(confidence_threshold) or not 0.0 <= confidence_threshold <= 1.0):
+        raise ValueError("confidence threshold must be finite and between zero and one")
+    if not isinstance(predictions, list) or not isinstance(head_points, list):
+        raise ValueError("predictions and head points must be lists")
+
+    valid_heads = []
+    for index, point in enumerate(head_points):
+        if (not isinstance(point, (tuple, list)) or len(point) != 2
+                or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not isfinite(value) for value in point)):
+            raise ValueError(f"head point {index} must contain two finite coordinates")
+        valid_heads.append((float(point[0]), float(point[1])))
+
+    person_labels = {"pedestrian", "person", "people"}
+    usable_predictions = []
+    for prediction in predictions:
+        if not isinstance(prediction, dict) or prediction.get("label") not in person_labels:
+            continue
+        confidence = prediction.get("confidence")
+        box = _valid_box(prediction.get("box"))
+        if (isinstance(confidence, bool) or not isinstance(confidence, (int, float))
+                or not isfinite(confidence) or confidence < confidence_threshold or box is None):
+            continue
+        usable_predictions.append((float(confidence), box))
+
+    usable_predictions.sort(key=lambda item: item[0], reverse=True)
+    neighbors = []
+    for _confidence, box in usable_predictions:
+        center_x = (box[0] + box[2]) / 2.0
+        center_y = (box[1] + box[3]) / 2.0
+        candidates = [
+            index for index, (x, y) in enumerate(valid_heads)
+            if box[0] <= x <= box[2] and box[1] <= y <= box[3]
+        ]
+        candidates.sort(key=lambda index: (
+            (valid_heads[index][0] - center_x) ** 2 + (valid_heads[index][1] - center_y) ** 2,
+            index,
+        ))
+        neighbors.append(candidates)
+
+    head_to_prediction = [-1] * len(valid_heads)
+
+    def assign(prediction_index: int, visited_heads: set[int]) -> bool:
+        for head_index in neighbors[prediction_index]:
+            if head_index in visited_heads:
+                continue
+            visited_heads.add(head_index)
+            previous = head_to_prediction[head_index]
+            if previous == -1 or assign(previous, visited_heads):
+                head_to_prediction[head_index] = prediction_index
+                return True
+        return False
+
+    true_positives = sum(
+        assign(index, set()) for index in range(len(usable_predictions))
+    )
+    predicted = len(usable_predictions)
+    ground_truth = len(valid_heads)
+    return {
+        "tp": true_positives,
+        "fp": predicted - true_positives,
+        "fn": ground_truth - true_positives,
+        "predicted": predicted,
+        "ground_truth": ground_truth,
+    }

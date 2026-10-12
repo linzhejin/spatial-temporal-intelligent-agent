@@ -1,3 +1,5 @@
+import pytest
+
 from vision.analysis import analyze_observations
 
 
@@ -62,6 +64,108 @@ def test_moving_camera_video_requires_roi_reassociation_before_congestion_candid
     assert result["safety"]["observation_region_reassociation_required"] is True
     assert result["safety"]["automatically_changes_routing"] is False
     assert result["safety"]["accident_recognition_supported"] is False
+
+
+def test_moving_camera_projects_anchor_pedestrian_roi_before_crowd_candidate():
+    frames = [
+        [
+            {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+             "box": [20 + index * 14 + frame_index * 20, 80,
+                     30 + index * 14 + frame_index * 20, 115]}
+            for index in range(16)
+        ]
+        for frame_index in range(6)
+    ]
+    pairwise = [[1, 0, 20], [0, 1, 0], [0, 0, 1]]
+    roi_transforms = [
+        [[1, 0, frame_index * 20], [0, 1, 0], [0, 0, 1]]
+        for frame_index in range(6)
+    ]
+    roi = [{"id": "walkway", "kind": "pedestrian",
+            "polygon": [[0, 0], [0.5, 0], [0.5, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        frames, frame_width=640, frame_height=480,
+        frame_transforms=[None] + [pairwise] * 5,
+        region_transforms=roi_transforms, regions=roi,
+    )
+
+    candidate = next(item for item in result["candidates"] if item["kind"] == "possible_crowding")
+    assert candidate["evidence"]["region_id"] == "walkway"
+    assert candidate["evidence"]["peak_person_count"] == 16
+    assert candidate["evidence"]["region_mapping_basis"] == "homography_projected_from_video_anchor"
+    assert result["safety"]["observation_region_reassociation_required"] is False
+
+
+def test_moving_camera_does_not_emit_roi_candidate_when_anchor_mapping_is_incomplete():
+    pedestrians = [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [30 + index * 14, 80, 40 + index * 14, 115]}
+        for index in range(16)
+    ]
+    pairwise = [[1, 0, 20], [0, 1, 0], [0, 0, 1]]
+    roi_transforms = [
+        [[1, 0, 0], [0, 1, 0], [0, 0, 1]], None, None, None, None, None,
+    ]
+    roi = [{"id": "walkway", "kind": "pedestrian",
+            "polygon": [[0, 0], [0.5, 0], [0.5, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        [pedestrians] * 6, frame_width=640, frame_height=480,
+        frame_transforms=[None] + [pairwise] * 5,
+        region_transforms=roi_transforms, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
+    assert result["safety"]["observation_region_reassociation_required"] is True
+
+
+def test_roi_projection_rejects_a_region_that_is_only_partly_visible():
+    from vision.analysis import project_regions_for_frame
+
+    roi = [{"id": "walkway", "kind": "pedestrian",
+            "polygon": [[0.5, 0.1], [0.9, 0.1], [0.9, 0.9], [0.5, 0.9]]}]
+    translation_out_of_view = [[1, 0, 20], [0, 1, 0], [0, 0, 1]]
+
+    assert project_regions_for_frame(roi, translation_out_of_view, 100, 100) == []
+
+
+def test_region_transform_count_must_match_analyzed_frames():
+    roi = [{"id": "walkway", "kind": "pedestrian",
+            "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    with pytest.raises(ValueError, match="match the analyzed frame count"):
+        analyze_observations(
+            [[], []], frame_width=640, frame_height=480,
+            region_transforms=[[[1, 0, 0], [0, 1, 0], [0, 0, 1]]], regions=roi,
+        )
+
+
+def test_crowd_candidate_is_blocked_when_exclusion_roi_is_not_mapped_reliably():
+    pedestrians = [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [8 + index * 2, 30, 10 + index * 2, 50]}
+        for index in range(16)
+    ]
+    transforms = [
+        [[1, 0, shift], [0, 1, 0], [0, 0, 1]]
+        for shift in (0, 10, 20, 30, 40, 50)
+    ]
+    regions = [
+        {"id": "walkway", "kind": "pedestrian",
+         "polygon": [[0.05, 0.1], [0.5, 0.1], [0.5, 0.9], [0.05, 0.9]]},
+        {"id": "private-yard", "kind": "exclude",
+         "polygon": [[0.4, 0.1], [0.7, 0.1], [0.7, 0.9], [0.4, 0.9]]},
+    ]
+
+    result = analyze_observations(
+        [pedestrians] * 6, frame_width=100, frame_height=100,
+        frame_transforms=[None] + [transforms[1]] * 5,
+        region_transforms=transforms, regions=regions,
+    )
+
+    assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
+    assert result["safety"]["observation_region_reassociation_required"] is True
 
 
 def test_fixed_camera_does_not_require_observation_region_reassociation():

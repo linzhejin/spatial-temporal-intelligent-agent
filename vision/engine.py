@@ -13,6 +13,7 @@ from typing import Any
 import config
 from vision.analysis import (
     VEHICLE_LABELS, analyze_observations, build_specialized_candidates,
+    project_regions_for_frame,
 )
 
 
@@ -23,7 +24,7 @@ VISDRONE_CLASSES = (
 logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
 # Bump this when detector/tracker/segment aggregation semantics change.
-VIDEO_CHECKPOINT_ANALYSIS_REVISION = 1
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 2
 
 
 def _checkpoint_model_identity(model) -> dict | None:
@@ -405,6 +406,27 @@ def _estimate_camera_transform(previous_gray, current_gray, cv2, scale: float):
     return full_resolution_matrix.tolist()
 
 
+def _relative_camera_transform(previous_anchor_transform, current_anchor_transform):
+    """Derive previous-frame -> current-frame motion from two anchor-frame homographies."""
+    if previous_anchor_transform is None or current_anchor_transform is None:
+        return None
+    import numpy as np
+
+    try:
+        previous = np.asarray(previous_anchor_transform, dtype=np.float64)
+        current = np.asarray(current_anchor_transform, dtype=np.float64)
+        if (previous.shape != (3, 3) or current.shape != (3, 3)
+                or not np.isfinite(previous).all() or not np.isfinite(current).all()
+                or abs(np.linalg.det(previous)) < 1e-8):
+            return None
+        relative = current @ np.linalg.inv(previous)
+    except (ValueError, np.linalg.LinAlgError):
+        return None
+    if not np.isfinite(relative).all() or abs(np.linalg.det(relative)) < 1e-8:
+        return None
+    return relative.tolist()
+
+
 def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float = 0.85,
                             flood_area_threshold: float = 0.08,
                             accident_model_enabled: bool = False,
@@ -439,7 +461,9 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
         transitions += int(segment_metrics.get("motion_compensation_transition_count", 0))
         for candidate in segment.get("candidates", []):
             evidence = candidate.get("evidence", {})
-            summary = evidence.get("summary", {}) if isinstance(evidence, dict) else {}
+            summary = evidence.get("summary") if isinstance(evidence, dict) else None
+            if not isinstance(summary, dict) and isinstance(evidence, dict):
+                summary = evidence
             region_id = summary.get("region_id") if isinstance(summary, dict) else None
             if region_id is None and isinstance(evidence, dict):
                 region_id = evidence.get("region_id")
@@ -478,7 +502,13 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
     for (kind, region_id), event_groups in candidate_events.items():
         for evidence_segments in event_groups:
             strongest = max(evidence_segments, key=lambda item: item["confidence"])
-            summary = strongest.get("evidence", {}).get("summary", {})
+            strongest_evidence = strongest.get("evidence", {})
+            summary = (
+                strongest_evidence.get("summary")
+                if isinstance(strongest_evidence, dict) else None
+            )
+            if not isinstance(summary, dict) and isinstance(strongest_evidence, dict):
+                summary = strongest_evidence
             summary = dict(summary) if isinstance(summary, dict) else {}
             if region_id is not None:
                 summary.setdefault("region_id", region_id)
@@ -637,6 +667,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
 
     frames: list[list[dict]] = []
     transforms: list[list[list[float]] | None] = [None]
+    region_transforms: list[list[list[float]] | None] = []
     frame_indices: list[int] = []
     completed_segments = []
     width = height = 0
@@ -693,6 +724,17 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
             _validate_frame_dimensions(width, height)
+            anchor_gray = None
+            anchor_scale = 1.0
+            if regions and not camera_stabilized:
+                anchor_capture = cv2.VideoCapture(str(path))
+                try:
+                    anchor_ok, anchor_frame = anchor_capture.read()
+                    if not anchor_ok or anchor_frame is None:
+                        raise ValueError("无法读取视频首帧，不能安全关联观察区域")
+                    anchor_gray, anchor_scale = _gray_for_motion(anchor_frame, cv2)
+                finally:
+                    anchor_capture.release()
             fps = capture.get(cv2.CAP_PROP_FPS)
             fps = float(fps) if fps and fps > 0 else 1.0
             total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0) or None
@@ -796,9 +838,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     report_checkpoint_reset()
             previous_gray = None
             previous_scale = 1.0
+            previous_region_transform = None
 
             def flush_segment(next_frame_index: int):
-                nonlocal frames, transforms, frame_indices, specialized_observations
+                nonlocal frames, transforms, region_transforms, frame_indices, specialized_observations
                 nonlocal last_live_progress_at
                 if not frames:
                     return
@@ -809,6 +852,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     sample_interval_s=sample_interval,
                     camera_stabilized=camera_stabilized,
                     frame_transforms=transforms,
+                    region_transforms=region_transforms if regions else None,
                     regions=regions,
                     tracking_high_threshold=getattr(detector, "confidence_threshold", 0.369),
                     tracking_low_threshold=getattr(detector, "tracking_low_confidence_threshold", 0.1),
@@ -851,6 +895,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     last_live_progress_at = time.monotonic()
                 frames = []
                 transforms = [None]
+                region_transforms = []
                 frame_indices = []
                 specialized_observations = []
 
@@ -902,9 +947,31 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     if frame_index % stride == 0:
                         height, width = frame.shape[:2]
                         _validate_frame_dimensions(width, height)
+                        gray = None
+                        scale = 1.0
+                        if regions and not camera_stabilized:
+                            gray, scale = _gray_for_motion(frame, cv2)
+                            region_transform = (
+                                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+                                if frame_index == 0 else
+                                _estimate_camera_transform(anchor_gray, gray, cv2, scale)
+                                if anchor_gray is not None and abs(scale - anchor_scale) < 1e-6
+                                else None
+                            )
+                            frame_regions = project_regions_for_frame(
+                                regions, region_transform, width, height,
+                            )
+                        else:
+                            region_transform = (
+                                [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]
+                                if camera_stabilized and regions else None
+                            )
+                            frame_regions = regions or []
+                        if regions:
+                            region_transforms.append(region_transform)
                         frame_detections = (
-                            detector.detect_regions(frame, regions, tracking=True)
-                            if regions and hasattr(detector, "detect_regions")
+                            detector.detect_regions(frame, frame_regions, tracking=True)
+                            if frame_regions and hasattr(detector, "detect_regions")
                             else detector.detect(frame, tracking=True)
                         )
                         frames.append(frame_detections)
@@ -926,7 +993,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         ) or dense_accident_frame:
                             was_in_dense_window = dense_accident_frame
                             observations, failures = _specialized_predictions(
-                                frame, frame_index / fps, regions,
+                                frame, frame_index / fps, frame_regions,
                                 accident_model if (
                                     regular_specialized_frame or dense_accident_frame
                                 ) and accident_model_available else None,
@@ -956,16 +1023,28 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         if len(frames) > 1 and camera_stabilized:
                             transforms.append([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
                         elif len(frames) > 1:
-                            gray, scale = _gray_for_motion(frame, cv2)
-                            transform = (
-                                _estimate_camera_transform(previous_gray, gray, cv2, scale)
-                                if previous_gray is not None and abs(scale - previous_scale) < 1e-6
-                                else None
-                            )
+                            if regions:
+                                transform = _relative_camera_transform(
+                                    previous_region_transform, region_transform,
+                                )
+                            else:
+                                if gray is None:
+                                    gray, scale = _gray_for_motion(frame, cv2)
+                                transform = (
+                                    _estimate_camera_transform(previous_gray, gray, cv2, scale)
+                                    if previous_gray is not None and abs(scale - previous_scale) < 1e-6
+                                    else None
+                                )
                             transforms.append(transform)
-                            previous_gray, previous_scale = gray, scale
+                            if not regions:
+                                previous_gray, previous_scale = gray, scale
                         elif not camera_stabilized:
-                            previous_gray, previous_scale = _gray_for_motion(frame, cv2)
+                            if not regions and gray is None:
+                                gray, scale = _gray_for_motion(frame, cv2)
+                            if not regions:
+                                previous_gray, previous_scale = gray, scale
+                        if regions and not camera_stabilized:
+                            previous_region_transform = region_transform
                         now = time.monotonic()
                         if (progress_callback
                                 and now - last_live_progress_at >= progress_interval_seconds):

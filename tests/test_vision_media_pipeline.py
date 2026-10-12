@@ -294,6 +294,77 @@ def test_video_pipeline_samples_entire_clip_in_segments_not_just_first_180_secon
     assert progress[-1]["checkpoint"]["next_frame_index"] == 1900
 
 
+def test_moving_video_projects_the_manager_roi_before_detection_and_crowd_analysis(
+    tmp_path, monkeypatch,
+):
+    import config
+    from vision import engine
+
+    class MovingCapture(FakeCapture):
+        def read(self):
+            if self.index >= self.decodable_frames:
+                return False, None
+            value = self.index * 0.1
+            self.index += 1
+            return True, np.full((80, 100, 3), value, dtype=np.float32)
+
+    class MovingCV2(FakeCV2):
+        _total_frames = 120
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            return MovingCapture(cls._total_frames)
+
+    class RegionDetector:
+        confidence_threshold = 0.369
+        tracking_low_confidence_threshold = 0.1
+        model_id = "moving-roi-fixture"
+        model_version = "1"
+
+        def __init__(self):
+            self.rois = []
+
+        def detect_regions(self, frame, regions, *, tracking=False):
+            self.rois.append(regions[0]["polygon"])
+            shift = float(frame[0, 0, 0])
+            return [
+                {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+                 "box": [12 + index * 2 + shift, 20, 14 + index * 2 + shift, 42]}
+                for index in range(16)
+            ]
+
+        def detect(self, *_args, **_kwargs):
+            pytest.fail("a valid projected ROI should use region-limited detection")
+
+    source = tmp_path / "moving-drone.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", MovingCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 100)
+    monkeypatch.setattr(engine, "_gray_for_motion", lambda frame, _cv2: (frame[:, :, 0], 1.0))
+    monkeypatch.setattr(
+        engine, "_estimate_camera_transform",
+        lambda previous, current, _cv2, _scale: [
+            [1, 0, float(current.mean() - previous.mean())], [0, 1, 0], [0, 0, 1],
+        ],
+    )
+    detector = RegionDetector()
+    region = {"id": "walkway", "kind": "pedestrian", "polygon": [
+        [0.1, 0.1], [0.7, 0.1], [0.7, 0.9], [0.1, 0.9],
+    ]}
+
+    result = analyze_media(
+        source, "video", None, detector=detector, regions=[region],
+    )
+
+    crowd = next(item for item in result["candidates"] if item["kind"] == "possible_crowding")
+    assert len(detector.rois) == 60
+    assert detector.rois[0][0][0] == pytest.approx(0.1)
+    assert detector.rois[-1][0][0] > detector.rois[0][0][0]
+    assert crowd["evidence"]["summary"]["region_mapping_basis"] == "homography_projected_from_video_anchor"
+    assert result["safety"]["observation_region_reassociation_required"] is False
+
+
 def test_video_reports_live_progress_between_durable_segment_checkpoints(tmp_path, monkeypatch):
     import config
     from vision import engine
