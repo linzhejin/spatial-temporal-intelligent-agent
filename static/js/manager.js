@@ -4,6 +4,7 @@
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
   var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
+  state.eventPublishBusy = false;
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
     var node = byId(id);
@@ -449,18 +450,111 @@
     } catch (error) { message('vision-message', error.message || '场景删除失败。'); }
   }
 
-  function updatePublishState() {
-    var hasFieldEvidence = !state.sourceJobId || byId('field-confirmation').value.trim().length >= 8;
-    var impactReady = !!byId('event-action').value && selectedEventModes().length > 0;
-    byId('event-cost-wrap').hidden = byId('event-action').value !== 'slowdown';
-    byId('publish-event').disabled = !state.picked || !state.picked.confirmed || state.picking ||
-      !byId('event-type').value || !impactReady || !hasFieldEvidence;
+  function eventModeInputs() {
+    return ['walk', 'bike', 'drive'].map(function (mode) { return byId('event-mode-' + mode); });
   }
 
   function selectedEventModes() {
-    var select = byId('event-modes');
-    if (!select || !select.options) return ['walk', 'bike', 'drive'];
-    return Array.from(select.selectedOptions || []).map(function (option) { return option.value; });
+    return ['walk', 'bike', 'drive'].filter(function (mode) { return byId('event-mode-' + mode).checked; });
+  }
+
+  function resetEventModes() {
+    eventModeInputs().forEach(function (input) { input.checked = false; });
+  }
+
+  // Campus event times always use UTC+8, even when the browser is in another timezone.
+  function beijingDateTime(epochMs) {
+    return new Date(epochMs + 8 * 3600000).toISOString().slice(0, 16);
+  }
+
+  function readEventDateTime(prefix) {
+    var date = byId(prefix + '-date').value;
+    var clock = byId(prefix + '-clock').value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(clock)) return NaN;
+    var text = date + 'T' + clock;
+    var epochMs = Date.parse(text + ':00+08:00');
+    return Number.isFinite(epochMs) && beijingDateTime(epochMs) === text ? epochMs : NaN;
+  }
+
+  function resetEventValidity() {
+    var now = Math.ceil(Date.now() / 60000) * 60000;
+    var start = beijingDateTime(now);
+    var end = beijingDateTime(now + 1800000);
+    byId('event-start-mode').value = 'now';
+    byId('event-duration').value = '30';
+    byId('event-start-date').value = start.slice(0, 10);
+    byId('event-start-clock').value = start.slice(11);
+    byId('event-end-date').value = end.slice(0, 10);
+    byId('event-end-clock').value = end.slice(11);
+  }
+
+  function readEventTimeRange() {
+    var now = Date.now();
+    var immediate = byId('event-start-mode').value === 'now';
+    var start = immediate ? now : readEventDateTime('event-start');
+    if (!Number.isFinite(start)) return { error: '请填写完整、有效的开始日期和时刻。' };
+    var duration = byId('event-duration').value;
+    var end;
+    if (duration === 'ongoing') {
+      if (state.sourceJobId) return { error: '影像来源事件必须设置结束时间，请选择有限时长。' };
+      return { start: start, summary: (immediate ? '发布后立即生效' : beijingDateTime(start).replace('T', ' ')) + ' · 长期有效，需手动结束。' };
+    }
+    if (duration === 'custom') end = readEventDateTime('event-end');
+    else if (duration === 'day') {
+      var dayStart = Date.parse(beijingDateTime(start).slice(0, 10) + 'T00:00:00+08:00');
+      end = dayStart + 86400000;
+    } else if (['30', '60', '120'].includes(duration)) end = start + Number(duration) * 60000;
+    if (!Number.isFinite(end)) return { error: '请填写完整、有效的结束日期和时刻。' };
+    if (end <= start) return { error: '结束时间必须晚于开始时间。' };
+    if (end <= now) return { error: '结束时间已过去，请设置未来的结束时间。' };
+    var summary = immediate ? '发布后立即生效' : beijingDateTime(start).replace('T', ' ') + ' 开始';
+    if (['30', '60', '120'].includes(duration)) summary += ' · 持续 ' + duration + ' 分钟';
+    summary += ' · 至 ' + beijingDateTime(end).replace('T', ' ') + '（北京时间）。';
+    return { start: start, end: end, summary: summary };
+  }
+
+  function publishBlocker(timeRange) {
+    if (state.eventPublishBusy) return '正在发布，请稍候，勿重复提交。';
+    if (!byId('event-type').value) return '请选择事件类型。';
+    if (!byId('event-name').value.trim()) return '请填写事件名称。';
+    if (!byId('event-action').value) return '请选择对路线的处理方式。';
+    if (!selectedEventModes().length) return '请至少勾选一种受影响的出行方式。';
+    if (byId('event-action').value === 'slowdown') {
+      var cost = Number(byId('event-cost').value);
+      if (!Number.isFinite(cost) || cost < 1 || cost > 5 || Math.abs(cost * 10 - Math.round(cost * 10)) > 1e-8) {
+        return '缓行成本倍数须为 1–5 之间的数值，最多一位小数。';
+      }
+    }
+    if (timeRange.error) return timeRange.error;
+    if (state.picking) return '请在地图上选择道路；不需要重选时可再次点击“选取路段”取消。';
+    if (!state.picked) return '请点击“选取路段”，再在地图上点击实际受影响的道路。';
+    if (!state.picked.confirmed) return '请核对高亮道路，并点击“确认路段”。';
+    if (state.sourceJobId && byId('field-confirmation').value.trim().length < 8) return '请填写道路现场核实依据（至少 8 字）。';
+    return '';
+  }
+
+  function updatePublishState() {
+    var slowdown = byId('event-action').value === 'slowdown';
+    byId('event-cost-wrap').hidden = !slowdown;
+    byId('event-cost').disabled = !slowdown;
+    byId('event-ongoing-option').disabled = !!state.sourceJobId;
+    var scheduled = byId('event-start-mode').value === 'scheduled';
+    var custom = byId('event-duration').value === 'custom';
+    byId('event-start-fields').hidden = !scheduled;
+    byId('event-end-fields').hidden = !custom;
+    ['date', 'clock'].forEach(function (part) {
+      byId('event-start-' + part).disabled = !scheduled;
+      byId('event-start-' + part).required = scheduled;
+      byId('event-end-' + part).disabled = !custom;
+      byId('event-end-' + part).required = custom;
+    });
+    var timeRange = readEventTimeRange();
+    byId('event-time-summary').textContent = timeRange.error || timeRange.summary;
+    byId('event-time-summary').classList.toggle('is-error', !!timeRange.error);
+    var blocker = publishBlocker(timeRange);
+    byId('publish-event').disabled = !!blocker;
+    byId('publish-guidance').textContent = blocker || '信息已齐全，可以发布。';
+    byId('condition-form').setAttribute('aria-busy', String(state.eventPublishBusy));
   }
 
   function conditionPreviewQuery(picked) {
@@ -524,11 +618,10 @@
     byId('field-confirmation').required = true;
     byId('event-type').value = '';
     byId('event-action').value = '';
-    Array.from(byId('event-modes').options || []).forEach(function (option) { option.selected = false; });
+    resetEventModes();
     byId('event-name').value = '';
     byId('event-description').value = '';
-    byId('start-time').value = '';
-    byId('end-time').value = localDateTimeValue(Date.now() / 1000 + 1800);
+    resetEventValidity();
     byId('field-confirmation').value = '';
     if (job.anchor_gcj) state.map.setView([job.anchor_gcj.lat, job.anchor_gcj.lng], 17);
     setPicking(true, 'road');
@@ -550,11 +643,10 @@
     byId('field-confirmation').required = true;
     byId('event-type').value = '';
     byId('event-action').value = '';
-    Array.from(byId('event-modes').options || []).forEach(function (option) { option.selected = false; });
+    resetEventModes();
     byId('event-name').value = '';
     byId('event-description').value = '';
-    byId('start-time').value = '';
-    byId('end-time').value = localDateTimeValue(Date.now() / 1000 + 1800);
+    resetEventValidity();
     byId('field-confirmation').value = '';
     if (job.anchor_gcj) state.map.setView([job.anchor_gcj.lat, job.anchor_gcj.lng], 17);
     setPicking(true, 'road');
@@ -617,8 +709,10 @@
     byId('event-type').value = '';
     byId('event-name').value = '';
     byId('event-description').value = '';
-    byId('start-time').value = '';
-    byId('end-time').value = '';
+    byId('event-action').value = '';
+    resetEventModes();
+    resetEventValidity();
+    updatePublishState();
     clearSelectedMedia();
     byId('workspace').hidden = true;
     byId('logout').hidden = true;
@@ -1627,20 +1721,14 @@
 
   async function submitEvent(event) {
     event.preventDefault();
-    if (!state.picked) { message('form-message', '请先在地图上选取一条道路。'); return; }
-    if (!state.picked.confirmed) { message('form-message', '请先核对并确认地图高亮的路段。'); return; }
-    if (!byId('event-type').value) { message('form-message', '请选择现场确认的事件类型。'); return; }
-    if (!byId('event-action').value || !selectedEventModes().length) {
-      message('form-message', '请选择路况影响方式及受影响的出行方式。'); return;
-    }
+    if (state.eventPublishBusy) return;
+    var timeRange = readEventTimeRange();
+    var blocker = publishBlocker(timeRange);
+    if (blocker) { updatePublishState(); message('form-message', blocker); return; }
     var fieldConfirmation = byId('field-confirmation').value.trim();
-    if (state.sourceJobId && fieldConfirmation.length < 8) {
-      message('form-message', '请填写具体道路的现场核实依据（至少 8 字）。'); return;
-    }
-    var start = byId('start-time').value;
-    var end = byId('end-time').value;
-    if (start && end && end <= start) { message('form-message', '结束时间必须晚于开始时间。'); return; }
-    var button = byId('publish-event'); button.disabled = true; button.textContent = '正在发布…';
+    state.eventPublishBusy = true;
+    updatePublishState();
+    var button = byId('publish-event'); button.textContent = '正在发布…';
     var body = {
       type: byId('event-type').value,
       action: byId('event-action').value,
@@ -1649,9 +1737,9 @@
       description: byId('event-description').value.trim(),
       lng: state.picked.lng, lat: state.picked.lat,
     };
-    if (body.action === 'slowdown') body.cost_multiplier = Number(byId('event-cost').value || 1.5);
-    if (start) body.start_time = new Date(start).toISOString();
-    if (end) body.end_time = new Date(end).toISOString();
+    if (body.action === 'slowdown') body.cost_multiplier = Number(byId('event-cost').value);
+    body.start_time = new Date(timeRange.start).toISOString();
+    if (timeRange.end !== undefined) body.end_time = new Date(timeRange.end).toISOString();
     if (state.sourceJobId) {
       body.source_vision_job_id = state.sourceJobId;
       body.source_vision_candidate_index = state.sourceCandidateIndex;
@@ -1661,13 +1749,13 @@
       await request('/api/road-conditions', 'POST', body);
       message('form-message', '事件已发布，路线规划会按该路段状态处理。', true);
       byId('event-name').value = ''; byId('event-description').value = '';
-      byId('start-time').value = ''; byId('end-time').value = '';
-      Array.from(byId('event-modes').options || []).forEach(function (option) { option.selected = false; });
+      resetEventValidity();
+      resetEventModes();
       byId('event-action').value = '';
       clearPickedRoad(); clearVisionSource();
       refreshEvents();
     } catch (error) { message('form-message', error.message || '事件发布失败。'); }
-    finally { button.innerHTML = '发布事件 <span>→</span>'; updatePublishState(); }
+    finally { state.eventPublishBusy = false; button.innerHTML = '发布事件 <span>→</span>'; updatePublishState(); }
   }
 
   byId('login-form').addEventListener('submit', async function (event) {
@@ -1693,7 +1781,14 @@
   });
   byId('event-type').addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
   byId('event-action').addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
-  byId('event-modes').addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
+  eventModeInputs().forEach(function (input) {
+    input.addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
+  });
+  byId('event-name').addEventListener('input', updatePublishState);
+  ['event-start-mode', 'event-duration', 'event-start-date', 'event-start-clock', 'event-end-date', 'event-end-clock'].forEach(function (id) {
+    byId(id).addEventListener('input', updatePublishState);
+    byId(id).addEventListener('change', updatePublishState);
+  });
   byId('event-cost').addEventListener('input', function () { updatePublishState(); return refreshImpactPreview(); });
   byId('field-confirmation').addEventListener('input', updatePublishState);
   byId('clear-vision-source').addEventListener('click', clearVisionSource);
@@ -1759,6 +1854,8 @@
     setLoggedOut('已退出管理台。');
   });
 
+  resetEventValidity();
+  updatePublishState();
   request('/api/admin/status', 'GET').then(function (data) {
     if (data.is_admin) setLoggedIn(data);
     else if (!data.login_enabled) message('login-message', '管理功能尚未配置，请联系系统管理员。');

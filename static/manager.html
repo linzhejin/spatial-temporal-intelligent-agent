@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#173b35">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261010a">
+  <link rel="stylesheet" href="/css/manager.css?v=20261012b">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261012a" defer></script>
+  <script src="/js/manager.js?v=20261012b" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -96,21 +96,49 @@
                   <option value="closure">禁止通行，规划时绕开</option>
                 </select>
               </label>
-              <label>受影响的出行方式
-                <select id="event-modes" multiple size="3" required aria-describedby="event-modes-help">
-                  <option value="walk">步行</option>
-                  <option value="bike">骑行</option>
-                  <option value="drive">驾车</option>
-                </select>
-                <small id="event-modes-help">按住 Ctrl（手机端逐项点选）可多选；不受影响的方式请不要选择。</small>
-              </label>
+              <fieldset id="event-modes" class="event-modes-fieldset" aria-describedby="event-modes-help">
+                <legend>受影响的出行方式</legend>
+                <div class="event-mode-options">
+                  <label><input id="event-mode-walk" type="checkbox" value="walk"><span>步行</span></label>
+                  <label><input id="event-mode-bike" type="checkbox" value="bike"><span>骑行</span></label>
+                  <label><input id="event-mode-drive" type="checkbox" value="drive"><span>驾车</span></label>
+                </div>
+                <small id="event-modes-help">直接勾选，可多选。只选择现场确认受影响的方式。</small>
+              </fieldset>
               <label id="event-cost-wrap" hidden>缓行成本倍数
                 <input id="event-cost" type="number" min="1" max="5" step="0.1" value="1.5">
               </label>
-              <div class="time-grid">
-                <label>开始时间<input id="start-time" type="datetime-local"></label>
-                <label>结束时间<input id="end-time" type="datetime-local"></label>
-              </div>
+              <fieldset class="event-validity-fieldset">
+                <legend>有效时间 <small>北京时间（UTC+8）</small></legend>
+                <div class="time-grid">
+                  <label>开始生效
+                    <select id="event-start-mode">
+                      <option value="now">发布后立即生效</option>
+                      <option value="scheduled">指定开始时间</option>
+                    </select>
+                  </label>
+                  <label>持续时间
+                    <select id="event-duration">
+                      <option value="30">30 分钟</option>
+                      <option value="60">1 小时</option>
+                      <option value="120">2 小时</option>
+                      <option value="day">至开始当天结束</option>
+                      <option value="custom">自定义结束时间</option>
+                      <option id="event-ongoing-option" value="ongoing">长期，手动结束</option>
+                    </select>
+                  </label>
+                </div>
+                <div id="event-start-fields" class="time-grid" hidden>
+                  <label>开始日期<input id="event-start-date" type="date" disabled></label>
+                  <label>开始时刻<input id="event-start-clock" type="time" step="60" disabled></label>
+                </div>
+                <div id="event-end-fields" class="time-grid" hidden>
+                  <label>结束日期<input id="event-end-date" type="date" disabled></label>
+                  <label>结束时刻<input id="event-end-clock" type="time" step="60" disabled></label>
+                </div>
+                <p id="event-time-summary" class="event-time-summary" role="status"></p>
+                <small>常用时长不必打开日历。自定义时也可直接输入日期、时刻；影像来源事件必须设置结束时间。</small>
+              </fieldset>
               <button id="pick-road" class="outline-button" type="button"><span>⌖</span> 选取路段</button>
               <div class="selected-road-row">
                 <div id="selected-road" class="selected-road" aria-live="polite">尚未选择道路</div>
@@ -120,13 +148,14 @@
                 </div>
               </div>
               <div id="impact-preview" class="impact-preview" aria-live="polite" hidden></div>
-              <button id="publish-event" class="primary-button" type="submit" disabled>发布事件 <span>→</span></button>
+              <button id="publish-event" class="primary-button" type="submit" aria-describedby="publish-guidance" disabled>发布事件 <span>→</span></button>
+              <p id="publish-guidance" class="publish-guidance" role="status"></p>
               <p id="form-message" class="form-message" role="status"></p>
             </form>
           </section>
           <section class="protocol-card">
             <span class="protocol-mark">i</span>
-            <p><strong>影响范围</strong><br>事件绑定在实际路段上，勾选的出行方式会绕开该路段；未勾选的方式按现场确认保持通行。</p>
+            <p><strong>影响范围</strong><br>事件绑定在实际路段上，仅影响勾选的出行方式：提示不改变路线，缓行增加时间成本，禁止通行才会绕开。未勾选的方式保持原有通行规则。</p>
           </section>
         </aside>
       </div>

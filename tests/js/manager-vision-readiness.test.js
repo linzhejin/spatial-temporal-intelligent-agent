@@ -256,8 +256,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261010a/);
-  assert.match(managerHtml, /manager\.js\?v=20261012a/);
+  assert.match(managerHtml, /manager\.css\?v=20261012b/);
+  assert.match(managerHtml, /manager\.js\?v=20261012b/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -534,7 +534,8 @@ test('a selected road can be explicitly cleared before publishing', async () => 
   confirmButton.hidden = true;
   elements.get('event-type').value = 'closure';
   elements.get('event-action').value = 'closure';
-  elements.get('event-modes').selectedOptions = [{ value: 'walk', selected: true }];
+  elements.get('event-mode-walk').checked = true;
+  elements.get('event-name').value = '测试路封闭';
   elements.get('pick-road').listeners.click();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
 
@@ -569,24 +570,17 @@ test('road event preview and publication use an action and affected travel modes
   elements.get('event-type').value = 'construction';
   elements.get('event-type').listeners.change();
   elements.get('event-action').value = 'closure';
-  const modes = elements.get('event-modes');
-  modes.options = [
-    { value: 'walk', selected: false },
-    { value: 'bike', selected: false },
-    { value: 'drive', selected: false },
-  ];
-  modes.selectedOptions = [];
+  elements.get('event-name').value = '测试路施工';
+  const walkMode = elements.get('event-mode-walk');
   elements.get('event-action').listeners.change();
   elements.get('pick-road').listeners.click();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
   elements.get('confirm-picked-road').listeners.click();
 
-  modes.selectedOptions = [];
   assert.equal(elements.get('publish-event').disabled, true, 'at least one affected travel mode is required');
 
-  modes.selectedOptions = [modes.options[0]];
-  modes.options[0].selected = true;
-  await modes.listeners.change();
+  walkMode.checked = true;
+  await walkMode.listeners.change();
   assert.equal(elements.get('publish-event').disabled, false);
   const preview = calls.filter((call) => call.url.startsWith('/api/road-conditions/snap')).at(-1);
   assert.match(preview.url, /action=closure/);
@@ -926,6 +920,8 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   elements.get('event-type').value = 'event';
   elements.get('event-type').listeners.change();
   elements.get('event-action').value = 'notice';
+  elements.get('event-name').value = '测试人流提示';
+  elements.get('event-mode-walk').checked = true;
   elements.get('event-action').listeners.change();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
   assert.equal(elements.get('publish-event').disabled, true);
@@ -934,6 +930,16 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   elements.get('field-confirmation').value = '已联系现场负责人核实，该路段确有人流聚集。';
   elements.get('field-confirmation').listeners.input();
   assert.equal(elements.get('publish-event').disabled, false);
+  assert.equal(elements.get('event-duration').value, '30');
+  assert.equal(elements.get('event-ongoing-option').disabled, true);
+  elements.get('event-duration').value = 'ongoing';
+  elements.get('event-duration').listeners.change();
+  assert.equal(elements.get('publish-event').disabled, true);
+  assert.match(elements.get('event-time-summary').textContent, /影像来源事件必须设置结束时间/);
+  await elements.get('condition-form').listeners.submit({ preventDefault() {} });
+  assert.equal(calls.some((call) => call.url === '/api/road-conditions' && call.options.method === 'POST'), false);
+  elements.get('event-duration').value = '30';
+  elements.get('event-duration').listeners.change();
   await elements.get('condition-form').listeners.submit({ preventDefault() {} });
   const posted = calls.find((call) => call.url === '/api/road-conditions' && call.options.method === 'POST');
   assert.ok(posted);
@@ -941,6 +947,7 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   assert.equal(body.source_vision_job_id, 'a6f6c6b1-d237-43fa-8ea2-b01ae48a3e8e');
   assert.equal(body.source_vision_candidate_index, 0);
   assert.equal(body.field_confirmation, '已联系现场负责人核实，该路段确有人流聚集。');
+  assert.equal(Date.parse(body.end_time) - Date.parse(body.start_time), 1800000);
   assert.equal(elements.get('vision-source-banner').hidden, true);
 });
 
