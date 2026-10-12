@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#173b35">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261012-event1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261012-vision1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261012-event1" defer></script>
+  <script src="/js/manager.js?v=20261012-vision1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -177,9 +177,13 @@
                 </div>
               </div>
               <label>实际拍摄时间
-                <input id="captured-at" type="datetime-local" required>
+                <input id="captured-at" type="datetime-local" step="1" required>
                 <small>图片和视频都请填写实际拍摄时间。过期影像可留作回放，不能直接发布为当前路况。</small>
               </label>
+              <button id="pick-dji-subtitle" class="outline-button" type="button">读取 DJI 字幕时间（可选）</button>
+              <input id="dji-subtitle-file" type="file" accept=".srt,text/plain" aria-label="选择与视频同名的 DJI SRT 字幕文件">
+              <small class="dji-subtitle-note">选择与视频同名的 .SRT 文件可带入拍摄时间。字幕无时区，按当前设备本地时区解释，请核对时钟和时区。字幕只在本机读取、不上传；机身 GPS 不作为地面位置或道路绑定依据。影像原片仍按原流程上传。</small>
+              <p id="dji-subtitle-status" class="dji-subtitle-status" role="status" aria-live="polite"></p>
               <button id="pick-anchor" class="outline-button" type="button">⌖ 标注影像所在校园区域</button>
               <div id="selected-anchor" class="selected-road">尚未标注影像区域</div>
               <div id="observation-editor" class="observation-editor" hidden>

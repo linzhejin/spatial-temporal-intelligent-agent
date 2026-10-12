@@ -278,5 +278,33 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.assertEqual(self.posts[0]["cost_multiplier"], 2.5)
 
 
+    def test_matching_dji_subtitle_fills_time_without_using_gps_for_road_binding(self):
+        self.open_manager()
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
+        self.page.locator("#media-file").set_input_files({
+            "name": "DJI_1081.mp4", "mimeType": "video/mp4", "buffer": b"test-video",
+        })
+        with self.page.expect_file_chooser() as chooser_info:
+            self.page.locator("#pick-dji-subtitle").click()
+        chooser_info.value.set_files({
+            "name": "DJI_1081.SRT", "mimeType": "text/plain",
+            "buffer": b"2025-06-15 15:47:50.149 [latitude:x] [longitude:y]\n"
+                      b"2025-06-15 15:47:50.182 [latitude:x] [longitude:y]",
+        })
+        expect(self.page.locator("#captured-at")).to_have_value("2025-06-15T15:47:50")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("GPS 记录 2 条")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("不用于道路定位")
+        self.page.locator("#captured-at").fill("2026-10-12T08:00")
+        self.page.locator("#dji-subtitle-file").set_input_files({
+            "name": "other.SRT", "mimeType": "text/plain",
+            "buffer": b"2025-06-15 16:00:00.149 [latitude:x] [longitude:y]",
+        })
+        expect(self.page.locator("#captured-at")).to_have_value("2026-10-12T08:00")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("文件名与视频不一致")
+        self.page.set_viewport_size({"width": 320, "height": 844})
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+
+
 if __name__ == "__main__":
     unittest.main()

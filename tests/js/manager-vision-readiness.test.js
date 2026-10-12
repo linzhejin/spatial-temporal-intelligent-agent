@@ -256,8 +256,10 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261012-event1/);
-  assert.match(managerHtml, /manager\.js\?v=20261012-event1/);
+  assert.match(managerHtml, /manager\.css\?v=20261012-vision1/);
+  assert.match(managerHtml, /manager\.js\?v=20261012-vision1/);
+  assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
+  assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerCss, /\.vision-region-mapping/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
@@ -393,6 +395,100 @@ test('selecting an image immediately enables recognition without a map point', a
   assert.equal(harness.elements.get('selected-media-preview').src, 'blob:preview-0');
   assert.match(harness.elements.get('vision-message').textContent, /可以开始识别.*复核后选择具体道路/);
   assert.equal(harness.elements.get('submit-vision').disabled, false);
+});
+
+test('a matching DJI SRT fills capture time locally and never uses aircraft GPS as a road location', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, calls } = harness;
+  const originalAnchorText = harness.getElement('selected-anchor').textContent;
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_1081.mp4', size: 100 }];
+  elements.get('media-file').listeners.change();
+  const subtitle = {
+    name: 'DJI_1081.SRT', size: 300,
+    text: async () => [
+      '2025-06-15 15:47:50.149 [latitude:30.5] [longitude:114.3]',
+      '2025-06-15 15:47:50.182 [latitude:30.5] [longitude:114.3]',
+    ].join('\n'),
+  };
+  elements.get('dji-subtitle-file').files = [subtitle];
+  await elements.get('dji-subtitle-file').listeners.change();
+
+  assert.equal(elements.get('captured-at').value, '2025-06-15T15:47:50');
+  assert.match(elements.get('dji-subtitle-status').textContent, /GPS 记录 2 条/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /不用于道路定位/);
+  assert.equal(harness.getElement('selected-anchor').textContent, originalAnchorText);
+  assert.equal(calls.some((call) => call.url.includes('/api/road-conditions/snap?')), false);
+  assert.equal(calls.some((call) => call.options && JSON.stringify(call.options.body || '').includes('30.5')), false);
+
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_1081.SRT', size: 10, text: async () => 'unreadable subtitle',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.equal(elements.get('captured-at').value, '');
+  assert.match(elements.get('dji-subtitle-status').textContent, /没有找到有效的拍摄时间/);
+});
+
+test('DJI subtitle mismatch or unreadable contents leave manual capture time and upload available', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements } = harness;
+  harness.setInferenceReady(true);
+  harness.intervalCallbacks[0]();
+  await flush();
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'flight-a.mp4', size: 100 }];
+  elements.get('media-file').listeners.change();
+  elements.get('captured-at').value = '2026-10-12T09:30';
+  elements.get('dji-subtitle-file').files = [{
+    name: 'flight-b.SRT', size: 10, text: async () => '2025-06-15 15:47:50.149 [latitude:1] [longitude:2]',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.equal(elements.get('captured-at').value, '2026-10-12T09:30');
+  assert.match(elements.get('dji-subtitle-status').textContent, /文件名与视频不一致/);
+  assert.equal(elements.get('submit-vision').disabled, false);
+
+  elements.get('dji-subtitle-file').files = [{
+    name: 'flight-a.SRT', size: 10, text: async () => 'not a DJI subtitle',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.equal(elements.get('captured-at').value, '2026-10-12T09:30');
+  assert.match(elements.get('dji-subtitle-status').textContent, /没有找到有效的拍摄时间/);
+  assert.equal(elements.get('submit-vision').disabled, false);
+});
+
+test('manual capture time stays authoritative after DJI subtitle auto-fill', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements } = harness;
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_1081.mp4', size: 100 }];
+  elements.get('media-file').listeners.change();
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_1081.SRT', size: 10, text: async () => '2025-06-15 15:47:50.149 [latitude:1] [longitude:2]',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  elements.get('captured-at').value = '2026-10-12T08:00';
+  elements.get('captured-at').listeners.input();
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_1081.SRT', size: 10, text: async () => '2025-06-15 16:00:00.149 [latitude:1] [longitude:2]',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.equal(elements.get('captured-at').value, '2026-10-12T08:00');
+  assert.match(elements.get('dji-subtitle-status').textContent, /保留手动填写的拍摄时间/);
+});
+
+test('a DJI subtitle selected before its video is applied once the matching video is selected', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements } = harness;
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_1081.SRT', size: 10, text: async () => '2025-06-15 15:47:50.149 [latitude:x] [longitude:y]',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.match(elements.get('dji-subtitle-status').textContent, /先选择视频/);
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_1081.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  assert.equal(elements.get('captured-at').value, '2025-06-15T15:47:50');
+  assert.match(elements.get('dji-subtitle-status').textContent, /GPS 记录 1 条/);
 });
 
 test('an oversized file is acknowledged but cannot be submitted', async () => {

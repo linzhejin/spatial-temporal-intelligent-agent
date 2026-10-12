@@ -4,6 +4,10 @@
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
   var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
+  state.djiSubtitleFile = null;
+  state.djiSubtitleReadId = 0;
+  state.captureTimeEdited = false;
+  state.captureTimeAutoValue = '';
   state.eventPublishBusy = false;
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
@@ -84,6 +88,76 @@
     return !!file && (/^image\/(jpeg|png|webp)$/i.test(file.type || '') || /\.(jpe?g|png|webp)$/i.test(file.name || ''));
   }
 
+  function fileStem(name) {
+    return String(name || '').replace(/\.[^.]+$/, '').trim().toLowerCase();
+  }
+
+  function clearDjiAutoCaptureTime() {
+    var captureInput = byId('captured-at');
+    if (!state.captureTimeEdited && state.captureTimeAutoValue
+      && captureInput.value === state.captureTimeAutoValue) captureInput.value = '';
+    state.captureTimeAutoValue = '';
+  }
+
+  function parseDjiSubtitle(text) {
+    var value = String(text || '');
+    var match = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?/.exec(value);
+    if (!match) return null;
+    var year = Number(match[1]); var month = Number(match[2]); var day = Number(match[3]);
+    var hour = Number(match[4]); var minute = Number(match[5]); var second = Number(match[6]);
+    var date = new Date(Date.UTC(year, month - 1, day));
+    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day
+      || hour > 23 || minute > 59 || second > 59) return null;
+    return {
+      captureTime: match[1] + '-' + match[2] + '-' + match[3] + 'T' + match[4] + ':' + match[5] + ':' + match[6],
+      gpsSamples: Math.min((value.match(/\[latitude\s*:/gi) || []).length,
+        (value.match(/\[longitude\s*:/gi) || []).length),
+    };
+  }
+
+  async function readDjiSubtitle() {
+    var subtitle = state.djiSubtitleFile;
+    var status = byId('dji-subtitle-status');
+    if (!subtitle) { status.textContent = ''; return; }
+    var media = byId('media-file').files[0];
+    if (!media || !isVideoFile(media)) {
+      status.textContent = '先选择视频，再选择与视频同名的 DJI .SRT 字幕。'; return;
+    }
+    if (!/\.srt$/i.test(subtitle.name || '')) {
+      status.textContent = '所选文件不是 .SRT 字幕；仍可手动填写拍摄时间。'; return;
+    }
+    if (fileStem(subtitle.name) !== fileStem(media.name)) {
+      status.textContent = '字幕文件名与视频不一致，未使用字幕时间；仍可手动填写拍摄时间。'; return;
+    }
+    if (subtitle.size > 16 * 1024 * 1024) {
+      status.textContent = '字幕文件超过 16 MB，未读取；仍可手动填写拍摄时间并上传影像。'; return;
+    }
+    var requestId = ++state.djiSubtitleReadId;
+    status.textContent = '正在读取字幕时间…';
+    try {
+      var metadata = parseDjiSubtitle(await subtitle.text());
+      if (requestId !== state.djiSubtitleReadId || subtitle !== state.djiSubtitleFile) return;
+      if (!metadata) {
+        status.textContent = '没有找到有效的拍摄时间，仍可手动填写后提交。'; return;
+      }
+      var captureInput = byId('captured-at');
+      var canApply = !state.captureTimeEdited
+        && (!captureInput.value || captureInput.value === state.captureTimeAutoValue);
+      if (canApply) {
+        captureInput.value = metadata.captureTime;
+        state.captureTimeAutoValue = metadata.captureTime;
+        status.textContent = '已带入字幕时间 ' + metadata.captureTime.replace('T', ' ')
+          + '；GPS 记录 ' + metadata.gpsSamples + ' 条。机身 GPS 不是地面位置，不用于道路定位；请核对时间。';
+      } else {
+        status.textContent = '字幕时间 ' + metadata.captureTime.replace('T', ' ')
+          + '；GPS 记录 ' + metadata.gpsSamples + ' 条。保留手动填写的拍摄时间；机身 GPS 不用于道路定位。';
+      }
+    } catch (_) {
+      if (requestId !== state.djiSubtitleReadId) return;
+      status.textContent = '字幕文件无法读取，仍可手动填写拍摄时间并上传影像。';
+    }
+  }
+
   function formatBytes(value) {
     if (value < 1024) return value + ' B';
     if (value < 1024 * 1024) return (value / 1024).toFixed(1) + ' KB';
@@ -102,6 +176,11 @@
     clearMediaPreview();
     state.mediaInvalidReason = '';
     byId('media-file').value = '';
+    state.djiSubtitleFile = null;
+    state.djiSubtitleReadId += 1;
+    state.captureTimeAutoValue = '';
+    byId('dji-subtitle-file').value = '';
+    byId('dji-subtitle-status').textContent = '';
     byId('selected-media').hidden = true;
     byId('selected-media-name').textContent = '';
     byId('selected-media-meta').textContent = '';
@@ -1878,6 +1957,9 @@
   });
   byId('media-file').addEventListener('change', function () {
     var file = byId('media-file').files[0];
+    state.captureTimeEdited = false;
+    state.captureTimeAutoValue = '';
+    state.djiSubtitleReadId += 1;
     renderSelectedMedia(file);
     state.observationSceneId = null; state.frameSignature = null;
     state.observationRegions = []; state.currentRegionPoints = []; state.drawingRegion = false;
@@ -1897,8 +1979,24 @@
     byId('camera-stabilized').disabled = !isVideoFile(file);
     if (!isVideoFile(file)) byId('camera-stabilized').checked = false;
     restorePendingVisionSettings(file);
+    var subtitleRead = readDjiSubtitle();
     updateVisionSubmitState();
     updateVisionGuidance();
+    return subtitleRead;
+  });
+  byId('pick-dji-subtitle').addEventListener('click', function () {
+    byId('dji-subtitle-file').click();
+  });
+  byId('dji-subtitle-file').addEventListener('change', function () {
+    clearDjiAutoCaptureTime();
+    state.djiSubtitleFile = byId('dji-subtitle-file').files[0] || null;
+    state.djiSubtitleReadId += 1;
+    var reading = readDjiSubtitle();
+    byId('dji-subtitle-file').value = '';
+    return reading;
+  });
+  byId('captured-at').addEventListener('input', function () {
+    state.captureTimeEdited = true;
   });
   byId('vision-form').addEventListener('submit', submitVision);
   byId('condition-form').addEventListener('submit', submitEvent);
