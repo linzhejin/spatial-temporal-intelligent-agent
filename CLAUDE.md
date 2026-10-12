@@ -8,9 +8,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/manager-event-controls @ 95138c1 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 16:25
+- 版本：codex/aerial-vision-release @ f740200 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 21:37
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 12（最新 012）
+- 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 13（最新 013）
 <!-- FACTS:END -->
 
 - 后端 Flask；Agent 工作流位于 `agents/`，LangGraph 编排，工具注册表 `agents/tools.py`（数量见上方自动事实块）。持久会话与任务在 `storage/`，后台执行由 Agent worker 承担。
