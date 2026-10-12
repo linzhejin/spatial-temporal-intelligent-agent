@@ -57,6 +57,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page = self.context.new_page()
         self.errors = []
         self.posts = []
+        self.snap_requests = []
         self.pending_posts = []
         self.hold_posts = False
         self.fail_posts = False
@@ -87,6 +88,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         elif path == "/api/road-conditions":
             data = {"conditions": []}
         elif path == "/api/road-conditions/snap":
+            self.snap_requests.append(route.request.url)
             data = {"snap": {
                 "u": 1, "v": 2, "key": 0, "road_name": "测试路",
                 "dist_m": 2, "chain_length_m": 100,
@@ -201,6 +203,39 @@ class ManagerEventControlsTest(unittest.TestCase):
         expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
         self.assertNotIn("end_time", self.posts[1])
 
+    def test_dji_aircraft_track_is_local_and_only_shown_after_click(self):
+        self.open_manager()
+        self.page.locator("#media-file").set_input_files({
+            "name": "DJI_flight.mp4", "mimeType": "video/mp4", "buffer": b"test video",
+        })
+        self.page.locator("#dji-subtitle-file").set_input_files({
+            "name": "DJI_flight.SRT", "mimeType": "text/plain",
+            "buffer": (
+                b"2026-10-12 10:00:00.000 [latitude: 30.536000] [longitude: 114.363000]\n"
+                b"2026-10-12 10:00:01.000 [latitude: 30.537000] [longitude: 114.364000]"
+            ),
+        })
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("读到 2 个机身 GPS 位置点")
+        expect(self.page.locator("#show-dji-track")).to_be_visible()
+        self.assertEqual(self.snap_requests, [], "reading the local SRT must not request a road snap")
+
+        self.page.locator("#show-dji-track").click()
+        expect(self.page.locator("#show-dji-track")).to_have_text("隐藏无人机航迹")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("不能表示镜头拍到的地面位置")
+        self.page.set_viewport_size({"width": 320, "height": 844})
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+        self.page.set_viewport_size({"width": 1280, "height": 1000})
+        self.page.screenshot(path=str(self.qa_dir / "dji-track-preview.png"), full_page=True)
+        self.assertEqual(self.snap_requests, [], "showing aircraft position must not bind it to a road")
+
+        self.page.locator("#show-dji-track").click()
+        expect(self.page.locator("#show-dji-track")).to_have_text("在地图上查看无人机航迹")
+        self.page.locator("#media-file").set_input_files({
+            "name": "different-flight.mp4", "mimeType": "video/mp4", "buffer": b"another video",
+        })
+        expect(self.page.locator("#show-dji-track")).to_be_hidden()
+        self.assertEqual(self.snap_requests, [])
+
     def test_mobile_controls_fit_and_custom_time_can_be_typed(self):
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.open_manager()
@@ -289,12 +324,16 @@ class ManagerEventControlsTest(unittest.TestCase):
             self.page.locator("#pick-dji-subtitle").click()
         chooser_info.value.set_files({
             "name": "DJI_1081.SRT", "mimeType": "text/plain",
-            "buffer": b"2025-06-15 15:47:50.149 [latitude:x] [longitude:y]\n"
-                      b"2025-06-15 15:47:50.182 [latitude:x] [longitude:y]",
+            "buffer": b"2025-06-15 15:47:50.149 [latitude:30.536000] [longitude:114.363000]\n"
+                      b"2025-06-15 15:47:50.182 [latitude:30.537000] [longitude:114.364000]",
         })
         expect(self.page.locator("#captured-at")).to_have_value("2025-06-15T15:47:50")
-        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("GPS 记录 2 条")
-        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("不用于道路定位")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("读到 2 个机身 GPS 位置点")
+        expect(self.page.locator("#show-dji-track")).to_be_visible()
+        self.page.locator("#show-dji-track").click()
+        expect(self.page.locator("#show-dji-track")).to_have_text("隐藏无人机航迹")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("不能表示镜头拍到的地面位置")
+        self.assertEqual(self.snap_requests, [])
         self.page.locator("#captured-at").fill("2026-10-12T08:00")
         self.page.locator("#dji-subtitle-file").set_input_files({
             "name": "other.SRT", "mimeType": "text/plain",
@@ -302,6 +341,8 @@ class ManagerEventControlsTest(unittest.TestCase):
         })
         expect(self.page.locator("#captured-at")).to_have_value("2026-10-12T08:00")
         expect(self.page.locator("#dji-subtitle-status")).to_contain_text("文件名与视频不一致")
+        expect(self.page.locator("#show-dji-track")).to_be_hidden()
+        self.assertEqual(self.snap_requests, [])
         self.page.set_viewport_size({"width": 320, "height": 844})
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
 

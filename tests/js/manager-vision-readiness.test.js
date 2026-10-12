@@ -75,6 +75,7 @@ function managerHarness(sessionSeed = []) {
 
   const map = {
     setView() { return this; },
+    fitBounds(bounds, options) { this.lastFitBounds = { bounds, options }; return this; },
     invalidateSize() {},
     on(name, callback) { mapListeners[name] = callback; },
     removeLayer(layer) { removedMapLayers.push(layer); },
@@ -214,7 +215,7 @@ function managerHarness(sessionSeed = []) {
   };
   vm.runInNewContext(source, context);
   return {
-    elements, intervalCallbacks, mapListeners, mapLayers, removedMapLayers, requested, calls, document,
+    elements, intervalCallbacks, mapListeners, map, mapLayers, removedMapLayers, requested, calls, document,
     createdObjectUrls, revokedObjectUrls, formEntries, sessionValues, getElement: element,
     setInferenceReady: (value) => { inferenceReady = value; },
     setOptionalModelStatus: (value) => { optionalModelStatus = value; },
@@ -256,10 +257,12 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261012-vision2/);
-  assert.match(managerHtml, /manager\.js\?v=20261012-vision2/);
+  assert.match(managerHtml, /manager\.css\?v=20261012-cameratrack1/);
+  assert.match(managerHtml, /manager\.js\?v=20261012-cameratrack1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
+  assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
+  assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
@@ -415,8 +418,8 @@ test('a matching DJI SRT fills capture time locally and never uses aircraft GPS 
   await elements.get('dji-subtitle-file').listeners.change();
 
   assert.equal(elements.get('captured-at').value, '2025-06-15T15:47:50');
-  assert.match(elements.get('dji-subtitle-status').textContent, /GPS 记录 2 条/);
-  assert.match(elements.get('dji-subtitle-status').textContent, /不用于道路定位/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /读到 2 个机身 GPS 位置点/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /不能表示镜头拍到的地面位置/);
   assert.equal(harness.getElement('selected-anchor').textContent, originalAnchorText);
   assert.equal(calls.some((call) => call.url.includes('/api/road-conditions/snap?')), false);
   assert.equal(calls.some((call) => call.options && JSON.stringify(call.options.body || '').includes('30.5')), false);
@@ -452,6 +455,103 @@ test('DJI subtitle capture provenance and browser timezone are sent with resumab
   const metadata = JSON.parse(startRequest.options.body);
   assert.equal(metadata.capture_time_source, 'dji_srt');
   assert.ok(metadata.capture_timezone.length > 0);
+});
+
+test('DJI subtitle flight GPS is an explicit map hint and never becomes a road location', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, mapLayers, calls } = harness;
+  const showTrack = harness.getElement('show-dji-track');
+  showTrack.hidden = true;
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_flight.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_flight.SRT', size: 100,
+    text: async () => [
+      '2026-10-12 10:00:00.000 [latitude: 30.536000] [longitude: 114.363000]',
+      '2026-10-12 10:00:01.000 [latitude: 30.537000] [longitude: 114.364000]',
+    ].join('\n'),
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+
+  assert.equal(showTrack.hidden, false);
+  assert.match(elements.get('dji-subtitle-status').textContent, /虚线航迹.*不能表示镜头拍到的地面位置/);
+  assert.equal(mapLayers.some((layer) => layer.options && layer.options.dashArray === '6 7'), false,
+    'reading a local subtitle must not move the map before an explicit action');
+  assert.equal(harness.map.lastFitBounds, undefined);
+
+  await showTrack.listeners.click();
+  const track = mapLayers.find((layer) => layer.kind === 'polyline' && layer.options && layer.options.dashArray === '6 7');
+  assert.ok(track, 'explicit action should draw a distinct dashed aircraft trace');
+  assert.ok(Math.abs(track.coordinates[0][0] - 30.5336732) < 1e-6
+    && Math.abs(track.coordinates[0][1] - 114.3685263) < 1e-6,
+  'WGS-84 GPS must use the project GCJ-02 conversion before rendering');
+  assert.ok(track.options.interactive === false, 'the aircraft trace must not act as a road-picking target');
+  assert.ok(harness.map.lastFitBounds, 'map should center on the trace only after the explicit action');
+  assert.match(elements.get('dji-subtitle-status').textContent, /机身航迹仅供查看无人机飞行位置/);
+  assert.equal(calls.some((call) => call.url.startsWith('/api/road-conditions/snap')), false,
+    'aircraft GPS must never be snapped to the road network');
+
+  await showTrack.listeners.click();
+  assert.ok(harness.removedMapLayers.includes(track), 'the trace should be removable');
+  assert.equal(showTrack.textContent, '在地图上查看无人机航迹');
+  await showTrack.listeners.click();
+  const visibleTrack = mapLayers.find((layer) => layer.kind === 'polyline' && layer.options && layer.options.className === 'dji-flight-track');
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'another-flight.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  assert.equal(showTrack.hidden, true, 'changing the selected video must clear the prior flight track');
+  assert.ok(harness.removedMapLayers.includes(visibleTrack));
+});
+
+test('DJI GPS-only subtitle can preview one valid position without inventing a capture time', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, mapLayers } = harness;
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'flight-gps.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  elements.get('captured-at').value = '2026-10-12T10:30:00';
+  elements.get('dji-subtitle-file').files = [{
+    name: 'flight-gps.SRT', size: 100,
+    text: async () => [
+      '[longitude: 114.363000] [latitude: 30.536000]',
+      '[latitude: 30.500000] [longitude: 200.000000]',
+      '[latitude: 0] [longitude: 0]',
+    ].join('\n'),
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+
+  assert.equal(elements.get('captured-at').value, '2026-10-12T10:30:00');
+  assert.match(elements.get('dji-subtitle-status').textContent, /字幕没有有效拍摄时间，保留已填写的时间/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /读到 1 个机身 GPS 位置点/);
+  await elements.get('show-dji-track').listeners.click();
+  assert.equal(mapLayers.filter((layer) => layer.kind === 'circleMarker' && layer.options && layer.options.interactive === false).length, 1);
+  assert.equal(mapLayers.some((layer) => layer.options && layer.options.className === 'dji-flight-track'), false,
+    'one GPS point should be a marker, not a fabricated line');
+});
+
+test('long DJI subtitles sample the whole flight and retain its final position', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, mapLayers } = harness;
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'long-flight.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  const rows = Array.from({ length: 20004 }, (_item, index) =>
+    `[latitude: 30.536000] [longitude: ${114.363 + index / 1000000}]`);
+  rows.push('[latitude: 30.537000] [longitude: 114.400000]');
+  elements.get('dji-subtitle-file').files = [{
+    name: 'long-flight.SRT', size: 100,
+    text: async () => '2026-10-12 10:00:00.000 ' + rows.join('\n'),
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+
+  assert.match(elements.get('dji-subtitle-status').textContent, /读到 20005 个机身 GPS 位置点/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /抽样预览/);
+  await elements.get('show-dji-track').listeners.click();
+  const track = mapLayers.find((layer) => layer.kind === 'polyline' && layer.options && layer.options.className === 'dji-flight-track');
+  assert.ok(track);
+  assert.ok(track.coordinates.length <= 1200);
+  assert.ok(Math.abs(track.coordinates.at(-1)[0] - 30.5347041) < 1e-6);
+  assert.ok(Math.abs(track.coordinates.at(-1)[1] - 114.4055430) < 1e-6);
 });
 
 test('DJI subtitle mismatch or unreadable contents leave manual capture time and upload available', async () => {
@@ -513,7 +613,7 @@ test('a DJI subtitle selected before its video is applied once the matching vide
   elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_1081.mp4', size: 100 }];
   await elements.get('media-file').listeners.change();
   assert.equal(elements.get('captured-at').value, '2025-06-15T15:47:50');
-  assert.match(elements.get('dji-subtitle-status').textContent, /GPS 记录 1 条/);
+  assert.doesNotMatch(elements.get('dji-subtitle-status').textContent, /GPS 记录/);
 });
 
 test('an oversized file is acknowledged but cannot be submitted', async () => {

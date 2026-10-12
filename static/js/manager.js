@@ -2,7 +2,7 @@
   'use strict';
 
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
-  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null };
+  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [] };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
@@ -102,22 +102,154 @@
   function parseDjiSubtitle(text) {
     var value = String(text || '');
     var match = /(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})(?:\.(\d{1,3}))?/.exec(value);
-    if (!match) return null;
-    var year = Number(match[1]); var month = Number(match[2]); var day = Number(match[3]);
-    var hour = Number(match[4]); var minute = Number(match[5]); var second = Number(match[6]);
-    var date = new Date(Date.UTC(year, month - 1, day));
-    if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day
-      || hour > 23 || minute > 59 || second > 59) return null;
+    var captureTime = null;
+    if (match) {
+      var year = Number(match[1]); var month = Number(match[2]); var day = Number(match[3]);
+      var hour = Number(match[4]); var minute = Number(match[5]); var second = Number(match[6]);
+      var date = new Date(Date.UTC(year, month - 1, day));
+      if (date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day
+        && hour <= 23 && minute <= 59 && second <= 59) {
+        captureTime = match[1] + '-' + match[2] + '-' + match[3] + 'T' + match[4] + ':' + match[5] + ':' + match[6];
+      }
+    }
+    var gps = parseDjiGpsTrack(value);
+    var gpsPoints = gps.points;
+    if (!captureTime && !gpsPoints.length) return null;
     return {
-      captureTime: match[1] + '-' + match[2] + '-' + match[3] + 'T' + match[4] + ':' + match[5] + ':' + match[6],
-      gpsSamples: Math.min((value.match(/\[latitude\s*:/gi) || []).length,
-        (value.match(/\[longitude\s*:/gi) || []).length),
+      captureTime: captureTime,
+      gpsPoints: gpsPoints,
+      gpsPointCount: gps.pointCount,
+      gpsTrackSampled: gps.pointCount > MAX_DJI_TRACK_DISPLAY_POINTS,
     };
+  }
+
+  var MAX_DJI_GPS_STORED_POINTS = 20000;
+  var MAX_DJI_TRACK_DISPLAY_POINTS = 1200;
+
+  function parseDjiGpsTrack(value) {
+    var pointCount = 0;
+    var points = [];
+    var stride = 1;
+    var gpsFieldPattern = /\[(latitude|longitude)\s*:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\]/gi;
+    function scanGpsPoints(visit) {
+      var linePattern = /[^\r\n]+/g;
+      var lineMatch;
+      while ((lineMatch = linePattern.exec(value))) {
+        var fields = {};
+        var field;
+        gpsFieldPattern.lastIndex = 0;
+        while ((field = gpsFieldPattern.exec(lineMatch[0]))) fields[field[1].toLowerCase()] = Number(field[2]);
+        var lat = fields.latitude;
+        var lng = fields.longitude;
+        if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+          && !(lat === 0 && lng === 0)) visit({ lat: lat, lng: lng });
+      }
+    }
+    scanGpsPoints(function () { pointCount += 1; });
+    if (!pointCount) return { pointCount: 0, points: points };
+    stride = Math.max(1, Math.ceil(pointCount / MAX_DJI_GPS_STORED_POINTS));
+    var index = 0;
+    var lastPoint = null;
+    var lastStoredIndex = -1;
+    scanGpsPoints(function (point) {
+      if (index % stride === 0) {
+        points.push(point);
+        lastStoredIndex = index;
+      }
+      lastPoint = point;
+      index += 1;
+    });
+    if (lastPoint && lastStoredIndex !== pointCount - 1) points.push(lastPoint);
+    return { pointCount: pointCount, points: points };
+  }
+
+  function transformLatitude(x, y) {
+    var result = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
+    result += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+    result += (20 * Math.sin(y * Math.PI) + 40 * Math.sin(y / 3 * Math.PI)) * 2 / 3;
+    result += (160 * Math.sin(y / 12 * Math.PI) + 320 * Math.sin(y * Math.PI / 30)) * 2 / 3;
+    return result;
+  }
+
+  function transformLongitude(x, y) {
+    var result = 300 + x + 2 * y + 0.1 * x * x + 0.1 * x * y + 0.1 * Math.sqrt(Math.abs(x));
+    result += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
+    result += (20 * Math.sin(x * Math.PI) + 40 * Math.sin(x / 3 * Math.PI)) * 2 / 3;
+    result += (150 * Math.sin(x / 12 * Math.PI) + 300 * Math.sin(x / 30 * Math.PI)) * 2 / 3;
+    return result;
+  }
+
+  function wgs84ToGcj02(lng, lat) {
+    if (lng < 73.66 || lng > 135.05 || lat < 3.86 || lat > 53.55) return [lng, lat];
+    var a = 6378245.0;
+    var ee = 0.006693421622965823;
+    var dlat = transformLatitude(lng - 105, lat - 35);
+    var dlng = transformLongitude(lng - 105, lat - 35);
+    var radlat = lat / 180 * Math.PI;
+    var magic = 1 - ee * Math.sin(radlat) * Math.sin(radlat);
+    var sqrtmagic = Math.sqrt(magic);
+    dlat = dlat * 180 / ((a * (1 - ee)) / (magic * sqrtmagic) * Math.PI);
+    dlng = dlng * 180 / (a / sqrtmagic * Math.cos(radlat) * Math.PI);
+    return [lng + dlng, lat + dlat];
+  }
+
+  function clearDjiTrackPreview() {
+    if (state.map) state.djiTrackLayers.forEach(function (layer) { state.map.removeLayer(layer); });
+    state.djiTrackLayers = [];
+    var button = byId('show-dji-track');
+    if (button) button.textContent = '在地图上查看无人机航迹';
+  }
+
+  function clearDjiTrackData() {
+    clearDjiTrackPreview();
+    state.djiTrackPoints = [];
+    var button = byId('show-dji-track');
+    if (button) button.hidden = true;
+  }
+
+  function toggleDjiTrackPreview() {
+    if (state.djiTrackLayers.length) {
+      clearDjiTrackPreview();
+      return;
+    }
+    if (!state.map || !state.djiTrackPoints.length) return;
+    var coordinates = state.djiTrackPoints.map(function (point) {
+      var gcj = wgs84ToGcj02(point.lng, point.lat);
+      return [gcj[1], gcj[0]];
+    });
+    var step = Math.max(1, Math.ceil(coordinates.length / MAX_DJI_TRACK_DISPLAY_POINTS));
+    var visibleCoordinates = coordinates.filter(function (_point, index) {
+      return index % step === 0 || index === coordinates.length - 1;
+    });
+    if (visibleCoordinates.length > 1) {
+      state.djiTrackLayers.push(L.polyline(visibleCoordinates, {
+        color: '#426f68', weight: 3, opacity: 0.9, dashArray: '6 7', lineCap: 'round', interactive: false,
+        className: 'dji-flight-track',
+      }).addTo(state.map));
+      var latitudes = visibleCoordinates.map(function (point) { return point[0]; });
+      var longitudes = visibleCoordinates.map(function (point) { return point[1]; });
+      state.map.fitBounds([
+        [Math.min.apply(null, latitudes), Math.min.apply(null, longitudes)],
+        [Math.max.apply(null, latitudes), Math.max.apply(null, longitudes)],
+      ], { padding: [28, 28], maxZoom: 17 });
+    } else {
+      state.map.setView(visibleCoordinates[0], 17);
+    }
+    state.djiTrackLayers.push(L.circleMarker(visibleCoordinates[0], {
+      radius: 4, color: '#fff', weight: 2, fillColor: '#426f68', fillOpacity: 1, interactive: false,
+    }).addTo(state.map));
+    if (visibleCoordinates.length > 1) {
+      state.djiTrackLayers.push(L.circleMarker(visibleCoordinates[visibleCoordinates.length - 1], {
+        radius: 5, color: '#fff', weight: 2, fillColor: '#c28b43', fillOpacity: 1, interactive: false,
+      }).addTo(state.map));
+    }
+    byId('show-dji-track').textContent = '隐藏无人机航迹';
   }
 
   async function readDjiSubtitle() {
     var subtitle = state.djiSubtitleFile;
     var status = byId('dji-subtitle-status');
+    clearDjiTrackData();
     if (!subtitle) { status.textContent = ''; return; }
     var media = byId('media-file').files[0];
     if (!media || !isVideoFile(media)) {
@@ -140,18 +272,28 @@
       if (!metadata) {
         status.textContent = '没有找到有效的拍摄时间，仍可手动填写后提交。'; return;
       }
+      state.djiTrackPoints = metadata.gpsPoints;
+      byId('show-dji-track').hidden = !metadata.gpsPoints.length;
       var captureInput = byId('captured-at');
       var canApply = !state.captureTimeEdited
         && (!captureInput.value || captureInput.value === state.captureTimeAutoValue);
-      if (canApply) {
+      if (metadata.captureTime && canApply) {
         captureInput.value = metadata.captureTime;
         state.captureTimeAutoValue = metadata.captureTime;
         status.textContent = '已带入字幕时间 ' + metadata.captureTime.replace('T', ' ')
-          + '；按本机时区解释并记录来源；GPS 记录 ' + metadata.gpsSamples
-          + ' 条。机身 GPS 不是地面位置，不用于道路定位；请核对设备时间和时区。';
+          + '；按本机时区解释并记录来源。';
+      } else if (!metadata.captureTime) {
+        status.textContent = captureInput.value
+          ? '字幕没有有效拍摄时间，保留已填写的时间。'
+          : '未读取到有效拍摄时间，请手动填写。';
       } else {
         status.textContent = '字幕时间 ' + metadata.captureTime.replace('T', ' ')
-          + '；GPS 记录 ' + metadata.gpsSamples + ' 条。保留手动填写的拍摄时间；机身 GPS 不用于道路定位。';
+          + '；保留手动填写的拍摄时间。';
+      }
+      if (metadata.gpsPoints.length) {
+        status.textContent += ' 读到 ' + metadata.gpsPointCount + ' 个机身 GPS 位置点；可在地图查看虚线航迹。'
+          + (metadata.gpsTrackSampled ? '航迹线是全程抽样预览。' : '')
+          + '机身航迹仅供查看无人机飞行位置，不能表示镜头拍到的地面位置或道路通行情况。';
       }
     } catch (_) {
       if (requestId !== state.djiSubtitleReadId) return;
@@ -174,6 +316,7 @@
   }
 
   function clearSelectedMedia() {
+    clearDjiTrackData();
     clearMediaPreview();
     state.mediaInvalidReason = '';
     byId('media-file').value = '';
@@ -1981,6 +2124,7 @@
     drawObservationRegions();
   });
   byId('media-file').addEventListener('change', function () {
+    clearDjiTrackData();
     var file = byId('media-file').files[0];
     state.captureTimeEdited = false;
     state.captureTimeAutoValue = '';
@@ -2013,6 +2157,7 @@
     byId('dji-subtitle-file').click();
   });
   byId('dji-subtitle-file').addEventListener('change', function () {
+    clearDjiTrackData();
     clearDjiAutoCaptureTime();
     state.djiSubtitleFile = byId('dji-subtitle-file').files[0] || null;
     state.djiSubtitleReadId += 1;
@@ -2020,6 +2165,7 @@
     byId('dji-subtitle-file').value = '';
     return reading;
   });
+  byId('show-dji-track').addEventListener('click', toggleDjiTrackPreview);
   byId('captured-at').addEventListener('input', function () {
     state.captureTimeEdited = true;
   });
