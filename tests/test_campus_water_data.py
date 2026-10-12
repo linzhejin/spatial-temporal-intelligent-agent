@@ -57,6 +57,8 @@ def test_flight_manifest_requires_exact_disjoint_flight_split_groups(tmp_path):
     }
     assert len(plan["flights"]) == 3
     assert plan["flights"][0]["location"] == "武大试点 01"
+    assert plan["flights"][0]["capture_time_source"] == "unknown"
+    assert plan["flights"][0]["capture_timezone"] is None
     assert len(plan["flights"][0]["source_sha256"]) == 64
     assert plan["flights"][0]["source_bytes"] == len(b"video placeholder flight-01")
     assert len(plan["flights"][0]["sidecars"][0]["sha256"]) == 64
@@ -106,6 +108,28 @@ def test_flight_manifest_requires_timezone_and_keeps_each_site_in_one_split(tmp_
     manifest["flights"][2]["location"] = ""
     with pytest.raises(ValueError, match="location is required"):
         build_campus_flight_plan(manifest, tmp_path)
+
+
+def test_flight_manifest_validates_and_preserves_capture_time_provenance(tmp_path):
+    manifest = _flight_manifest(tmp_path)
+    manifest["flights"][0].update({
+        "capture_time_source": "dji_srt",
+        "capture_timezone": "Asia/Shanghai",
+    })
+    plan = build_campus_flight_plan(manifest, tmp_path)
+
+    assert plan["flights"][0]["capture_time_source"] == "dji_srt"
+    assert plan["flights"][0]["capture_timezone"] == "Asia/Shanghai"
+
+    missing_timezone = _flight_manifest(tmp_path / "missing-timezone")
+    missing_timezone["flights"][0]["capture_time_source"] = "dji_srt"
+    with pytest.raises(ValueError, match="capture_timezone is required"):
+        build_campus_flight_plan(missing_timezone, tmp_path / "missing-timezone")
+
+    invalid_source = _flight_manifest(tmp_path / "invalid-source")
+    invalid_source["flights"][0]["capture_time_source"] = "guessed"
+    with pytest.raises(ValueError, match="capture_time_source is invalid"):
+        build_campus_flight_plan(invalid_source, tmp_path / "invalid-source")
 
 
 class _FakeCapture:
@@ -176,6 +200,14 @@ class _TruncatedCV2(_FakeCV2):
 
 def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
     manifest = _flight_manifest(tmp_path / "source")
+    manifest["flights"][0].update({
+        "capture_time_source": "manual",
+        "capture_timezone": "Asia/Shanghai",
+    })
+    manifest["flights"][2].update({
+        "capture_time_source": "dji_srt",
+        "capture_timezone": "Asia/Shanghai",
+    })
     plan = build_campus_flight_plan(manifest, tmp_path / "source")
     cv2 = _FakeCV2()
 
@@ -200,6 +232,8 @@ def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
     expected_location = "武大试点 01"
     assert worklist["flights"][0]["location"] == expected_location
     assert worklist["flights"][0]["captured_at"].endswith("+08:00")
+    assert worklist["flights"][0]["capture_time_source"] == "manual"
+    assert worklist["flights"][0]["capture_timezone"] == "Asia/Shanghai"
     assert len(worklist["flights"][0]["source_sha256"]) == 64
     assert (tmp_path / "annotation-pack" / "frames" / "train" / "flight-01"
             / "frame_00000000.jpg").is_file()
@@ -223,6 +257,8 @@ def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
     assert {sample["split"] for sample in training["samples"]} == {"train", "validation"}
     assert {flight["split"] for flight in training["flights"]} == {"train", "validation"}
     assert all(len(flight["source_sha256"]) == 64 for flight in training["flights"])
+    assert training["flights"][0]["capture_time_source"] == "manual"
+    assert training["flights"][0]["capture_timezone"] == "Asia/Shanghai"
     assert len(testing["samples"]) == 3
     assert {sample["group_id"] for sample in testing["samples"]} == {"flight-03"}
     assert {flight["flight_id"] for flight in testing["flights"]} == {"flight-03"}
@@ -243,6 +279,8 @@ def test_extraction_builds_frame_worklist_and_train_test_templates(tmp_path):
         "site_id": "site-03",
         "location": "武大试点 03",
         "captured_at": "2026-10-13T09:30:00+08:00",
+        "capture_time_source": "dji_srt",
+        "capture_timezone": "Asia/Shanghai",
         "source_sha256": worklist["flights"][2]["source_sha256"],
         "camera_stabilized": None,
         "event_kinds": [],

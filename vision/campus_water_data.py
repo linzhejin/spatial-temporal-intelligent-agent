@@ -11,6 +11,8 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 
 _SPLITS = ("train", "validation", "test")
 _FLIGHT_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
+_CAPTURE_TIME_SOURCES = {"unknown", "manual", "dji_srt"}
+_TIMEZONE_NAME = re.compile(r"^[A-Za-z0-9_+./:-]{1,64}$")
 
 
 def _required_text(value: object, field: str) -> str:
@@ -107,6 +109,18 @@ def build_campus_flight_plan(manifest: object, dataset_root) -> dict:
             raise ValueError(f"site must not cross splits: {site_id}")
         location = _required_text(flight.get("location"), f"flight {flight_id} location")
         captured_at = _captured_at(flight.get("captured_at"), flight_id)
+        capture_time_source = str(flight.get("capture_time_source") or "unknown").strip().lower()
+        if capture_time_source not in _CAPTURE_TIME_SOURCES:
+            raise ValueError(f"flight {flight_id} capture_time_source is invalid")
+        capture_timezone = flight.get("capture_timezone")
+        if capture_timezone is not None:
+            capture_timezone = _required_text(
+                capture_timezone, f"flight {flight_id} capture_timezone",
+            )
+            if not _TIMEZONE_NAME.fullmatch(capture_timezone):
+                raise ValueError(f"flight {flight_id} capture_timezone is invalid")
+        if capture_time_source in {"manual", "dji_srt"} and not capture_timezone:
+            raise ValueError(f"flight {flight_id} capture_timezone is required")
         video = _relative_path(flight.get("video"), f"flight {flight_id} video")
         try:
             video_path = (root / Path(*PurePosixPath(video).parts)).resolve(strict=True)
@@ -160,6 +174,8 @@ def build_campus_flight_plan(manifest: object, dataset_root) -> dict:
             "site_id": site_id,
             "location": location,
             "captured_at": captured_at,
+            "capture_time_source": capture_time_source,
+            "capture_timezone": capture_timezone,
             "video": video,
             "video_path": video_path,
             "source_bytes": source_bytes,
@@ -279,6 +295,8 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
                     "site_id": flight["site_id"],
                     "location": flight["location"],
                     "captured_at": flight["captured_at"],
+                    "capture_time_source": flight["capture_time_source"],
+                    "capture_timezone": flight["capture_timezone"],
                     "source_video": flight["video"],
                     "source_bytes": flight["source_bytes"],
                     "source_sha256": flight["source_sha256"],
@@ -377,6 +395,8 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
                     "site_id": item["site_id"],
                     "location": item["location"],
                     "captured_at": item["captured_at"],
+                    "capture_time_source": item["capture_time_source"],
+                    "capture_timezone": item["capture_timezone"],
                     "source_sha256": item["source_sha256"],
                     "camera_stabilized": None,
                     "event_kinds": [],
@@ -394,7 +414,7 @@ def extract_campus_annotation_pack(plan: dict, output_dir, *, sample_fps: float 
         (staging / "ANNOTATION.md").write_text(
             """# 校园道路可见水体人工标注
 
-1. 在 `training-template.json` 和 `test-template.json` 中，把每个样本的 `road_surface_polygon: null` 替换为原图坐标归一化到 0–1 的路面多边形。
+1. 在 `training-template.json` 和 `test-template.json` 中，把每个样本的 `road_surface_polygon: null` 替换为原图坐标归一化到 0–1 的路面多边形。航次记录中的 `capture_time_source` 与 `capture_timezone` 是时间审计信息；DJI 字幕时间没有时区，必须核对拍摄设备时区后再登记。
 2. 按 `mask` 路径保存与原图同宽高的灰度 PNG；路面范围内确认的可见水体标为 255，其余像素为 0。积水、湿路反光、阴影、湖面和干路要按标注规范区分；不确定样本应先剔除，不能猜标签。
 3. 只把 train/validation 模板交给 `train_visible_water.py`；test 模板只交给独立评测脚本，不能参与训练、选模型或调阈值。保存原视频和本目录外的备份。
 4. 模板含 `annotation_pending: true`，标注完成后可删除该提示字段；训练器仍会检查文件、尺寸、掩膜像素值和跨 split 的完全重复图像。
