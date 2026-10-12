@@ -6,6 +6,7 @@
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
+  state.djiSubtitleStatusBase = '';
   state.captureTimeEdited = false;
   state.captureTimeAutoValue = '';
   state.eventPublishBusy = false;
@@ -217,8 +218,30 @@
   function clearDjiTrackData() {
     clearDjiTrackPreview();
     state.djiTrackPoints = [];
+    state.djiSubtitleStatusBase = '';
     var button = byId('show-dji-track');
     if (button) button.hidden = true;
+  }
+
+  function updateDjiSubtitleTimelineStatus() {
+    var status = byId('dji-subtitle-status');
+    if (!status || !state.djiSubtitleStatusBase) return;
+    var video = byId('observation-video');
+    var timedPoints = state.djiTrackPoints.filter(function (point) { return Number.isFinite(point.seconds); });
+    var duration = video && Number(video.duration);
+    var mismatch = false;
+    if (timedPoints.length && Number.isFinite(duration) && duration > 0) {
+      var firstSecond = Infinity;
+      var lastSecond = -Infinity;
+      timedPoints.forEach(function (point) {
+        firstSecond = Math.min(firstSecond, point.seconds);
+        lastSecond = Math.max(lastSecond, point.seconds);
+      });
+      mismatch = firstSecond > duration + 3 || lastSecond < -3;
+    }
+    status.textContent = state.djiSubtitleStatusBase + (mismatch
+      ? ' 字幕时间范围与视频时长不重叠，请核对视频和字幕是否配套；仍可查看整段航迹。'
+      : '');
   }
 
   function toggleDjiTrackPreview() {
@@ -352,10 +375,12 @@
       if (metadata.gpsPoints.length) {
         status.textContent += ' 读到 ' + metadata.gpsPointCount + ' 个机身 GPS 位置点；可在地图查看虚线航迹。'
           + (metadata.gpsTrackSampled ? '航迹线是全程抽样预览。' : '')
-          + (metadata.gpsTimedPointCount ? '字幕时间码可与视频对齐；播放或拖动视频时，地图会显示时间最近的机身位置。'
+          + (metadata.gpsTimedPointCount ? '字幕含视频时间码；如时间范围匹配，播放或拖动视频时会显示时间最近的机身位置。'
             : '字幕没有可用于视频对时的时间码，只显示整段航迹。')
           + '机身航迹仅供查看无人机飞行位置，不能表示镜头拍到的地面位置或道路通行情况。';
       }
+      state.djiSubtitleStatusBase = status.textContent;
+      updateDjiSubtitleTimelineStatus();
     } catch (_) {
       if (requestId !== state.djiSubtitleReadId) return;
       status.textContent = '字幕文件无法读取，仍可手动填写拍摄时间并上传影像。';
@@ -515,7 +540,10 @@
     state.mediaObjectUrl = window.URL.createObjectURL(file);
     if (isVideoFile(file)) {
       video.hidden = false; video.src = state.mediaObjectUrl;
-      video.addEventListener('loadedmetadata', setObservationCanvasSize, { once: true });
+      video.addEventListener('loadedmetadata', function () {
+        setObservationCanvasSize();
+        updateDjiSubtitleTimelineStatus();
+      }, { once: true });
       video.addEventListener('loadeddata', function () {
         setObservationCanvasSize();
         try { state.frameSignature = observationFrameSignature(); } catch (_) {}

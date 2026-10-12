@@ -218,7 +218,7 @@ class ManagerEventControlsTest(unittest.TestCase):
             ),
         })
         expect(self.page.locator("#dji-subtitle-status")).to_contain_text("读到 2 个机身 GPS 位置点")
-        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("字幕时间码")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("字幕含视频时间码")
         expect(self.page.locator("#show-dji-track")).to_be_visible()
         self.assertEqual(self.snap_requests, [], "reading the local SRT must not request a road snap")
 
@@ -263,6 +263,29 @@ class ManagerEventControlsTest(unittest.TestCase):
 
         self.page.locator("#show-dji-track").click()
         expect(self.page.locator("#show-dji-track")).to_have_text("在地图上查看无人机航迹")
+
+    def test_dji_subtitle_outside_video_duration_warns_but_keeps_static_track_preview(self):
+        self.open_manager()
+        self.page.evaluate("""() => {
+          const video = document.getElementById('observation-video');
+          Object.defineProperty(video, 'duration', { configurable: true, get: () => 2 });
+        }""")
+        self.page.locator("#media-file").set_input_files({
+            "name": "DJI_offset.mp4", "mimeType": "video/mp4", "buffer": b"test video",
+        })
+        self.page.locator("#dji-subtitle-file").set_input_files({
+            "name": "DJI_offset.SRT", "mimeType": "text/plain",
+            "buffer": (
+                b"1\n00:00:08,000 --> 00:00:08,200\n"
+                b"[latitude: 30.536000] [longitude: 114.363000]\n\n"
+                b"2\n00:00:09,000 --> 00:00:09,200\n"
+                b"[latitude: 30.537000] [longitude: 114.364000]"
+            ),
+        })
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("字幕时间范围与视频时长不重叠")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("请核对视频和字幕是否配套")
+        self.page.locator("#show-dji-track").click()
+        expect(self.page.locator("#show-dji-track")).to_have_text("隐藏无人机航迹")
         self.page.locator("#media-file").set_input_files({
             "name": "different-flight.mp4", "mimeType": "video/mp4", "buffer": b"another video",
         })

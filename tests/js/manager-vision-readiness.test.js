@@ -43,7 +43,7 @@ function managerHarness(sessionSeed = []) {
     const classes = new Set();
     let textContent = '';
     const node = {
-      id, hidden: false, value: '', innerHTML: '', disabled: false, currentTime: 0,
+      id, hidden: false, value: '', innerHTML: '', disabled: false, currentTime: 0, duration: NaN,
       checked: false, files: [], style: {}, listeners, children: [], attributes: {},
       clickCount: 0, scrollCount: 0,
       setAttribute(name, value) { this.attributes[name] = String(value); },
@@ -216,7 +216,7 @@ function managerHarness(sessionSeed = []) {
   };
   vm.runInNewContext(source, context);
   return {
-    elements, intervalCallbacks, mapListeners, map, mapLayers, removedMapLayers, requested, calls, document,
+    elements, intervalCallbacks, mapListeners, map, mapLayers, removedMapLayers, requested, calls, document, window,
     createdObjectUrls, revokedObjectUrls, formEntries, sessionValues, getElement: element,
     setInferenceReady: (value) => { inferenceReady = value; },
     setOptionalModelStatus: (value) => { optionalModelStatus = value; },
@@ -258,8 +258,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261013-videosync1/);
-  assert.match(managerHtml, /manager\.js\?v=20261013-videosync1/);
+  assert.match(managerHtml, /manager\.css\?v=20261013-videosync2/);
+  assert.match(managerHtml, /manager\.js\?v=20261013-videosync2/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -520,7 +520,7 @@ test('DJI aircraft marker follows SRT timecodes while the local video is scrubbe
     ].join('\n'),
   }];
   await elements.get('dji-subtitle-file').listeners.change();
-  assert.match(elements.get('dji-subtitle-status').textContent, /字幕时间码.*播放或拖动视频/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /字幕含视频时间码.*播放或拖动视频/);
 
   await elements.get('show-dji-track').listeners.click();
   const marker = mapLayers.find((layer) => layer.options && layer.options.className === 'dji-flight-current-position');
@@ -533,6 +533,35 @@ test('DJI aircraft marker follows SRT timecodes while the local video is scrubbe
   elements.get('observation-video').currentTime = 10;
   elements.get('observation-video').listeners.timeupdate();
   assert.ok(removedMapLayers.includes(marker), 'do not carry the last coordinate across a large subtitle gap');
+});
+
+test('DJI SRT time range outside video duration warns even when metadata loads after the subtitle', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, window } = harness;
+  window.URL = {
+    createObjectURL: () => 'blob:test-observation-video',
+    revokeObjectURL() {},
+  };
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'DJI_offset.mp4', size: 100 }];
+  await elements.get('media-file').listeners.change();
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_offset.SRT', size: 200,
+    text: async () => [
+      '1', '00:00:08,000 --> 00:00:08,200',
+      '[latitude: 30.536000] [longitude: 114.363000]', '',
+      '2', '00:00:09,000 --> 00:00:09,200',
+      '[latitude: 30.537000] [longitude: 114.364000]', '',
+    ].join('\n'),
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  assert.doesNotMatch(elements.get('dji-subtitle-status').textContent, /时间范围与视频时长不重叠/);
+
+  elements.get('observation-video').duration = 2;
+  elements.get('observation-video').listeners.loadedmetadata();
+  assert.match(elements.get('dji-subtitle-status').textContent, /字幕时间范围与视频时长不重叠/);
+  assert.match(elements.get('dji-subtitle-status').textContent, /请核对视频和字幕是否配套/);
+  assert.equal(elements.get('show-dji-track').hidden, false, 'keep the static aircraft-track preview available');
 });
 
 test('DJI GPS-only subtitle can preview one valid position without inventing a capture time', async () => {
