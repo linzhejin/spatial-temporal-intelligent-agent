@@ -211,17 +211,50 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page.locator("#dji-subtitle-file").set_input_files({
             "name": "DJI_flight.SRT", "mimeType": "text/plain",
             "buffer": (
-                b"2026-10-12 10:00:00.000 [latitude: 30.536000] [longitude: 114.363000]\n"
-                b"2026-10-12 10:00:01.000 [latitude: 30.537000] [longitude: 114.364000]"
+                b"1\n00:00:00,000 --> 00:00:00,200\n"
+                b"[latitude: 30.536000] [longitude: 114.363000]\n\n"
+                b"2\n00:00:01,000 --> 00:00:01,200\n"
+                b"[latitude: 30.537000] [longitude: 114.364000]"
             ),
         })
         expect(self.page.locator("#dji-subtitle-status")).to_contain_text("读到 2 个机身 GPS 位置点")
+        expect(self.page.locator("#dji-subtitle-status")).to_contain_text("字幕时间码")
         expect(self.page.locator("#show-dji-track")).to_be_visible()
         self.assertEqual(self.snap_requests, [], "reading the local SRT must not request a road snap")
 
+        self.page.evaluate("""() => {
+          const video = document.getElementById('observation-video');
+          let current = 0;
+          Object.defineProperty(video, 'currentTime', { configurable: true, get: () => current });
+          window.__setObservationVideoTime = value => { current = value; };
+          const createCircleMarker = L.circleMarker;
+          window.__djiPlaybackMarker = null;
+          L.circleMarker = (coordinates, options) => {
+            const layer = createCircleMarker(coordinates, options);
+            if (options && options.className === 'dji-flight-current-position') {
+              window.__djiPlaybackMarker = layer;
+            }
+            return layer;
+          };
+        }""")
         self.page.locator("#show-dji-track").click()
         expect(self.page.locator("#show-dji-track")).to_have_text("隐藏无人机航迹")
         expect(self.page.locator("#dji-subtitle-status")).to_contain_text("不能表示镜头拍到的地面位置")
+        positions = self.page.evaluate("""() => {
+          const video = document.getElementById('observation-video');
+          const marker = window.__djiPlaybackMarker;
+          video.dispatchEvent(new Event('timeupdate'));
+          const readPoint = () => marker ? [marker.getLatLng().lat, marker.getLatLng().lng] : null;
+          const first = readPoint();
+          window.__setObservationVideoTime(1.05);
+          video.dispatchEvent(new Event('timeupdate'));
+          const second = readPoint();
+          window.__setObservationVideoTime(10);
+          video.dispatchEvent(new Event('timeupdate'));
+          return { first, second, hidden: !marker || marker._map === null };
+        }""")
+        self.assertNotEqual(positions["first"], positions["second"], "video playback time must update the map hint")
+        self.assertTrue(positions["hidden"], "a time far from the subtitle must not retain a stale GPS marker")
         self.page.set_viewport_size({"width": 320, "height": 844})
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
         self.page.set_viewport_size({"width": 1280, "height": 1000})

@@ -2,7 +2,7 @@
   'use strict';
 
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
-  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [] };
+  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
@@ -119,6 +119,7 @@
       captureTime: captureTime,
       gpsPoints: gpsPoints,
       gpsPointCount: gps.pointCount,
+      gpsTimedPointCount: gps.timedPointCount,
       gpsTrackSampled: gps.pointCount > MAX_DJI_TRACK_DISPLAY_POINTS,
     };
   }
@@ -128,13 +129,20 @@
 
   function parseDjiGpsTrack(value) {
     var pointCount = 0;
+    var timedPointCount = 0;
     var points = [];
     var stride = 1;
     var gpsFieldPattern = /\[(latitude|longitude)\s*:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))\]/gi;
     function scanGpsPoints(visit) {
       var linePattern = /[^\r\n]+/g;
       var lineMatch;
+      var cueTimeSeconds = null;
       while ((lineMatch = linePattern.exec(value))) {
+        var timecode = /^\s*(\d{2,}):([0-5]\d):([0-5]\d)[,.](\d{1,3})\s*-->/.exec(lineMatch[0]);
+        if (timecode) {
+          cueTimeSeconds = Number(timecode[1]) * 3600 + Number(timecode[2]) * 60
+            + Number(timecode[3]) + Number((timecode[4] + '00').slice(0, 3)) / 1000;
+        }
         var fields = {};
         var field;
         gpsFieldPattern.lastIndex = 0;
@@ -142,11 +150,14 @@
         var lat = fields.latitude;
         var lng = fields.longitude;
         if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
-          && !(lat === 0 && lng === 0)) visit({ lat: lat, lng: lng });
+          && !(lat === 0 && lng === 0)) visit({ lat: lat, lng: lng, seconds: cueTimeSeconds });
       }
     }
-    scanGpsPoints(function () { pointCount += 1; });
-    if (!pointCount) return { pointCount: 0, points: points };
+    scanGpsPoints(function (point) {
+      pointCount += 1;
+      if (Number.isFinite(point.seconds)) timedPointCount += 1;
+    });
+    if (!pointCount) return { pointCount: 0, timedPointCount: 0, points: points };
     stride = Math.max(1, Math.ceil(pointCount / MAX_DJI_GPS_STORED_POINTS));
     var index = 0;
     var lastPoint = null;
@@ -160,7 +171,7 @@
       index += 1;
     });
     if (lastPoint && lastStoredIndex !== pointCount - 1) points.push(lastPoint);
-    return { pointCount: pointCount, points: points };
+    return { pointCount: pointCount, timedPointCount: timedPointCount, points: points };
   }
 
   function transformLatitude(x, y) {
@@ -195,7 +206,10 @@
 
   function clearDjiTrackPreview() {
     if (state.map) state.djiTrackLayers.forEach(function (layer) { state.map.removeLayer(layer); });
+    if (state.map && state.djiPlaybackLayer) state.map.removeLayer(state.djiPlaybackLayer);
     state.djiTrackLayers = [];
+    state.djiTrackTimedCoordinates = [];
+    state.djiPlaybackLayer = null;
     var button = byId('show-dji-track');
     if (button) button.textContent = '在地图上查看无人机航迹';
   }
@@ -213,10 +227,14 @@
       return;
     }
     if (!state.map || !state.djiTrackPoints.length) return;
-    var coordinates = state.djiTrackPoints.map(function (point) {
+    var trackPoints = state.djiTrackPoints.map(function (point) {
       var gcj = wgs84ToGcj02(point.lng, point.lat);
-      return [gcj[1], gcj[0]];
+      return { seconds: point.seconds, coordinate: [gcj[1], gcj[0]] };
     });
+    var coordinates = trackPoints.map(function (point) { return point.coordinate; });
+    state.djiTrackTimedCoordinates = trackPoints.filter(function (point) {
+      return Number.isFinite(point.seconds);
+    }).sort(function (left, right) { return left.seconds - right.seconds; });
     var step = Math.max(1, Math.ceil(coordinates.length / MAX_DJI_TRACK_DISPLAY_POINTS));
     var visibleCoordinates = coordinates.filter(function (_point, index) {
       return index % step === 0 || index === coordinates.length - 1;
@@ -244,6 +262,47 @@
       }).addTo(state.map));
     }
     byId('show-dji-track').textContent = '隐藏无人机航迹';
+    updateDjiPlaybackMarker();
+  }
+
+  var MAX_DJI_PLAYBACK_TIME_GAP_SECONDS = 3;
+
+  function nearestDjiTrackPoint(seconds) {
+    var points = state.djiTrackTimedCoordinates;
+    if (!points.length || !Number.isFinite(seconds)) return null;
+    var low = 0;
+    var high = points.length;
+    while (low < high) {
+      var middle = Math.floor((low + high) / 2);
+      if (points[middle].seconds < seconds) low = middle + 1;
+      else high = middle;
+    }
+    var before = low > 0 ? points[low - 1] : null;
+    var after = low < points.length ? points[low] : null;
+    var nearest = !before ? after : !after ? before
+      : (seconds - before.seconds <= after.seconds - seconds ? before : after);
+    return nearest && Math.abs(nearest.seconds - seconds) <= MAX_DJI_PLAYBACK_TIME_GAP_SECONDS ? nearest : null;
+  }
+
+  function updateDjiPlaybackMarker() {
+    if (!state.djiTrackLayers.length || !state.map || !state.djiTrackTimedCoordinates.length) return;
+    var video = byId('observation-video');
+    var seconds = Number(video && video.currentTime);
+    var point = nearestDjiTrackPoint(seconds);
+    if (!point) {
+      if (state.djiPlaybackLayer) state.map.removeLayer(state.djiPlaybackLayer);
+      state.djiPlaybackLayer = null;
+      return;
+    }
+    if (state.djiPlaybackLayer) {
+      state.djiPlaybackLayer.setLatLng(point.coordinate);
+      return;
+    }
+    state.djiPlaybackLayer = L.circleMarker(point.coordinate, {
+      radius: 8, color: '#fff', weight: 3, fillColor: '#2f6b5f', fillOpacity: 1,
+      interactive: false, className: 'dji-flight-current-position',
+      title: '视频时间附近的无人机机身位置，不是地面位置',
+    }).addTo(state.map);
   }
 
   async function readDjiSubtitle() {
@@ -293,6 +352,8 @@
       if (metadata.gpsPoints.length) {
         status.textContent += ' 读到 ' + metadata.gpsPointCount + ' 个机身 GPS 位置点；可在地图查看虚线航迹。'
           + (metadata.gpsTrackSampled ? '航迹线是全程抽样预览。' : '')
+          + (metadata.gpsTimedPointCount ? '字幕时间码可与视频对齐；播放或拖动视频时，地图会显示时间最近的机身位置。'
+            : '字幕没有可用于视频对时的时间码，只显示整段航迹。')
           + '机身航迹仅供查看无人机飞行位置，不能表示镜头拍到的地面位置或道路通行情况。';
       }
     } catch (_) {
@@ -2166,6 +2227,7 @@
     return reading;
   });
   byId('show-dji-track').addEventListener('click', toggleDjiTrackPreview);
+  byId('observation-video').addEventListener('timeupdate', updateDjiPlaybackMarker);
   byId('captured-at').addEventListener('input', function () {
     state.captureTimeEdited = true;
   });
