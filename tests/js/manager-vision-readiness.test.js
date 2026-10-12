@@ -256,8 +256,9 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261012b/);
-  assert.match(managerHtml, /manager\.js\?v=20261012b/);
+  assert.match(managerHtml, /manager\.css\?v=20261012-event1/);
+  assert.match(managerHtml, /manager\.js\?v=20261012-event1/);
+  assert.match(managerCss, /\.vision-region-mapping/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -810,8 +811,12 @@ test('moving camera results ask the manager to recheck the observation region', 
   await flush();
   harness.setVisionJobs([{
     job_id: 'moving-video', status: 'completed', media_kind: 'video', original_name: 'moving.mp4',
+    observation_regions: [{ id: 'east-lane', kind: 'vehicle_lane' }],
     result: {
-      metrics: { peak_vehicle_count: 3, motion_assessment: 'camera_motion_compensated' },
+      metrics: {
+        peak_vehicle_count: 3, motion_assessment: 'camera_motion_compensated',
+        observation_region_mapping_valid_ratios: { 'east-lane': 0.63 },
+      },
       safety: { observation_region_reassociation_required: true },
       candidates: [],
     },
@@ -822,8 +827,40 @@ test('moving camera results ask the manager to recheck the observation region', 
   const card = harness.elements.get('vision-jobs').children[0];
   const summary = card.children.find((node) => node.className === 'vision-metrics');
   const summaryText = descendants(summary).map((node) => node.textContent || '').join(' ');
-  assert.match(summaryText, /镜头移动后请重新核对观察区域与道路的对应关系/);
+  assert.match(summaryText, /镜头移动后仍需人工核对观察区域与道路的对应关系/);
   assert.match(summaryText, /轨迹运动补偿通过/);
+  assert.match(summaryText, /east-lane/);
+  assert.match(summaryText, /63\.0%/);
+  assert.match(summaryText, /低于 80%/);
+  assert.match(summaryText, /不会生成拥堵\/人流候选/);
+  assert.match(summaryText, /地图定位精度/);
+  const resubmit = descendants(summary).find((node) => node.tagName === 'button'
+    && node.textContent === '重新圈选并重新分析');
+  assert.ok(resubmit);
+  resubmit.listeners.click();
+  assert.equal(harness.elements.get('vision-upload-card').scrollCount, 1);
+  assert.equal(harness.elements.get('media-file').clickCount, 1);
+});
+
+test('empty analysis distinguishes a mapping safety block from a model finding nothing', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'mapping-blocked', status: 'completed', media_kind: 'video', original_name: 'moving.mp4',
+    observation_regions: [{ id: 'walkway', kind: 'pedestrian' }],
+    result: {
+      metrics: { observation_region_mapping_valid_ratios: { walkway: 0.41 } },
+      safety: { observation_region_reassociation_required: true }, candidates: [],
+    },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const rendered = descendants(harness.elements.get('vision-jobs').children[0]);
+  const terminalText = rendered.map((node) => node.textContent || '').join(' ');
+  assert.match(terminalText, /映射成功率低于 80%/);
+  assert.match(terminalText, /不会基于相关区域生成拥堵或人群候选/);
+  assert.doesNotMatch(terminalText, /模型未生成可复核的路况候选/);
 });
 
 function descendants(node) {

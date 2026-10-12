@@ -1370,7 +1370,56 @@
     target.appendChild(note);
   }
 
-  function appendVisionMetrics(card, result, mediaKind) {
+  function appendObservationRegionDiagnostics(summary, result, mediaKind, job) {
+    var metrics = result.metrics || {};
+    var ratios = metrics.observation_region_mapping_valid_ratios || {};
+    var regionList = Array.isArray(job.observation_regions) ? job.observation_regions : [];
+    var regionIds = Object.keys(ratios);
+    var validRatios = regionIds.map(function (regionId) {
+      return { id: regionId, ratio: Number(ratios[regionId]) };
+    }).filter(function (item) {
+      return Number.isFinite(item.ratio) && item.ratio >= 0 && item.ratio <= 1;
+    });
+    var mappingBlocked = result.safety && result.safety.observation_region_reassociation_required === true;
+    if (!validRatios.length && !mappingBlocked) return false;
+
+    var panel = document.createElement('div'); panel.className = 'vision-region-mapping';
+    var heading = document.createElement('strong');
+    heading.textContent = '观察区域映射诊断'; panel.appendChild(heading);
+    var note = document.createElement('small');
+    note.textContent = '比例表示抽样帧中区域映射成功的占比，不是地面坐标或地图定位精度。';
+    panel.appendChild(note);
+    validRatios.forEach(function (item) {
+      var region = regionList.find(function (candidate) { return candidate && candidate.id === item.id; });
+      var label = region
+        ? regionKindLabel(region.kind) + '（' + item.id + '）'
+        : '观察区域（' + item.id + '）';
+      var row = document.createElement('small');
+      row.textContent = label + '：' + (item.ratio * 100).toFixed(1) + '% 抽样帧映射成功' +
+        (item.ratio < 0.8
+          ? '，低于 80% 安全门槛；该区域不会生成拥堵/人流候选。'
+          : '；仍需人工核对对应道路。');
+      panel.appendChild(row);
+    });
+    if (!validRatios.length && mappingBlocked) {
+      var unavailable = document.createElement('small');
+      unavailable.textContent = '至少一个观察区域未达到 80% 映射安全门槛；对应区域不会生成拥堵/人流候选。';
+      panel.appendChild(unavailable);
+    }
+    if (mappingBlocked && mediaKind === 'video') {
+      var action = document.createElement('button'); action.type = 'button';
+      action.className = 'outline-button vision-remap-action';
+      action.textContent = '重新圈选并重新分析';
+      action.addEventListener('click', retryVisionSelection);
+      panel.appendChild(action);
+      var actionNote = document.createElement('small');
+      actionNote.textContent = '重新选择同一视频后，在首帧重画观察区并检查道路绑定。';
+      panel.appendChild(actionNote);
+    }
+    summary.appendChild(panel);
+  }
+
+  function appendVisionMetrics(card, result, mediaKind, job) {
     var metrics = result.metrics || {};
     var safety = result.safety || {};
     var summary = document.createElement('div'); summary.className = 'vision-metrics';
@@ -1392,10 +1441,11 @@
       summary.appendChild(motion);
       if (safety.observation_region_reassociation_required === true) {
         var regionReview = document.createElement('small');
-        regionReview.textContent = '镜头移动后请重新核对观察区域与道路的对应关系，再确认事件路段。';
+        regionReview.textContent = '镜头移动后仍需人工核对观察区域与道路的对应关系；画面跟踪不等于地图定位。';
         summary.appendChild(regionReview);
       }
     }
+    appendObservationRegionDiagnostics(summary, result, mediaKind, job || {});
     var counts = metrics.peak_class_counts || {};
     var classes = Object.keys(counts).filter(function (label) { return Number(counts[label]) > 0; }).slice(0, 8);
     if (classes.length) {
@@ -1505,7 +1555,7 @@
     var result = job.result || {};
     if (job.result && (job.status === 'needs_review' || job.status === 'completed' || job.review_status)) {
       var previewMedia = appendVisionPreview(card, job, result);
-      appendVisionMetrics(card, result, job.media_kind);
+      appendVisionMetrics(card, result, job.media_kind, job);
       var reviewNote = null;
       var reviewFeedback = null;
       if (job.status === 'needs_review' && !job.review_status && (result.candidates || []).length) {
@@ -1590,14 +1640,18 @@
         var terminal = document.createElement('div'); terminal.className = 'vision-terminal';
         var terminalTitle = document.createElement('strong'); terminalTitle.textContent = '分析已结束';
         var terminalCopy = document.createElement('p');
-        terminalCopy.textContent = '模型未生成可复核的路况候选。若查看原片后发现遗漏，可由管理员手工登记；车辆数量不能单独证明拥堵。';
+        terminalCopy.textContent = result.safety && result.safety.observation_region_reassociation_required === true
+          ? '观察区域映射成功率低于 80%，系统不会基于相关区域生成拥堵或人群候选。请重新圈选观察区、核对道路绑定后重新分析；画面映射不等于地图地理配准。'
+          : '模型未生成可复核的路况候选。若查看原片后发现遗漏，可由管理员手工登记；车辆数量不能单独证明拥堵。';
         terminal.append(terminalTitle, terminalCopy); card.appendChild(terminal);
         var manual = document.createElement('button'); manual.type = 'button';
         manual.className = 'outline-button transfer-button';
         manual.textContent = '依据原片手工登记路况';
         manual.addEventListener('click', function () { prepareManualVisionEvent(job); });
         card.appendChild(manual);
-        appendVisionRecoveryActions(card, job);
+        if (!(result.safety && result.safety.observation_region_reassociation_required === true)) {
+          appendVisionRecoveryActions(card, job);
+        }
       }
     }
     if (job.status === 'failed') appendVisionRecoveryActions(card, job);
