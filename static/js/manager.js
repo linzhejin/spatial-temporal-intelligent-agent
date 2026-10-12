@@ -147,7 +147,8 @@
         captureInput.value = metadata.captureTime;
         state.captureTimeAutoValue = metadata.captureTime;
         status.textContent = '已带入字幕时间 ' + metadata.captureTime.replace('T', ' ')
-          + '；GPS 记录 ' + metadata.gpsSamples + ' 条。机身 GPS 不是地面位置，不用于道路定位；请核对时间。';
+          + '；按本机时区解释并记录来源；GPS 记录 ' + metadata.gpsSamples
+          + ' 条。机身 GPS 不是地面位置，不用于道路定位；请核对设备时间和时区。';
       } else {
         status.textContent = '字幕时间 ' + metadata.captureTime.replace('T', ' ')
           + '；GPS 记录 ' + metadata.gpsSamples + ' 条。保留手动填写的拍摄时间；机身 GPS 不用于道路定位。';
@@ -1125,6 +1126,18 @@
     return Number.isFinite(timestamp) ? timestamp / 1000 : null;
   }
 
+  function captureTimeProvenance() {
+    var timezone = 'UTC';
+    try { timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || timezone; } catch (_) {}
+    var input = byId('captured-at');
+    var fromDjiSubtitle = !state.captureTimeEdited && state.captureTimeAutoValue
+      && input.value === state.captureTimeAutoValue;
+    return {
+      capture_time_source: fromDjiSubtitle ? 'dji_srt' : 'manual',
+      capture_timezone: timezone,
+    };
+  }
+
   function showVisionUploadProgress(offset, total) {
     var box = byId('vision-upload-progress');
     var bar = byId('vision-upload-bar');
@@ -1141,7 +1154,7 @@
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, observationRegions, sceneId) {
+  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance, observationRegions, sceneId) {
     var pending = readPendingVisionUpload();
     var matchingPending = fileMatchesPending(file, pending) &&
       pending.camera_stabilized === cameraStabilized &&
@@ -1171,7 +1184,10 @@
     if (!uploadId) {
       var uploadMetadata = {
         filename: file.name, size: file.size, camera_stabilized: cameraStabilized,
-        captured_at: capturedAt, observation_regions: observationRegions || [],
+        captured_at: capturedAt,
+        capture_time_source: captureProvenance.capture_time_source,
+        capture_timezone: captureProvenance.capture_timezone,
+        observation_regions: observationRegions || [],
       };
       if (sceneId) uploadMetadata.scene_id = sceneId;
       if (state.anchor) {
@@ -1584,6 +1600,11 @@
     var captured = job.captured_at ? new Date(job.captured_at).toLocaleString('zh-CN', { hour12: false }) : '拍摄时间未记录';
     meta.textContent = '拍摄 ' + captured + (job.anchor_gcj ? ' · 校园位置已标注' : '')
       + (job.media_kind === 'video' ? (job.camera_stabilized ? ' · 管理员声明固定/已稳像' : ' · 自动检查镜头运动') : '');
+    var captureSource = { dji_srt: 'DJI 字幕', manual: '人工填写' }[job.capture_time_source];
+    if (captureSource) {
+      meta.textContent += ' · 时间来自 ' + captureSource
+        + (job.capture_timezone ? ' · 时区 ' + job.capture_timezone : '');
+    }
     title.appendChild(meta);
     var stateLabel = document.createElement('span'); stateLabel.className = 'vision-job-state ' + job.status;
     stateLabel.textContent = {
@@ -1798,6 +1819,7 @@
       message('vision-message', '只支持 JPG、PNG、WebP 图片和 MP4、MOV、AVI、WebM 视频。'); return;
     }
     var cameraStabilized = video && byId('camera-stabilized').checked;
+    var captureProvenance = captureTimeProvenance();
     var observationRegions = state.observationRegions.slice();
     var button = byId('submit-vision');
     state.visionUploadBusy = true;
@@ -1806,11 +1828,14 @@
     try {
       var data;
       if (video) {
-        data = await uploadVideoInChunks(file, cameraStabilized, capturedAt, observationRegions, state.observationSceneId);
+        data = await uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance,
+          observationRegions, state.observationSceneId);
       } else {
         var form = new FormData(); form.append('media', file);
         form.append('camera_stabilized', String(cameraStabilized));
         form.append('captured_at', new Date(capturedAt * 1000).toISOString());
+        form.append('capture_time_source', captureProvenance.capture_time_source);
+        form.append('capture_timezone', captureProvenance.capture_timezone);
         form.append('observation_regions', JSON.stringify(observationRegions));
         if (state.observationSceneId) form.append('scene_id', state.observationSceneId);
         if (state.anchor) {

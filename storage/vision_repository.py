@@ -12,19 +12,23 @@ from storage import database
 def create_job(url: str | None, *, created_by: str, original_name: str,
                media_kind: str, media_path: str, sha256: str,
                anchor_gcj: dict[str, float] | None, camera_stabilized: bool = False,
-               captured_at=None, observation_regions: list[dict] | None = None,
+               captured_at=None, capture_time_source: str = "unknown",
+               capture_timezone: str | None = None,
+               observation_regions: list[dict] | None = None,
                observation_scene_id: str | None = None) -> dict:
     job_id = str(uuid.uuid4())
     with database.connect(url) as conn:
         row = conn.execute(
             "INSERT INTO manager_vision_job(job_id, created_by, original_name, media_kind,"
-            " media_path, sha256, anchor_gcj, camera_stabilized, captured_at, observation_regions,"
+            " media_path, sha256, anchor_gcj, camera_stabilized, captured_at, capture_time_source,"
+            " capture_timezone, observation_regions,"
             " observation_scene_id, status)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
-            " RETURNING job_id, status, created_at",
+            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
+            " RETURNING job_id, status, created_at, capture_time_source, capture_timezone",
             (job_id, created_by, original_name, media_kind, media_path, sha256,
              Jsonb(anchor_gcj) if anchor_gcj is not None else None,
              bool(camera_stabilized), captured_at,
+             capture_time_source, capture_timezone,
              Jsonb(observation_regions or []), observation_scene_id),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])}
@@ -148,7 +152,7 @@ def get_job(url: str | None, job_id: str) -> dict | None:
     with database.connect(url) as conn:
         row = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, media_path, sha256, anchor_gcj, camera_stabilized,"
-            " captured_at, observation_regions, observation_scene_id, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error,"
             " review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at FROM manager_vision_job WHERE job_id=%s AND deleted_at IS NULL", (job_id,),
         ).fetchone()
@@ -161,7 +165,7 @@ def list_jobs(url: str | None, limit: int = 50) -> list[dict[str, Any]]:
     with database.connect(url) as conn:
         rows = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, anchor_gcj, camera_stabilized,"
-            " captured_at, observation_regions, observation_scene_id, progress, candidate_reviews, cancel_requested, status, attempts,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, progress, candidate_reviews, cancel_requested, status, attempts,"
             " result, error, review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at"
             " FROM manager_vision_job WHERE deleted_at IS NULL"

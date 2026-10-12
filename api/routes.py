@@ -279,6 +279,23 @@ def _parse_vision_capture_time(value, *, required: bool) -> datetime:
     return datetime.fromtimestamp(float(timestamp), tz=timezone.utc)
 
 
+_VISION_CAPTURE_TIME_SOURCES = {"unknown", "manual", "dji_srt"}
+_VISION_TIMEZONE_NAME = re.compile(r"^[A-Za-z0-9_+./:-]{1,64}$")
+
+
+def _parse_vision_capture_provenance(source, timezone_name) -> tuple[str, str | None]:
+    """Validate audit metadata without using the timezone to reinterpret the UTC instant."""
+    source = str(source or "unknown").strip().lower()
+    if source not in _VISION_CAPTURE_TIME_SOURCES:
+        raise ValueError("影像拍摄时间来源无效。")
+    timezone_name = str(timezone_name or "").strip() or None
+    if timezone_name and not _VISION_TIMEZONE_NAME.fullmatch(timezone_name):
+        raise ValueError("影像拍摄时间时区格式无效。")
+    if source in {"manual", "dji_srt"} and not timezone_name:
+        raise ValueError("请记录拍摄时间对应的设备时区。")
+    return source, timezone_name
+
+
 def _clear_admin_session():
     for key in ("is_admin", "admin_csrf_token", "admin_issued_at", "admin_last_active_at"):
         session.pop(key, None)
@@ -2865,6 +2882,9 @@ def start_manager_vision_upload():
         return _err("upload_unavailable", "视频分块大小配置无效。", 503)
     try:
         captured_at = _parse_vision_capture_time(body.get("captured_at"), required=True)
+        capture_time_source, capture_timezone = _parse_vision_capture_provenance(
+            body.get("capture_time_source"), body.get("capture_timezone"),
+        )
         scene_id = str(body.get("scene_id") or "").strip() or None
         if scene_id:
             uuid.UUID(scene_id)
@@ -2911,6 +2931,8 @@ def start_manager_vision_upload():
             "anchor_gcj": anchor_gcj,
             "camera_stabilized": body.get("camera_stabilized") is True,
             "captured_at": captured_at.timestamp(),
+            "capture_time_source": capture_time_source,
+            "capture_timezone": capture_timezone,
             "observation_regions": observation_regions,
             "scene_id": scene_id,
             "created_by": _admin_identity() or "unknown", "created_at": now, "updated_at": now,
@@ -3080,6 +3102,8 @@ def complete_manager_vision_upload(upload_id):
                     anchor_gcj=scene_values.get("anchor_gcj", metadata["anchor_gcj"]),
                     camera_stabilized=scene_values.get("camera_stabilized", metadata["camera_stabilized"]),
                     captured_at=datetime.fromtimestamp(float(metadata["captured_at"]), tz=timezone.utc),
+                    capture_time_source=metadata.get("capture_time_source", "unknown"),
+                    capture_timezone=metadata.get("capture_timezone"),
                     observation_regions=scene_values.get(
                         "observation_regions", metadata.get("observation_regions") or [],
                     ),
@@ -3165,6 +3189,9 @@ def manager_vision_jobs():
     is_video = extension in video_extensions
     try:
         captured_at = _parse_vision_capture_time(request.form.get("captured_at"), required=True)
+        capture_time_source, capture_timezone = _parse_vision_capture_provenance(
+            request.form.get("capture_time_source"), request.form.get("capture_timezone"),
+        )
         scene_id = request.form.get("scene_id", "").strip() or None
         if scene_id:
             uuid.UUID(scene_id)
@@ -3260,6 +3287,8 @@ def manager_vision_jobs():
                 and request.form.get("camera_stabilized", "false").strip().lower() == "true"
             )),
             captured_at=captured_at,
+            capture_time_source=capture_time_source,
+            capture_timezone=capture_timezone,
             observation_regions=scene_values.get("observation_regions", observation_regions),
             observation_scene_id=scene_values.get("scene_id"),
         )

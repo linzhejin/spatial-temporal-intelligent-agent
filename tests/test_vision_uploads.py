@@ -21,7 +21,6 @@ def manager_client(monkeypatch, tmp_path):
 
 
 def test_large_video_upload_resumes_by_offset_and_creates_private_job(monkeypatch, tmp_path):
-    import api.routes as routes
     from storage import database, vision_repository
 
     client, csrf = manager_client(monkeypatch, tmp_path)
@@ -42,6 +41,7 @@ def test_large_video_upload_resumes_by_offset_and_creates_private_job(monkeypatc
     started = client.post("/api/manager/vision-uploads", json={
         "filename": "campus.mp4", "size": 12,
         "camera_stabilized": True, "captured_at": time.time(),
+        "capture_time_source": "dji_srt", "capture_timezone": "Asia/Shanghai",
         "observation_regions": [{"id": "lane", "kind": "vehicle_lane",
                                   "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}],
     }, headers=headers)
@@ -75,6 +75,8 @@ def test_large_video_upload_resumes_by_offset_and_creates_private_job(monkeypatc
     assert created[0]["anchor_gcj"] is None
     assert created[0]["observation_regions"][0]["id"] == "lane"
     assert created[0]["captured_at"].tzinfo is not None
+    assert created[0]["capture_time_source"] == "dji_srt"
+    assert created[0]["capture_timezone"] == "Asia/Shanghai"
     assert os.path.isfile(os.path.join(str(tmp_path), created[0]["media_path"]))
     resumed = client.get(f"/api/manager/vision-uploads/{upload_id}")
     assert resumed.status_code == 200
@@ -188,6 +190,19 @@ def test_video_upload_requires_capture_time_and_normalized_roi(monkeypatch, tmp_
     duplicate_id = client.post("/api/manager/vision-uploads", json=payload, headers=headers)
     assert duplicate_id.status_code == 400
     assert duplicate_id.get_json()["error"] == "invalid_observation_metadata"
+
+
+def test_video_upload_rejects_unknown_capture_time_source(monkeypatch, tmp_path):
+    import time
+
+    client, csrf = manager_client(monkeypatch, tmp_path)
+    response = client.post("/api/manager/vision-uploads", json={
+        "filename": "campus.mp4", "size": 12, "captured_at": time.time(),
+        "capture_time_source": "guess", "capture_timezone": "Asia/Shanghai",
+    }, headers={"X-CSRF-Token": csrf})
+
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_observation_metadata"
 
 
 def test_image_upload_requires_actual_capture_time(monkeypatch, tmp_path):

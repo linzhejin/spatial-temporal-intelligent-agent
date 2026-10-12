@@ -256,8 +256,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261012-vision1/);
-  assert.match(managerHtml, /manager\.js\?v=20261012-vision1/);
+  assert.match(managerHtml, /manager\.css\?v=20261012-vision2/);
+  assert.match(managerHtml, /manager\.js\?v=20261012-vision2/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerCss, /\.vision-region-mapping/);
@@ -429,6 +429,31 @@ test('a matching DJI SRT fills capture time locally and never uses aircraft GPS 
   assert.match(elements.get('dji-subtitle-status').textContent, /没有找到有效的拍摄时间/);
 });
 
+test('DJI subtitle capture provenance and browser timezone are sent with resumable video upload', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setInferenceReady(true);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const { elements, calls } = harness;
+  elements.get('media-file').files = [{
+    type: 'video/mp4', name: 'DJI_1081.mp4', size: 100, lastModified: 7,
+    slice(start, end) { return { size: end - start, arrayBuffer() { return Promise.resolve(new ArrayBuffer(end - start)); } }; },
+  }];
+  await elements.get('media-file').listeners.change();
+  elements.get('dji-subtitle-file').files = [{
+    name: 'DJI_1081.SRT', size: 10,
+    text: async () => '2025-06-15 15:47:50.149 [latitude:1] [longitude:2]',
+  }];
+  await elements.get('dji-subtitle-file').listeners.change();
+  await elements.get('vision-form').listeners.submit({ preventDefault() {} });
+
+  const startRequest = calls.find((call) => call.url === '/api/manager/vision-uploads' && call.options.method === 'POST');
+  const metadata = JSON.parse(startRequest.options.body);
+  assert.equal(metadata.capture_time_source, 'dji_srt');
+  assert.ok(metadata.capture_timezone.length > 0);
+});
+
 test('DJI subtitle mismatch or unreadable contents leave manual capture time and upload available', async () => {
   const harness = managerHarness();
   await flush();
@@ -594,8 +619,11 @@ test('successful media upload clears the preview and preserves the queued confir
   const upload = harness.elements.get('vision-form').listeners.submit({ preventDefault() {} });
   await flush();
   assert.deepEqual(harness.formEntries.map(([name]) => name), [
-    'media', 'camera_stabilized', 'captured_at', 'observation_regions',
+    'media', 'camera_stabilized', 'captured_at', 'capture_time_source', 'capture_timezone', 'observation_regions',
   ]);
+  assert.equal(harness.formEntries.find(([name]) => name === 'capture_time_source')[1], 'manual');
+  assert.equal(typeof harness.formEntries.find(([name]) => name === 'capture_timezone')[1], 'string');
+  assert.ok(harness.formEntries.find(([name]) => name === 'capture_timezone')[1].length > 0);
   harness.releaseVisionUploads();
   await upload;
 
@@ -826,7 +854,10 @@ test('videos are sent through resumable chunks without requiring a map anchor', 
   assert.deepEqual(harness.getVideoChunkSizes(), [512, 512, 512, 512, 2]);
   assert.equal(calls.some((call) => call.url === '/api/manager/vision-jobs' && call.options.method === 'POST'), false);
   const startRequest = calls.find((call) => call.url === '/api/manager/vision-uploads' && call.options.method === 'POST');
-  assert.equal(JSON.parse(startRequest.options.body).lng, undefined);
+  const metadata = JSON.parse(startRequest.options.body);
+  assert.equal(metadata.lng, undefined);
+  assert.equal(metadata.capture_time_source, 'manual');
+  assert.ok(metadata.capture_timezone.length > 0);
   assert.equal(elements.get('vision-message').textContent.includes('已入队'), true);
 });
 
@@ -885,7 +916,7 @@ test('running video progress compares analyzed samples with the sampled-frame to
   await flush();
   harness.setVisionJobs([{
     job_id: 'running-video', status: 'running', media_kind: 'video',
-    original_name: 'campus.mp4', progress: {
+    original_name: 'campus.mp4', capture_time_source: 'dji_srt', capture_timezone: 'Asia/Shanghai', progress: {
       phase: 'analyzing', percent: 42, frames_analyzed: 63, total_frames: 18000,
       total_sampled_frames: 3000, analyzed_through_seconds: 126, duration_seconds: 600,
     },
@@ -897,6 +928,10 @@ test('running video progress compares analyzed samples with the sampled-frame to
   const progress = rendered.find((node) => node.className === 'vision-job-meta'
     && /抽样帧/.test(node.textContent || ''));
   assert.ok(progress);
+  const captureMeta = rendered.find((node) => node.className === 'vision-job-meta'
+    && /时间来自/.test(node.textContent || ''));
+  assert.ok(captureMeta);
+  assert.match(captureMeta.textContent, /DJI 字幕.*Asia\/Shanghai/);
   assert.match(progress.textContent, /63\s*\/\s*3000 个抽样帧/);
   assert.match(progress.textContent, /已分析到 126\.0 秒/);
   assert.doesNotMatch(progress.textContent, /18000/);
