@@ -167,4 +167,3 @@ def test_optional_model_release_requires_current_approval_and_report(
     )
 
     assert result == {"approved": False, "reason": expected_reason}
-
