@@ -282,13 +282,14 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261014-road-rebind1/);
-  assert.match(managerHtml, /manager\.js\?v=20261014-road-rebind1/);
+  assert.match(managerHtml, /manager\.css\?v=20261014-count-caveat1/);
+  assert.match(managerHtml, /manager\.js\?v=20261014-count-caveat1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
   assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
+  assert.match(managerCss, /\.vision-count-caveat\{[^}]*font-size:11px/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -1094,6 +1095,32 @@ test('completed image jobs show vehicle counts and safely render detector boxes'
   assert.match(summaryText, /检出车辆 2/);
   assert.match(summaryText, /事故场景模型 未启用/);
   assert.match(summaryText, /路面积水分割模型 未启用/);
+  assert.doesNotMatch(summaryText, /抽样画面的模型检出数/);
+});
+
+test('video class peaks are labeled as sampled detections rather than real crowd counts', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'crowd-count-note', status: 'completed', media_kind: 'video',
+    original_name: 'aerial.mp4', result: {
+      metrics: {
+        frames_analyzed: 20, peak_vehicle_count: 4, mean_vehicle_count: 2,
+        peak_class_counts: { pedestrian: 27, car: 4 },
+      },
+      model: { id: 'visdrone-rtdetrv4-s', version: 'abc123' },
+      safety: {}, candidates: [],
+    },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const summary = card.children.find((node) => node.className === 'vision-metrics');
+  const summaryText = descendants(summary).map((node) => node.textContent || '').join(' ');
+  assert.match(summaryText, /抽样画面的模型检出数/);
+  assert.match(summaryText, /人群密集时可能漏检/);
+  assert.match(summaryText, /不等于实际人数或人流密度/);
 });
 
 test('running video progress compares analyzed samples with the sampled-frame total', async () => {

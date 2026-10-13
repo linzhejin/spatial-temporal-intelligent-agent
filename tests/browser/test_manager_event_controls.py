@@ -246,6 +246,11 @@ class ManagerEventControlsTest(unittest.TestCase):
         }]
         self.open_manager()
 
+        count_caveat = self.page.locator(".vision-count-caveat")
+        expect(count_caveat).to_contain_text("抽样画面的模型检出数")
+        expect(count_caveat).to_contain_text("人群密集时可能漏检")
+        expect(count_caveat).to_have_css("font-size", "11px")
+
         main_overlay = self.page.locator(".vision-job .video-detection-overlay").first
         self.assertEqual(self.vision_preview_requests, [], "the 5-second task-list poll must not fetch frame overlays")
         self.page.locator(".vision-job video.vision-preview").evaluate("video => video.dispatchEvent(new Event('seeking'))")

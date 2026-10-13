@@ -2089,6 +2089,12 @@
       list.textContent = '类别峰值：' + classes.map(function (label) { return label + ' ' + counts[label]; }).join('、');
       summary.appendChild(list);
     }
+    if (mediaKind === 'video') {
+      var countCaveat = document.createElement('div');
+      countCaveat.className = 'vision-count-caveat';
+      countCaveat.textContent = '人车数是抽样画面的模型检出数；远景、遮挡或人群密集时可能漏检，不等于实际人数或人流密度，车辆检出数也不等于车流量。';
+      summary.appendChild(countCaveat);
+    }
     var model = result.model || {};
     var accident = model.accident_model;
     var flood = model.flood_model;
