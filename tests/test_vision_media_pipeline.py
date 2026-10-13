@@ -37,6 +37,7 @@ def test_optional_model_failure_does_not_disable_other_visual_capabilities():
         accident_path="bad-aider.onnx", flood_path="valid-flood.onnx",
         accident_enabled=True, flood_enabled=True,
         accident_loader=AccidentLoader, flood_loader=FloodLoader,
+        release_checker=lambda kind, *_args: {"approved": True, "reason": "approved"},
     )
 
     assert accident is None
@@ -44,16 +45,23 @@ def test_optional_model_failure_does_not_disable_other_visual_capabilities():
     assert capabilities == {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": True,
+        "accident_recognition_release_status": "model_load_failed",
+        "flood_segmentation_release_status": "approved",
     }
 
 
-def test_optional_models_stay_unloaded_until_explicitly_enabled():
+def test_optional_models_stay_unloaded_until_release_evidence_is_present(tmp_path):
     class MustNotLoad:
         def __init__(self, *_args, **_kwargs):
             pytest.fail("optional model was loaded without explicit release approval")
 
+    accident_path = tmp_path / "available-aider.onnx"
+    flood_path = tmp_path / "available-flood.onnx"
+    accident_path.write_bytes(b"fixture")
+    flood_path.write_bytes(b"fixture")
     accident, flood, capabilities = load_optional_models(
-        accident_path="available-aider.onnx", flood_path="available-flood.onnx",
+        accident_path=accident_path, flood_path=flood_path,
+        accident_enabled=True, flood_enabled=True,
         accident_loader=MustNotLoad, flood_loader=MustNotLoad,
     )
 
@@ -62,7 +70,33 @@ def test_optional_models_stay_unloaded_until_explicitly_enabled():
     assert capabilities == {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": False,
+        "accident_recognition_release_status": "release_manifest_missing",
+        "flood_segmentation_release_status": "release_manifest_missing",
     }
+
+
+def test_optional_release_check_failure_does_not_disable_base_vision(tmp_path):
+    model_path = tmp_path / "optional.onnx"
+    model_path.write_bytes(b"fixture")
+
+    def broken_release_check(*_args):
+        raise OSError("release evidence file cannot be read")
+
+    class MustNotLoad:
+        def __init__(self, *_args, **_kwargs):
+            pytest.fail("model must stay unloaded when the release check fails")
+
+    accident, flood, capabilities = load_optional_models(
+        accident_path=model_path, flood_path=None,
+        accident_enabled=True, flood_enabled=False,
+        accident_loader=MustNotLoad,
+        release_checker=broken_release_check,
+    )
+
+    assert accident is None
+    assert flood is None
+    assert capabilities["accident_recognition_supported"] is False
+    assert capabilities["accident_recognition_release_status"] == "release_check_failed"
 
 
 def test_single_image_pipeline_returns_vehicle_boxes_without_claiming_accident_or_geolocation(tmp_path):

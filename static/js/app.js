@@ -1877,7 +1877,7 @@
             button.disabled = false;
             button.onclick = function () {
                 button.disabled = true;
-                return replanCurrentRoute({}, '按最新路况重新规划').finally(function () {
+                return replanCurrentRoute({ refresh_road_conditions: true }, '按最新路况重新规划').finally(function () {
                     button.disabled = false;
                 });
             };

@@ -124,6 +124,8 @@ def test_manager_vision_status_distinguishes_unconfigured_missing_and_failed_opt
     monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": False,
+        "accident_recognition_release_status": "model_hash_mismatch",
+        "flood_segmentation_release_status": "model_load_failed",
     })
 
     response = client.get("/api/manager/vision-status")
@@ -157,6 +159,59 @@ def test_manager_status_keeps_present_optional_models_disabled_by_default(monkey
     assert data["optional_model_status"] == {"accident": "disabled", "flood": "disabled"}
     assert data["capabilities"]["accident_recognition_supported"] is False
     assert data["capabilities"]["flood_segmentation_supported"] is False
+
+
+def test_manager_status_reports_optional_models_unverified_when_release_gate_blocks_them(
+    monkeypatch, tmp_path,
+):
+    import api.routes as routes
+
+    client, _csrf = manager_client(monkeypatch, tmp_path)
+    accident_model = tmp_path / "aider.onnx"
+    flood_model = tmp_path / "flood.onnx"
+    accident_model.write_bytes(b"present")
+    flood_model.write_bytes(b"present")
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_MODEL_PATH", str(accident_model))
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_MODEL_PATH", str(flood_model))
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_ENABLED", True)
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_ENABLED", True)
+    monkeypatch.setattr(routes, "_vision_inference_readiness", lambda *_args: (True, True, True, True))
+    monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+        "accident_recognition_supported": False,
+        "flood_segmentation_supported": False,
+        "accident_recognition_release_status": "campus_readiness_not_met",
+        "flood_segmentation_release_status": "rights_not_approved",
+    })
+
+    response = client.get("/api/manager/vision-status")
+
+    assert response.status_code == 200
+    assert response.get_json()["data"]["optional_model_status"] == {
+        "accident": "disabled", "flood": "disabled",
+    }
+
+
+def test_manager_does_not_trust_optional_model_capability_from_an_old_worker(
+    monkeypatch, tmp_path,
+):
+    import api.routes as routes
+
+    client, _csrf = manager_client(monkeypatch, tmp_path)
+    accident_model = tmp_path / "aider.onnx"
+    accident_model.write_bytes(b"present")
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_MODEL_PATH", str(accident_model))
+    monkeypatch.setattr(routes.config, "VISION_ACCIDENT_ENABLED", True)
+    monkeypatch.setattr(routes, "_vision_inference_readiness", lambda *_args: (True, True, True, True))
+    # An older process only reports the boolean and has no release-gate result.
+    monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+        "accident_recognition_supported": True,
+    })
+
+    response = client.get("/api/manager/vision-status")
+    data = response.get_json()["data"]
+
+    assert data["capabilities"]["accident_recognition_supported"] is False
+    assert data["optional_model_status"]["accident"] == "disabled"
 
 
 def test_video_upload_requires_capture_time_and_normalized_roi(monkeypatch, tmp_path):

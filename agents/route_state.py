@@ -162,10 +162,14 @@ def apply_change(state, change) -> dict:
     if not isinstance(change, dict) or set(change) not in (
         {"travel_mode"},
         {"strategy"},
+        {"refresh_road_conditions"},
     ):
         raise ValueError("change must contain exactly one supported field")
     out = deepcopy(validate_route_state(state))
-    if "travel_mode" in change:
+    if "refresh_road_conditions" in change:
+        if change["refresh_road_conditions"] is not True:
+            raise ValueError("refresh_road_conditions must be true")
+    elif "travel_mode" in change:
         if change["travel_mode"] not in TRAVEL_MODES:
             raise ValueError("invalid travel_mode")
         out["travel_mode"] = change["travel_mode"]

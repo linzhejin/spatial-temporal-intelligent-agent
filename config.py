@@ -113,6 +113,10 @@ VISION_FLOOD_ENABLED = os.getenv("VISION_FLOOD_ENABLED", "false").strip().lower(
 }
 VISION_FLOOD_REVISION = os.getenv("VISION_FLOOD_REVISION", "unverified")
 VISION_FLOOD_MIN_AREA_RATIO = _env_float("VISION_FLOOD_MIN_AREA_RATIO", 0.08)
+# Optional safety models require both a rights-reviewed release manifest and a
+# matching campus field-readiness report before the worker loads their weights.
+VISION_OPTIONAL_MODELS_RELEASE_MANIFEST = os.getenv("VISION_OPTIONAL_MODELS_RELEASE_MANIFEST", "")
+VISION_FIELD_READINESS_REPORT = os.getenv("VISION_FIELD_READINESS_REPORT", "")
 VISION_CONFIDENCE_THRESHOLD = float(os.getenv("VISION_CONFIDENCE_THRESHOLD", "0.369"))
 VISION_TRACKING_MIN_CONFIDENCE = _env_float("VISION_TRACKING_MIN_CONFIDENCE", 0.1)
 VISION_CPU_THREADS = resolve_vision_cpu_threads()

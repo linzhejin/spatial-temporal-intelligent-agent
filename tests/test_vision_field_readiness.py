@@ -1,5 +1,6 @@
 import json
 import hashlib
+from datetime import datetime
 
 from scripts.vision.audit_campus_field_readiness import audit_campus_field_readiness
 
@@ -7,6 +8,7 @@ from scripts.vision.audit_campus_field_readiness import audit_campus_field_readi
 def test_readiness_audit_names_missing_campus_evidence_without_claiming_ready(tmp_path):
     result = audit_campus_field_readiness(dataset_root=tmp_path)
 
+    assert datetime.fromisoformat(result["generated_at"]).tzinfo is not None
     assert result["campus_field_data_present"] is False
     assert result["checks"]["flight_inventory"]["status"] == "missing"
     assert result["checks"]["object_detection"]["status"] == "missing"

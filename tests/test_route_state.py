@@ -159,6 +159,19 @@ def test_rejects_zero_multiple_or_unknown_changes(change):
         apply_change(BASE, change)
 
 
+def test_road_condition_refresh_preserves_route_preferences_and_constraints():
+    refreshed = apply_change(BASE, {"refresh_road_conditions": True})
+
+    assert refreshed["route_id"] != BASE["route_id"]
+    for field in ("start", "end", "via", "legs", "travel_mode", "hard_constraints", "strategy"):
+        assert refreshed[field] == BASE[field]
+
+
+def test_road_condition_refresh_requires_explicit_true():
+    with pytest.raises(ValueError, match="refresh_road_conditions"):
+        apply_change(BASE, {"refresh_road_conditions": False})
+
+
 @pytest.mark.parametrize(
     "field,value,message",
     [

@@ -1174,6 +1174,7 @@ test('new road conditions prompt a context-preserving route refresh', async () =
     await refresh.onclick();
 
     const request = calls.find(call => call.url === '/api/route/replan');
+    assert.equal(request.body.change.refresh_road_conditions, true);
     assert.deepEqual(request.body.route_state.waypoints, original.waypoints);
     assert.deepEqual(request.body.route_state.hard_constraints, original.hard_constraints);
     assert.equal(h.state.routeStore.current().route_id, 'after-road-change');

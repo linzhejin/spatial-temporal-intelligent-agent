@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+from datetime import datetime, timezone
 from pathlib import Path
 
 from vision.campus_detection_evaluation import validate_campus_detection_manifest
@@ -787,6 +788,7 @@ def audit_campus_field_readiness(
     checks["visible_water_segmentation"] = water_check
     return {
         "task": "campus_uav_field_readiness",
+        "generated_at": datetime.now(timezone.utc).isoformat(),
         "campus_field_data_present": campus_field_data_present,
         "accuracy_claim_allowed": bool(accuracy_claim_allowed),
         "checks": checks,

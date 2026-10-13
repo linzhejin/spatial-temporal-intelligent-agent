@@ -17,6 +17,7 @@ from storage import database
 from storage import vision_repository
 from vision.evidence import attach_evidence_clips
 from vision.engine import OnnxDetector, VisionAnalysisCancelled, analyze_media
+from vision.model_release import check_optional_model_release
 from vision.specialized import OnnxAiderClassifier, OnnxFloodSegmenter
 
 logger = logging.getLogger(__name__)
@@ -28,29 +29,58 @@ def load_optional_models(*, accident_path=None, accident_revision=None,
                          flood_enabled=False,
                          flood_revision=None, flood_min_area_ratio=None,
                          accident_loader=OnnxAiderClassifier,
-                         flood_loader=OnnxFloodSegmenter):
+                         flood_loader=OnnxFloodSegmenter,
+                         release_manifest_path=None, readiness_report_path=None,
+                         release_checker=check_optional_model_release):
     """Load specialized models independently; their failure must not disable traffic vision."""
     accident_model = flood_segmenter = None
     capabilities = {
         "accident_recognition_supported": False,
         "flood_segmentation_supported": False,
+        "accident_recognition_release_status": "disabled",
+        "flood_segmentation_release_status": "disabled",
     }
+
+    def check_release(model_kind, model_path, revision):
+        try:
+            return release_checker(
+                model_kind, model_path, revision,
+                release_manifest_path, readiness_report_path,
+            )
+        except Exception:
+            logger.exception("Optional %s model release check failed; capability disabled", model_kind)
+            return {"approved": False, "reason": "release_check_failed"}
+
     if accident_enabled and accident_path:
-        try:
-            accident_model = accident_loader(
-                accident_path, model_version=accident_revision, threshold=accident_threshold,
-            )
-            capabilities["accident_recognition_supported"] = True
-        except Exception:
-            logger.exception("Optional accident scene model could not be loaded; capability disabled")
+        release = check_release("accident", accident_path, accident_revision)
+        capabilities["accident_recognition_release_status"] = str(release.get("reason", "release_invalid"))
+        if release.get("approved") is True:
+            try:
+                accident_model = accident_loader(
+                    accident_path, model_version=accident_revision, threshold=accident_threshold,
+                )
+                capabilities["accident_recognition_supported"] = True
+            except Exception:
+                capabilities["accident_recognition_release_status"] = "model_load_failed"
+                logger.exception("Optional accident scene model could not be loaded; capability disabled")
+        else:
+            logger.warning("Optional accident scene model remains disabled: %s",
+                           capabilities["accident_recognition_release_status"])
     if flood_enabled and flood_path:
-        try:
-            flood_segmenter = flood_loader(
-                flood_path, model_version=flood_revision, min_area_ratio=flood_min_area_ratio,
-            )
-            capabilities["flood_segmentation_supported"] = True
-        except Exception:
-            logger.exception("Optional road-flood segmentation model could not be loaded; capability disabled")
+        release = check_release("flood", flood_path, flood_revision)
+        capabilities["flood_segmentation_release_status"] = str(release.get("reason", "release_invalid"))
+        if release.get("approved") is True:
+            try:
+                flood_segmenter = flood_loader(
+                    flood_path, model_version=flood_revision, min_area_ratio=flood_min_area_ratio,
+                )
+                capabilities["flood_segmentation_supported"] = True
+            except Exception:
+                capabilities["flood_segmentation_release_status"] = "model_load_failed"
+                logger.exception("Optional road-flood segmentation model could not be loaded; capability disabled")
+        else:
+            logger.warning("Optional road-flood model remains disabled: %s",
+                           capabilities["flood_segmentation_release_status"])
     return accident_model, flood_segmenter, capabilities
 
 
@@ -221,6 +251,8 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
             flood_enabled=config.VISION_FLOOD_ENABLED,
             flood_revision=config.VISION_FLOOD_REVISION,
             flood_min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
+            release_manifest_path=config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST,
+            readiness_report_path=config.VISION_FIELD_READINESS_REPORT,
         )
         status_detail = json.dumps(optional_capabilities, separators=(",", ":"))
         ready = True

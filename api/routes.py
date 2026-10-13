@@ -2705,10 +2705,12 @@ def _vision_worker_capabilities(database_url=None) -> dict:
 def _vision_optional_model_ready(path_key: str, enabled_key: str, capability_key: str,
                                  inference_ready: bool, worker_capabilities: dict) -> bool:
     model_path = getattr(config, path_key, "")
+    release_key = capability_key.replace("_supported", "_release_status")
     return bool(
         getattr(config, enabled_key, False) and inference_ready
         and model_path and Path(model_path).is_file()
         and worker_capabilities.get(capability_key) is True
+        and worker_capabilities.get(release_key) == "approved"
     )
 
 
@@ -2838,8 +2840,14 @@ def _vision_optional_model_status(path_key: str, enabled_key: str, capability_ke
         return "file_missing"
     if not inference_ready:
         return "worker_not_ready"
+    release_key = capability_key.replace("_supported", "_release_status")
+    release_status = worker_capabilities.get(release_key)
     if worker_capabilities.get(capability_key) is True:
-        return "ready"
+        return "ready" if release_status == "approved" else "disabled"
+    if release_status == "model_load_failed":
+        return "load_failed"
+    if release_status and release_status not in {"disabled", "approved"}:
+        return "disabled"
     return "load_failed"
 
 

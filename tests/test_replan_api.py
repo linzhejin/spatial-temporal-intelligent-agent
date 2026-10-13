@@ -111,6 +111,30 @@ def test_replan_preserves_route_kind_and_skips_llm(client, route_kind, tool_name
         assert execute.call_args.args[1]["stops"] == state["via"]["points"]
 
 
+def test_replan_after_road_condition_update_preserves_route_and_uses_latest_snapshot(client):
+    state = _state_for("via")
+    state["road_condition_version"] = "old-road-version"
+    road_conditions = [{"condition_id": "event-new", "action": "slowdown"}]
+    payload = {"recommended": [], "distance_m": 600, "mode": "walk"}
+
+    with patch("api.routes.list_conditions", return_value=road_conditions), \
+         patch("api.routes._current_road_condition_version", return_value="new-road-version"), \
+         patch("agents.tools.execute_tool", return_value=(payload, {"route": payload})) as execute:
+        response = client.post(
+            "/api/route/replan",
+            json={"route_state": state, "change": {"refresh_road_conditions": True}},
+        )
+
+    assert response.status_code == 200
+    updated = response.get_json()["data"]["route_state"]
+    assert updated["road_condition_version"] == "new-road-version"
+    assert updated["start"] == state["start"]
+    assert updated["end"] == state["end"]
+    assert updated["via"] == state["via"]
+    assert updated["hard_constraints"] == state["hard_constraints"]
+    assert execute.call_args.args[2]["_route_conditions_snapshot"] == road_conditions
+
+
 def test_itinerary_replan_refuses_a_route_that_exceeds_budget(client):
     state = _state_for("itinerary")
     with patch("agents.tools.execute_tool", return_value=(
