@@ -1,7 +1,9 @@
 """
 珞珈智行 (WHU-Walker) V1 全局配置
 """
+import math
 import os
+from pathlib import Path
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -18,6 +20,54 @@ def _env_float(key: str, default: float) -> float:
         import warnings
         warnings.warn(f"config: env {key}={raw!r} 非法，使用默认值 {default}", stacklevel=2)
         return default
+
+
+def _read_cgroup_cpu_quota(cgroup_root: Path) -> float | None:
+    """Return the visible cgroup CPU quota in cores, if one is configured."""
+    cpu_max = cgroup_root / "cpu.max"
+    try:
+        parts = cpu_max.read_text(encoding="ascii").split()
+    except OSError:
+        parts = []
+    if len(parts) >= 2 and parts[0] != "max":
+        try:
+            quota, period = float(parts[0]), float(parts[1])
+        except ValueError:
+            quota = period = 0
+        if quota > 0 and period > 0 and math.isfinite(quota / period):
+            return quota / period
+
+    for base in (cgroup_root / "cpu", cgroup_root):
+        try:
+            quota = float((base / "cpu.cfs_quota_us").read_text(encoding="ascii").strip())
+            period = float((base / "cpu.cfs_period_us").read_text(encoding="ascii").strip())
+        except (OSError, ValueError):
+            continue
+        if quota > 0 and period > 0 and math.isfinite(quota / period):
+            return quota / period
+    return None
+
+
+def resolve_vision_cpu_threads(value: str | None = None, *, cpu_count: int | None = None,
+                               cgroup_root: Path | None = None) -> int:
+    """Resolve an explicit thread override or a conservative local/container default."""
+    setting = os.getenv("VISION_CPU_THREADS", "auto") if value is None else value
+    setting = str(setting).strip().lower()
+    if setting not in {"", "auto"}:
+        try:
+            return max(1, int(setting))
+        except ValueError as error:
+            raise ValueError("VISION_CPU_THREADS 必须是正整数或 auto") from error
+
+    if cpu_count is None:
+        process_cpu_count = getattr(os, "process_cpu_count", None)
+        cpu_count = process_cpu_count() if callable(process_cpu_count) else None
+        cpu_count = cpu_count or os.cpu_count() or 1
+    available = max(1, int(cpu_count))
+    quota = _read_cgroup_cpu_quota(cgroup_root or Path("/sys/fs/cgroup"))
+    if quota is not None:
+        available = min(available, max(1, math.ceil(quota)))
+    return max(1, min(4, available))
 
 
 # ===== LLM 配置（DEC-006: DeepSeek V4-Flash）=====
@@ -65,7 +115,7 @@ VISION_FLOOD_REVISION = os.getenv("VISION_FLOOD_REVISION", "unverified")
 VISION_FLOOD_MIN_AREA_RATIO = _env_float("VISION_FLOOD_MIN_AREA_RATIO", 0.08)
 VISION_CONFIDENCE_THRESHOLD = float(os.getenv("VISION_CONFIDENCE_THRESHOLD", "0.369"))
 VISION_TRACKING_MIN_CONFIDENCE = _env_float("VISION_TRACKING_MIN_CONFIDENCE", 0.1)
-VISION_CPU_THREADS = int(os.getenv("VISION_CPU_THREADS", "1"))
+VISION_CPU_THREADS = resolve_vision_cpu_threads()
 VISION_MAX_MEDIA_BYTES = int(os.getenv("VISION_MAX_MEDIA_BYTES", str(24 * 1024 * 1024)))
 VISION_MAX_VIDEO_BYTES = int(os.getenv("VISION_MAX_VIDEO_BYTES", str(1024 * 1024 * 1024)))
 VISION_CHUNK_BYTES = int(os.getenv("VISION_CHUNK_BYTES", str(8 * 1024 * 1024)))

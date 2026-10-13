@@ -106,7 +106,7 @@ class OnnxDetector:
                  model_id: str | None = None, model_version: str | None = None):
         if session is None and (not model_path or not Path(model_path).is_file()):
             raise VisionConfigurationError("VISION_MODEL_PATH 未配置或 ONNX 权重文件不存在")
-        cpu_threads = max(1, int(os.getenv("VISION_CPU_THREADS", "1"))) if session is None else None
+        cpu_threads = config.resolve_vision_cpu_threads() if session is None else None
         if session is None:
             try:
                 import onnxruntime as ort

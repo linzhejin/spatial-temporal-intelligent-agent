@@ -5,6 +5,7 @@ import math
 import os
 from pathlib import Path
 
+import config
 from vision.tiling import tile_windows
 
 
@@ -30,7 +31,7 @@ def _onnx_contract(model_path, session, *, expected_classes: int | tuple[int, ..
         except ImportError as error:
             raise RuntimeError("缺少 onnxruntime，无法加载专用视觉模型") from error
         options = ort.SessionOptions()
-        options.intra_op_num_threads = max(1, int(os.getenv("VISION_CPU_THREADS", "1")))
+        options.intra_op_num_threads = config.resolve_vision_cpu_threads()
         options.inter_op_num_threads = 1
         options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
         options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
