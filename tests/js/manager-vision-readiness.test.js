@@ -31,6 +31,7 @@ function managerHarness(sessionSeed = []) {
   let roadEvents = [];
   const calls = [];
   let inferenceReady = false;
+  let visionPublicationAlreadyExists = false;
   let optionalModelStatus = { accident: 'not_configured', flood: 'not_configured' };
   let visionStatusFailure = false;
   let sessionExpired = false;
@@ -165,6 +166,9 @@ function managerHarness(sessionSeed = []) {
         visionPostCount += 1;
         return new Promise((resolve) => uploadResolvers.push(resolve));
       }
+      if (url === '/api/road-conditions' && options.method === 'POST' && visionPublicationAlreadyExists) {
+        return { ok: true, json: async () => ({ data: { already_published: true, event: { id: 'existing-event' } } }) };
+      }
       if (url === '/api/manager/vision-scenes' && options.method === 'POST') {
         const body = typeof options.body === 'string' ? JSON.parse(options.body) : {};
         const scene = { ...body, scene_id: body.scene_id || 'scene-created' };
@@ -223,6 +227,7 @@ function managerHarness(sessionSeed = []) {
     setVisionJobs: (items) => { visionJobs = items; },
     setVisionScenes: (items) => { visionScenes = items; },
     setRoadEvents: (items) => { roadEvents = items; },
+    setVisionPublicationAlreadyExists: (value) => { visionPublicationAlreadyExists = value; },
     setVisionStatusFailure: (value) => { visionStatusFailure = value; },
     setSessionExpired: (value) => { sessionExpired = value; },
     setStorageFailure: (value) => { storageFailure = value; },
@@ -258,8 +263,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261013-videosync2/);
-  assert.match(managerHtml, /manager\.js\?v=20261013-videosync2/);
+  assert.match(managerHtml, /manager\.css\?v=20261013-visionroute1/);
+  assert.match(managerHtml, /manager\.js\?v=20261013-visionroute1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1269,6 +1274,7 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   assert.equal(calls.some((call) => call.url === '/api/road-conditions' && call.options.method === 'POST'), false);
   elements.get('event-duration').value = '30';
   elements.get('event-duration').listeners.change();
+  harness.setVisionPublicationAlreadyExists(true);
   await elements.get('condition-form').listeners.submit({ preventDefault() {} });
   const posted = calls.find((call) => call.url === '/api/road-conditions' && call.options.method === 'POST');
   assert.ok(posted);
@@ -1277,6 +1283,7 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   assert.equal(body.source_vision_candidate_index, 0);
   assert.equal(body.field_confirmation, '已联系现场负责人核实，该路段确有人流聚集。');
   assert.equal(Date.parse(body.end_time) - Date.parse(body.start_time), 1800000);
+  assert.match(elements.get('form-message').textContent, /已经关联到路况，没有重复新增事件/);
   assert.equal(elements.get('vision-source-banner').hidden, true);
 });
 
@@ -1294,8 +1301,12 @@ test('candidate review shows congestion duration and image-space crowd evidence'
         region_id: 'walkway-east', peak_person_count: 24,
         peak_people_with_nearby_peer_count: 18,
         observed_duration_seconds: 6,
+        sustained_cluster_duration_seconds: 5,
+        sustained_cluster_peak_size: 12,
+        minimum_cluster_size: 8,
         movement_assessment: 'mostly_moving_in_image',
       } },
+      { kind: 'possible_accident', confidence: 0.81, reason: '事故场景线索', evidence: {} },
     ] },
   }]);
   harness.intervalCallbacks[0]();
@@ -1307,9 +1318,14 @@ test('candidate review shows congestion duration and image-space crowd evidence'
   assert.match(renderedText, /低位移车辆轨迹占 75%/);
   assert.match(renderedText, /峰值 24 人/);
   assert.match(renderedText, /连续观察 6\.0 秒/);
+  assert.match(renderedText, /最大画面相邻组 12 人，最长连续 5\.0 秒（筛查门槛 8 人）/);
   assert.match(renderedText, /有邻近同伴的检测数 18 人/);
   assert.match(renderedText, /多数轨迹有画面位移/);
   assert.match(renderedText, /不代表地面密度或实际速度/);
+  assert.match(renderedText, /人行区域人群聚集候选 · 规则筛查 · 需复核/);
+  assert.doesNotMatch(renderedText, /人行区域人群聚集候选 · 置信度/);
+  assert.match(renderedText, /可能存在车辆排队\/低速聚集 · 规则筛查 · 需复核/);
+  assert.match(renderedText, /疑似事故场景（位置待复核） · 模型分数 81% · 需复核/);
 });
 
 test('road event deletion removes its record from the manager list after refresh', async () => {

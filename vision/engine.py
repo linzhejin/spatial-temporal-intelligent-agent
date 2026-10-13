@@ -24,7 +24,8 @@ VISDRONE_CLASSES = (
 logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
 # Bump this when detector/tracker/segment aggregation semantics change.
-VIDEO_CHECKPOINT_ANALYSIS_REVISION = 2
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 3
+VIDEO_TEMPORAL_CONTEXT_SECONDS = 15.0
 
 
 def _checkpoint_model_identity(model) -> dict | None:
@@ -476,8 +477,12 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
                 "confidence": candidate.get("confidence", 0.0),
                 "reason": candidate.get("reason", ""),
                 "evidence": evidence,
-                "start_seconds": segment["start_seconds"],
-                "end_seconds": segment["end_seconds"],
+                "start_seconds": candidate.get("_candidate_window_start_seconds", segment.get(
+                    "candidate_window_start_seconds", segment["start_seconds"],
+                )),
+                "end_seconds": candidate.get("_candidate_window_end_seconds", segment.get(
+                    "candidate_window_end_seconds", segment["end_seconds"],
+                )),
                 "segment_index": segment_index,
             }
             if groups and groups[-1][-1]["segment_index"] == segment_index - 1:
@@ -672,6 +677,9 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
     region_transforms: list[list[list[float]] | None] = []
     frame_indices: list[int] = []
     completed_segments = []
+    temporal_context = {
+        "frames": [], "transforms": [], "region_transforms": [], "frame_indices": [],
+    }
     width = height = 0
     sample_interval = 1.0
     duration_seconds = None
@@ -812,6 +820,28 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 accident_dense_until_frame = int(
                     saved_checkpoint.get("accident_dense_until_frame", -1)
                 )
+                saved_context = saved_checkpoint.get("temporal_context")
+                if isinstance(saved_context, dict):
+                    context_frames = saved_context.get("frames")
+                    context_transforms = saved_context.get("transforms")
+                    context_indices = saved_context.get("frame_indices")
+                    context_region_transforms = saved_context.get("region_transforms")
+                    if (isinstance(context_frames, list)
+                            and isinstance(context_transforms, list)
+                            and isinstance(context_indices, list)
+                            and isinstance(context_region_transforms, list)
+                            and len(context_frames) == len(context_transforms)
+                            and len(context_frames) == len(context_indices)
+                            and (not regions or len(context_frames) == len(context_region_transforms))
+                            and len(context_indices) <= math.ceil(
+                                VIDEO_TEMPORAL_CONTEXT_SECONDS / sample_interval,
+                            ) + 1):
+                        temporal_context = {
+                            "frames": context_frames,
+                            "transforms": context_transforms,
+                            "region_transforms": context_region_transforms,
+                            "frame_indices": context_indices,
+                        }
             frame_index = (
                 int(saved_checkpoint.get("next_frame_index", 0))
                 if checkpoint_matches else 0
@@ -837,6 +867,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     frame_index = 0
                     accident_dense_until_frame = -1
                     completed_segments = []
+                    temporal_context = {
+                        "frames": [], "transforms": [],
+                        "region_transforms": [], "frame_indices": [],
+                    }
                     report_checkpoint_reset()
             previous_gray = None
             previous_scale = 1.0
@@ -844,7 +878,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
 
             def flush_segment(next_frame_index: int):
                 nonlocal frames, transforms, region_transforms, frame_indices, specialized_observations
-                nonlocal last_live_progress_at
+                nonlocal last_live_progress_at, temporal_context
                 if not frames:
                     return
                 segment_start = frame_indices[0] / fps
@@ -859,6 +893,83 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     tracking_high_threshold=getattr(detector, "confidence_threshold", 0.369),
                     tracking_low_threshold=getattr(detector, "tracking_low_confidence_threshold", 0.1),
                 )
+                context_frames = temporal_context["frames"]
+                temporal_frames = context_frames + frames
+                temporal_frame_indices = temporal_context["frame_indices"] + frame_indices
+                if context_frames:
+                    temporal_transforms = (
+                        temporal_context["transforms"] + [None] + transforms[1:]
+                    )
+                    temporal_region_transforms = (
+                        temporal_context["region_transforms"] + region_transforms
+                    ) if regions else None
+                else:
+                    temporal_transforms = transforms
+                    temporal_region_transforms = region_transforms if regions else None
+                if context_frames:
+                    context_window_start_seconds = temporal_frame_indices[0] / fps
+                    for candidate in result["candidates"]:
+                        if candidate.get("kind") in {"possible_congestion", "possible_crowding"}:
+                            candidate["_candidate_window_start_seconds"] = round(segment_start, 3)
+                            candidate["_candidate_window_end_seconds"] = round(segment_end, 3)
+                    temporal_result = analyze_observations(
+                        temporal_frames, frame_width=width, frame_height=height,
+                        sample_interval_s=sample_interval,
+                        camera_stabilized=camera_stabilized,
+                        frame_transforms=temporal_transforms,
+                        region_transforms=temporal_region_transforms,
+                        regions=regions,
+                        tracking_high_threshold=getattr(detector, "confidence_threshold", 0.369),
+                        tracking_low_threshold=getattr(detector, "tracking_low_confidence_threshold", 0.1),
+                    )
+                    temporal_kinds = {"possible_congestion", "possible_crowding"}
+                    for candidate in temporal_result["candidates"]:
+                        if candidate.get("kind") in temporal_kinds:
+                            candidate["_candidate_window_start_seconds"] = round(
+                                context_window_start_seconds, 3,
+                            )
+                            candidate["_candidate_window_end_seconds"] = round(segment_end, 3)
+                    selected_temporal_candidates = {}
+                    for candidate in result["candidates"] + temporal_result["candidates"]:
+                        if candidate.get("kind") not in temporal_kinds:
+                            continue
+                        evidence = candidate.get("evidence", {})
+                        summary = evidence.get("summary", {}) if isinstance(evidence, dict) else {}
+                        region_id = summary.get("region_id") if isinstance(summary, dict) else None
+                        key = (candidate.get("kind"), str(region_id) if region_id is not None else None)
+                        current = selected_temporal_candidates.get(key)
+                        current_summary = (
+                            current.get("evidence", {}).get("summary", {})
+                            if current and isinstance(current.get("evidence"), dict) else {}
+                        )
+                        current_duration = current_summary.get("region_observed_duration_seconds", 0)
+                        candidate_duration = summary.get("region_observed_duration_seconds", 0)
+                        if (current is None or candidate_duration > current_duration
+                                or (candidate_duration == current_duration
+                                    and candidate.get("confidence", 0) > current.get("confidence", 0))):
+                            selected_temporal_candidates[key] = candidate
+                    result["candidates"] = [
+                        candidate for candidate in result["candidates"]
+                        if candidate.get("kind") not in temporal_kinds
+                    ] + list(selected_temporal_candidates.values())
+                candidate_window_start_seconds = (
+                    temporal_frame_indices[0] / fps if temporal_frame_indices else segment_start
+                )
+                context_limit = max(
+                    2, math.ceil(VIDEO_TEMPORAL_CONTEXT_SECONDS / sample_interval) + 1,
+                )
+                all_temporal_transforms = temporal_transforms
+                keep_from = max(0, len(temporal_frames) - context_limit)
+                temporal_context = {
+                    "frames": temporal_frames[keep_from:],
+                    "transforms": ([None] + all_temporal_transforms[keep_from + 1:]
+                                   if keep_from < len(temporal_frames) else []),
+                    "region_transforms": (
+                        temporal_region_transforms[keep_from:]
+                        if regions and temporal_region_transforms is not None else []
+                    ),
+                    "frame_indices": temporal_frame_indices[keep_from:],
+                }
                 result["safety"]["accident_recognition_supported"] = accident_model is not None
                 result["safety"]["flood_segmentation_supported"] = flood_segmenter is not None
                 result["metrics"]["specialized_frames_analyzed"] = len({
@@ -868,6 +979,8 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 completed_segments.append({
                     "start_seconds": round(segment_start, 3),
                     "end_seconds": round(segment_end, 3),
+                    "candidate_window_start_seconds": round(candidate_window_start_seconds, 3),
+                    "candidate_window_end_seconds": round(segment_end, 3),
                     "specialized_observations": segment_observations,
                     **result,
                 })
@@ -879,6 +992,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     "next_frame_index": next_frame_index,
                     "segments": completed_segments,
                     "accident_dense_until_frame": accident_dense_until_frame,
+                    "temporal_context": temporal_context,
                     "analysis_fingerprint": checkpoint_fingerprint,
                 }
                 if progress_callback:
@@ -929,6 +1043,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             "next_frame_index": next_frame_index,
                             "segments": completed_segments,
                             "accident_dense_until_frame": accident_dense_until_frame,
+                            "temporal_context": temporal_context,
                             "analysis_fingerprint": checkpoint_fingerprint,
                         },
                     })

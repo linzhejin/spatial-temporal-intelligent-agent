@@ -1097,6 +1097,7 @@ class TestRoadConditionAPI:
         monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
         gj = _mid_12_gcj(G)
         body = {"type": "event", "name": "现场复核的人流事件", "lng": gj[0], "lat": gj[1],
+                "action": "notice", "affected_modes": ["walk"],
                 "source_vision_job_id": job_id}
         headers = {"X-Admin-Token": "test-token-xyz"}
 
@@ -1116,6 +1117,43 @@ class TestRoadConditionAPI:
         public_records = client.get("/api/road-conditions").get_json()["data"]["conditions"]
         assert len(public_records) == 1
         assert "source" not in public_records[0] and "audit" not in public_records[0]
+        version = client.get("/api/road-conditions?version_only=1").get_json()["data"]
+        assert version["active_event_version"] == routes._current_road_condition_version(
+            rc.list_conditions(strict=True),
+        )
+
+    def test_vision_publication_requires_explicit_action_and_affected_modes(
+        self, client, G, monkeypatch,
+    ):
+        from storage import database, vision_repository
+
+        job_id = "a6f6c6b1-d237-43fa-8ea2-b01ae48a3e8e"
+        job = {
+            "job_id": job_id, "status": "needs_review", "captured_at": time.time(),
+            "candidate_reviews": {"0": {"status": "confirmed"}},
+            "result": {"candidates": [{
+                "kind": "possible_congestion", "review_required": True,
+                "auto_publish": False,
+            }]},
+        }
+        monkeypatch.setattr(database, "initialize", lambda *_args: None)
+        monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
+        lng, lat = _mid_12_gcj(G)
+        body = {
+            "type": "event", "name": "影像确认的路况", "lng": lng, "lat": lat,
+            "source_vision_job_id": job_id, "source_vision_candidate_index": 0,
+            "field_confirmation": "现场已核实该路段需要临时管制，请按实际情况发布。",
+            "end_time": time.time() + 1800,
+        }
+
+        response = client.post(
+            "/api/road-conditions", json=body,
+            headers={"X-Admin-Token": "test-token-xyz"},
+        )
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "vision_effect_required"
+        assert rc.list_conditions() == []
 
     def test_agent_condition_lookup_reports_unavailable_store_instead_of_no_conditions(self):
         from agents import tools as agent_tools
@@ -1222,6 +1260,19 @@ class TestRoadConditionAPI:
             else:
                 assert route["duration_min"] == baseline["duration_min"]
 
+        duplicate = client.post("/api/road-conditions", json={
+            "type": "event", "action": action, "affected_modes": ["walk"],
+            "cost_multiplier": cost_multiplier, "name": "航拍复核道路临时封闭",
+            "lng": lng, "lat": lat, "source_vision_job_id": job_id,
+            "source_vision_candidate_index": 0,
+            "field_confirmation": "管理员核对现场信息，确认自强大道该路段暂时不能步行通行。",
+            "end_time": time.time() + 1800,
+        }, headers=headers)
+        assert duplicate.status_code == 200
+        assert duplicate.get_json()["data"]["already_published"] is True
+        assert duplicate.get_json()["data"]["condition"]["id"] == condition["id"]
+        assert len(rc.list_conditions(strict=True)) == 1
+
     def test_completed_vision_job_without_candidates_can_be_registered_manually(self, client, G, monkeypatch):
         from storage import database, vision_repository
 
@@ -1276,6 +1327,7 @@ class TestRoadConditionAPI:
         gj = _mid_12_gcj(G)
         body = {
             "type": "event", "name": "现场复核的人流事件", "lng": gj[0], "lat": gj[1],
+            "action": "notice", "affected_modes": ["walk"],
             "source_vision_job_id": job_id, "source_vision_candidate_index": 1,
             "field_confirmation": "现场人员已核实该路段当前拥堵情况。",
             "end_time": time.time() + 1800,
@@ -1314,6 +1366,7 @@ class TestRoadConditionAPI:
         gj = _mid_12_gcj(G)
         response = client.post("/api/road-conditions", json={
             "type": "event", "name": "复核的道路积水", "lng": gj[0], "lat": gj[1],
+            "action": "notice", "affected_modes": ["walk"],
             "source_vision_job_id": job_id, "source_vision_candidate_index": 0,
             "field_confirmation": "现场人员已核实该道路有积水并确认影响范围。",
             "end_time": time.time() + 1800,
@@ -1512,3 +1565,18 @@ class TestRoadConditionAPI:
         cond = data["conditions"][0]
         assert cond["type_label"] == "积水"
         assert cond["edge"]["geometry_gcj"]  # 前端需要几何画线
+
+    def test_public_road_condition_version_changes_when_active_event_is_published(self, client, G):
+        before = client.get("/api/road-conditions?version_only=1").get_json()["data"]
+        assert before["active_event_version"].startswith("roads-")
+
+        lng, lat = _mid_12_gcj(G)
+        published = client.post("/api/road-conditions", json={
+            "type": "event", "action": "notice", "affected_modes": ["walk"],
+            "name": "版本轮询验收事件", "lng": lng, "lat": lat,
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+        assert published.status_code == 201
+
+        after = client.get("/api/road-conditions?version_only=1").get_json()["data"]
+        assert after["active_event_version"] != before["active_event_version"]
+        assert "conditions" not in after

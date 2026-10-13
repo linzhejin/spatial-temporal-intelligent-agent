@@ -140,6 +140,39 @@ def _count_people_with_nearby_peers(people: list[dict]) -> int:
     return grouped_count
 
 
+def _largest_image_space_group(people: list[dict]) -> int:
+    """Return the largest connected group under the image-space neighbor rule."""
+    centers = []
+    for person in people:
+        x1, y1, x2, y2 = map(float, person["box"])
+        centers.append((_center(person["box"]), max(0.0, y2 - y1)))
+    neighbors = [set() for _ in centers]
+    for left_index, (left_center, left_height) in enumerate(centers):
+        for right_index in range(left_index + 1, len(centers)):
+            right_center, right_height = centers[right_index]
+            if hypot(left_center[0] - right_center[0], left_center[1] - right_center[1]) <= (
+                    left_height + right_height):
+                neighbors[left_index].add(right_index)
+                neighbors[right_index].add(left_index)
+
+    largest_group = 0
+    visited = set()
+    for start_index in range(len(centers)):
+        if start_index in visited:
+            continue
+        pending = [start_index]
+        visited.add(start_index)
+        group_size = 0
+        while pending:
+            current = pending.pop()
+            group_size += 1
+            for neighbor in neighbors[current] - visited:
+                visited.add(neighbor)
+                pending.append(neighbor)
+        largest_group = max(largest_group, group_size)
+    return largest_group
+
+
 def _transform_point(matrix, point):
     if matrix is None:
         return None
@@ -364,6 +397,7 @@ def analyze_observations(
     stationary_ratio_threshold: float = 0.5,
     min_congestion_duration_s: float = 15.0,
     min_crowding_duration_s: float = 5.0,
+    min_crowding_cluster_size: int = 8,
     tracking_high_threshold: float = 0.369,
     tracking_low_threshold: float = 0.1,
 ) -> dict:
@@ -389,6 +423,10 @@ def analyze_observations(
             or not math.isfinite(float(min_crowding_duration_s))
             or min_crowding_duration_s <= 0):
         raise ValueError("minimum crowd observation duration must be finite and positive")
+    if (isinstance(min_crowding_cluster_size, bool)
+            or not isinstance(min_crowding_cluster_size, int)
+            or min_crowding_cluster_size < 2):
+        raise ValueError("minimum image-space crowd cluster size must be an integer of at least two")
     regions = _validated_regions(regions, frame_width, frame_height)
     if region_transforms is not None and len(region_transforms) != len(frames):
         raise ValueError("observation region transforms must match the analyzed frame count")
@@ -462,6 +500,7 @@ def analyze_observations(
     vehicle_area_by_region = {region["id"]: [] for region in vehicle_regions}
     track_positions_by_region = {region["id"]: defaultdict(list) for region in vehicle_regions}
     pedestrian_counts_by_region = {region["id"]: [] for region in pedestrian_regions}
+    pedestrian_group_sizes_by_region = {region["id"]: [] for region in pedestrian_regions}
     vehicle_observed_frames = {region["id"]: [] for region in vehicle_regions}
     pedestrian_observed_frames = {region["id"]: [] for region in pedestrian_regions}
     pedestrian_track_positions_by_region = {
@@ -538,6 +577,9 @@ def analyze_observations(
             pedestrian_counts_by_region[region["id"]].append(len(region_people))
             nearby_peer_counts_by_region[region["id"]].append(
                 _count_people_with_nearby_peers(region_people)
+            )
+            pedestrian_group_sizes_by_region[region["id"]].append(
+                _largest_image_space_group(region_people)
             )
             for item in region_people:
                 track_id = item.get("track_id")
@@ -672,7 +714,27 @@ def analyze_observations(
         supporting_mapping_ratio = candidate_mapping_ratio(region)
         region_duration_s = mapped_duration(pedestrian_observed_frames[region["id"]])
         peer_counts = nearby_peer_counts_by_region[region["id"]]
+        group_sizes = pedestrian_group_sizes_by_region[region["id"]]
         pedestrian_speeds = pedestrian_speeds_by_region[region["id"]]
+        observed_frames = pedestrian_observed_frames[region["id"]]
+        longest_cluster_run = []
+        current_cluster_run = []
+        for frame_index, group_size in zip(observed_frames, group_sizes):
+            if group_size < min_crowding_cluster_size:
+                current_cluster_run = []
+                continue
+            if current_cluster_run and frame_index != current_cluster_run[-1] + 1:
+                current_cluster_run = []
+            current_cluster_run.append(frame_index)
+            if len(current_cluster_run) > len(longest_cluster_run):
+                longest_cluster_run = list(current_cluster_run)
+        sustained_cluster_duration_s = mapped_duration(longest_cluster_run)
+        longest_run_frames = set(longest_cluster_run)
+        sustained_cluster_peak_size = max(
+            (group_size for frame_index, group_size in zip(observed_frames, group_sizes)
+             if frame_index in longest_run_frames),
+            default=0,
+        )
         moving_people = sum(speed > 0.003 for speed in pedestrian_speeds)
         low_motion_people = len(pedestrian_speeds) - moving_people
         if not motion_compensation_ready:
@@ -687,15 +749,20 @@ def analyze_observations(
         if (motion_compensation_ready and supporting_mapping_ratio >= 0.8
                 and region_duration_s >= min_crowding_duration_s
                 and len(counts) >= 3 and max(counts, default=0) >= 15
-                and sum(count > 0 for count in counts) >= 3):
+                and sustained_cluster_duration_s >= min_crowding_duration_s):
             candidates.append(_candidate(
-                "possible_crowding",
-                min(0.9, 0.55 + max(counts) / 100),
-                "行人观察区域内连续检测到较多人群；未标定有效面积，不能换算为每平方米人数，请结合原片和现场核实。",
+                "possible_crowding", min(0.9, 0.55 + sustained_cluster_peak_size / 100),
+                f"行人观察区域内连续检测到至少 {min_crowding_cluster_size} 名画面相邻行人；"
+                "这不是地面密度估计，请结合原片和现场核实。",
                 {"region_id": region["id"],
                  "peak_person_count": max(counts),
                  "mean_person_count": round(mean(counts), 2),
                  "frames_with_people": sum(count > 0 for count in counts),
+                 "sustained_cluster_frames": len(longest_cluster_run),
+                 "sustained_cluster_duration_seconds": round(sustained_cluster_duration_s, 3),
+                 "sustained_cluster_peak_size": sustained_cluster_peak_size,
+                 "peak_image_space_group_size": max(group_sizes, default=0),
+                 "minimum_cluster_size": min_crowding_cluster_size,
                  "observed_duration_seconds": round(observed_duration_s, 3),
                  "region_observed_duration_seconds": round(region_duration_s, 3),
                  "region_mapping_basis": region_mapping_basis,
@@ -760,6 +827,7 @@ def analyze_observations(
             "observed_duration_seconds": round(observed_duration_s, 3),
             "minimum_congestion_duration_seconds": float(min_congestion_duration_s),
             "minimum_crowding_duration_seconds": float(min_crowding_duration_s),
+            "minimum_crowding_cluster_size": min_crowding_cluster_size,
             "mean_vehicle_count": round(avg_vehicle_count, 2),
             "peak_vehicle_count": max(vehicle_counts, default=0),
             "mean_pedestrian_count": round(mean(pedestrian_counts), 2) if pedestrian_counts else 0.0,

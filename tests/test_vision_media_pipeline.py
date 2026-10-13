@@ -294,6 +294,134 @@ def test_video_pipeline_samples_entire_clip_in_segments_not_just_first_180_secon
     assert progress[-1]["checkpoint"]["next_frame_index"] == 1900
 
 
+def test_congestion_evidence_continues_across_video_segment_boundary(tmp_path, monkeypatch):
+    import config
+    from vision.engine import VisionAnalysisCancelled
+
+    class OneFpsCapture(FakeCapture):
+        def __init__(self, total_frames):
+            super().__init__(total_frames, fps=1)
+
+        def read(self):
+            if self.index >= self.decodable_frames:
+                return False, None
+            frame_index = self.index
+            self.index += 1
+            return True, np.full((80, 100, 3), frame_index, dtype=np.uint8)
+
+    class OneFpsCV2(FakeCV2):
+        _total_frames = 40
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            return OneFpsCapture(cls._total_frames)
+
+    class TimedTrafficDetector:
+        model_id = "segment-boundary-fixture"
+        model_version = "1"
+        confidence_threshold = 0.4
+
+        def __init__(self):
+            self.calls = 0
+
+        def detect(self, frame, *, tracking=False):
+            self.calls += 1
+            frame_index = int(frame[0, 0, 0])
+            if not 12 <= frame_index < 28:
+                return []
+            return [
+                {"label": "car", "box": [2 + index * 6, 20, 7 + index * 6, 32],
+                 "confidence": 0.95, "track_id": None}
+                for index in range(14)
+            ]
+
+    source = tmp_path / "boundary.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", OneFpsCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 1)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 20)
+    lane = [{"id": "lane", "kind": "vehicle_lane",
+             "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+    checkpoint = {}
+    first_detector = TimedTrafficDetector()
+
+    def save_checkpoint(payload):
+        checkpoint.update(payload["checkpoint"])
+
+    with pytest.raises(VisionAnalysisCancelled):
+        analyze_media(
+            source, "video", None, camera_stabilized=True,
+            detector=first_detector, regions=lane,
+            progress_callback=save_checkpoint,
+            cancel_check=lambda: first_detector.calls >= 20,
+        )
+    assert checkpoint["temporal_context"]["frame_indices"][-1] == 19
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True,
+        detector=TimedTrafficDetector(), regions=lane, resume_state=checkpoint,
+    )
+
+    candidates = [item for item in result["candidates"]
+                  if item["kind"] == "possible_congestion"]
+    assert len(candidates) == 1
+    assert candidates[0]["evidence"]["summary"]["region_observed_duration_seconds"] >= 15
+    assert candidates[0]["evidence"]["segments"][0]["start_seconds"] == 4.0
+    assert candidates[0]["evidence"]["segments"][0]["end_seconds"] == 39.0
+    assert result["video_coverage"]["sampled_frames"] == 40
+
+
+def test_crowding_evidence_continues_across_video_segment_boundary(tmp_path, monkeypatch):
+    import config
+
+    class OneFpsCapture(FakeCapture):
+        def __init__(self, total_frames):
+            super().__init__(total_frames, fps=1)
+
+    class OneFpsCV2(FakeCV2):
+        _total_frames = 40
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            return OneFpsCapture(cls._total_frames)
+
+    class TimedCrowdDetector:
+        model_id = "crowd-boundary-fixture"
+        model_version = "1"
+        confidence_threshold = 0.4
+
+        def __init__(self):
+            self.frame_index = 0
+
+        def detect(self, _frame, *, tracking=False):
+            frame_index = self.frame_index
+            self.frame_index += 1
+            if not 17 <= frame_index < 24:
+                return []
+            return [
+                {"label": "pedestrian", "box": [10 + index * 3, 20, 20 + index * 3, 50],
+                 "confidence": 0.95, "track_id": None}
+                for index in range(16)
+            ]
+
+    source = tmp_path / "crowd-boundary.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", OneFpsCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 1)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 20)
+    walkway = [{"id": "walkway", "kind": "pedestrian",
+                "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True,
+        detector=TimedCrowdDetector(), regions=walkway,
+    )
+
+    candidates = [item for item in result["candidates"]
+                  if item["kind"] == "possible_crowding"]
+    assert len(candidates) == 1
+    assert candidates[0]["evidence"]["summary"]["sustained_cluster_duration_seconds"] >= 5
+
+
 def test_moving_video_projects_the_manager_roi_before_detection_and_crowd_analysis(
     tmp_path, monkeypatch,
 ):

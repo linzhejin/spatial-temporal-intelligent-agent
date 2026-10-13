@@ -124,6 +124,14 @@ class RoadConditionBindingError(RoadConditionsUnavailableError):
     """Raised when an active condition cannot be safely bound to the current graph."""
 
 
+class VisionConditionAlreadyPublishedError(RuntimeError):
+    """Raised when a reviewed image candidate already has a road-condition event."""
+
+    def __init__(self, condition: dict):
+        self.condition = deepcopy(condition)
+        super().__init__("影像候选已发布为路况事件")
+
+
 def _finite_number(value) -> bool:
     if isinstance(value, bool):
         return False
@@ -425,6 +433,17 @@ def add_condition(
             condition["cost_multiplier"] = float(cost_multiplier)
     with _condition_write_lock():
         conditions = _load_conditions(strict=True)
+        source_kind = (source or {}).get("kind")
+        source_job_id = (source or {}).get("job_id")
+        candidate_index = (source or {}).get("candidate_index")
+        if source_kind == "vision_job" and candidate_index is not None:
+            existing = next((item for item in conditions
+                             if (item.get("source") or {}).get("kind") == "vision_job"
+                             and (item.get("source") or {}).get("job_id") == source_job_id
+                             and (item.get("source") or {}).get("candidate_index") == candidate_index),
+                            None)
+            if existing is not None:
+                raise VisionConditionAlreadyPublishedError(existing)
         conditions.append(condition)
         _save_conditions(conditions)
     logger.info(

@@ -141,6 +141,15 @@ def test_region_transform_count_must_match_analyzed_frames():
         )
 
 
+@pytest.mark.parametrize("cluster_size", [True, 1, 1.5, 0])
+def test_minimum_image_space_cluster_size_must_be_an_integer_at_least_two(cluster_size):
+    with pytest.raises(ValueError, match="minimum image-space crowd cluster size"):
+        analyze_observations(
+            [[]], frame_width=640, frame_height=480,
+            min_crowding_cluster_size=cluster_size,
+        )
+
+
 def test_crowd_candidate_is_blocked_when_exclusion_roi_is_not_mapped_reliably():
     pedestrians = [
         {"label": "pedestrian", "confidence": 0.9, "track_id": None,
@@ -255,6 +264,9 @@ def test_crowd_candidate_requires_pedestrian_roi_and_sustained_video_evidence():
     assert candidate["evidence"]["peak_people_with_nearby_peer_count"] == 16
     assert candidate["evidence"]["movement_assessment"] == "mostly_stationary_in_image"
     assert candidate["evidence"]["observed_duration_seconds"] == 5.0
+    assert candidate["evidence"]["sustained_cluster_frames"] == 6
+    assert candidate["evidence"]["sustained_cluster_duration_seconds"] == 5.0
+    assert candidate["evidence"]["minimum_cluster_size"] == 8
 
 
 def test_brief_pedestrian_cluster_at_dense_sampling_does_not_propose_crowding():
@@ -321,7 +333,7 @@ def test_pedestrians_outside_observed_region_are_not_counted_as_crowding():
     assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
 
 
-def test_crowd_candidate_reports_no_image_space_cluster_when_people_are_spread_out():
+def test_distributed_people_do_not_produce_a_crowding_candidate():
     pedestrians = [
         {"label": "pedestrian", "confidence": 0.9, "track_id": None,
          "box": [40 + (index % 5) * 110, 40 + (index // 5) * 130,
@@ -335,9 +347,49 @@ def test_crowd_candidate_reports_no_image_space_cluster_when_people_are_spread_o
         camera_stabilized=True, regions=roi,
     )
 
-    candidate = next(item for item in result["candidates"] if item["kind"] == "possible_crowding")
-    assert candidate["evidence"]["peak_people_with_nearby_peer_count"] == 0
-    assert candidate["evidence"]["aggregation_assessment"] == "no_image_space_cluster_detected"
+    assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
+
+
+def test_transient_image_space_cluster_does_not_produce_a_crowding_candidate():
+    clustered = [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [20 + index * 12, 80, 32 + index * 12, 120]}
+        for index in range(16)
+    ]
+    distributed = [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [40 + (index % 5) * 110, 40 + (index // 5) * 130,
+                 50 + (index % 5) * 110, 60 + (index // 5) * 130]}
+        for index in range(15)
+    ]
+    roi = [{"id": "plaza", "kind": "pedestrian", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        [clustered, clustered, distributed, distributed, distributed, distributed],
+        frame_width=640, frame_height=480, camera_stabilized=True, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
+
+
+def test_separate_small_groups_do_not_pass_the_single_cluster_threshold():
+    pedestrians = [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [start + index * 12, 80, start + index * 12 + 10, 120]}
+        for start in (30, 300)
+        for index in range(4)
+    ] + [
+        {"label": "pedestrian", "confidence": 0.9, "track_id": None,
+         "box": [500, 400, 510, 420]}
+    ]
+    roi = [{"id": "plaza", "kind": "pedestrian", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        [pedestrians] * 6, frame_width=640, frame_height=480,
+        camera_stabilized=True, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_crowding" for item in result["candidates"])
 
 
 def test_crowd_candidate_reports_observed_image_space_movement():

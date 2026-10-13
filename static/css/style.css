@@ -951,6 +951,29 @@ body.is-planning-mode .desktop-route-workbench {
     color: #D35400;
 }
 
+.road-condition-update-notice {
+    margin-top: 8px;
+    padding: 8px 10px;
+    background: #EAF2F1;
+    border-left: 3px solid #4F8275;
+    border-radius: 4px;
+    color: #315B51;
+    font-size: 0.84rem;
+    line-height: 1.5;
+}
+
+.road-condition-update-notice button {
+    margin-left: 8px;
+    padding: 4px 9px;
+    border: 1px solid #4F8275;
+    border-radius: 999px;
+    background: #fff;
+    color: #315B51;
+    font: inherit;
+    font-weight: 600;
+    cursor: pointer;
+}
+
 /* Follow-up suggestions */
 .suggestions-area {
     padding-top: 8px;

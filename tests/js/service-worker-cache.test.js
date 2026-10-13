@@ -10,12 +10,19 @@ const indexSource = fs.readFileSync(path.join(__dirname, '../../static/index.htm
 test('deployed app bundle uses a fresh and consistent service-worker cache key', () => {
   const htmlAsset = indexSource.match(/<script\s+src="([^\"]*\/js\/app\.js\?v=([^\"]+))"/);
   const workerAsset = source.match(/'([^']*\/js\/app\.js\?v=([^']+))'/);
+  const htmlStylesheet = indexSource.match(/<link\s+rel="stylesheet"\s+href="([^"]*\/css\/style\.css\?v=([^"]+))"/);
+  const workerStylesheet = source.match(/'([^']*\/css\/style\.css\?v=([^']+))'/);
   const cacheVersion = source.match(/var CACHE_NAME = 'whu-walker-v(\d+)'/);
 
   assert.ok(htmlAsset, 'index.html must version app.js');
   assert.ok(workerAsset, 'the service worker must precache versioned app.js');
+  assert.ok(htmlStylesheet, 'index.html must version style.css');
+  assert.ok(workerStylesheet, 'the service worker must precache versioned style.css');
   assert.ok(cacheVersion, 'the service worker must declare its cache version');
   assert.equal(htmlAsset[1], workerAsset[1]);
+  assert.equal(htmlStylesheet[1], workerStylesheet[1]);
+  assert.notEqual(htmlAsset[2], '20261009c');
+  assert.notEqual(htmlStylesheet[2], '20261009a');
   assert.notEqual(htmlAsset[2], '20261003a');
   assert.notEqual(htmlAsset[2], '20261007a');
   assert.ok(Number(cacheVersion[1]) > 84);

@@ -1,5 +1,6 @@
 from importlib import import_module, util
 import json
+from pathlib import Path
 
 import pytest
 
@@ -90,6 +91,31 @@ def test_loader_rejects_annotation_row_count_mismatch(tmp_path):
         _runner().load_sequence(root)
 
 
+def test_loader_rejects_incomplete_multiscene_frame_map(tmp_path):
+    root = tmp_path / "sample"
+    _write_sequence(root)
+    source_path = root / "source.json"
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["sequences"] = ["scene_23/1", "scene_31/1"]
+    source["frame_map"] = [{"sample_file": "1.jpg", "source_sequence": "scene_23/1"}]
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="frame_map.*every sample image"):
+        _runner().load_sequence(root)
+
+
+def test_loader_requires_frame_map_when_source_lists_multiple_sequences(tmp_path):
+    root = tmp_path / "sample"
+    _write_sequence(root)
+    source_path = root / "source.json"
+    source = json.loads(source_path.read_text(encoding="utf-8"))
+    source["sequences"] = ["scene_23/1", "scene_31/1"]
+    source_path.write_text(json.dumps(source), encoding="utf-8")
+
+    with pytest.raises(ValueError, match="multi-sequence.*frame_map"):
+        _runner().load_sequence(root)
+
+
 def test_limitations_describe_the_actual_multiscene_framewise_sample():
     describe = getattr(_runner(), "build_evaluation_limitations", None)
     assert callable(describe), "evaluation limitations must be derived from sample metadata"
@@ -104,3 +130,59 @@ def test_limitations_describe_the_actual_multiscene_framewise_sample():
     assert "36 sampled frames" in combined
     assert "tracking" in combined
     assert "Single 30-frame sequence" not in combined
+
+
+def test_sequence_summary_reports_scene_metrics_and_unweighted_macro_means():
+    summarize = getattr(_runner(), "summarize_sequence_metrics", None)
+    assert callable(summarize), "multi-scene evaluation must report per-sequence variation"
+
+    result = summarize([
+        {
+            "sequence": "scene_a/1",
+            "counts": {"tp": 1, "fp": 1, "fn": 0, "predicted": 2, "ground_truth": 1},
+            "count_error": 1,
+        },
+        {
+            "sequence": "scene_a/1",
+            "counts": {"tp": 1, "fp": 0, "fn": 1, "predicted": 1, "ground_truth": 2},
+            "count_error": 1,
+        },
+        {
+            "sequence": "scene_b/1",
+            "counts": {"tp": 2, "fp": 0, "fn": 2, "predicted": 2, "ground_truth": 4},
+            "count_error": 2,
+        },
+    ])
+
+    assert result["sequence_count"] == 2
+    assert result["macro_head_point_f1"] == 0.6667
+    assert result["macro_per_frame_count_mae"] == 1.5
+    assert [item["sequence"] for item in result["per_sequence"]] == ["scene_a/1", "scene_b/1"]
+    assert result["per_sequence"][0]["images_evaluated"] == 2
+    assert result["per_sequence"][0]["per_frame_count_mae"] == 1.0
+
+
+def test_sequence_summary_rejects_invalid_or_empty_frame_metrics():
+    summarize = getattr(_runner(), "summarize_sequence_metrics", None)
+    assert callable(summarize), "multi-scene evaluation must validate its frame metrics"
+
+    with pytest.raises(ValueError, match="at least one"):
+        summarize([])
+    with pytest.raises(ValueError, match="sequence"):
+        summarize([{"sequence": "", "counts": {}, "count_error": 0}])
+
+
+def test_sampled_frame_is_mapped_back_to_official_source_sequence():
+    resolve_sequence = getattr(_runner(), "sequence_for_image", None)
+    assert callable(resolve_sequence), "evaluation must preserve official sequence provenance"
+
+    assert resolve_sequence(Path("2.jpg"), {
+        "frame_map": [
+            {"sample_file": "1.jpg", "source_sequence": "scene_1/1"},
+            {"sample_file": "2.jpg", "source_sequence": "scene_3/1"},
+        ],
+    }) == "scene_3/1"
+    with pytest.raises(ValueError, match="exactly once"):
+        resolve_sequence(Path("3.jpg"), {
+            "frame_map": [{"sample_file": "1.jpg", "source_sequence": "scene_1/1"}],
+        })

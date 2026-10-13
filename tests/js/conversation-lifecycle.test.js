@@ -15,13 +15,17 @@ function harness(storage = new Map()) {
         removeItem: k => storage.delete(k),
     };
     const noop = () => {};
-    const element = () => ({ hidden: false, style: {}, classList: { add: noop, remove: noop, toggle: noop }, querySelectorAll: () => [] });
+    const element = () => ({ hidden: false, style: {}, children: [], classList: { add: noop, remove: noop, toggle: noop },
+        querySelectorAll: () => [],
+        querySelector(selector) { return this.children.find(child => selector.includes(child.dataset && child.dataset.action)) || null; },
+        appendChild(child) { this.children.push(child); } });
     const elements = new Map();
     const context = vm.createContext({
         console, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
         localStorage, navigator: { userAgent: 'desktop', platform: 'Win32' },
         window: { localStorage, WHURouteState: routeState, location: { reload: () => { reloads++; } } },
-        document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [], getElementById: id => {
+        document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [],
+            createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, textContent: '', disabled: false }), getElementById: id => {
             if (!elements.has(id)) elements.set(id, element()); return elements.get(id);
         } },
         boundaries: {
@@ -54,6 +58,7 @@ function harness(storage = new Map()) {
         [${['hideError','startLoadingMessages','hideWelcomeElements','stopLoadingMessages','hideLoading',
             'renderClarifyOptions','renderCandidateCards','syncModeFromServer','showResults','trackRouteShown','showTopBanner',
             'applyProductMode','loadTravelMode','bindEvents','syncTravelModeUI','syncRouteStrategyUI',
+            'startRoadConditionVersionMonitor',
             'showWelcomeHint','initMap','consumeMobileHandoff'].map(n => JSON.stringify(n)).join(',')}]
             .forEach(function (name) { eval(name + ' = boundaries.noop'); });
         showUserBubble = boundaries.showUserBubble;
@@ -76,6 +81,7 @@ function harness(storage = new Map()) {
             setMapPoint: setMapPoint,
             refreshPage: refreshPage,
             setTravelMode: setTravelMode,
+            checkRoadConditionVersion: checkRouteConditionVersion,
             setApi: function (fn) {
                 submitQueuedMessage = function (query, body, bubble, epoch) {
                     var payload = Object.assign({ query: query }, body || {});
@@ -470,6 +476,8 @@ test('desktop route feedback gives one useful overview with endpoints, strategy,
     assert.match(reply, /最短路径/);
     assert.match(reply, /3 个途经点/);
     assert.match(reply, /2 条.*路况/);
+    assert.match(reply, /已核对 2 条当前生效路况信息/);
+    assert.doesNotMatch(reply, /路况调整路线/);
     assert.match(reply, /4 处地点/);
     assert.doesNotMatch(reply, /沿途地点一|沿途地点二/);
     assert.doesNotMatch(reply, /已为你规划好步行路线/);
@@ -1126,4 +1134,64 @@ test('resumed clarification continuation appends its result after the latest use
     assert.deepEqual(Array.from(h.state.conversationHistory, message => message.content), [
         '带我去图书馆', '从哪里出发？', '从樱顶出发', 'continued-route',
     ]);
+});
+
+test('new road conditions prompt a context-preserving route refresh', async () => {
+    const h = harness();
+    const original = {
+        ...existingRoute(), route_id: 'before-road-change',
+        road_condition_version: 'roads-old',
+        start: { name: '信息学部', lng: 114.35, lat: 30.53 },
+        end: { name: '星湖园食堂', lng: 114.36, lat: 30.54 },
+        waypoints: [{ name: '桂园操场', lng: 114.355, lat: 30.535 }],
+        hard_constraints: { avoid_steps: true },
+        strategy: { name: 'shortest', weights: [1, 0, 0] },
+    };
+    h.state.routeStore.replace(original);
+    const notice = h.context.document.getElementById('road-condition-update-notice');
+    const calls = [];
+    h.setRawApi(async (url, body) => {
+        calls.push({ url, body });
+        if (url === '/api/road-conditions?version_only=1') {
+            return { active_event_version: 'roads-new' };
+        }
+        if (url === '/api/route/replan') {
+            return {
+                recommended: [[1, 2], [2, 3]],
+                route_state: { ...body.route_state, route_id: 'after-road-change', road_condition_version: 'roads-new' },
+            };
+        }
+        throw new Error('unexpected request ' + url);
+    });
+
+    await h.checkRoadConditionVersion();
+    assert.equal(notice.hidden, false);
+    assert.match(notice.textContent, /保留起点、途经点和路线偏好/);
+    const refresh = notice.children.find(child => child.dataset.action === 'replan-road-conditions');
+    assert.ok(refresh);
+    assert.equal(refresh.textContent, '按最新路况重算');
+
+    await refresh.onclick();
+
+    const request = calls.find(call => call.url === '/api/route/replan');
+    assert.deepEqual(request.body.route_state.waypoints, original.waypoints);
+    assert.deepEqual(request.body.route_state.hard_constraints, original.hard_constraints);
+    assert.equal(h.state.routeStore.current().route_id, 'after-road-change');
+    assert.equal(notice.hidden, true);
+});
+
+test('unchanged road conditions do not interrupt the displayed route', async () => {
+    const h = harness();
+    h.state.routeStore.replace({ ...existingRoute(), road_condition_version: 'roads-stable' });
+    const notice = h.context.document.getElementById('road-condition-update-notice');
+    notice.hidden = false;
+    h.setRawApi(async url => {
+        assert.equal(url, '/api/road-conditions?version_only=1');
+        return { active_event_version: 'roads-stable' };
+    });
+
+    await h.checkRoadConditionVersion();
+
+    assert.equal(notice.hidden, true);
+    assert.equal(h.state.routeStore.current().route_id, 'existing');
 });

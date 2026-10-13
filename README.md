@@ -16,9 +16,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ a9b587b ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-12 22:09
+- 版本：codex/aerial-vision-release @ da56854 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-13 13:54
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v87 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 13（最新 013）
+- 前端 SW whu-walker-v88 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 13（最新 013）
 <!-- FACTS:END -->
 
 日常通勤与“最短路径”策略的距离/坡度/景观权重为 `1/0/0`；推荐、风景优先和平坦优先使用其他预设。2026-10-05 核验生产服务器检出 `3beea8d`，健康接口、管理页面及其 JS/CSS 均正常；路线可计算或画出，不等于每条边都已实地证明可通行。当前开放候选、风险路段与路线样本仍需核查，详见评测报告。

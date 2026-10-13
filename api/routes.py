@@ -62,8 +62,8 @@ from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, add_condition, remove_condition, update_condition,
     purge_revoked_conditions, snap_to_edge, CONDITION_LABELS, CONDITION_EFFECTS,
-    SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, TRAVEL_MODES, CONDITION_ACTIONS,
-    RoadConditionsUnavailableError,
+    SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS,
+    RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
 )
 from spatial import weather as weather_mod
 from storage import vision_scene_repository
@@ -2020,9 +2020,16 @@ def get_road_conditions():
             include_inactive=include_all and is_admin,
             strict=True,
         )
+        active_conditions = (
+            list_conditions(strict=True) if include_all and is_admin else conditions
+        )
     except RoadConditionsUnavailableError:
         logger.exception("路况查询无法读取有效数据")
         return _err("road_conditions_unavailable", "路况数据暂时不可用", 503)
+    # Hash the same untouched event snapshot used by route construction. Public
+    # response decoration/removal of admin-only fields must not trigger a false
+    # route-change notification.
+    active_event_version = _current_road_condition_version(active_conditions)
     now = time.time()
     for c in conditions:
         c["type_label"] = CONDITION_LABELS.get(c["type"], c["type"])
@@ -2040,7 +2047,13 @@ def get_road_conditions():
         else:
             c.pop("audit", None)
             c.pop("source", None)
-    return _ok({"conditions": conditions, "count": len(conditions)})
+    if request.args.get("version_only") in ("1", "true", "yes"):
+        return _ok({"active_event_version": active_event_version})
+    return _ok({
+        "conditions": conditions,
+        "count": len(conditions),
+        "active_event_version": active_event_version,
+    })
 
 
 @api_bp.route("/road-conditions/snap", methods=["GET"])
@@ -2351,6 +2364,20 @@ def create_road_condition():
                 "region_polygon": observation_region["polygon"],
             })
 
+    if source_job_id and (
+            action not in CONDITION_ACTIONS
+            or not isinstance(affected_modes, list)
+            or not affected_modes
+            or len(affected_modes) > len(TRAVEL_MODE_KEYS)
+            or any(not isinstance(mode, str) or mode not in TRAVEL_MODE_KEYS
+                   for mode in affected_modes)
+            or len(set(affected_modes)) != len(affected_modes)):
+        return _err(
+            "vision_effect_required",
+            "发布影像路况时必须明确选择提示、缓行或封路，并指定受影响的出行方式。",
+            400,
+        )
+
     try:
         lng_f, lat_f = float(lng), float(lat)
         start_ts = _parse_time_input(body.get("start_time"))
@@ -2396,6 +2423,12 @@ def create_road_condition():
         )
         condition["type_label"] = CONDITION_LABELS.get(cond_type, cond_type)
         return _ok({"condition": condition, "snap": snap}, status=201)
+    except VisionConditionAlreadyPublishedError as e:
+        return _ok({
+            "condition": e.condition,
+            "snap": snap,
+            "already_published": True,
+        }, status=200)
     except RoadConditionsUnavailableError:
         logger.exception("路况存储无效，拒绝新增以免覆盖既有事件")
         return _err("road_conditions_unavailable", "现有路况数据无效，已拒绝修改；请先修复数据文件", 503)

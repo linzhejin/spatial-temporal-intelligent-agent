@@ -1680,6 +1680,9 @@
       var peakPeople = Number(evidence.peak_person_count);
       var groupedPeople = Number(evidence.peak_people_with_nearby_peer_count);
       var observedCrowdSeconds = Number(evidence.observed_duration_seconds);
+      var sustainedClusterSeconds = Number(evidence.sustained_cluster_duration_seconds);
+      var sustainedClusterPeak = Number(evidence.sustained_cluster_peak_size);
+      var minimumClusterSize = Number(evidence.minimum_cluster_size);
       var movement = {
         mostly_moving_in_image: '多数轨迹有画面位移',
         mostly_stationary_in_image: '多数轨迹在画面内变化较少',
@@ -1689,7 +1692,12 @@
       line += '稳定画面连续观察 ' + (Number.isFinite(observedCrowdSeconds) ? observedCrowdSeconds.toFixed(1) : '未知') +
         ' 秒；区域内峰值 ' + (Number.isFinite(peakPeople) ? peakPeople : '未知') +
         ' 人；画面内有邻近同伴的检测数 ' + (Number.isFinite(groupedPeople) ? groupedPeople : '未知') +
-        ' 人；' + movement + '。画面邻近关系和位移不代表地面密度或实际速度。';
+        ' 人；' + movement + '。';
+      if ([sustainedClusterSeconds, sustainedClusterPeak, minimumClusterSize].every(Number.isFinite)) {
+        line += '最大画面相邻组 ' + sustainedClusterPeak + ' 人，最长连续 ' +
+          sustainedClusterSeconds.toFixed(1) + ' 秒（筛查门槛 ' + minimumClusterSize + ' 人）。';
+      }
+      line += '画面邻近关系和位移不代表地面密度或实际速度。';
     }
     if (!line) return;
     var note = document.createElement('small'); note.className = 'candidate-evidence-caption';
@@ -1910,9 +1918,15 @@
         var legacyReview = job.review_status && (job.review_candidate_index === index || ((result.candidates || []).length === 1 && job.review_candidate_index == null));
         var candidate = document.createElement('div'); candidate.className = 'candidate-card';
         var titleNode = document.createElement('strong');
-        titleNode.textContent = candidateName(item.kind, item) + (item.kind === 'possible_flooding'
-          ? ' · 需人工核对'
-          : ' · 置信度 ' + Math.round((item.confidence || 0) * 100) + '%');
+        var titleStatus;
+        if (item.kind === 'possible_flooding') {
+          titleStatus = ' · 需人工核对';
+        } else if (['vehicle_cluster_review', 'possible_congestion', 'possible_crowding'].indexOf(item.kind) >= 0) {
+          titleStatus = ' · 规则筛查 · 需复核';
+        } else {
+          titleStatus = ' · 模型分数 ' + Math.round((item.confidence || 0) * 100) + '% · 需复核';
+        }
+        titleNode.textContent = candidateName(item.kind, item) + titleStatus;
         if (candidateReview) titleNode.textContent += candidateReview.status === 'confirmed' ? ' · 已确认' : ' · 已排除';
         else if (legacyReview) titleNode.textContent += job.review_status === 'confirmed' ? ' · 已确认' : ' · 已排除';
         var why = document.createElement('p'); why.textContent = item.reason || '请结合原始影像复核。';
@@ -2136,8 +2150,10 @@
       body.field_confirmation = fieldConfirmation;
     }
     try {
-      await request('/api/road-conditions', 'POST', body);
-      message('form-message', '事件已发布，路线规划会按该路段状态处理。', true);
+      var publication = await request('/api/road-conditions', 'POST', body);
+      message('form-message', publication && publication.already_published
+        ? '这个影像候选已经关联到路况，没有重复新增事件。'
+        : '事件已发布，路线规划会按该路段状态处理。', true);
       byId('event-name').value = ''; byId('event-description').value = '';
       resetEventValidity();
       resetEventModes();

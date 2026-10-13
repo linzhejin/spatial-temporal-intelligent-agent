@@ -59,6 +59,8 @@
         pendingIntent: null,  // 尚未补全的路线意图；成功路线统一由 routeStore 持有
         activeMode: null,
         loadingTimer: null,  // 轮播加载语定时器
+        roadConditionMonitorTimer: null,
+        roadConditionMonitorInFlight: false,
         requestSeq: 0,  // 请求序号：防止先发的请求后返回覆盖后发请求的结果
         conversationEpoch: 0, // 显式重置后使在途请求失效
         nextConversationTurnId: 0,
@@ -259,6 +261,7 @@
     function adoptRouteState(data) {
         if (!data || !data.route_state || !state.routeStore) return;
         state.routeStore.replace(data.route_state);
+        clearRoadConditionUpdateNotice();
         if (TRAVEL_MODES[data.route_state.travel_mode]) {
             state.travelMode = data.route_state.travel_mode;
             syncTravelModeUI();
@@ -316,6 +319,7 @@
                 throw new Error(tm.label + '路线暂时不可达');
             }
             if (!state.routeStore.commit(token, result.route_state)) return false;
+            clearRoadConditionUpdateNotice();
             if (change.strategy) {
                 trackRouteSignal('strategy_abandoned', current);
                 trackRouteSignal('strategy_selected', result.route_state);
@@ -1837,6 +1841,59 @@
         });
     }
 
+    function clearRoadConditionUpdateNotice() {
+        var notice = document.getElementById('road-condition-update-notice');
+        if (notice) notice.hidden = true;
+    }
+
+    function checkRouteConditionVersion() {
+        if (state.roadConditionMonitorInFlight || !state.routeStore) return Promise.resolve(false);
+        var current = state.routeStore.current();
+        var notice = document.getElementById('road-condition-update-notice');
+        if (!current || !current.road_condition_version || !notice) {
+            clearRoadConditionUpdateNotice();
+            return Promise.resolve(false);
+        }
+        state.roadConditionMonitorInFlight = true;
+        var routeId = current.route_id;
+        return apiRequest('/api/road-conditions?version_only=1', null, 'GET').then(function (data) {
+            var latest = state.routeStore && state.routeStore.current();
+            if (!latest || latest.route_id !== routeId) return;
+            if (!data || !data.active_event_version
+                    || data.active_event_version === latest.road_condition_version) {
+                clearRoadConditionUpdateNotice();
+                return;
+            }
+            notice.hidden = false;
+            notice.textContent = '校园路况有更新。重新规划会保留起点、途经点和路线偏好。';
+            var button = notice.querySelector('button[data-action="replan-road-conditions"]');
+            if (!button) {
+                button = document.createElement('button');
+                button.type = 'button';
+                button.dataset.action = 'replan-road-conditions';
+                button.textContent = '按最新路况重算';
+                notice.appendChild(button);
+            }
+            button.disabled = false;
+            button.onclick = function () {
+                button.disabled = true;
+                return replanCurrentRoute({}, '按最新路况重新规划').finally(function () {
+                    button.disabled = false;
+                });
+            };
+        }).catch(function (error) {
+            console.warn('[路况] 检查路线版本失败:', error);
+        }).finally(function () {
+            state.roadConditionMonitorInFlight = false;
+        });
+    }
+
+    function startRoadConditionVersionMonitor() {
+        if (state.roadConditionMonitorTimer) return;
+        checkRouteConditionVersion();
+        state.roadConditionMonitorTimer = setInterval(checkRouteConditionVersion, 30000);
+    }
+
     // 地图图例中"管制封闭/缓行"两行仅在存在对应事件时显示
     function updateRoadConditionLegend(hasClosure, hasSlow) {
         var elClosure = document.getElementById('legend-closure-item');
@@ -2989,7 +3046,8 @@
             var rcCount = data.road_conditions_applied || 0;
             if (rcCount > 0) {
                 roadNoticeEl.style.display = 'block';
-                roadNoticeEl.textContent = '⚠️ 当前有 ' + rcCount + ' 条路况事件生效，路线已自动绕行';
+                roadNoticeEl.textContent = '⚠️ 已核对 ' + rcCount
+                    + ' 条当前路况信息；路线是否调整取决于封路或缓行是否影响本路线。';
             } else {
                 roadNoticeEl.style.display = 'none';
             }
@@ -3814,7 +3872,7 @@
             facts.push('沿途可查看 ' + poiCount + ' 处地点');
         }
         var conditionCount = Number(data.road_conditions_applied || 0);
-        if (conditionCount > 0) facts.push('已结合 ' + conditionCount + ' 条当前生效路况调整路线');
+        if (conditionCount > 0) facts.push('已核对 ' + conditionCount + ' 条当前生效路况信息');
         if (facts.length) overview += ' ' + facts.join('；') + '。';
 
         var reason = conciseRouteReason(data.explanation);
@@ -4624,6 +4682,7 @@
         syncRouteStrategyUI();
         showWelcomeHint();
         initMap();
+        startRoadConditionVersionMonitor();
         // 暴露公开函数给欢迎卡片等模块调用
         window.submitNaturalLanguageQuery = handleNlSubmit;
 
