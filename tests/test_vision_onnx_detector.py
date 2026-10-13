@@ -1,3 +1,4 @@
+import sys
 from types import SimpleNamespace
 
 import numpy as np
@@ -51,6 +52,37 @@ def test_onnx_detector_preprocesses_rgb_letterbox_and_restores_boxes():
     assert session.feed["images"][0, 0, 120, 0] == pytest.approx(0.0)
     assert session.feed["images"][0, 2, 120, 0] == pytest.approx(1.0)
     assert session.feed["orig_target_sizes"].tolist() == [[960, 960]]
+
+
+def test_onnx_detector_records_configured_cpu_thread_count(tmp_path, monkeypatch):
+    model_path = tmp_path / "model.onnx"
+    model_path.write_bytes(b"fixture")
+    created = {}
+
+    class FakeSessionOptions:
+        def __init__(self):
+            self.intra_op_num_threads = 0
+            self.inter_op_num_threads = 0
+
+    def make_session(path, *, sess_options, providers):
+        created["path"] = path
+        created["options"] = sess_options
+        created["providers"] = providers
+        return FakeSession()
+
+    monkeypatch.setenv("VISION_CPU_THREADS", "4")
+    monkeypatch.setitem(sys.modules, "onnxruntime", SimpleNamespace(
+        SessionOptions=FakeSessionOptions,
+        ExecutionMode=SimpleNamespace(ORT_SEQUENTIAL="sequential"),
+        GraphOptimizationLevel=SimpleNamespace(ORT_ENABLE_ALL="all"),
+        InferenceSession=make_session,
+    ))
+
+    detector = OnnxDetector(str(model_path))
+
+    assert detector.cpu_threads == 4
+    assert created["options"].intra_op_num_threads == 4
+    assert created["providers"] == ["CPUExecutionProvider"]
 
 
 def test_onnx_detector_returns_empty_for_empty_valid_outputs():

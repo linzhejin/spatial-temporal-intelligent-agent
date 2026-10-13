@@ -31,6 +31,7 @@ def test_video_smoke_report_records_coverage_and_model_provenance(tmp_path, monk
             self.model_id = kwargs.get("model_id", "stub")
             self.model_version = kwargs.get("model_version", "stub-revision")
             self.confidence_threshold = confidence_threshold
+            self.cpu_threads = 4
 
         def detect(self, _frame):
             return []
@@ -62,6 +63,7 @@ def test_video_smoke_report_records_coverage_and_model_provenance(tmp_path, monk
     report = json.loads(capsys.readouterr().out)
     assert report["model"] == "test-aerial-detector"
     assert report["model_revision"] == "revision-123"
+    assert report["cpu_threads"] == 4
     assert report["model_sha256"] == model_sha256
     assert report["model_manifest_sha256"] == hashlib.sha256(
         manifest_path.read_bytes()

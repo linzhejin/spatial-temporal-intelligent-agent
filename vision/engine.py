@@ -106,6 +106,7 @@ class OnnxDetector:
                  model_id: str | None = None, model_version: str | None = None):
         if session is None and (not model_path or not Path(model_path).is_file()):
             raise VisionConfigurationError("VISION_MODEL_PATH 未配置或 ONNX 权重文件不存在")
+        cpu_threads = max(1, int(os.getenv("VISION_CPU_THREADS", "1"))) if session is None else None
         if session is None:
             try:
                 import onnxruntime as ort
@@ -114,7 +115,7 @@ class OnnxDetector:
                     "缺少 onnxruntime，请在独立视觉工作进程中安装 requirements-vision.txt"
                 ) from error
             options = ort.SessionOptions()
-            options.intra_op_num_threads = max(1, int(os.getenv("VISION_CPU_THREADS", "1")))
+            options.intra_op_num_threads = cpu_threads
             options.inter_op_num_threads = 1
             options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
@@ -126,6 +127,7 @@ class OnnxDetector:
                 raise VisionConfigurationError(f"ONNX 模型加载失败：{error}") from error
 
         self.session = session
+        self.cpu_threads = cpu_threads
         self.model_path = str(model_path or "injected-session")
         self.model_id = model_id or os.getenv("VISION_MODEL_ID", "visdrone-rtdetrv4-s")
         self.model_version = model_version or os.getenv("VISION_MODEL_REVISION", "unspecified")

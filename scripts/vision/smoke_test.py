@@ -95,6 +95,7 @@ def main() -> int:
         "model_revision": detector.model_version,
         "model_sha256": _sha256(args.model),
         "model_manifest_sha256": model_manifest_sha256,
+        "cpu_threads": detector.cpu_threads,
         "confidence_threshold": detector.confidence_threshold,
         "execution_provider": "CPUExecutionProvider",
         "sample_count": len(images),
