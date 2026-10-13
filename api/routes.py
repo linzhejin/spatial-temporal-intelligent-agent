@@ -2253,7 +2253,7 @@ def create_road_condition():
     action = body.get("action")
     affected_modes = body.get("affected_modes")
     cost_multiplier = body.get("cost_multiplier")
-    blocked_modes = body.get("blocked_modes", list(TRAVEL_MODE_KEYS))
+    blocked_modes = body.get("blocked_modes")
 
     if not cond_type or not name or lng is None or lat is None:
         return _err("missing_fields", "type, name, lng, lat 必填", 400)
@@ -2377,6 +2377,26 @@ def create_road_condition():
             "发布影像路况时必须明确选择提示、缓行或封路，并指定受影响的出行方式。",
             400,
         )
+
+    if action is None:
+        if "blocked_modes" not in body:
+            return _err(
+                "route_effect_required",
+                "请明确选择路线影响及受影响的出行方式；不能默认封闭所有方式。",
+                400,
+            )
+        if (not isinstance(blocked_modes, list) or not blocked_modes
+                or len(blocked_modes) > len(TRAVEL_MODE_KEYS)
+                or any(not isinstance(mode, str) or mode not in TRAVEL_MODE_KEYS
+                       for mode in blocked_modes)
+                or len(set(blocked_modes)) != len(blocked_modes)):
+            return _err("invalid_modes", "请至少选择一种有效且不重复的禁行方式。", 400)
+    elif (not isinstance(affected_modes, list) or not affected_modes
+            or len(affected_modes) > len(TRAVEL_MODE_KEYS)
+            or any(not isinstance(mode, str) or mode not in TRAVEL_MODE_KEYS
+                   for mode in affected_modes)
+            or len(set(affected_modes)) != len(affected_modes)):
+        return _err("invalid_modes", "请至少选择一种有效且不重复的受影响出行方式。", 400)
 
     try:
         lng_f, lat_f = float(lng), float(lat)

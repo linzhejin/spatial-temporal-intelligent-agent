@@ -1061,7 +1061,7 @@ class TestRoadConditionAPI:
         gj = _mid_12_gcj(G)
         r = client.post("/api/road-conditions", json={
             "type": "closure", "name": "接口封闭测试",
-            "lng": gj[0], "lat": gj[1],
+            "lng": gj[0], "lat": gj[1], "blocked_modes": ["walk", "bike", "drive"],
         }, headers={"X-Admin-Token": "test-token-xyz"})
         assert r.status_code == 201
         cond = r.get_json()["data"]["condition"]
@@ -1069,6 +1069,17 @@ class TestRoadConditionAPI:
         assert "radius_m" not in cond
         assert cond["created_by"] == "token"
         assert set(cond["blocked_modes"]) == {"walk", "bike", "drive"}
+
+    def test_post_requires_explicit_route_effect(self, client, G):
+        gj = _mid_12_gcj(G)
+        response = client.post("/api/road-conditions", json={
+            "type": "event", "name": "缺少路线影响设置",
+            "lng": gj[0], "lat": gj[1],
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "route_effect_required"
+        assert rc.list_conditions() == []
 
     def test_post_persists_explicit_modes_that_manager_confirms_are_blocked(self, client, G):
         gj = _mid_12_gcj(G)
@@ -1079,6 +1090,25 @@ class TestRoadConditionAPI:
 
         assert response.status_code == 201
         assert response.get_json()["data"]["condition"]["blocked_modes"] == ["walk"]
+
+    def test_post_persists_action_and_only_selected_travel_modes(self, client, G):
+        gj = _mid_12_gcj(G)
+        response = client.post("/api/road-conditions", json={
+            "type": "event", "name": "仅步行缓行",
+            "lng": gj[0], "lat": gj[1],
+            "action": "slowdown", "affected_modes": ["walk"],
+            "cost_multiplier": 1.7,
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+
+        assert response.status_code == 201
+        condition = response.get_json()["data"]["condition"]
+        assert condition["action"] == "slowdown"
+        assert condition["affected_modes"] == ["walk"]
+        assert condition["cost_multiplier"] == 1.7
+        assert "blocked_modes" not in condition
+        public = client.get("/api/road-conditions").get_json()["data"]["conditions"][0]
+        assert public["action"] == "slowdown"
+        assert public["affected_modes"] == ["walk"]
 
     def test_confirmed_vision_requires_field_evidence_before_road_publication(self, client, G, monkeypatch):
         import api.routes as routes
@@ -1498,7 +1528,7 @@ class TestRoadConditionAPI:
     def test_post_too_far(self, client):
         r = client.post("/api/road-conditions", json={
             "type": "closure", "name": "湖里",
-            "lng": 114.380, "lat": 30.545,  # 东湖里，远离路网
+            "lng": 114.380, "lat": 30.545, "blocked_modes": ["walk"],  # 东湖里，远离路网
         }, headers={"X-Admin-Token": "test-token-xyz"})
         assert r.status_code == 400
         assert r.get_json()["error"] == "too_far_from_road"
@@ -1517,7 +1547,7 @@ class TestRoadConditionAPI:
         gj = _mid_12_gcj(G)
         cid = client.post("/api/road-conditions", json={
             "type": "accident", "name": "session事故",
-            "lng": gj[0], "lat": gj[1],
+            "lng": gj[0], "lat": gj[1], "blocked_modes": ["walk", "bike", "drive"],
         }, headers=headers).get_json()["data"]["condition"]["id"]
         # 立即结束
         r = client.patch(f"/api/road-conditions/{cid}", json={"action": "end"}, headers=headers)
@@ -1535,6 +1565,7 @@ class TestRoadConditionAPI:
         created = client.post("/api/road-conditions", json={
             "type": "closure", "name": "时间窗校验",
             "lng": gj[0], "lat": gj[1],
+            "blocked_modes": ["walk", "bike", "drive"],
             "start_time": 2000000000, "end_time": 2000003600,
         }, headers={"X-Admin-Token": "test-token-xyz"})
         assert created.status_code == 201
@@ -1559,6 +1590,7 @@ class TestRoadConditionAPI:
         client.post("/api/road-conditions", json={
             "type": "flooding", "name": "公开视图积水",
             "lng": gj[0], "lat": gj[1],
+            "action": "notice", "affected_modes": ["walk"],
         }, headers={"X-Admin-Token": "test-token-xyz"})
         data = client.get("/api/road-conditions").get_json()["data"]
         assert data["count"] == 1

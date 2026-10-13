@@ -82,6 +82,10 @@ function harness(storage = new Map()) {
             refreshPage: refreshPage,
             setTravelMode: setTravelMode,
             checkRoadConditionVersion: checkRouteConditionVersion,
+            loadRoadConditions: loadAndRenderRoadConditions,
+            submitRoadReport: handleRoadReportSubmit,
+            roadConditionEffect: getRoadConditionModeEffect,
+            roadConditionEffectLabel: describeRoadConditionModeEffect,
             setApi: function (fn) {
                 submitQueuedMessage = function (query, body, bubble, epoch) {
                     var payload = Object.assign({ query: query }, body || {});
@@ -1134,6 +1138,88 @@ test('resumed clarification continuation appends its result after the latest use
     assert.deepEqual(Array.from(h.state.conversationHistory, message => message.content), [
         '带我去图书馆', '从哪里出发？', '从樱顶出发', 'continued-route',
     ]);
+});
+
+test('road-condition popup follows the published action and affected travel modes', () => {
+    const h = harness();
+    const notice = { type: 'closure', action: 'notice', affected_modes: ['walk'] };
+    const slowdown = { type: 'event', action: 'slowdown', affected_modes: ['walk'], cost_multiplier: 1.7 };
+    const closure = { type: 'event', action: 'closure', affected_modes: ['bike'] };
+    const incomplete = { type: 'event', action: 'closure' };
+    const unsupported = { type: 'event', action: 'detour', affected_modes: ['walk'] };
+
+    assert.equal(h.roadConditionEffect(notice, 'walk').status, 'notice');
+    assert.equal(h.roadConditionEffect(notice, 'drive').status, 'unaffected');
+    assert.equal(h.roadConditionEffect(slowdown, 'walk').costMultiplier, 1.7);
+    assert.equal(h.roadConditionEffect(slowdown, 'drive').status, 'unaffected');
+    assert.equal(h.roadConditionEffect(closure, 'bike').status, 'blocked');
+    assert.equal(h.roadConditionEffect(incomplete, 'drive').status, 'unknown');
+    assert.equal(h.roadConditionEffect(unsupported, 'drive').status, 'unknown');
+    assert.match(h.roadConditionEffectLabel(notice, 'walk', '步行'), /仅提示，不改变路线/);
+    assert.match(h.roadConditionEffectLabel(slowdown, 'walk', '步行'), /规划成本约 ×1\.7/);
+    assert.match(h.roadConditionEffectLabel(closure, 'bike', '骑行'), /禁止通行，路线会绕行/);
+});
+
+test('road-condition legend follows the published action and affected travel modes', async () => {
+    const h = harness();
+    h.state.map = {};
+    h.state.travelMode = 'walk';
+    h.setRawApi(async () => ({ conditions: [{
+        type: 'closure', action: 'notice', affected_modes: ['walk'],
+    }] }));
+
+    h.loadRoadConditions(false);
+    await Promise.resolve();
+
+    assert.equal(h.context.document.getElementById('legend-closure-item').hidden, true);
+    assert.equal(h.context.document.getElementById('legend-slow-item').hidden, true);
+});
+
+test('road report submits a deliberate action and only the selected travel modes', async () => {
+    const h = harness();
+    const get = id => h.context.document.getElementById(id);
+    h.state._pickedLng = 114.36;
+    h.state._pickedLat = 30.53;
+    get('rr-type').value = 'event';
+    get('rr-action').value = 'slowdown';
+    get('rr-mode-walk').checked = true;
+    get('rr-name').value = '步行缓行';
+    get('rr-desc').value = '';
+    get('rr-start-time').value = '';
+    get('rr-end-time').value = '';
+    get('rr-cost-multiplier').value = '1.7';
+    const sent = [];
+    h.setRawApi(async (url, body) => {
+        sent.push({ url, body });
+        throw new Error('测试中止响应，保留表单');
+    });
+
+    await h.submitRoadReport({ preventDefault() {} });
+
+    assert.equal(sent[0].url, '/api/road-conditions');
+    assert.equal(sent[0].body.action, 'slowdown');
+    assert.deepEqual(Array.from(sent[0].body.affected_modes), ['walk']);
+    assert.equal(sent[0].body.cost_multiplier, 1.7);
+    assert.equal(Object.hasOwn(sent[0].body, 'blocked_modes'), false);
+});
+
+test('road report refuses to publish before the route effect and mode are selected', async () => {
+    const h = harness();
+    const get = id => h.context.document.getElementById(id);
+    h.state._pickedLng = 114.36;
+    h.state._pickedLat = 30.53;
+    get('rr-name').value = '未选影响';
+    get('rr-type').value = 'event';
+    get('rr-desc').value = '';
+    get('rr-start-time').value = '';
+    get('rr-end-time').value = '';
+    let requestCount = 0;
+    h.setRawApi(async () => { requestCount += 1; return {}; });
+
+    await h.submitRoadReport({ preventDefault() {} });
+
+    assert.equal(requestCount, 0);
+    assert.match(get('road-report-hint').textContent, /明确选择仅提示、缓行或封路/);
 });
 
 test('new road conditions prompt a context-preserving route refresh', async () => {

@@ -1795,8 +1795,7 @@
         flooding:    { icon: '🌊', color: '#2980B9', label: '积水', dash: '7 5' },
         accident:    { icon: '⚠️', color: '#F39C12', label: '事故', dash: '12 7' },
     };
-    // 与后端 spatial/road_conditions.py 的 CONDITION_EFFECTS 保持一致：
-    // 'block' = 当前出行模式禁行（画实线，路线绕行）；数字 = 缓行成本倍数（画虚线，仍可通行）
+    // 仅供旧版事件记录兼容；新记录必须使用 action + affected_modes。
     var CONDITION_MODE_EFFECTS = {
         closure:      { walk: 'block', bike: 'block', drive: 'block' },
         construction: { walk: 1.5,     bike: 'block', drive: 'block' },
@@ -1805,6 +1804,51 @@
         event:        { walk: 1.2,     bike: 1.2,     drive: 'block' },
     };
     var COND_STATUS_LABELS = { active: '生效中', scheduled: '未开始', expired: '已结束' };
+
+    function getRoadConditionModeEffect(cond, mode) {
+        if (cond && cond.action) {
+            var affected = Array.isArray(cond.affected_modes) ? cond.affected_modes : [];
+            if (!['notice', 'slowdown', 'closure'].includes(cond.action)
+                    || !affected.length
+                    || affected.some(function (item) { return !['walk', 'bike', 'drive'].includes(item); })) {
+                return { status: 'unknown' };
+            }
+            if (!affected.includes(mode)) return { status: 'unaffected' };
+            if (cond.action === 'closure') return { status: 'blocked' };
+            if (cond.action === 'slowdown') {
+                var multiplier = Number(cond.cost_multiplier);
+                return Number.isFinite(multiplier) && multiplier >= 1
+                    ? { status: 'slowdown', costMultiplier: multiplier }
+                    : { status: 'unknown' };
+            }
+            if (cond.action === 'notice') return { status: 'notice' };
+            return { status: 'unknown' };
+        }
+        if (cond && Array.isArray(cond.blocked_modes)) {
+            if (!cond.blocked_modes.length
+                    || cond.blocked_modes.some(function (item) { return !['walk', 'bike', 'drive'].includes(item); })) {
+                return { status: 'unknown' };
+            }
+            return { status: cond.blocked_modes.includes(mode) ? 'blocked' : 'unaffected' };
+        }
+        var legacyEffect = (CONDITION_MODE_EFFECTS[(cond || {}).type] || {})[mode];
+        if (legacyEffect === 'block') return { status: 'blocked' };
+        if (typeof legacyEffect === 'number') {
+            return { status: 'slowdown', costMultiplier: legacyEffect };
+        }
+        return { status: 'unknown' };
+    }
+
+    function describeRoadConditionModeEffect(cond, mode, modeName) {
+        var effect = getRoadConditionModeEffect(cond, mode);
+        if (effect.status === 'blocked') return '当前方式（' + modeName + '）禁止通行，路线会绕行';
+        if (effect.status === 'slowdown') {
+            return '当前方式（' + modeName + '）可通行，规划成本约 ×' + effect.costMultiplier;
+        }
+        if (effect.status === 'notice') return '当前方式（' + modeName + '）仅提示，不改变路线';
+        if (effect.status === 'unaffected') return '当前方式（' + modeName + '）不受此事件影响';
+        return '当前方式的路线影响未配置，请联系管理员核对';
+    }
 
     // 清除路况标记（线段 + 胶囊）
     function clearRoadConditionMarkers() {
@@ -1826,8 +1870,9 @@
             conditions.forEach(function (cond) {
                 var active = !includeAll || !cond.status || cond.status === 'active';
                 if (active) {
-                    var eff = (CONDITION_MODE_EFFECTS[cond.type] || {})[state.travelMode];
-                    if (eff === 'block') hasClosure = true; else if (eff) hasSlow = true;
+                    var effect = getRoadConditionModeEffect(cond, state.travelMode);
+                    if (effect.status === 'blocked') hasClosure = true;
+                    else if (effect.status === 'slowdown') hasSlow = true;
                 }
                 try {
                     renderRoadCondition(cond, !!includeAll);
@@ -1913,9 +1958,9 @@
         var latlng = gcjToLatLng(anchor.lng, anchor.lat);
         var layers = [];
 
-        // 沿真实路段画高亮线：当前模式禁行画实线，可通行但缓行画虚线
-        var modeEffect = (CONDITION_MODE_EFFECTS[cond.type] || {})[state.travelMode];
-        var hardClosed = modeEffect === 'block';
+        // 沿真实路段画高亮线：当前模式禁行画实线，其余影响画虚线区分
+        var modeEffect = getRoadConditionModeEffect(cond, state.travelMode);
+        var hardClosed = modeEffect.status === 'blocked';
         var geom = edge.geometry_gcj || [];
         if (geom.length >= 2) {
             var lineLatLngs = geom.map(function (p) { return gcjToLatLng(p[0], p[1]); });
@@ -1971,11 +2016,8 @@
                     + Math.round(edge.chain_length_m) + ' 米（两端路口之间整段）</div>');
             }
             if (!inactive) {
-                var eff = (CONDITION_MODE_EFFECTS[cond.type] || {})[state.travelMode];
                 var modeName = (TRAVEL_MODES[state.travelMode] || {}).label || state.travelMode;
-                var effText = eff === 'block'
-                    ? '🚷 当前方式（' + modeName + '）<b>禁止通行</b>，路线将自动绕行'
-                    : ('🚶 当前方式（' + modeName + '）<b>可缓行通过</b>，通过成本约 ×' + eff);
+                var effText = '🚦 ' + escapeHTML(describeRoadConditionModeEffect(cond, state.travelMode, modeName));
                 rows.push('<div style="font-size:12px;color:' + color + ';">' + effText + '</div>');
             }
             var start = cond.start_time || 0, end = cond.end_time || 0;
@@ -2139,6 +2181,7 @@
         clearPickState();
         var form = document.getElementById('road-report-form');
         if (form) form.reset();
+        syncRoadReportActionFields();
         var loc = document.getElementById('rr-location');
         if (loc) loc.value = '';
     }
@@ -2235,8 +2278,21 @@
         _pickHandler = function (e) {
             var gcjLng = e.latlng.lng, gcjLat = e.latlng.lat;
             showPickBanner('⏳ 正在吸附到道路…');
-            apiRequest('/api/road-conditions/snap?lng=' + encodeURIComponent(gcjLng)
-                + '&lat=' + encodeURIComponent(gcjLat), null, 'GET')
+            var snapQuery = 'lng=' + encodeURIComponent(gcjLng)
+                + '&lat=' + encodeURIComponent(gcjLat);
+            var reportAction = document.getElementById('rr-action');
+            var reportType = document.getElementById('rr-type');
+            var reportModes = getSelectedRoadReportModes();
+            if (reportAction && reportAction.value && reportModes.length && reportType) {
+                snapQuery += '&type=' + encodeURIComponent(reportType.value)
+                    + '&action=' + encodeURIComponent(reportAction.value)
+                    + '&modes=' + encodeURIComponent(reportModes.join(','));
+                if (reportAction.value === 'slowdown') {
+                    var reportCost = document.getElementById('rr-cost-multiplier');
+                    if (reportCost) snapQuery += '&cost_multiplier=' + encodeURIComponent(reportCost.value);
+                }
+            }
+            apiRequest('/api/road-conditions/snap?' + snapQuery, null, 'GET')
                 .then(function (data) {
                     var snap = data && data.snap;
                     if (!snap) {
@@ -2274,7 +2330,7 @@
                         hint.textContent = '✅ 已吸附到「' + (snap.road_name || '未命名道路')
                             + '」，偏移 ' + (snap.dist_m != null ? snap.dist_m : '?') + ' 米'
                             + (snap.chain_length_m
-                                ? '，管制将覆盖两端路口间整段约 ' + Math.round(snap.chain_length_m) + ' 米'
+                                ? '，关联路段约 ' + Math.round(snap.chain_length_m) + ' 米'
                                 : '');
                     }
                 })
@@ -2296,6 +2352,9 @@
     function handleRoadReportSubmit(e) {
         e.preventDefault();
         var type = document.getElementById('rr-type').value;
+        var actionEl = document.getElementById('rr-action');
+        var action = actionEl ? actionEl.value : '';
+        var affectedModes = getSelectedRoadReportModes();
         var name = document.getElementById('rr-name').value.trim();
         var descEl = document.getElementById('rr-desc');
         var desc = descEl ? descEl.value.trim() : '';
@@ -2312,6 +2371,24 @@
             if (hint) hint.textContent = '请填写事件名称';
             return;
         }
+        if (!action) {
+            if (hint) hint.textContent = '请明确选择仅提示、缓行或封路';
+            return;
+        }
+        if (!affectedModes.length) {
+            if (hint) hint.textContent = '请至少选择一种受影响的出行方式';
+            return;
+        }
+
+        var costMultiplier = null;
+        if (action === 'slowdown') {
+            var costEl = document.getElementById('rr-cost-multiplier');
+            costMultiplier = costEl ? Number(costEl.value) : NaN;
+            if (!Number.isFinite(costMultiplier) || costMultiplier < 1 || costMultiplier > 5) {
+                if (hint) hint.textContent = '缓行成本倍数需在 1 到 5 之间';
+                return;
+            }
+        }
 
         var startTime = document.getElementById('rr-start-time').value;
         var endTime = document.getElementById('rr-end-time').value;
@@ -2323,12 +2400,21 @@
         var submitBtn = document.getElementById('rr-submit-btn');
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = '提交中…'; }
 
-        var payload = { type: type, name: name, lng: lng, lat: lat, description: desc };
+        var payload = {
+            type: type, action: action, affected_modes: affectedModes,
+            name: name, lng: lng, lat: lat, description: desc,
+        };
+        if (action === 'slowdown') payload.cost_multiplier = costMultiplier;
         if (startTime) payload.start_time = startTime;
         if (endTime) payload.end_time = endTime;
 
         apiRequest('/api/road-conditions', payload).then(function () {
-            if (hint) { hint.style.color = '#27AE60'; hint.textContent = '✅ 上报成功！路线将自动绕行。'; }
+            var actionSummary = action === 'closure' ? '封路并绕行'
+                : action === 'slowdown' ? '允许通行并增加规划成本' : '发布提示，不改变路线';
+            if (hint) {
+                hint.style.color = '#27AE60';
+                hint.textContent = '✅ 已发布：' + actionSummary + '；仅作用于所选出行方式。';
+            }
             clearPickState();
             loadAndRenderRoadConditions(true);  // 保持管理员视图刷新
             setTimeout(function () {
@@ -2342,6 +2428,22 @@
             }
             if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = '提交'; }
         });
+    }
+
+    function getSelectedRoadReportModes() {
+        return ['walk', 'bike', 'drive'].filter(function (mode) {
+            var input = document.getElementById('rr-mode-' + mode);
+            return !!(input && input.checked);
+        });
+    }
+
+    function syncRoadReportActionFields() {
+        var action = document.getElementById('rr-action');
+        var costWrap = document.getElementById('rr-cost-wrap');
+        var costInput = document.getElementById('rr-cost-multiplier');
+        var usesCost = !!(action && action.value === 'slowdown');
+        if (costWrap) costWrap.hidden = !usesCost;
+        if (costInput) costInput.required = usesCost;
     }
 
     // ===================== 实时导航（高德同款沉浸态） =====================
@@ -4522,6 +4624,9 @@
         if (rrLogout) rrLogout.addEventListener('click', adminLogout);
         var rrPick = document.getElementById('rr-pick-btn');
         if (rrPick) rrPick.addEventListener('click', startPickLocation);
+        var rrAction = document.getElementById('rr-action');
+        if (rrAction) rrAction.addEventListener('change', syncRoadReportActionFields);
+        syncRoadReportActionFields();
         var rrForm = document.getElementById('road-report-form');
         if (rrForm) rrForm.addEventListener('submit', handleRoadReportSubmit);
 

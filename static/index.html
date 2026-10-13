@@ -24,7 +24,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261013-roadcondition1">
+    <link rel="stylesheet" href="/css/style.css?v=20261014-roadconditioneffects1">
 </head>
 <body>
 
@@ -379,7 +379,7 @@
     <section class="road-report-section" id="road-report-section" hidden>
         <div class="road-report-card">
             <h3>🚧 上报路况</h3>
-            <p class="road-report-desc">校内施工/活动/管制等动态路况，提交后路线自动绕行。</p>
+            <p class="road-report-desc">选择具体影响后再发布；提示不改路线，缓行会增加规划成本，封路会绕行。</p>
             <form id="road-report-form">
                 <label>
                     <span>事件类型</span>
@@ -399,6 +399,28 @@
                     <span>补充说明（选填）</span>
                     <input type="text" id="rr-desc" placeholder="如：围挡占满整幅路面" maxlength="60">
                 </label>
+                <fieldset class="rr-impact-settings">
+                    <legend>路线影响（必选）</legend>
+                    <label>
+                        <span>处理方式</span>
+                        <select id="rr-action" required>
+                            <option value="">请选择提示、缓行或封路</option>
+                            <option value="notice">仅发布提示，不改变路线</option>
+                            <option value="slowdown">允许通行，增加路线成本</option>
+                            <option value="closure">禁止通行，路线绕行</option>
+                        </select>
+                    </label>
+                    <label id="rr-cost-wrap" hidden>
+                        <span>缓行成本倍数（1–5）</span>
+                        <input type="number" id="rr-cost-multiplier" min="1" max="5" step="0.1" value="1.5">
+                    </label>
+                    <span class="rr-mode-title">受影响的出行方式（至少选一种）</span>
+                    <div class="rr-mode-options">
+                        <label class="rr-mode-choice"><input type="checkbox" id="rr-mode-walk" value="walk">步行</label>
+                        <label class="rr-mode-choice"><input type="checkbox" id="rr-mode-bike" value="bike">骑行</label>
+                        <label class="rr-mode-choice"><input type="checkbox" id="rr-mode-drive" value="drive">驾车</label>
+                    </div>
+                </fieldset>
                 <div class="rr-time-row">
                     <label class="rr-time-item">
                         <span>生效开始（选填）</span>
@@ -555,6 +577,6 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261014-roadconditionrefresh1"></script>
+    <script src="/js/app.js?v=20261014-roadconditioneffects1"></script>
 </body>
 </html>

@@ -35,6 +35,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         cls.server_thread = threading.Thread(target=cls.server.serve_forever, daemon=True)
         cls.server_thread.start()
         cls.url = f"http://127.0.0.1:{cls.server.server_port}/manager.html"
+        cls.app_url = f"http://127.0.0.1:{cls.server.server_port}/index.html"
         cls.runtime = sync_playwright().start()
         cls.browser = cls.runtime.chromium.launch()
         cls.qa_dir = Path(tempfile.mkdtemp(prefix="manager-event-qa-"))
@@ -121,6 +122,33 @@ class ManagerEventControlsTest(unittest.TestCase):
     def open_manager(self):
         self.page.goto(self.url, wait_until="networkidle")
         expect(self.page.locator("#workspace")).to_be_visible()
+
+    def test_legacy_road_report_requires_selected_effect_before_publishing(self):
+        self.page.add_init_script("try { localStorage.setItem('whu_welcome_seen', 'true'); } catch (_) {}")
+        self.page.goto(self.app_url, wait_until="domcontentloaded")
+        expect(self.page.locator(".leaflet-container")).to_be_visible(timeout=10000)
+
+        self.page.locator("#road-report-btn").click()
+        expect(self.page.locator("#road-report-section")).to_be_visible()
+        self.page.locator("#rr-name").fill("浏览器验收封路")
+        self.page.locator("#rr-action").select_option("closure")
+        self.page.locator("#rr-pick-btn").click()
+        self.page.locator("#map-container").click(position={"x": 260, "y": 260})
+        expect(self.page.locator("#rr-location")).to_have_value(
+            "测试路（吸附偏移 2 米）", timeout=5000,
+        )
+
+        self.page.locator("#rr-submit-btn").click()
+        expect(self.page.locator("#road-report-hint")).to_contain_text("至少选择一种受影响的出行方式")
+        self.assertEqual(self.posts, [], "an event without an affected travel mode must not publish")
+
+        self.page.locator("#rr-mode-walk").check()
+        self.page.locator("#rr-submit-btn").click()
+        expect(self.page.locator("#road-report-hint")).to_contain_text("已发布：封路并绕行")
+        self.assertEqual(len(self.posts), 1)
+        self.assertEqual(self.posts[0]["action"], "closure")
+        self.assertEqual(self.posts[0]["affected_modes"], ["walk"])
+        self.assertFalse(self.errors, "the public route-report flow must not raise browser errors")
 
     def test_video_detection_overlays_follow_source_and_evidence_time(self):
         job_id = "12345678-1234-4234-8234-123456789abc"

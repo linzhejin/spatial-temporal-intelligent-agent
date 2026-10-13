@@ -1726,6 +1726,51 @@ body.is-planning-mode .desktop-route-workbench {
 #road-report-form input:focus {
     border-color: var(--cherry);
 }
+.rr-impact-settings {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin: 0;
+    padding: 12px;
+    border: 1px solid var(--stone);
+    border-radius: 12px;
+    background: var(--surface);
+}
+.rr-impact-settings legend {
+    padding: 0 5px;
+    color: var(--ink);
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+.rr-mode-title {
+    color: var(--ink-soft);
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.rr-mode-options {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+}
+#road-report-form .rr-mode-choice {
+    display: inline-flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 6px;
+    padding: 7px 10px;
+    border: 1px solid var(--stone);
+    border-radius: 999px;
+    background: var(--surface);
+    cursor: pointer;
+}
+#road-report-form .rr-mode-choice input {
+    width: auto;
+    margin: 0;
+    accent-color: var(--cherry);
+}
+#rr-cost-wrap[hidden] {
+    display: none;
+}
 .rr-time-row {
     display: flex;
     gap: 10px;
