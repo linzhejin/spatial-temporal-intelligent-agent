@@ -12,9 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-import cv2
+import cv2  # noqa: E402
 
-from vision.engine import OnnxDetector, analyze_media
+from scripts.vision.evaluate_visdrone import _load_model_manifest, _sha256  # noqa: E402
+from vision.engine import OnnxDetector, analyze_media  # noqa: E402
 
 
 def main() -> int:
@@ -25,6 +26,8 @@ def main() -> int:
     parser.add_argument("--confidence", type=float, default=0.369)
     parser.add_argument("--video", type=Path,
                         help="optional public video sample for end-to-end sequence and motion-compensation smoke")
+    parser.add_argument("--output", type=Path,
+                        help="optional path for a UTF-8 JSON report")
     args = parser.parse_args()
     images = sorted(
         path for path in args.images.iterdir()
@@ -35,7 +38,12 @@ def main() -> int:
     if args.render_dir:
         args.render_dir.mkdir(parents=True, exist_ok=True)
 
-    detector = OnnxDetector(str(args.model), confidence_threshold=args.confidence)
+    model_manifest, model_manifest_sha256 = _load_model_manifest(args.model)
+    detector = OnnxDetector(
+        str(args.model), confidence_threshold=args.confidence,
+        model_id=model_manifest.get("model_id", "visdrone-rtdetrv4-s"),
+        model_version=model_manifest.get("model_revision", "unspecified"),
+    )
     rows = []
     total_started = time.monotonic()
     for path in images:
@@ -78,10 +86,13 @@ def main() -> int:
             "metrics": video_result["metrics"],
             "candidate_kinds": [item["kind"] for item in video_result["candidates"]],
             "safety": video_result["safety"],
+            "video_coverage": video_result.get("video_coverage"),
         }
     report = {
         "model": detector.model_id,
         "model_revision": detector.model_version,
+        "model_sha256": _sha256(args.model),
+        "model_manifest_sha256": model_manifest_sha256,
         "confidence_threshold": detector.confidence_threshold,
         "execution_provider": "CPUExecutionProvider",
         "sample_count": len(images),
@@ -91,7 +102,11 @@ def main() -> int:
         "video_sequence_smoke": video_report,
         "evaluation_note": "功能与推理冒烟检查；样本目录若无标注，不计算精确率、召回率或 mAP。",
     }
-    print(json.dumps(report, ensure_ascii=False, indent=2))
+    report_text = json.dumps(report, ensure_ascii=False, indent=2)
+    if args.output:
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(report_text + "\n", encoding="utf-8")
+    print(report_text)
     return 0 if len(successful) == len(images) else 1
 
 
