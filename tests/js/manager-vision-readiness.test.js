@@ -27,6 +27,8 @@ function managerHarness(sessionSeed = []) {
   let videoChunkResponseDrops = true;
   const videoChunkSizes = [];
   let visionJobs = [];
+  const visionPreviewFrames = new Map();
+  let visionPreviewFailures = 0;
   let visionScenes = [];
   let roadEvents = [];
   const calls = [];
@@ -185,6 +187,16 @@ function managerHarness(sessionSeed = []) {
         visionJobs = visionJobs.filter((job) => job.job_id !== jobId);
         return { ok: true, json: async () => ({ data: { message: 'deleted' } }) };
       }
+      if (url.match(/^\/api\/manager\/vision-jobs\/[^/]+\/preview-frames$/)) {
+        const jobId = decodeURIComponent(url.split('/')[4] || '');
+        if (visionPreviewFailures > 0) {
+          visionPreviewFailures -= 1;
+          return { ok: false, status: 503, json: async () => ({ message: '标注读取失败' }) };
+        }
+        return { ok: true, json: async () => ({ data: visionPreviewFrames.get(jobId) || {
+          media: {}, preview_frame_interval_seconds: 1, preview_frames: [],
+        } }) };
+      }
       if (url.startsWith('/api/road-conditions/') && options.method === 'DELETE') {
         const conditionId = decodeURIComponent(url.split('/').pop() || '');
         roadEvents = roadEvents.filter((event) => event.id !== conditionId);
@@ -225,6 +237,8 @@ function managerHarness(sessionSeed = []) {
     setInferenceReady: (value) => { inferenceReady = value; },
     setOptionalModelStatus: (value) => { optionalModelStatus = value; },
     setVisionJobs: (items) => { visionJobs = items; },
+    setVisionPreviewFrames: (jobId, value) => { visionPreviewFrames.set(jobId, value); },
+    failVisionPreviewRequests: (count) => { visionPreviewFailures = count; },
     setVisionScenes: (items) => { visionScenes = items; },
     setRoadEvents: (items) => { roadEvents = items; },
     setVisionPublicationAlreadyExists: (value) => { visionPublicationAlreadyExists = value; },
@@ -263,8 +277,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261013-visionroute1/);
-  assert.match(managerHtml, /manager\.js\?v=20261013-visionfeedback1/);
+  assert.match(managerHtml, /manager\.css\?v=20261013-videooverlay1/);
+  assert.match(managerHtml, /manager\.js\?v=20261013-videooverlay1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1505,6 +1519,134 @@ test('video candidate cards play their bounded manager-only evidence clip', asyn
   assert.equal(evidenceVideo.controls, true);
   assert.equal(evidenceVideo.preload, 'metadata');
   assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /证据片段/);
+});
+
+test('video previews and evidence clips synchronize manager-only detection overlays', async () => {
+  const harness = managerHarness();
+  await flush();
+  const jobId = '12345678-1234-4234-8234-123456789abc';
+  const previewData = {
+    media: { width: 1000, height: 800 }, preview_frame_interval_seconds: 1,
+    preview_frames: [
+      { time_seconds: 0, detections: [{ box: [0.1, 0.2, 0.4, 0.5], label: 'car', confidence: 0.91, track_id: '7' }] },
+      { time_seconds: 11, detections: [{ box: [0.2, 0.25, 0.5, 0.55], label: 'pedestrian', confidence: 0.82, track_id: '9' }] },
+    ],
+  };
+  harness.setVisionPreviewFrames(jobId, previewData);
+  harness.setVisionJobs([{
+    job_id: jobId, status: 'needs_review', media_kind: 'video',
+    original_name: '巡查视频.mp4', media_url: '/private/original',
+    result: { candidates: [{
+        kind: 'possible_congestion', confidence: 0.74,
+        evidence: {
+          segments: [{ start_seconds: 10, end_seconds: 12 }],
+          clips: [{ media_url: '/api/manager/vision-jobs/12345678-1234-4234-8234-123456789abc/media?clip=0:0', start_seconds: 10, end_seconds: 20 }],
+        },
+      }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const videos = descendants(card).filter((node) => node.tagName === 'video');
+  const mainVideo = videos.find((node) => node.src === '/private/original');
+  const evidenceVideo = videos.find((node) => node.src.endsWith('?clip=0:0'));
+  assert.ok(mainVideo);
+  assert.ok(evidenceVideo);
+  assert.equal(harness.calls.some((call) => call.url.endsWith('/preview-frames')), false,
+    'opening the task list must not download frame-level data');
+  mainVideo.listeners.seeking();
+  await flush();
+  const previewCalls = harness.calls.filter((call) => call.url.endsWith('/preview-frames'));
+  assert.equal(previewCalls.length, 1, 'opening a video should fetch overlays once for the job');
+  const mainOverlay = descendants(card).find((node) => node.attributes.class === 'video-detection-overlay');
+  assert.ok(mainOverlay);
+  assert.equal(mainOverlay.children.length, 2);
+  assert.match(mainOverlay.children[1].textContent, /#7/);
+
+  evidenceVideo.currentTime = 1;
+  evidenceVideo.listeners.timeupdate();
+  const overlays = descendants(card).filter((node) => node.attributes.class === 'video-detection-overlay');
+  assert.equal(overlays.length, 2);
+  assert.equal(overlays[1].children.length, 2);
+  assert.match(overlays[1].children[1].textContent, /#9/);
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /不是地面坐标/);
+});
+
+test('video overlay failures can be retried and empty preview data is explained', async () => {
+  const harness = managerHarness();
+  await flush();
+  const jobId = '12345678-1234-4234-8234-123456789abc';
+  harness.setVisionJobs([{
+    job_id: jobId, status: 'completed', media_kind: 'video', media_url: '/private/original',
+    result: { candidates: [] },
+  }]);
+  harness.failVisionPreviewRequests(1);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const video = descendants(card).find((node) => node.tagName === 'video');
+  video.listeners.seeking();
+  await flush();
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /再次播放或拖动视频可重试/);
+
+  video.listeners.seeking();
+  await flush();
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /没有保存可显示的抽样检测框/);
+  assert.equal(harness.calls.filter((call) => call.url.endsWith('/preview-frames')).length, 2);
+});
+
+test('manager polling preserves a playing video and applies deferred task updates after pause', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'video-poll', status: 'completed', media_kind: 'video', original_name: '原片.mp4',
+    media_url: '/private/original', result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const root = harness.elements.get('vision-jobs');
+  const firstCard = root.children[0];
+  const video = descendants(firstCard).find((node) => node.tagName === 'video');
+  video.listeners.play();
+  await flush();
+
+  harness.setVisionJobs([{
+    job_id: 'video-poll', status: 'completed', media_kind: 'video', original_name: '更新后.mp4',
+    media_url: '/private/original', result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  assert.equal(root.children[0], firstCard, 'polling must not destroy a video while it is playing');
+
+  video.listeners.pause();
+  await flush();
+  assert.notEqual(root.children[0], firstCard, 'apply the queued task update after playback pauses');
+  assert.match(descendants(root).map((node) => node.textContent || '').join(' '), /更新后\.mp4/);
+});
+
+test('logging out during video playback clears the polling lock for the next manager session', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'video-session', status: 'completed', media_kind: 'video', original_name: '旧会话.mp4',
+    media_url: '/private/original', result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const video = descendants(harness.elements.get('vision-jobs')).find((node) => node.tagName === 'video');
+  video.listeners.play();
+  harness.intervalCallbacks[0]();
+  await flush();
+  await harness.elements.get('logout').listeners.click();
+
+  harness.setVisionJobs([{
+    job_id: 'video-session', status: 'completed', media_kind: 'video', original_name: '新会话.mp4',
+    media_url: '/private/original', result: { candidates: [] },
+  }]);
+  await harness.elements.get('login-form').listeners.submit({ preventDefault() {} });
+  await flush();
+  assert.match(descendants(harness.elements.get('vision-jobs')).map((node) => node.textContent || '').join(' '), /新会话\.mp4/);
 });
 
 test('periodic updates preserve an unfinished vision review note and its focus', async () => {

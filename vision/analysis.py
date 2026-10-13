@@ -19,7 +19,9 @@ VEHICLE_LABELS = {
 }
 INCIDENT_LABELS = {"accident", "crash", "collision", "vehicle_accident", "overturned_vehicle"}
 PEDESTRIAN_LABELS = {"pedestrian", "person", "people"}
+PREVIEW_LABELS = VEHICLE_LABELS | PEDESTRIAN_LABELS | {"bicycle"}
 ROI_KINDS = {"vehicle_lane", "pedestrian", "road_surface", "parking", "exclude"}
+MAX_PREVIEW_DETECTIONS_PER_FRAME = 80
 
 
 def _validated_regions(regions, frame_width: int, frame_height: int) -> list[dict]:
@@ -400,6 +402,8 @@ def analyze_observations(
     min_crowding_cluster_size: int = 8,
     tracking_high_threshold: float = 0.369,
     tracking_low_threshold: float = 0.1,
+    include_preview_frames: bool = False,
+    preview_frame_interval_s: float = 1.0,
 ) -> dict:
     """Summarize detections and compensate vehicle motion for verified camera motion.
 
@@ -493,6 +497,50 @@ def analyze_observations(
         high_threshold=tracking_high_threshold,
         low_threshold=tracking_low_threshold,
     )
+    preview_frames = []
+    if include_preview_frames:
+        if (isinstance(preview_frame_interval_s, bool)
+                or not isinstance(preview_frame_interval_s, (int, float))
+                or not math.isfinite(float(preview_frame_interval_s))
+                or preview_frame_interval_s <= 0):
+            raise ValueError("preview frame interval must be finite and positive")
+        preview_stride = max(1, math.ceil(preview_frame_interval_s / sample_interval_s))
+        for frame_index in range(0, len(track_frames), preview_stride):
+            detections = []
+            for item in track_frames[frame_index]:
+                label = str(item.get("label", "")).strip().lower()
+                if label not in PREVIEW_LABELS or not _valid_detection(item):
+                    continue
+                x1, y1, x2, y2 = map(float, item["box"])
+                box = [
+                    round(max(0.0, min(1.0, x1 / frame_width)), 5),
+                    round(max(0.0, min(1.0, y1 / frame_height)), 5),
+                    round(max(0.0, min(1.0, x2 / frame_width)), 5),
+                    round(max(0.0, min(1.0, y2 / frame_height)), 5),
+                ]
+                if box[2] <= box[0] or box[3] <= box[1]:
+                    continue
+                try:
+                    confidence = float(item.get("confidence", 0.0))
+                except (TypeError, ValueError, OverflowError):
+                    continue
+                if not math.isfinite(confidence) or not 0 <= confidence <= 1:
+                    continue
+                detection = {
+                    "label": label,
+                    "box": box,
+                    "confidence": round(confidence, 4),
+                }
+                track_id = item.get("track_id")
+                if (isinstance(track_id, (int, str)) and not isinstance(track_id, bool)
+                        and str(track_id).strip()):
+                    detection["track_id"] = str(track_id)[:24]
+                detections.append(detection)
+            detections.sort(key=lambda item: item["confidence"], reverse=True)
+            preview_frames.append({
+                "frame_index": frame_index,
+                "detections": detections[:MAX_PREVIEW_DETECTIONS_PER_FRAME],
+            })
     vehicle_frames: list[list[dict]] = []
     pedestrian_counts: list[int] = []
     track_positions: dict[str, list[tuple[float, float, int]]] = defaultdict(list)
@@ -821,7 +869,7 @@ def analyze_observations(
         label: max((counts.get(label, 0) for counts in class_counts), default=0)
         for label in sorted(all_classes)
     }
-    return {
+    result = {
         "metrics": {
             "frames_analyzed": len(valid_frames),
             "observed_duration_seconds": round(observed_duration_s, 3),
@@ -865,3 +913,6 @@ def analyze_observations(
             "automatically_changes_routing": False,
         },
     }
+    if include_preview_frames:
+        result["preview_frames"] = preview_frames
+    return result

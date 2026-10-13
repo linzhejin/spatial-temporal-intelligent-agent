@@ -2594,9 +2594,15 @@ def _public_vision_job(job: dict) -> dict:
                if key not in {"media_path", "sha256", "checkpoint"}}
     if visible.get("job_id"):
         visible["media_url"] = f"/api/manager/vision-jobs/{visible['job_id']}/media"
-        result = visible.get("result")
-        if isinstance(result, dict):
-            result = json.loads(json.dumps(result))
+        stored_result = visible.get("result")
+        if isinstance(stored_result, dict):
+            # Frame-level overlays are fetched only when an administrator opens
+            # a video preview. Avoid copying or returning them in status responses.
+            result = {key: value for key, value in stored_result.items()
+                      if key not in {"preview_frames", "preview_frame_interval_seconds"}}
+            candidates = result.get("candidates")
+            if isinstance(candidates, list):
+                result["candidates"] = json.loads(json.dumps(candidates))
             visible["result"] = result
             candidates = result.get("candidates")
             if isinstance(candidates, list):
@@ -3376,6 +3382,70 @@ def manager_vision_job(job_id):
     if not job:
         return _err("job_not_found", "影像任务不存在。", 404)
     return _ok({"job": _public_vision_job(job)})
+
+
+@api_bp.route("/manager/vision-jobs/<job_id>/preview-frames", methods=["GET"])
+def manager_vision_preview_frames(job_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    try:
+        uuid.UUID(job_id)
+        from storage import database, vision_repository
+        database.initialize(current_app.config.get("DATABASE_URL"))
+        job = vision_repository.get_job(current_app.config.get("DATABASE_URL"), job_id)
+    except ValueError:
+        return _err("invalid_job_id", "影像任务标识无效。", 400)
+    except Exception:
+        logger.exception("读取视频抽样检测框失败")
+        return _err("vision_storage_unavailable", "视频检测框暂时无法读取，请稍后重试。", 503)
+    if not job:
+        return _err("job_not_found", "影像任务不存在。", 404)
+    if job.get("media_kind") != "video":
+        return _err("preview_frames_unavailable", "只有视频任务包含按时间抽样的检测框。", 409)
+    result = job.get("result") if isinstance(job.get("result"), dict) else {}
+    media = result.get("media") if isinstance(result.get("media"), dict) else {}
+    frames = result.get("preview_frames")
+    previews = []
+    for frame in frames[:180] if isinstance(frames, list) else []:
+        if not isinstance(frame, dict):
+            continue
+        when = frame.get("time_seconds")
+        detections = frame.get("detections")
+        if (isinstance(when, bool) or not isinstance(when, (int, float))
+                or not math.isfinite(float(when)) or not isinstance(detections, list)):
+            continue
+        previews.append({
+            "time_seconds": round(float(when), 3),
+            "detections": [
+                {
+                    "label": item["label"],
+                    "box": item["box"],
+                    "confidence": item["confidence"],
+                    **({"track_id": item["track_id"]} if item.get("track_id") is not None else {}),
+                }
+                for item in detections[:80]
+                if isinstance(item, dict)
+                and isinstance(item.get("label"), str)
+                and isinstance(item.get("box"), list) and len(item["box"]) == 4
+                and isinstance(item.get("confidence"), (int, float))
+                and not isinstance(item.get("confidence"), bool)
+                and all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                        and math.isfinite(float(value)) and 0 <= value <= 1
+                        for value in item["box"])
+                and math.isfinite(float(item["confidence"]))
+                and 0 <= item["confidence"] <= 1
+            ],
+        })
+    interval = result.get("preview_frame_interval_seconds", 1.0)
+    if (isinstance(interval, bool) or not isinstance(interval, (int, float))
+            or not math.isfinite(float(interval)) or interval <= 0):
+        interval = 1.0
+    return _ok({
+        "media": {"width": media.get("width"), "height": media.get("height")},
+        "preview_frame_interval_seconds": round(float(interval), 3),
+        "preview_frames": previews,
+    })
 
 
 @api_bp.route("/manager/vision-jobs/<job_id>/cancel", methods=["POST"])

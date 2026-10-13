@@ -4,6 +4,9 @@
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
   var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
+  var visionPreviewStates = new Map();
+  var playingVisionVideos = new Set();
+  var visionJobsRefreshDeferred = false;
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
   state.djiSubtitleStatusBase = '';
@@ -1014,6 +1017,12 @@
 
   function setLoggedOut(notice) {
     if (state.poll) { window.clearInterval(state.poll); state.poll = null; }
+    visionJobsRefreshDeferred = false;
+    playingVisionVideos.forEach(function (video) {
+      if (typeof video.pause === 'function') video.pause();
+    });
+    playingVisionVideos.clear();
+    visionPreviewStates.clear();
     state.csrf = '';
     state.reviewDrafts = {};
     clearVisionSource();
@@ -1527,7 +1536,13 @@
     if (job.media_kind === 'video') {
       var video = document.createElement('video');
       video.controls = true; video.preload = 'metadata'; video.className = 'vision-preview'; video.src = job.media_url;
-      card.appendChild(video);
+      var previewState = getVisionPreviewState(job.job_id, result);
+      var stage = appendVideoDetectionOverlay(video, previewState, 0);
+      card.appendChild(stage);
+      var note = document.createElement('small'); note.className = 'video-overlay-note';
+      note.textContent = videoOverlayNote(previewState);
+      previewState.notes.add(note);
+      card.appendChild(note);
       return video;
     }
     var imageInfo = result.media || {};
@@ -1600,7 +1615,156 @@
     return null;
   }
 
-  function appendCandidateEvidence(candidate, mediaElement, mediaKind, target) {
+  function getVisionPreviewState(jobId, result) {
+    var id = String(jobId || '');
+    var previewState = visionPreviewStates.get(id);
+    if (!previewState) {
+      previewState = {
+        jobId: id, frames: [], interval: 1, media: {}, status: 'idle',
+        videos: new Set(), notes: new Set(),
+      };
+      visionPreviewStates.set(id, previewState);
+    }
+    previewState.videos.forEach(function (video) { if (video.isConnected === false) previewState.videos.delete(video); });
+    previewState.notes.forEach(function (note) { if (note.isConnected === false) previewState.notes.delete(note); });
+    if (!previewState.frames.length && result && Array.isArray(result.preview_frames)) {
+      previewState.frames = result.preview_frames.slice(0, 180);
+      previewState.interval = Number(result.preview_frame_interval_seconds) || 1;
+      previewState.media = result.media || {};
+      previewState.status = 'loaded';
+    }
+    return previewState;
+  }
+
+  function videoOverlayNote(previewState) {
+    var limitation = '检测框只显示已分析的抽样画面和像素位置，不是地面坐标；没有框不代表该时刻没有目标。';
+    if (previewState.status === 'loading') return '正在读取本视频的抽样检测框。' + limitation;
+    if (previewState.status === 'error') return '检测框暂时读取失败；再次播放或拖动视频可重试。' + limitation;
+    if (previewState.status === 'loaded' && !previewState.frames.length) {
+      return '此任务没有保存可显示的抽样检测框；原视频仍可查看。' + limitation;
+    }
+    if (previewState.status === 'loaded') return '检测框仅在已分析的抽样画面显示，位置是画面像素，不是地面坐标。没有框不代表该时刻没有目标。';
+    return '播放或拖动视频时读取抽样检测框。' + limitation;
+  }
+
+  function updateVideoPreviewState(previewState) {
+    previewState.videos.forEach(function (video) {
+      if (video.isConnected === false) { previewState.videos.delete(video); return; }
+      if (typeof video._renderVisionOverlay === 'function') video._renderVisionOverlay();
+    });
+    previewState.notes.forEach(function (note) {
+      if (note.isConnected === false) { previewState.notes.delete(note); return; }
+      note.textContent = videoOverlayNote(previewState);
+    });
+  }
+
+  async function loadVisionPreviewFrames(previewState, allowRetry) {
+    if (previewState.status === 'loaded' || previewState.status === 'loading') return;
+    if (previewState.status === 'error' && !allowRetry) return;
+    previewState.status = 'loading';
+    updateVideoPreviewState(previewState);
+    try {
+      var data = await request('/api/manager/vision-jobs/' + encodeURIComponent(previewState.jobId) + '/preview-frames', 'GET');
+      previewState.frames = Array.isArray(data.preview_frames) ? data.preview_frames.slice(0, 180) : [];
+      previewState.interval = Number(data.preview_frame_interval_seconds) || 1;
+      previewState.media = data.media || {};
+      previewState.status = 'loaded';
+    } catch (_) {
+      previewState.status = 'error';
+    }
+    updateVideoPreviewState(previewState);
+  }
+
+  function appendVideoDetectionOverlay(video, previewState, sourceOffsetSeconds) {
+    var stage = document.createElement('div'); stage.className = 'video-overlay-stage';
+    stage.appendChild(video);
+    var overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    overlay.setAttribute('class', 'video-detection-overlay');
+    overlay.setAttribute('aria-label', '视频抽样帧中的模型检测框和跟踪编号');
+    overlay.setAttribute('preserveAspectRatio', 'none');
+    var media = previewState.media || {};
+    var width = Number(media.width), height = Number(media.height);
+    if (!Number.isFinite(width) || width <= 0) width = 1000;
+    if (!Number.isFinite(height) || height <= 0) height = 1000;
+    overlay.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
+    stage.appendChild(overlay);
+
+    var interval = Number(previewState.interval);
+    if (!Number.isFinite(interval) || interval <= 0) interval = 1;
+    var tolerance = Math.min(2, Math.max(0.35, interval * 0.45));
+    var labels = {
+      car: '汽车', van: '面包车', truck: '货车', bus: '公交车', vehicle: '车辆',
+      motor: '摩托车', motorcycle: '摩托车', motorbike: '摩托车', tricycle: '三轮车',
+      'awning-tricycle': '三轮车', bicycle: '自行车', pedestrian: '行人',
+      person: '行人', people: '行人',
+    };
+    function render() {
+      overlay.replaceChildren();
+      var currentMedia = previewState.media || {};
+      var currentWidth = Number(currentMedia.width), currentHeight = Number(currentMedia.height);
+      if (!Number.isFinite(currentWidth) || currentWidth <= 0) currentWidth = 1000;
+      if (!Number.isFinite(currentHeight) || currentHeight <= 0) currentHeight = 1000;
+      overlay.setAttribute('viewBox', '0 0 ' + currentWidth + ' ' + currentHeight);
+      var sourceTime = Number(video.currentTime) + Number(sourceOffsetSeconds || 0);
+      if (!Number.isFinite(sourceTime)) return;
+      var nearest = null, nearestDistance = Infinity;
+      previewState.frames.forEach(function (frame) {
+        var time = Number(frame && frame.time_seconds);
+        if (!Number.isFinite(time)) return;
+        var distance = Math.abs(time - sourceTime);
+        if (distance < nearestDistance) { nearest = frame; nearestDistance = distance; }
+      });
+      if (!nearest || nearestDistance > tolerance) return;
+      var detections = Array.isArray(nearest.detections) ? nearest.detections.slice(0, 80) : [];
+      detections.forEach(function (item) {
+        if (!item || !Array.isArray(item.box) || item.box.length !== 4) return;
+        var label = String(item.label || '').trim().toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(labels, label)) return;
+        var box = item.box.map(Number);
+        if (!box.every(Number.isFinite)
+            || box.some(function (value) { return value < 0 || value > 1; })
+            || box[2] <= box[0] || box[3] <= box[1]) return;
+        var x = box[0] * currentWidth, y = box[1] * currentHeight;
+        var rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+        rect.setAttribute('x', x); rect.setAttribute('y', y);
+        rect.setAttribute('width', (box[2] - box[0]) * currentWidth);
+        rect.setAttribute('height', (box[3] - box[1]) * currentHeight);
+        overlay.appendChild(rect);
+        var text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        text.setAttribute('x', x);
+        text.setAttribute('y', Math.max(currentWidth / 100, y - currentHeight / 100));
+        var confidence = Number(item.confidence);
+        confidence = Number.isFinite(confidence) ? Math.max(0, Math.min(1, confidence)) : 0;
+        var trackId = item.track_id == null ? '' : ' #' + String(item.track_id).slice(0, 16);
+        text.textContent = labels[label] + ' ' + Math.round(confidence * 100) + '%' + trackId;
+        overlay.appendChild(text);
+      });
+    }
+    video._renderVisionOverlay = render;
+    video._visionPreviewState = previewState;
+    video._visionJobId = previewState.jobId;
+    previewState.videos.add(video);
+    video.addEventListener('timeupdate', function () { render(); loadVisionPreviewFrames(previewState, false); });
+    video.addEventListener('play', function () {
+      playingVisionVideos.add(video);
+      loadVisionPreviewFrames(previewState, true);
+    });
+    function resumeDeferredVisionRefresh() {
+      playingVisionVideos.delete(video);
+      if (visionJobsRefreshDeferred && playingVisionVideos.size === 0) {
+        visionJobsRefreshDeferred = false;
+        refreshVisionJobs(true);
+      }
+    }
+    video.addEventListener('pause', resumeDeferredVisionRefresh);
+    video.addEventListener('ended', resumeDeferredVisionRefresh);
+    video.addEventListener('seeking', function () { render(); loadVisionPreviewFrames(previewState, true); });
+    video.addEventListener('loadedmetadata', render);
+    render();
+    return stage;
+  }
+
+  function appendCandidateEvidence(candidate, mediaElement, mediaKind, target, result) {
     var evidence = candidate && candidate.evidence || {};
     var segments = Array.isArray(evidence.segments) ? evidence.segments : [];
     var clips = Array.isArray(evidence.clips) ? evidence.clips.slice(0, 3) : [];
@@ -1636,7 +1800,9 @@
       video.controls = true; video.preload = 'metadata'; video.playsInline = true;
       video.className = 'candidate-evidence-clip'; video.src = url;
       video.setAttribute('aria-label', '识别证据片段 ' + (index + 1));
-      list.appendChild(video);
+      var previewState = mediaElement && mediaElement._visionPreviewState
+        ? mediaElement._visionPreviewState : getVisionPreviewState(result && result.job_id, result);
+      list.appendChild(appendVideoDetectionOverlay(video, previewState, Number.isFinite(start) ? start : 0));
       var caption = document.createElement('small'); caption.className = 'candidate-evidence-caption';
       caption.textContent = Number.isFinite(start) && Number.isFinite(end) && end >= start
         ? '证据片段 ' + (index + 1) + ' · 原片 ' + start.toFixed(1) + '–' + end.toFixed(1) + ' 秒'
@@ -1964,7 +2130,7 @@
         var why = document.createElement('p'); why.textContent = item.reason || '请结合原始影像复核。';
         candidate.append(titleNode, why);
         appendCandidateSummary(item, job.media_kind, candidate);
-        appendCandidateEvidence(item, previewMedia, job.media_kind, candidate);
+        appendCandidateEvidence(item, previewMedia, job.media_kind, candidate, result);
         if (candidateReview && candidateReview.note) {
           var reviewText = document.createElement('p'); reviewText.textContent = '复核记录：' + candidateReview.note; candidate.appendChild(reviewText);
         }
@@ -2056,6 +2222,7 @@
 
   async function refreshVisionJobs(force) {
     if (!byId('workspace') || byId('workspace').hidden) return;
+    if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
     if (!force && document.activeElement && document.activeElement.classList &&
         document.activeElement.classList.contains('vision-review-note')) return;
     var root = byId('vision-jobs');
@@ -2063,7 +2230,19 @@
       var data = await request('/api/manager/vision-jobs?limit=20', 'GET');
       if (!force && document.activeElement && document.activeElement.classList &&
           document.activeElement.classList.contains('vision-review-note')) return;
+      if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
       var jobs = (data.jobs || []).filter(function (job) { return !isVisionJobHidden(job.job_id); });
+      if (force) {
+        playingVisionVideos.forEach(function (video) {
+          if (typeof video.pause === 'function') video.pause();
+        });
+        playingVisionVideos.clear();
+        visionJobsRefreshDeferred = false;
+      }
+      var activePreviewJobIds = new Set(jobs.map(function (job) { return String(job.job_id || ''); }));
+      visionPreviewStates.forEach(function (_previewState, jobId) {
+        if (!activePreviewJobIds.has(jobId)) visionPreviewStates.delete(jobId);
+      });
       root.replaceChildren();
       if (!jobs.length) {
         var empty = document.createElement('div'); empty.className = 'empty-state';

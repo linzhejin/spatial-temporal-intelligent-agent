@@ -166,7 +166,8 @@ def list_jobs(url: str | None, limit: int = 50) -> list[dict[str, Any]]:
         rows = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, anchor_gcj, camera_stabilized,"
             " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, progress, candidate_reviews, cancel_requested, status, attempts,"
-            " result, error, review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
+            " result - 'preview_frames' - 'preview_frame_interval_seconds' AS result,"
+            " error, review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at"
             " FROM manager_vision_job WHERE deleted_at IS NULL"
             " ORDER BY created_at DESC LIMIT %s", (limit,),

@@ -290,6 +290,87 @@ def test_public_manager_job_exposes_clip_urls_without_local_filenames():
     assert "filename" in job["result"]["candidates"][0]["evidence"]["clips"][0]
 
 
+def test_public_manager_job_keeps_large_video_previews_out_of_five_second_poll_payload():
+    from api.routes import _public_vision_job
+
+    job = {
+        "job_id": "12345678-1234-4234-8234-123456789abc",
+        "media_kind": "video",
+        "result": {
+            "preview_frame_interval_seconds": 1,
+            "preview_frames": [{"time_seconds": 0, "detections": []}],
+            "candidates": [],
+        },
+    }
+
+    public = _public_vision_job(job)
+
+    assert "preview_frames" not in public["result"]
+    assert "preview_frame_interval_seconds" not in public["result"]
+    assert job["result"]["preview_frames"]
+
+
+def test_vision_job_list_query_does_not_load_frame_level_previews(monkeypatch):
+    from storage import database, vision_repository
+    from unittest.mock import MagicMock
+
+    connection = MagicMock()
+    connection.__enter__.return_value.execute.return_value.fetchall.return_value = []
+    monkeypatch.setattr(database, "connect", lambda *_args, **_kwargs: connection)
+
+    assert vision_repository.list_jobs("postgresql://unused") == []
+    query = connection.__enter__.return_value.execute.call_args.args[0]
+    assert "result - 'preview_frames' - 'preview_frame_interval_seconds' AS result" in query
+
+
+def test_manager_preview_frames_endpoint_returns_only_review_overlay_data(monkeypatch):
+    from app import create_app
+    import api.routes as routes
+    from storage import database, vision_repository
+
+    job_id = "12345678-1234-4234-8234-123456789abc"
+    previews = [{"time_seconds": 2, "detections": [{
+        "box": [0.1, 0.2, 0.4, 0.5], "label": "car",
+        "confidence": 0.9, "track_id": "7",
+    }]}]
+    job = {
+        "job_id": job_id, "media_kind": "video",
+        "result": {
+            "media": {"width": 1000, "height": 800},
+            "preview_frame_interval_seconds": 1,
+            "preview_frames": previews,
+            "candidates": [{"kind": "private-candidate"}],
+        },
+    }
+    monkeypatch.setattr(routes, "_require_admin", lambda: None)
+    monkeypatch.setattr(database, "initialize", lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(vision_repository, "get_job", lambda *_args, **_kwargs: job)
+    app = create_app()
+    app.config.update(TESTING=True, SECRET_KEY="vision-test")
+
+    response = app.test_client().get(f"/api/manager/vision-jobs/{job_id}/preview-frames")
+
+    assert response.status_code == 200
+    assert "no-store" in response.headers.get("Cache-Control", "")
+    assert response.get_json()["data"] == {
+        "media": {"width": 1000, "height": 800},
+        "preview_frame_interval_seconds": 1,
+        "preview_frames": previews,
+    }
+
+
+def test_manager_preview_frames_endpoint_requires_admin_authentication():
+    from app import create_app
+
+    app = create_app()
+    app.config.update(TESTING=True, SECRET_KEY="vision-test")
+    response = app.test_client().get(
+        "/api/manager/vision-jobs/12345678-1234-4234-8234-123456789abc/preview-frames"
+    )
+
+    assert response.status_code == 401
+
+
 def test_private_manager_media_route_serves_only_registered_evidence_clip(monkeypatch, tmp_path):
     from app import create_app
     import api.routes as routes

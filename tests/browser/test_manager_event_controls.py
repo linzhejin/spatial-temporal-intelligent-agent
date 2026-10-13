@@ -62,6 +62,8 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.hold_posts = False
         self.fail_posts = False
         self.vision_jobs = []
+        self.vision_preview_data = None
+        self.vision_preview_requests = []
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
         self.page.route("**/api/**", self.api)
         self.page.route("**/*", self.local_only)
@@ -101,6 +103,11 @@ class ManagerEventControlsTest(unittest.TestCase):
             }}
         elif path == "/api/manager/vision-jobs":
             data = {"jobs": self.vision_jobs}
+        elif path.endswith("/preview-frames"):
+            self.vision_preview_requests.append(path)
+            data = self.vision_preview_data or {
+                "media": {}, "preview_frame_interval_seconds": 1, "preview_frames": [],
+            }
         elif path == "/api/manager/vision-scenes":
             data = {"scenes": []}
         elif path == "/api/manager/vision-status":
@@ -114,6 +121,55 @@ class ManagerEventControlsTest(unittest.TestCase):
     def open_manager(self):
         self.page.goto(self.url, wait_until="networkidle")
         expect(self.page.locator("#workspace")).to_be_visible()
+
+    def test_video_detection_overlays_follow_source_and_evidence_time(self):
+        job_id = "12345678-1234-4234-8234-123456789abc"
+        self.vision_preview_data = {
+            "media": {"width": 1000, "height": 800},
+            "preview_frame_interval_seconds": 1,
+            "preview_frames": [
+                {"time_seconds": 0, "detections": [{
+                    "box": [0.1, 0.2, 0.4, 0.5], "label": "car",
+                    "confidence": 0.91, "track_id": "7",
+                }]},
+                {"time_seconds": 11, "detections": [{
+                    "box": [0.2, 0.25, 0.5, 0.55], "label": "pedestrian",
+                    "confidence": 0.82, "track_id": "9",
+                }]},
+            ],
+        }
+        self.vision_jobs = [{
+            "job_id": job_id, "status": "needs_review", "media_kind": "video",
+            "original_name": "巡查视频.mp4", "media_url": f"/api/manager/vision-jobs/{job_id}/media",
+            "result": {
+                "media": {"width": 1000, "height": 800},
+                "candidates": [{
+                    "kind": "possible_congestion", "confidence": 0.74,
+                    "evidence": {
+                        "segments": [{"start_seconds": 10, "end_seconds": 12}],
+                        "clips": [{
+                            "media_url": f"/api/manager/vision-jobs/{job_id}/media?clip=0:0",
+                            "start_seconds": 10, "end_seconds": 20,
+                        }],
+                    },
+                }],
+            },
+        }]
+        self.open_manager()
+
+        main_overlay = self.page.locator(".vision-job .video-detection-overlay").first
+        self.assertEqual(self.vision_preview_requests, [], "the 5-second task-list poll must not fetch frame overlays")
+        self.page.locator(".vision-job video.vision-preview").evaluate("video => video.dispatchEvent(new Event('seeking'))")
+        expect(main_overlay.locator("text")).to_contain_text("汽车 91% #7")
+        self.assertEqual(len(self.vision_preview_requests), 1)
+        evidence_video = self.page.locator("video.candidate-evidence-clip")
+        expect(evidence_video).to_have_count(1)
+        evidence_video.evaluate("video => { Object.defineProperty(video, 'currentTime', {configurable: true, value: 1}); video.dispatchEvent(new Event('timeupdate')); }")
+        evidence_overlay = self.page.locator(".candidate-evidence .video-detection-overlay")
+        expect(evidence_overlay.locator("text")).to_contain_text("行人 82% #9")
+        expect(self.page.locator(".video-overlay-note")).to_contain_text("不是地面坐标")
+        self.page.locator(".candidate-evidence").evaluate("details => { details.open = true; }")
+        self.page.screenshot(path=str(self.qa_dir / "video-detection-overlays.png"), full_page=True)
 
     def prepare_event(self):
         self.page.locator("#event-type").select_option("construction")

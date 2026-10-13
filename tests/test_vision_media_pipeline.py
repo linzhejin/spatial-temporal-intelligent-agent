@@ -309,6 +309,15 @@ def test_video_pipeline_samples_entire_clip_in_segments_not_just_first_180_secon
     assert result["video_coverage"]["segment_count"] == 6
     assert detector.calls == 950
     assert progress[-1]["checkpoint"]["next_frame_index"] == 1900
+    preview_frames = result["preview_frames"]
+    assert 1 <= len(preview_frames) <= 180
+    assert preview_frames[0]["time_seconds"] == 0
+    assert preview_frames[-1]["time_seconds"] >= 188
+    assert preview_frames[0]["detections"]
+    detection = preview_frames[0]["detections"][0]
+    assert detection["label"] in {"car", "pedestrian"}
+    assert detection["box"] == [0.1, 0.125, 0.4, 0.5]
+    assert detection["track_id"] is not None
 
 
 def test_congestion_evidence_continues_across_video_segment_boundary(tmp_path, monkeypatch):

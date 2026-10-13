@@ -65,6 +65,7 @@ def test_vision_model_status_jobs_and_media_require_manager_authentication():
         "/api/manager/vision-status",
         "/api/manager/vision-jobs?limit=1",
         "/api/manager/vision-jobs/00000000-0000-0000-0000-000000000000/media",
+        "/api/manager/vision-jobs/00000000-0000-0000-0000-000000000000/preview-frames",
     ):
         response = client.get(path)
         assert response.status_code == 401

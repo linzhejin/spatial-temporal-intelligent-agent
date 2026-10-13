@@ -23,8 +23,9 @@ VISDRONE_CLASSES = (
 )
 logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
+MAX_VIDEO_PREVIEW_FRAMES = 180
 # Bump this when detector/tracker/segment aggregation semantics change.
-VIDEO_CHECKPOINT_ANALYSIS_REVISION = 3
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 4
 VIDEO_TEMPORAL_CONTEXT_SECONDS = 15.0
 
 
@@ -462,6 +463,7 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
     candidate_events: dict[tuple[str, str | None], list[list[dict]]] = {}
     specialized_observations: list[dict] = []
     specialized_frame_times: set[float] = set()
+    preview_frames_by_time: dict[float, dict] = {}
     for segment_index, segment in enumerate(segments):
         segment_metrics = segment["metrics"]
         count = segment_metrics.get("frames_analyzed", 0)
@@ -515,6 +517,16 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
                 and isinstance(item.get("time_seconds"), (int, float))
                 and not isinstance(item.get("time_seconds"), bool)
             )
+        previews = segment.get("preview_frames", [])
+        if isinstance(previews, list):
+            for item in previews:
+                if not isinstance(item, dict):
+                    continue
+                when = item.get("time_seconds")
+                detections = item.get("detections")
+                if (isinstance(when, (int, float)) and not isinstance(when, bool)
+                        and math.isfinite(float(when)) and isinstance(detections, list)):
+                    preview_frames_by_time[round(float(when), 3)] = item
     for key in weighted_keys:
         metrics[key] = round(metrics[key] / total_frames, 4 if "ratio" in key else 2)
     for label in classes_mean:
@@ -582,6 +594,10 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
             "minimum_crowding_duration_seconds": minimum_crowding_duration,
         },
         "candidates": candidates,
+        "preview_frames": [
+            preview_frames_by_time[when]
+            for when in sorted(preview_frames_by_time)[:MAX_VIDEO_PREVIEW_FRAMES]
+        ],
         "safety": {
             "requires_human_review": True,
             "camera_motion_compensated": bool(motion_ready and not stabilized),
@@ -766,6 +782,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             fps = float(fps) if fps and fps > 0 else 1.0
             total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0) or None
             duration_seconds = total_frames / fps if total_frames else None
+            preview_interval_seconds = max(
+                1.0, (duration_seconds or float(MAX_VIDEO_PREVIEW_FRAMES))
+                / MAX_VIDEO_PREVIEW_FRAMES,
+            )
             target_fps = max(0.1, float(getattr(config, "VISION_SAMPLE_FPS", 5)))
             stride = max(1, round(fps / target_fps))
             total_sampled_frames = math.ceil(total_frames / stride) if total_frames else None
@@ -909,6 +929,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     regions=regions,
                     tracking_high_threshold=getattr(detector, "confidence_threshold", 0.369),
                     tracking_low_threshold=getattr(detector, "tracking_low_confidence_threshold", 0.1),
+                    include_preview_frames=True,
                 )
                 context_frames = temporal_context["frames"]
                 temporal_frames = context_frames + frames
@@ -938,6 +959,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         regions=regions,
                         tracking_high_threshold=getattr(detector, "confidence_threshold", 0.369),
                         tracking_low_threshold=getattr(detector, "tracking_low_confidence_threshold", 0.1),
+                        include_preview_frames=True,
                     )
                     temporal_kinds = {"possible_congestion", "possible_crowding"}
                     for candidate in temporal_result["candidates"]:
@@ -969,6 +991,41 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         candidate for candidate in result["candidates"]
                         if candidate.get("kind") not in temporal_kinds
                     ] + list(selected_temporal_candidates.values())
+                    preview_source = temporal_result
+                    preview_source_indices = temporal_frame_indices
+                else:
+                    preview_source = result
+                    preview_source_indices = frame_indices
+                last_preview_bucket = max((
+                    math.floor(
+                        float(item["time_seconds"]) / preview_interval_seconds + 1e-9
+                    )
+                    for saved_segment in completed_segments
+                    for item in saved_segment.get("preview_frames", [])
+                    if isinstance(item, dict)
+                    and isinstance(item.get("time_seconds"), (int, float))
+                    and not isinstance(item.get("time_seconds"), bool)
+                    and math.isfinite(float(item["time_seconds"]))
+                ), default=-1)
+                bounded_previews = []
+                for item in preview_source.get("preview_frames", []):
+                    local_index = item.get("frame_index") if isinstance(item, dict) else None
+                    if (isinstance(local_index, bool) or not isinstance(local_index, int)
+                            or not 0 <= local_index < len(preview_source_indices)):
+                        continue
+                    when = preview_source_indices[local_index] / fps
+                    bucket = math.floor(when / preview_interval_seconds + 1e-9)
+                    if bucket <= last_preview_bucket or bucket >= MAX_VIDEO_PREVIEW_FRAMES:
+                        continue
+                    detections = item.get("detections")
+                    if not isinstance(detections, list):
+                        continue
+                    bounded_previews.append({
+                        "time_seconds": round(when, 3),
+                        "detections": detections[:80],
+                    })
+                    last_preview_bucket = bucket
+                result["preview_frames"] = bounded_previews
                 candidate_window_start_seconds = (
                     temporal_frame_indices[0] / fps if temporal_frame_indices else segment_start
                 )
@@ -1222,6 +1279,9 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 flood_area_threshold=getattr(flood_segmenter, "min_area_ratio", 0.08),
                 accident_model_enabled=accident_model is not None,
                 flood_model_enabled=flood_segmenter is not None,
+            )
+            analysis["preview_frame_interval_seconds"] = round(
+                preview_interval_seconds, 3,
             )
             analysis["safety"]["accident_recognition_supported"] = (
                 accident_model is not None and "accident" not in optional_model_errors
