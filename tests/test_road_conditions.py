@@ -1081,6 +1081,19 @@ class TestRoadConditionAPI:
         assert response.get_json()["error"] == "route_effect_required"
         assert rc.list_conditions() == []
 
+    @pytest.mark.parametrize("action", [["closure"], {"action": "closure"}])
+    def test_post_rejects_non_string_action_as_client_error(self, client, G, action):
+        gj = _mid_12_gcj(G)
+        response = client.post("/api/road-conditions", json={
+            "type": "event", "name": "错误动作类型",
+            "lng": gj[0], "lat": gj[1], "action": action,
+            "affected_modes": ["walk"],
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "invalid_action"
+        assert rc.list_conditions() == []
+
     def test_post_persists_explicit_modes_that_manager_confirms_are_blocked(self, client, G):
         gj = _mid_12_gcj(G)
         response = client.post("/api/road-conditions", json={

@@ -2259,7 +2259,8 @@ def create_road_condition():
         return _err("missing_fields", "type, name, lng, lat 必填", 400)
     if cond_type not in CONDITION_EFFECTS:
         return _err("invalid_type", f"未知路况类型: {cond_type}", 400)
-    if action is not None and action not in CONDITION_ACTIONS:
+    if action is not None and (
+            not isinstance(action, str) or action not in CONDITION_ACTIONS):
         return _err("invalid_action", "路况影响动作只能是提示、缓行或禁止通行。", 400)
 
     source = None

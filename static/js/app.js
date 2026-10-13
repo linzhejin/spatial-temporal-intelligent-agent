@@ -1806,7 +1806,7 @@
     var COND_STATUS_LABELS = { active: '生效中', scheduled: '未开始', expired: '已结束' };
 
     function getRoadConditionModeEffect(cond, mode) {
-        if (cond && cond.action) {
+        if (cond && cond.action != null) {
             var affected = Array.isArray(cond.affected_modes) ? cond.affected_modes : [];
             if (!['notice', 'slowdown', 'closure'].includes(cond.action)
                     || !affected.length
@@ -1824,12 +1824,16 @@
             if (cond.action === 'notice') return { status: 'notice' };
             return { status: 'unknown' };
         }
-        if (cond && Array.isArray(cond.blocked_modes)) {
-            if (!cond.blocked_modes.length
+        if (cond && Object.prototype.hasOwnProperty.call(cond, 'blocked_modes')) {
+            if (!Array.isArray(cond.blocked_modes) || !cond.blocked_modes.length
                     || cond.blocked_modes.some(function (item) { return !['walk', 'bike', 'drive'].includes(item); })) {
                 return { status: 'unknown' };
             }
             return { status: cond.blocked_modes.includes(mode) ? 'blocked' : 'unaffected' };
+        }
+        if (cond && (Object.prototype.hasOwnProperty.call(cond, 'action')
+                || Object.prototype.hasOwnProperty.call(cond, 'affected_modes'))) {
+            return { status: 'unknown' };
         }
         var legacyEffect = (CONDITION_MODE_EFFECTS[(cond || {}).type] || {})[mode];
         if (legacyEffect === 'block') return { status: 'blocked' };
@@ -1837,6 +1841,28 @@
             return { status: 'slowdown', costMultiplier: legacyEffect };
         }
         return { status: 'unknown' };
+    }
+
+    var ROAD_CONDITION_EFFECT_STYLES = {
+        blocked:    { icon: '🚫', color: '#C0392B', label: '封闭', dash: null },
+        slowdown:   { icon: '⚠️', color: '#D97706', label: '缓行', dash: '10 6' },
+        notice:     { icon: 'ℹ️', color: '#2878A8', label: '仅提示', dash: '3 6' },
+        unaffected: { icon: 'ℹ️', color: '#2878A8', label: '本方式不受影响', dash: '3 6' },
+        unknown:    { icon: '⚠️', color: '#6B7280', label: '影响待核实', dash: '3 6' },
+    };
+
+    function getRoadConditionDisplayStyle(cond, mode) {
+        var type = (cond || {}).type;
+        var baseStyle = ROAD_CONDITION_STYLES[type]
+            || { icon: '⚠️', color: '#999', label: type || '路况', dash: null };
+        var hasExplicitEffect = !!cond && (
+            cond.action != null
+            || Object.prototype.hasOwnProperty.call(cond, 'affected_modes')
+            || Object.prototype.hasOwnProperty.call(cond, 'blocked_modes')
+        );
+        if (!hasExplicitEffect) return baseStyle;
+        var effect = getRoadConditionModeEffect(cond, mode);
+        return ROAD_CONDITION_EFFECT_STYLES[effect.status] || ROAD_CONDITION_EFFECT_STYLES.unknown;
     }
 
     function describeRoadConditionModeEffect(cond, mode, modeName) {
@@ -1866,13 +1892,15 @@
             clearRoadConditionMarkers();
             state.roadConditionAdminView = !!includeAll;
             var conditions = (data && data.conditions) || [];
-            var hasClosure = false, hasSlow = false;
+            var hasClosure = false, hasSlow = false, hasInfo = false, hasUnknown = false;
             conditions.forEach(function (cond) {
                 var active = !includeAll || !cond.status || cond.status === 'active';
                 if (active) {
                     var effect = getRoadConditionModeEffect(cond, state.travelMode);
                     if (effect.status === 'blocked') hasClosure = true;
                     else if (effect.status === 'slowdown') hasSlow = true;
+                    else if (effect.status === 'notice' || effect.status === 'unaffected') hasInfo = true;
+                    else if (effect.status === 'unknown') hasUnknown = true;
                 }
                 try {
                     renderRoadCondition(cond, !!includeAll);
@@ -1880,7 +1908,7 @@
                     console.warn('[路况] 单条事件渲染失败，跳过:', err, cond && cond.id);
                 }
             });
-            updateRoadConditionLegend(hasClosure, hasSlow);
+            updateRoadConditionLegend(hasClosure, hasSlow, hasInfo, hasUnknown);
         }).catch(function (e) {
             console.warn('[路况] 加载失败:', e);
         });
@@ -1939,17 +1967,20 @@
         state.roadConditionMonitorTimer = setInterval(checkRouteConditionVersion, 30000);
     }
 
-    // 地图图例中"管制封闭/缓行"两行仅在存在对应事件时显示
-    function updateRoadConditionLegend(hasClosure, hasSlow) {
+    // 图例只显示当前出行方式下实际出现的路线影响状态。
+    function updateRoadConditionLegend(hasClosure, hasSlow, hasInfo, hasUnknown) {
         var elClosure = document.getElementById('legend-closure-item');
         var elSlow = document.getElementById('legend-slow-item');
+        var elInfo = document.getElementById('legend-info-item');
+        var elUnknown = document.getElementById('legend-unknown-item');
         if (elClosure) elClosure.hidden = !hasClosure;
         if (elSlow) elSlow.hidden = !hasSlow;
+        if (elInfo) elInfo.hidden = !hasInfo;
+        if (elUnknown) elUnknown.hidden = !hasUnknown;
     }
 
     function renderRoadCondition(cond, adminView) {
-        var style = ROAD_CONDITION_STYLES[cond.type]
-            || { icon: '⚠️', color: '#999', label: cond.type, dash: null };
+        var style = getRoadConditionDisplayStyle(cond, state.travelMode);
         var inactive = adminView && cond.status && cond.status !== 'active';
         var color = inactive ? '#9AA5B1' : style.color;
         var edge = cond.edge || {};
@@ -1967,8 +1998,8 @@
             var lineOpt = { color: color, weight: 6, opacity: inactive ? 0.4 : 0.9, lineCap: 'round' };
             if (inactive) {
                 lineOpt.dashArray = '3 8';
-            } else if (!hardClosed) {
-                lineOpt.dashArray = style.dash || '8 6';
+            } else if (!hardClosed && style.dash) {
+                lineOpt.dashArray = style.dash;
             }
             var line = L.polyline(lineLatLngs, lineOpt);
             line.addTo(state.map);

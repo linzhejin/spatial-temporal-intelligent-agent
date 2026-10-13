@@ -59,6 +59,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.errors = []
         self.posts = []
         self.snap_requests = []
+        self.road_conditions = []
         self.pending_posts = []
         self.hold_posts = False
         self.fail_posts = False
@@ -89,7 +90,7 @@ class ManagerEventControlsTest(unittest.TestCase):
                 route.fulfill(status=503, json={"message": "发布失败，请重试"})
                 return
         elif path == "/api/road-conditions":
-            data = {"conditions": []}
+            data = {"conditions": self.road_conditions}
         elif path == "/api/road-conditions/snap":
             self.snap_requests.append(route.request.url)
             data = {"snap": {
@@ -149,6 +150,58 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.assertEqual(self.posts[0]["action"], "closure")
         self.assertEqual(self.posts[0]["affected_modes"], ["walk"])
         self.assertFalse(self.errors, "the public route-report flow must not raise browser errors")
+
+    def test_route_condition_map_markers_follow_current_mode_effect(self):
+        self.page.add_init_script("try { localStorage.setItem('whu_welcome_seen', 'true'); } catch (_) {}")
+        self.road_conditions = [
+            {"id": "notice", "type": "closure", "action": "notice",
+             "affected_modes": ["walk"], "name": "仅提示道路",
+             "edge": {"snap": {"lng": 114.361, "lat": 30.531},
+                      "geometry_gcj": [[114.361, 30.531], [114.362, 30.531]]}},
+            {"id": "closure", "type": "event", "action": "closure",
+             "affected_modes": ["walk"], "name": "步行封闭道路",
+             "edge": {"snap": {"lng": 114.363, "lat": 30.532},
+                      "geometry_gcj": [[114.363, 30.532], [114.364, 30.532]]}},
+            {"id": "slowdown", "type": "event", "action": "slowdown",
+             "affected_modes": ["walk"], "cost_multiplier": 1.4, "name": "步行缓行道路",
+             "edge": {"snap": {"lng": 114.364, "lat": 30.5325},
+                      "geometry_gcj": [[114.364, 30.5325], [114.365, 30.5325]]}},
+            {"id": "unaffected", "type": "flooding", "action": "closure",
+             "affected_modes": ["drive"], "name": "驾车封闭道路",
+             "edge": {"snap": {"lng": 114.365, "lat": 30.533},
+                      "geometry_gcj": [[114.365, 30.533], [114.366, 30.533]]}},
+            {"id": "unknown", "type": "event", "action": "closure",
+             "name": "影响未配置道路",
+             "edge": {"snap": {"lng": 114.367, "lat": 30.534},
+                      "geometry_gcj": [[114.367, 30.534], [114.368, 30.534]]}},
+        ]
+        self.page.goto(self.app_url, wait_until="networkidle")
+        expect(self.page.locator(".leaflet-container")).to_be_visible(timeout=10000)
+        expect(self.page.locator("#legend-closure-item")).to_be_visible()
+        expect(self.page.locator("#legend-slow-item")).to_be_visible()
+        expect(self.page.locator("#legend-info-item")).to_be_visible()
+        expect(self.page.locator("#legend-unknown-item")).to_be_visible()
+
+        pills = self.page.locator(".whu-map-pill")
+        expect(pills).to_have_count(5)
+        rendered = {
+            text: self.page.locator(".whu-map-pill").filter(has_text=text).first
+            for text in ("仅提示道路", "步行封闭道路", "步行缓行道路", "驾车封闭道路", "影响未配置道路")
+        }
+        expect(rendered["仅提示道路"]).to_contain_text("ℹ️")
+        expect(rendered["仅提示道路"]).to_have_css("background-color", "rgb(40, 120, 168)")
+        expect(rendered["步行封闭道路"]).to_contain_text("🚫")
+        expect(rendered["步行封闭道路"]).to_have_css("background-color", "rgb(192, 57, 43)")
+        expect(rendered["步行缓行道路"]).to_contain_text("⚠️")
+        expect(rendered["步行缓行道路"]).to_have_css("background-color", "rgb(217, 119, 6)")
+        expect(rendered["驾车封闭道路"]).to_contain_text("ℹ️")
+        expect(rendered["驾车封闭道路"]).to_have_css("background-color", "rgb(40, 120, 168)")
+        expect(rendered["影响未配置道路"]).to_contain_text("⚠️")
+        expect(rendered["影响未配置道路"]).to_have_css("background-color", "rgb(107, 114, 128)")
+        self.assertIn("rgb(40, 120, 168)", self.page.locator("#legend-info-item .legend-line").evaluate(
+            "element => getComputedStyle(element).backgroundImage"))
+        self.assertIn("rgb(217, 119, 6)", self.page.locator("#legend-slow-item .legend-line").evaluate(
+            "element => getComputedStyle(element).backgroundImage"))
 
     def test_video_detection_overlays_follow_source_and_evidence_time(self):
         job_id = "12345678-1234-4234-8234-123456789abc"

@@ -86,6 +86,7 @@ function harness(storage = new Map()) {
             submitRoadReport: handleRoadReportSubmit,
             roadConditionEffect: getRoadConditionModeEffect,
             roadConditionEffectLabel: describeRoadConditionModeEffect,
+            roadConditionDisplayStyle: getRoadConditionDisplayStyle,
             setApi: function (fn) {
                 submitQueuedMessage = function (query, body, bubble, epoch) {
                     var payload = Object.assign({ query: query }, body || {});
@@ -1160,19 +1161,46 @@ test('road-condition popup follows the published action and affected travel mode
     assert.match(h.roadConditionEffectLabel(closure, 'bike', '骑行'), /禁止通行，路线会绕行/);
 });
 
+test('road-condition marker style follows the effect on the current travel mode', () => {
+    const h = harness();
+    const info = h.roadConditionDisplayStyle(
+        { type: 'closure', action: 'notice', affected_modes: ['walk'] }, 'walk');
+    const closure = h.roadConditionDisplayStyle(
+        { type: 'event', action: 'closure', affected_modes: ['bike'] }, 'bike');
+    const unaffected = h.roadConditionDisplayStyle(
+        { type: 'flooding', action: 'closure', affected_modes: ['drive'] }, 'walk');
+    const unknown = h.roadConditionDisplayStyle(
+        { type: 'event', action: 'closure' }, 'walk');
+    const legacy = h.roadConditionDisplayStyle({ type: 'flooding' }, 'walk');
+
+    assert.deepEqual({ icon: info.icon, color: info.color, label: info.label },
+        { icon: 'ℹ️', color: '#2878A8', label: '仅提示' });
+    assert.deepEqual({ icon: closure.icon, color: closure.color, label: closure.label },
+        { icon: '🚫', color: '#C0392B', label: '封闭' });
+    assert.equal(unaffected.label, '本方式不受影响');
+    assert.equal(unaffected.color, '#2878A8');
+    assert.equal(unknown.label, '影响待核实');
+    assert.equal(unknown.color, '#6B7280');
+    assert.equal(legacy.icon, '🌊');
+    assert.equal(legacy.color, '#2980B9');
+});
+
 test('road-condition legend follows the published action and affected travel modes', async () => {
     const h = harness();
     h.state.map = {};
     h.state.travelMode = 'walk';
-    h.setRawApi(async () => ({ conditions: [{
-        type: 'closure', action: 'notice', affected_modes: ['walk'],
-    }] }));
+    h.setRawApi(async () => ({ conditions: [
+        { type: 'closure', action: 'notice', affected_modes: ['walk'] },
+        { type: 'event', action: 'closure' },
+    ] }));
 
     h.loadRoadConditions(false);
     await Promise.resolve();
 
     assert.equal(h.context.document.getElementById('legend-closure-item').hidden, true);
     assert.equal(h.context.document.getElementById('legend-slow-item').hidden, true);
+    assert.equal(h.context.document.getElementById('legend-info-item').hidden, false);
+    assert.equal(h.context.document.getElementById('legend-unknown-item').hidden, false);
 });
 
 test('road report submits a deliberate action and only the selected travel modes', async () => {

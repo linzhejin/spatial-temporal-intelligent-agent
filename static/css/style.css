@@ -149,10 +149,33 @@ body {
     width: 24px;
     background: repeating-linear-gradient(
         90deg,
-        #E67E22 0,
-        #E67E22 7px,
+        #D97706 0,
+        #D97706 7px,
         transparent 7px,
         transparent 12px
+    );
+}
+
+.legend-line.road-info,
+.legend-line.road-unknown {
+    height: 5px;
+    width: 24px;
+    background: repeating-linear-gradient(
+        90deg,
+        #2878A8 0,
+        #2878A8 3px,
+        transparent 3px,
+        transparent 7px
+    );
+}
+
+.legend-line.road-unknown {
+    background: repeating-linear-gradient(
+        90deg,
+        #6B7280 0,
+        #6B7280 3px,
+        transparent 3px,
+        transparent 7px
     );
 }
 
