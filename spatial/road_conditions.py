@@ -86,6 +86,7 @@ _lock = threading.Lock()
 _write_lock = threading.Lock()
 _cache = None  # list of condition dicts
 _cache_mtime = 0.0
+_cache_error = None
 
 
 @contextmanager
@@ -217,7 +218,7 @@ def _validate_condition_record(condition: dict) -> None:
 
 def _load_conditions(*, strict: bool = False) -> list:
     """从 JSON 文件加载路况事件，带 mtime 缓存。"""
-    global _cache, _cache_mtime
+    global _cache, _cache_mtime, _cache_error
     with _lock:
         try:
             mtime = os.stat(_CONDITIONS_FILE).st_mtime_ns
@@ -230,12 +231,13 @@ def _load_conditions(*, strict: bool = False) -> list:
             if strict:
                 _cache = []
                 _cache_mtime = 0.0
+                _cache_error = None
                 return []
         except OSError as exc:
             if strict:
                 raise RoadConditionsUnavailableError("无法读取路况文件状态") from exc
             mtime = 0.0
-        if _cache is not None and mtime == _cache_mtime:
+        if _cache is not None and mtime == _cache_mtime and not (strict and _cache_error):
             if strict:
                 try:
                     for item in _cache:
@@ -254,18 +256,20 @@ def _load_conditions(*, strict: bool = False) -> list:
                 for item in loaded:
                     _validate_condition_record(item)
             _cache = loaded
+            _cache_error = None
         except (OSError, json.JSONDecodeError, ValueError) as e:
             if strict:
                 raise RoadConditionsUnavailableError("路况文件无效，无法确认当前封路信息") from e
             logger.warning("路况文件加载失败，使用空列表: %s", e)
             _cache = []
+            _cache_error = "路况文件无效，无法确认当前封路信息"
         _cache_mtime = mtime
         return deepcopy(_cache)
 
 
 def _save_conditions(conditions: list) -> None:
     """Replace a complete JSON snapshot; a failed write preserves the old file."""
-    global _cache, _cache_mtime
+    global _cache, _cache_mtime, _cache_error
     for condition in conditions:
         _validate_condition_record(condition)
     directory = os.path.dirname(_CONDITIONS_FILE)
@@ -284,6 +288,7 @@ def _save_conditions(conditions: list) -> None:
         with _lock:
             _cache = deepcopy(conditions)
             _cache_mtime = os.stat(_CONDITIONS_FILE).st_mtime_ns
+            _cache_error = None
     finally:
         if temp_path and os.path.exists(temp_path):
             os.unlink(temp_path)

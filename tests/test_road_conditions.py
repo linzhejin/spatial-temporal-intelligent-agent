@@ -93,6 +93,7 @@ def _isolate_store(tmp_path, monkeypatch):
     monkeypatch.setattr(rc, "_CONDITIONS_FILE", str(path))
     monkeypatch.setattr(rc, "_cache", None)
     monkeypatch.setattr(rc, "_cache_mtime", 0.0)
+    monkeypatch.setattr(rc, "_cache_error", None)
     yield
 
 
@@ -102,9 +103,28 @@ def test_routing_snapshot_rejects_corrupt_road_condition_store(tmp_path, monkeyp
     monkeypatch.setattr(rc, "_CONDITIONS_FILE", str(path))
     monkeypatch.setattr(rc, "_cache", None)
     monkeypatch.setattr(rc, "_cache_mtime", 0.0)
+    monkeypatch.setattr(rc, "_cache_error", None)
 
     with pytest.raises(rc.RoadConditionsUnavailableError):
         rc.list_conditions(strict=True)
+
+
+def test_lenient_corrupt_read_does_not_poison_strict_snapshot(tmp_path, monkeypatch):
+    path = tmp_path / "road_conditions.json"
+    path.write_text("{ invalid json", encoding="utf-8")
+    monkeypatch.setattr(rc, "_CONDITIONS_FILE", str(path))
+    monkeypatch.setattr(rc, "_cache", None)
+    monkeypatch.setattr(rc, "_cache_mtime", 0.0)
+    monkeypatch.setattr(rc, "_cache_error", None)
+
+    assert rc.list_conditions() == []
+    with pytest.raises(rc.RoadConditionsUnavailableError):
+        rc.list_conditions(strict=True)
+
+    corrupt_stat = path.stat()
+    path.write_text("[]", encoding="utf-8")
+    os.utime(path, ns=(corrupt_stat.st_atime_ns, corrupt_stat.st_mtime_ns))
+    assert rc.list_conditions(strict=True) == []
 
 
 def test_configured_runtime_event_store_fails_closed_if_missing(tmp_path, monkeypatch):
@@ -1096,6 +1116,16 @@ class TestRoadConditionAPI:
         public_records = client.get("/api/road-conditions").get_json()["data"]["conditions"]
         assert len(public_records) == 1
         assert "source" not in public_records[0] and "audit" not in public_records[0]
+
+    def test_agent_condition_lookup_reports_unavailable_store_instead_of_no_conditions(self):
+        from agents import tools as agent_tools
+
+        Path(rc._CONDITIONS_FILE).write_text("{ invalid json", encoding="utf-8")
+        result, _ = agent_tools.execute_tool("list_road_conditions", {})
+
+        assert result["error"] == "road_conditions_unavailable"
+        assert "不能确认是否存在管制信息" in result["message"]
+        assert "当前没有生效的路况信息" not in result["message"]
 
     @pytest.mark.parametrize("action,cost_multiplier", [
         ("closure", None),

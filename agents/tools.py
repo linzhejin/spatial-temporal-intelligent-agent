@@ -2381,7 +2381,13 @@ def _tool_get_weather(args, ctx):
 
 
 def _tool_list_road_conditions(args, ctx):
-    conds = list_conditions()
+    try:
+        conds = list_conditions(strict=True)
+    except RoadConditionsUnavailableError:
+        return {
+            "error": "road_conditions_unavailable",
+            "message": "当前路况数据暂不可用，不能确认是否存在管制信息；请稍后再试。",
+        }, None
     out = []
     for c in conds:
         road = (c.get("edge") or {}).get("road_name", "")

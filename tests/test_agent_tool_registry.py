@@ -28,13 +28,13 @@ def test_non_routing_tool_executors_return_schema_shaped_results(monkeypatch):
     assert result["weather"] == "晴"
     assert artifact is None
 
-    monkeypatch.setattr(tools, "list_conditions", lambda: [])
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
     result, artifact = tools.execute_tool("list_road_conditions", {})
     assert result["count"] == 0
     assert "没有生效" in result["message"]
     assert artifact is None
 
-    monkeypatch.setattr(tools, "list_conditions", lambda: [{
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [{
         "id": "vision-1", "type": "event", "name": "入口缓行", "created_at": 200,
         "start_time": 100, "end_time": 300, "description": "已复核",
         "source": {"kind": "vision_job", "captured_at": 90, "field_confirmation": "现场确认"},
