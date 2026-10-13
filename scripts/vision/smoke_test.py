@@ -83,6 +83,8 @@ def main() -> int:
         video_result = analyze_media(args.video, "video", None, detector=detector)
         video_report = {
             "video": args.video.name,
+            "video_bytes": args.video.stat().st_size,
+            "video_sha256": _sha256(args.video),
             "metrics": video_result["metrics"],
             "candidate_kinds": [item["kind"] for item in video_result["candidates"]],
             "safety": video_result["safety"],

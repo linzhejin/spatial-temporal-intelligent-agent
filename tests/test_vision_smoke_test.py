@@ -66,5 +66,9 @@ def test_video_smoke_report_records_coverage_and_model_provenance(tmp_path, monk
     assert report["model_manifest_sha256"] == hashlib.sha256(
         manifest_path.read_bytes()
     ).hexdigest()
+    assert report["video_sequence_smoke"]["video_sha256"] == hashlib.sha256(
+        video_path.read_bytes()
+    ).hexdigest()
+    assert report["video_sequence_smoke"]["video_bytes"] == video_path.stat().st_size
     assert report["video_sequence_smoke"]["video_coverage"] == coverage
     assert json.loads(output_path.read_text(encoding="utf-8")) == report
