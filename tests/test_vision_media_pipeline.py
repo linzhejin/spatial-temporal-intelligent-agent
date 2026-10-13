@@ -188,6 +188,23 @@ def test_segment_merge_propagates_observation_region_reassociation_requirement()
     assert result["safety"]["observation_region_reassociation_required"] is True
 
 
+def test_segment_merge_preserves_temporal_evidence_thresholds_for_manager_feedback():
+    result = _merge_segment_analyses([{
+        "start_seconds": 0.0,
+        "end_seconds": 5.0,
+        "metrics": {
+            "frames_analyzed": 5,
+            "minimum_congestion_duration_seconds": 15.0,
+            "minimum_crowding_duration_seconds": 5.0,
+        },
+        "candidates": [],
+        "safety": {},
+    }])
+
+    assert result["metrics"]["minimum_congestion_duration_seconds"] == 15.0
+    assert result["metrics"]["minimum_crowding_duration_seconds"] == 5.0
+
+
 def test_segment_merge_splits_same_region_events_when_an_intervening_segment_has_no_candidate():
     def segment(start, end, candidate=True):
         return {

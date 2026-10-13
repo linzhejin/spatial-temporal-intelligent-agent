@@ -438,6 +438,21 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
     total_frames = sum(item["metrics"].get("frames_analyzed", 0) for item in segments)
     if total_frames <= 0:
         raise ValueError("视频中没有可读取的画面")
+    def maximum_positive_threshold(key: str, default: float) -> float:
+        values = []
+        for segment in segments:
+            value = segment.get("metrics", {}).get(key)
+            if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                    and math.isfinite(float(value)) and float(value) > 0):
+                values.append(float(value))
+        return max(values, default=default)
+
+    minimum_congestion_duration = maximum_positive_threshold(
+        "minimum_congestion_duration_seconds", 15.0,
+    )
+    minimum_crowding_duration = maximum_positive_threshold(
+        "minimum_crowding_duration_seconds", 5.0,
+    )
     weighted_keys = ("mean_vehicle_count", "mean_pedestrian_count", "mean_vehicle_occupied_area_ratio")
     metrics = {key: 0.0 for key in weighted_keys}
     peaks = {"peak_vehicle_count": 0, "peak_pedestrian_count": 0}
@@ -563,6 +578,8 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
             ),
             "analysis_segments": len(segments),
             "specialized_frames_analyzed": len(specialized_frame_times),
+            "minimum_congestion_duration_seconds": minimum_congestion_duration,
+            "minimum_crowding_duration_seconds": minimum_crowding_duration,
         },
         "candidates": candidates,
         "safety": {

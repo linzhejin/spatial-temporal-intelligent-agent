@@ -264,7 +264,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261013-visionroute1/);
-  assert.match(managerHtml, /manager\.js\?v=20261013-visionroute1/);
+  assert.match(managerHtml, /manager\.js\?v=20261013-visionfeedback1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1160,6 +1160,30 @@ test('empty analysis distinguishes a mapping safety block from a model finding n
   assert.doesNotMatch(terminalText, /模型未生成可复核的路况候选/);
 });
 
+test('short video with no candidates explains the temporal evidence limits and next step', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'short-video-empty', status: 'completed', media_kind: 'video', original_name: '1081.mp4',
+    result: {
+      metrics: { frames_analyzed: 10, mean_vehicle_count: 149.33 },
+      video_coverage: { complete: true, duration_seconds: 2, analyzed_through_seconds: 1.8 },
+      safety: {}, candidates: [],
+    },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const nodes = descendants(harness.elements.get('vision-jobs').children[0]);
+  const terminalText = nodes.map((node) => node.textContent || '').join(' ');
+  assert.match(terminalText, /本段视频约 2 秒/);
+  assert.match(terminalText, /缓行判断至少需要 15 秒连续证据/);
+  assert.match(terminalText, /人群聚集判断至少需要 5 秒连续证据/);
+  assert.match(terminalText, /画面车辆数只是抽样帧检测数量/);
+  assert.match(terminalText, /建议上传至少 15 秒、尽量固定角度的视频/);
+  assert.match(terminalText, /依据原片手工登记路况/);
+});
+
 function descendants(node) {
   return [node, ...(node.children || []).flatMap(descendants)];
 }
@@ -1182,7 +1206,8 @@ test('completed jobs without candidates allow manual visual road registration an
   const retry = nodes.find((node) => node.tagName === 'button' && node.textContent === '重新选择影像');
   const clear = nodes.find((node) => node.tagName === 'button' && node.textContent === '删除影像记录');
   assert.match(terminalText, /分析已结束/);
-  assert.match(terminalText, /未生成可复核的路况候选/);
+  assert.match(terminalText, /静态图片/);
+  assert.match(terminalText, /不能判断车辆是否持续缓行或人群是否持续聚集/);
   assert.ok(manual);
   assert.ok(retry);
   assert.ok(clear);

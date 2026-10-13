@@ -1832,6 +1832,38 @@
     } catch (error) { window.alert(error.message || '影像任务操作失败。'); }
   }
 
+  function noCandidateFeedback(result, mediaKind) {
+    var metrics = result.metrics || {};
+    if (mediaKind === 'image') {
+      return '这是一张静态图片，不能判断车辆是否持续缓行或人群是否持续聚集；检测数量只是画面线索。若查看原片并现场核实后确认道路受影响，可按下方按钮手工登记路况。';
+    }
+    var coverage = result.video_coverage || {};
+    var duration = Number(coverage.duration_seconds || metrics.observed_duration_seconds);
+    var congestionMinimum = Number(metrics.minimum_congestion_duration_seconds) || 15;
+    var crowdingMinimum = Number(metrics.minimum_crowding_duration_seconds) || 5;
+    if (Number.isFinite(duration) && duration > 0) {
+      var insufficient = [];
+      var durationKinds = [];
+      if (duration < congestionMinimum) {
+        insufficient.push('缓行判断至少需要 ' + congestionMinimum + ' 秒连续证据');
+        durationKinds.push('持续缓行');
+      }
+      if (duration < crowdingMinimum) {
+        insufficient.push('人群聚集判断至少需要 ' + crowdingMinimum + ' 秒连续证据');
+        durationKinds.push('持续人群聚集');
+      }
+      if (insufficient.length) {
+        var shownDuration = Math.round(duration * 10) / 10;
+        return '本段视频约 ' + shownDuration + ' 秒，' + insufficient.join('；') + '，时长不足以判断'
+          + durationKinds.join('或') + '。画面车辆数只是抽样帧检测数量，不等于道路流量或拥堵。'
+          + '建议上传至少 ' + congestionMinimum + ' 秒、尽量固定角度的视频；若查看原片后确认道路受影响，'
+          + '可按下方“依据原片手工登记路况”，并填写现场核实依据。';
+      }
+    }
+    return '模型没有生成可复核的路况候选。请查看原片和观察区域；抽样帧中的车辆数不能单独说明道路流量或拥堵。'
+      + '若现场核实后确认道路受影响，可按下方按钮手工登记路况，并填写核实依据。';
+  }
+
   function renderVisionJob(job) {
     var card = document.createElement('article'); card.className = 'vision-job';
     var head = document.createElement('div'); head.className = 'vision-job-head';
@@ -1988,7 +2020,7 @@
         var terminalCopy = document.createElement('p');
         terminalCopy.textContent = result.safety && result.safety.observation_region_reassociation_required === true
           ? '观察区域映射成功率低于 80%，系统不会基于相关区域生成拥堵或人群候选。请重新圈选观察区、核对道路绑定后重新分析；画面映射不等于地图地理配准。'
-          : '模型未生成可复核的路况候选。若查看原片后发现遗漏，可由管理员手工登记；车辆数量不能单独证明拥堵。';
+          : noCandidateFeedback(result, job.media_kind);
         terminal.append(terminalTitle, terminalCopy); card.appendChild(terminal);
         var manual = document.createElement('button'); manual.type = 'button';
         manual.className = 'outline-button transfer-button';
