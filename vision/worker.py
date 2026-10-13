@@ -24,6 +24,37 @@ logger = logging.getLogger(__name__)
 _STOP = threading.Event()
 
 
+def _optional_runtime_config(model_kind, *, accident_threshold, flood_min_area_ratio):
+    sampling = {
+        "sample_fps": float(config.VISION_SAMPLE_FPS),
+        "specialized_sampling_policy": "detector_sample_grid_about_1hz_v2",
+    }
+    if model_kind == "accident":
+        if accident_threshold is None:
+            accident_threshold = config.VISION_ACCIDENT_THRESHOLD
+        return {
+            **sampling,
+            "decision_threshold": float(accident_threshold),
+            "dense_trigger_threshold": float(config.VISION_ACCIDENT_DENSE_TRIGGER_THRESHOLD),
+            "dense_window_seconds": float(config.VISION_ACCIDENT_DENSE_WINDOW_SECONDS),
+            "roi_policy": "all_vehicle_lanes_or_first_road_region_v1",
+        }
+    flood_probability = os.getenv("VISION_FLOOD_CLASS_PROBABILITY_THRESHOLD", "").strip()
+    visible_probability = os.getenv("VISION_VISIBLE_WATER_CLASS_PROBABILITY_THRESHOLD", "").strip()
+    flood_probability = float(flood_probability) if flood_probability else None
+    visible_probability = float(visible_probability) if visible_probability else None
+    if flood_probability != visible_probability:
+        return None
+    if flood_min_area_ratio is None:
+        flood_min_area_ratio = config.VISION_FLOOD_MIN_AREA_RATIO
+    return {
+        **sampling,
+        "min_area_ratio": float(flood_min_area_ratio),
+        "probability_threshold": flood_probability,
+        "roi_policy": "all_marked_road_surface_regions_v1",
+    }
+
+
 def load_optional_models(*, accident_path=None, accident_revision=None,
                          accident_threshold=None, accident_enabled=False, flood_path=None,
                          flood_enabled=False,
@@ -43,9 +74,15 @@ def load_optional_models(*, accident_path=None, accident_revision=None,
 
     def check_release(model_kind, model_path, revision):
         try:
+            runtime_config = _optional_runtime_config(
+                model_kind, accident_threshold=accident_threshold,
+                flood_min_area_ratio=flood_min_area_ratio,
+            )
+            if runtime_config is None:
+                return {"approved": False, "reason": "flood_threshold_configuration_ambiguous"}
             return release_checker(
                 model_kind, model_path, revision,
-                release_manifest_path, readiness_report_path,
+                release_manifest_path, readiness_report_path, runtime_config,
             )
         except Exception:
             logger.exception("Optional %s model release check failed; capability disabled", model_kind)

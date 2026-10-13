@@ -191,7 +191,8 @@ def review_candidate(url: str | None, job_id: str, *, candidate_index: int,
     with database.connect(url) as conn:
         row = conn.execute(
             "UPDATE manager_vision_job SET candidate_reviews = candidate_reviews || "
-            "jsonb_build_object(%s::text, %s::jsonb), updated_at=now() "
+            "jsonb_build_object(%s::text, (%s::jsonb || jsonb_build_object('reviewed_at', now()))), "
+            "updated_at=now() "
             "WHERE job_id=%s AND status='needs_review' AND review_status IS NULL "
             "AND jsonb_typeof(result->'candidates')='array' "
             "AND jsonb_array_length(result->'candidates') > %s "

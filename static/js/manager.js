@@ -13,6 +13,11 @@
   state.captureTimeEdited = false;
   state.captureTimeAutoValue = '';
   state.eventPublishBusy = false;
+  state.selectedRoadRebindId = null;
+  state.roadRebindPick = null;
+  state.roadRebindPreview = null;
+  state.roadRebindReason = '';
+  state.roadRebindBusy = false;
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
     var node = byId(id);
@@ -1025,6 +1030,7 @@
     visionPreviewStates.clear();
     state.csrf = '';
     state.reviewDrafts = {};
+    clearRoadRebind(false);
     clearVisionSource();
     if (state.map) clearPickedRoad();
     byId('event-type').value = '';
@@ -1069,6 +1075,56 @@
         : '选择路段后再填写事件';
     }
     updatePublishState();
+  }
+
+  function clearRoadRebind(refresh) {
+    state.pickRequestId += 1;
+    if (state.picking && state.pickPurpose === 'event_rebind') setPicking(false);
+    if (state.roadRebindPreview && state.map) state.map.removeLayer(state.roadRebindPreview);
+    state.roadRebindPreview = null;
+    state.selectedRoadRebindId = null;
+    state.roadRebindPick = null;
+    state.roadRebindReason = '';
+    state.roadRebindBusy = false;
+    if (refresh) refreshEvents();
+  }
+
+  function beginRoadRebind(item) {
+    if (state.selectedRoadRebindId === item.id) {
+      clearRoadRebind(true);
+      return;
+    }
+    clearRoadRebind(false);
+    state.selectedRoadRebindId = item.id;
+    setPicking(true, 'event_rebind');
+    message('form-message', '请在地图上点击该影像事件实际对应的道路。');
+    refreshEvents();
+  }
+
+  async function submitRoadRebind(item) {
+    if (state.roadRebindBusy || !state.roadRebindPick ||
+        state.roadRebindPick.eventId !== item.id) return;
+    var reason = String(state.roadRebindReason || '').trim();
+    if (reason.length < 8 || reason.length > 300) {
+      message('form-message', '请填写 8 到 300 字的道路更正依据。');
+      return;
+    }
+    var picked = state.roadRebindPick;
+    if (!window.confirm('将“' + (item.edge && item.edge.road_name || '原道路') + '”更正为“' +
+        (picked.snap.road_name || '所选道路') + '”？这会更新该事件影响的路段。')) return;
+    state.roadRebindBusy = true;
+    try {
+      await request('/api/road-conditions/' + encodeURIComponent(item.id), 'PATCH', {
+        road_point: { lng: picked.lng, lat: picked.lat },
+        field_confirmation: reason,
+      });
+      message('form-message', '道路绑定已更正，路线影响已同步更新。', true);
+      clearRoadRebind(true);
+    } catch (error) {
+      state.roadRebindBusy = false;
+      message('form-message', error.message || '道路更正失败，请重新核对后重试。');
+      refreshEvents();
+    }
   }
 
   function renderImpactPreview(preview) {
@@ -1181,6 +1237,36 @@
       }
       return;
     }
+    if (state.pickPurpose === 'event_rebind') {
+      var eventRebindId = state.selectedRoadRebindId;
+      var rebindRequestId = ++state.pickRequestId;
+      var rebindLng = event.latlng.lng;
+      var rebindLat = event.latlng.lat;
+      message('form-message', '正在核对新道路与校园路网的距离…');
+      try {
+        var rebindData = await request('/api/road-conditions/snap?lng=' + encodeURIComponent(rebindLng) +
+          '&lat=' + encodeURIComponent(rebindLat), 'GET');
+        if (rebindRequestId !== state.pickRequestId || !state.picking ||
+            state.pickPurpose !== 'event_rebind' || state.selectedRoadRebindId !== eventRebindId) return;
+        var rebindSnap = rebindData.snap;
+        if (!rebindSnap) throw new Error('这个位置没有匹配到校园道路，请放大后重新选择。');
+        if (state.roadRebindPreview && state.map) state.map.removeLayer(state.roadRebindPreview);
+        var rebindGeometry = (rebindSnap.geometry_gcj || []).map(function (point) { return [point[1], point[0]]; });
+        state.roadRebindPreview = rebindGeometry.length >= 2
+          ? L.polyline(rebindGeometry, { color: '#2878a8', weight: 8, opacity: .9, lineCap: 'round' }).addTo(state.map)
+          : L.circleMarker([rebindSnap.snap_lat_gcj, rebindSnap.snap_lng_gcj], {
+            radius: 8, color: '#fff', weight: 2, fillColor: '#2878a8', fillOpacity: 1,
+          }).addTo(state.map);
+        state.roadRebindPick = { eventId: eventRebindId, lng: rebindLng, lat: rebindLat, snap: rebindSnap };
+        setPicking(false);
+        message('form-message', '已选中“' + (rebindSnap.road_name || '未命名道路') + '”，吸附偏移 ' +
+          Number(rebindSnap.dist_m || 0).toFixed(1) + ' 米。填写更正依据后确认。', true);
+        refreshEvents();
+      } catch (error) {
+        if (rebindRequestId === state.pickRequestId) message('form-message', error.message || '新道路匹配失败，请重试。');
+      }
+      return;
+    }
     var pickRequestId = ++state.pickRequestId;
     var lng = event.latlng.lng;
     var lat = event.latlng.lat;
@@ -1271,6 +1357,46 @@
         ' · ' + (last.actor || '未知') + ' · ' + (last.at ? new Date(Number(last.at) * 1000).toLocaleString('zh-CN', { hour12: false }) : '时间未知');
       name.appendChild(audit);
     }
+    var isVisionEvent = item.source && item.source.kind === 'vision_job';
+    if (isVisionEvent && eventStatus(item) !== 'revoked' && state.selectedRoadRebindId === item.id) {
+      var rebindPanel = document.createElement('div'); rebindPanel.className = 'event-rebind-panel';
+      var rebindHelp = document.createElement('p');
+      rebindHelp.textContent = '如果影像事件绑错了路，在地图上重新选路并写明核对依据。';
+      var rebindSelection = document.createElement('p'); rebindSelection.className = 'event-rebind-selection';
+      var currentPick = state.roadRebindPick && state.roadRebindPick.eventId === item.id
+        ? state.roadRebindPick : null;
+      rebindSelection.textContent = currentPick
+        ? (currentPick.snap.road_name || '未命名道路') + ' · 吸附 ' + Number(currentPick.snap.dist_m || 0).toFixed(1) + ' 米'
+        : '尚未选择新道路';
+      var rebindReason = document.createElement('textarea');
+      rebindReason.rows = 2; rebindReason.maxLength = 300;
+      rebindReason.placeholder = '填写现场或影像核对依据（8–300 字）';
+      rebindReason.value = state.roadRebindReason;
+      rebindReason.addEventListener('input', function () {
+        state.roadRebindReason = rebindReason.value;
+        rebindConfirm.disabled = !currentPick || state.roadRebindBusy ||
+          rebindReason.value.trim().length < 8 || rebindReason.value.trim().length > 300;
+      });
+      var rebindActions = document.createElement('div'); rebindActions.className = 'event-rebind-actions';
+      var rebindPickButton = document.createElement('button'); rebindPickButton.type = 'button';
+      rebindPickButton.textContent = state.picking && state.pickPurpose === 'event_rebind' ? '取消地图选路' : '在地图选择道路';
+      rebindPickButton.addEventListener('click', function () {
+        var picking = !(state.picking && state.pickPurpose === 'event_rebind');
+        setPicking(picking, 'event_rebind');
+        message('form-message', picking ? '请在地图上点击事件实际对应的道路。' : '已取消地图选路。');
+      });
+      var rebindConfirm = document.createElement('button'); rebindConfirm.type = 'button';
+      rebindConfirm.textContent = state.roadRebindBusy ? '正在保存…' : '确认更正';
+      rebindConfirm.disabled = !currentPick || state.roadRebindBusy ||
+        state.roadRebindReason.trim().length < 8 || state.roadRebindReason.trim().length > 300;
+      rebindConfirm.addEventListener('click', function () { submitRoadRebind(item); });
+      var rebindCancel = document.createElement('button'); rebindCancel.type = 'button';
+      rebindCancel.textContent = '取消更正';
+      rebindCancel.addEventListener('click', function () { clearRoadRebind(true); });
+      rebindActions.append(rebindPickButton, rebindConfirm, rebindCancel);
+      rebindPanel.append(rebindHelp, rebindSelection, rebindReason, rebindActions);
+      name.appendChild(rebindPanel);
+    }
     var type = document.createElement('div'); type.className = 'event-type'; type.textContent = item.type_label || item.type || '管制';
     var road = document.createElement('div'); road.className = 'event-meta';
     var edge = item.edge || {};
@@ -1280,6 +1406,12 @@
     times.textContent = eventStatus(item) === 'revoked' ? '撤销 ' + new Date(Number(item.revoked_at || item.updated_at) * 1000).toLocaleString('zh-CN', { hour12: false }) :
       (eventStatus(item) === 'scheduled' ? '计划开始 ' + new Date(Number(item.start_time) * 1000).toLocaleString('zh-CN', { hour12: false }) : '结束 ' + end);
     var actions = document.createElement('div'); actions.className = 'row-actions';
+    if (isVisionEvent && eventStatus(item) !== 'revoked') {
+      var rebindButton = document.createElement('button'); rebindButton.type = 'button';
+      rebindButton.textContent = state.selectedRoadRebindId === item.id ? '收起更正' : '更正道路';
+      rebindButton.addEventListener('click', function () { beginRoadRebind(item); });
+      actions.appendChild(rebindButton);
+    }
     if (eventStatus(item) === 'active') {
       var endButton = document.createElement('button'); endButton.type = 'button'; endButton.textContent = '结束事件';
       endButton.addEventListener('click', function () { endEvent(item.id); }); actions.appendChild(endButton);
@@ -1297,6 +1429,9 @@
     try {
       var result = await request('/api/road-conditions?all=1', 'GET');
       var items = result.conditions || [];
+      if (state.selectedRoadRebindId && !items.some(function (item) { return item.id === state.selectedRoadRebindId; })) {
+        clearRoadRebind(false);
+      }
       byId('active-count').textContent = items.filter(function (item) { return item.status === 'active'; }).length;
       state.eventLayers.clearLayers();
       items.forEach(function (item) {
@@ -2131,8 +2266,17 @@
         candidate.append(titleNode, why);
         appendCandidateSummary(item, job.media_kind, candidate);
         appendCandidateEvidence(item, previewMedia, job.media_kind, candidate, result);
-        if (candidateReview && candidateReview.note) {
-          var reviewText = document.createElement('p'); reviewText.textContent = '复核记录：' + candidateReview.note; candidate.appendChild(reviewText);
+        if (candidateReview) {
+          var reviewText = document.createElement('p'); reviewText.className = 'vision-job-meta';
+          var reviewParts = [candidateReview.status === 'confirmed' ? '已确认' : '已排除'];
+          if (candidateReview.reviewed_by) reviewParts.push(candidateReview.reviewed_by);
+          if (candidateReview.reviewed_at) {
+            var reviewDate = new Date(candidateReview.reviewed_at);
+            if (Number.isFinite(reviewDate.getTime())) reviewParts.push(reviewDate.toLocaleString('zh-CN', { hour12: false }));
+          }
+          if (candidateReview.note) reviewParts.push(candidateReview.note);
+          reviewText.textContent = '单项复核：' + reviewParts.join(' · ');
+          candidate.appendChild(reviewText);
         }
         if (job.status === 'needs_review' && !job.review_status && !candidateReview && !legacyReview) {
           var actions = document.createElement('div'); actions.className = 'candidate-actions';

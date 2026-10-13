@@ -495,6 +495,116 @@ def update_condition(cond_id: str, changes: dict, *, actor: str = "web",
     return target
 
 
+def rebind_vision_condition_edge(cond_id: str, edge: dict, *,
+                                 field_confirmation: str,
+                                 actor: str = "web") -> Optional[dict]:
+    """Correct the road association of a published vision-derived event, with audit history."""
+    if not isinstance(edge, dict) or edge.get("u") is None or edge.get("v") is None:
+        raise ValueError("缺少新的路段绑定信息")
+
+    def integer_id(value, label):
+        if not _finite_number(value) or not float(value).is_integer():
+            raise ValueError(f"新的道路{label}无效")
+        return int(value)
+
+    u, v = integer_id(edge.get("u"), "起点"), integer_id(edge.get("v"), "终点")
+    key = integer_id(edge.get("key", 0), "边标识")
+    snap_lng, snap_lat, snap_dist = (
+        edge.get("snap_lng_gcj"), edge.get("snap_lat_gcj"), edge.get("dist_m"),
+    )
+    if (not _valid_lon_lat(snap_lng, snap_lat)
+            or not 70 <= float(snap_lng) <= 140 or not 0 <= float(snap_lat) <= 60
+            or not _finite_number(snap_dist)
+            or not 0 <= float(snap_dist) <= SNAP_MAX_DIST_M):
+        raise ValueError("新的道路吸附结果无效")
+    chain_length = edge.get("chain_length_m", 0)
+    if not _finite_number(chain_length) or float(chain_length) < 0:
+        raise ValueError("新的道路长度无效")
+    raw_chain = edge.get("edges")
+    if raw_chain is None:
+        raw_chain = [[u, v, key]]
+    if not isinstance(raw_chain, list) or not raw_chain:
+        raise ValueError("新的路段边链无效")
+    chain = []
+    for triple in raw_chain:
+        if not isinstance(triple, (list, tuple)) or len(triple) != 3:
+            raise ValueError("新的路段边链无效")
+        chain.append([integer_id(triple[0], "边链起点"),
+                      integer_id(triple[1], "边链终点"),
+                      integer_id(triple[2], "边链标识")])
+    geometry = edge.get("geometry_gcj")
+    if (not isinstance(geometry, list) or len(geometry) < 2
+            or not all(isinstance(point, (list, tuple)) and len(point) >= 2
+                       and _valid_lon_lat(point[0], point[1])
+                       for point in geometry)):
+        raise ValueError("新的道路几何无效")
+    reason = str(field_confirmation or "").strip()
+    if not 8 <= len(reason) <= 300:
+        raise ValueError("道路更正依据须为 8 到 300 字")
+
+    new_binding = {
+        "u": u,
+        "v": v,
+        "key": key,
+        "edges": chain,
+        "chain_length_m": float(chain_length),
+        "road_name": str(edge.get("road_name") or ""),
+        "snap": {"lng": float(snap_lng), "lat": float(snap_lat)},
+        "geometry_gcj": [[float(point[0]), float(point[1])] for point in geometry],
+        "snap_dist_m": round(float(snap_dist), 1),
+    }
+    associated_edge = {
+        "u": new_binding["u"], "v": new_binding["v"], "key": new_binding["key"],
+        "road_name": new_binding["road_name"], "snap_dist_m": new_binding["snap_dist_m"],
+    }
+
+    with _condition_write_lock():
+        conditions = _load_conditions(strict=True)
+        target = next((item for item in conditions if item.get("id") == cond_id), None)
+        if target is None or target.get("revoked_at"):
+            return None
+        source = target.get("source") or {}
+        if source.get("kind") != "vision_job":
+            raise ValueError("只有影像识别来源的事件可以更正绑定道路")
+        previous_edge = target.get("edge") or {}
+        previous_association = {
+            "road_name": str(previous_edge.get("road_name") or ""),
+            "u": previous_edge.get("u"), "v": previous_edge.get("v"),
+            "key": previous_edge.get("key", 0),
+        }
+        now = time.time()
+        history = source.get("association_history")
+        history = list(history) if isinstance(history, list) else []
+        history.append({
+            "associated_edge": previous_association,
+            "field_confirmation": source.get("field_confirmation", ""),
+            "at": now,
+        })
+        source = deepcopy(source)
+        source["association_history"] = history[-10:]
+        source["associated_edge"] = associated_edge
+        source["field_confirmation"] = reason
+        source["road_association"] = "manager_corrected_edge"
+        target["source"] = source
+        target["edge"] = new_binding
+        target["click_point"] = {
+            "lng": float(edge["snap_lng_gcj"]), "lat": float(edge["snap_lat_gcj"]),
+        }
+        target["updated_at"] = now
+        target.setdefault("audit", []).append({
+            "action": "vision_road_rebound", "actor": actor, "at": now,
+            "changes": {
+                "previous_edge": previous_association,
+                "new_edge": associated_edge,
+                "field_confirmation": reason,
+            },
+        })
+        _save_conditions(conditions)
+    logger.info("更正影像路况事件 %s 的道路绑定: %s -> %s by=%s",
+                cond_id, previous_association["road_name"], associated_edge["road_name"], actor)
+    return target
+
+
 # ===================== 路网吸附 =====================
 
 def _edge_line(G, u, v, data):

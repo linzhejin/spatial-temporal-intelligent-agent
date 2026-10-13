@@ -2395,7 +2395,7 @@ def _tool_list_road_conditions(args, ctx):
         source = c.get("source") or {}
         audit = c.get("audit") or []
         observation_time = source.get("captured_at") or c.get("created_at")
-        out.append({
+        condition = {
             "id": c.get("id"),
             "name": c.get("name", ""),
             "type_label": CONDITION_LABELS.get(c.get("type"), c.get("type", "")),
@@ -2423,7 +2423,24 @@ def _tool_list_road_conditions(args, ctx):
                 "affected_modes": c.get("affected_modes") or [],
                 "cost_multiplier": c.get("cost_multiplier"),
             },
-        })
+        }
+        if source.get("kind") == "vision_job":
+            condition["vision_evidence"] = {
+                "job_id": source.get("job_id"),
+                "candidate_index": source.get("candidate_index"),
+                "candidate_kind": source.get("candidate_kind"),
+                "region_id": source.get("region_id"),
+                "observation_time": source.get("captured_at"),
+                "reviewed_at": source.get("reviewed_at"),
+                "reviewed_by": source.get("reviewed_by"),
+                "review_note": (source.get("review_note") or "")[:500],
+                "evidence_reference": source.get("evidence_reference") or {},
+                "road_association": source.get("road_association"),
+                "associated_edge": source.get("associated_edge") or {},
+                "association_history": (source.get("association_history") or [])[-3:],
+                "field_confirmation": (source.get("field_confirmation") or "")[:300],
+            }
+        out.append(condition)
     return {"conditions": out, "count": len(out),
             "message": "当前没有生效的路况信息" if not out else ""}, None
 

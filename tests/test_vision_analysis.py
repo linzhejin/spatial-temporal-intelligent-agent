@@ -23,6 +23,42 @@ def test_stabilized_video_with_many_stopped_tracked_vehicles_proposes_congestion
     assert candidate["evidence"]["summary"]["observed_duration_seconds"] == 15.0
 
 
+def test_congestion_duration_does_not_bridge_missing_road_observations():
+    frames = [frame_of_stopped_vehicles() for _ in range(18)]
+    identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
+    region_transforms = [identity for _ in frames]
+    region_transforms[8] = None
+    pairwise_transforms = [None] + [identity for _ in frames[1:]]
+    pairwise_transforms[8] = None
+    roi = [{"id": "lane", "kind": "vehicle_lane",
+            "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        frames, frame_width=640, frame_height=480,
+        frame_transforms=pairwise_transforms,
+        region_transforms=region_transforms, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_congestion" for item in result["candidates"])
+
+
+def test_congestion_duration_does_not_bridge_large_decoder_timestamp_gap():
+    frames = [frame_of_stopped_vehicles() for _ in range(90)]
+    frame_times_s = [index * 0.2 for index in range(45)] + [
+        20.0 + index * 0.2 for index in range(45)
+    ]
+    roi = [{"id": "lane", "kind": "vehicle_lane",
+            "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        frames, frame_width=640, frame_height=480,
+        sample_interval_s=0.2, frame_times_s=frame_times_s,
+        camera_stabilized=True, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_congestion" for item in result["candidates"])
+
+
 def test_short_red_light_like_stop_at_dense_sampling_does_not_propose_congestion():
     frames = [frame_of_stopped_vehicles() for _ in range(6)]
     roi = [{"id": "lane", "kind": "vehicle_lane", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]

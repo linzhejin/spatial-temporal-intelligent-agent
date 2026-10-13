@@ -58,6 +58,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page = self.context.new_page()
         self.errors = []
         self.posts = []
+        self.rebind_requests = []
         self.snap_requests = []
         self.road_conditions = []
         self.pending_posts = []
@@ -103,6 +104,13 @@ class ManagerEventControlsTest(unittest.TestCase):
                 "affected_length_m": 100, "active_event_count": 0,
                 "effects_by_mode": {}, "sample_routes": {},
             }}
+        elif path.startswith("/api/road-conditions/") and route.request.method == "PATCH":
+            self.rebind_requests.append(route.request.post_data_json)
+            if self.road_conditions:
+                self.road_conditions[0]["edge"]["road_name"] = "测试路"
+                self.road_conditions[0]["source"]["associated_edge"]["road_name"] = "测试路"
+                self.road_conditions[0]["source"]["road_association"] = "manager_corrected_edge"
+            data = {"condition": self.road_conditions[0] if self.road_conditions else {}}
         elif path == "/api/manager/vision-jobs":
             data = {"jobs": self.vision_jobs}
         elif path.endswith("/preview-frames"):
@@ -504,6 +512,38 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page.locator("#publish-event").click()
         expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
         self.assertEqual(self.posts[0]["cost_multiplier"], 2.5)
+
+
+    def test_admin_can_rebind_a_vision_event_to_a_snapped_road(self):
+        self.road_conditions = [{
+            "id": "vision-event-1", "status": "active", "name": "影像发现的缓行",
+            "description": "已由管理员确认", "type": "event", "type_label": "校园事件",
+            "action": "slowdown", "affected_modes": ["walk"], "cost_multiplier": 1.4,
+            "edge": {"road_name": "错误道路", "snap": {"lng": 114.362, "lat": 30.536},
+                     "geometry_gcj": [[114.362, 30.536], [114.363, 30.536]]},
+            "source": {"kind": "vision_job", "job_id": "vision-job-1",
+                       "road_association": "manager_selected_edge",
+                       "associated_edge": {"road_name": "错误道路"},
+                       "field_confirmation": "已核对影像"},
+            "audit": [],
+        }]
+        self.open_manager()
+        row = self.page.locator(".event-row").filter(has_text="影像发现的缓行")
+        row.get_by_role("button", name="更正道路").click()
+        expect(row.locator(".event-rebind-panel")).to_be_visible()
+        self.page.locator("#manager-map").click(position={"x": 220, "y": 220})
+        expect(row.locator(".event-rebind-selection")).to_contain_text("测试路", timeout=5000)
+        row.locator("textarea").fill("复核原视频与地图后，确认该候选对应测试路并更新绑定。")
+        self.page.on("dialog", lambda dialog: dialog.accept())
+        row.get_by_role("button", name="确认更正").click()
+        expect(self.page.locator("#form-message")).to_contain_text("道路绑定已更正")
+        self.assertEqual(len(self.rebind_requests), 1)
+        self.assertEqual(self.rebind_requests[0]["road_point"].keys(), {"lng", "lat"})
+        self.assertIn("复核原视频与地图", self.rebind_requests[0]["field_confirmation"])
+        updated = self.page.locator(".event-row").filter(has_text="影像发现的缓行")
+        expect(updated).to_contain_text("测试路")
+        self.assertEqual(self.road_conditions[0]["action"], "slowdown")
+        self.assertEqual(self.road_conditions[0]["affected_modes"], ["walk"])
 
 
     def test_matching_dji_subtitle_fills_time_without_using_gps_for_road_binding(self):

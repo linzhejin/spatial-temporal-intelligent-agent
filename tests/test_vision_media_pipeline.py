@@ -4,7 +4,10 @@ import cv2
 import numpy as np
 import pytest
 
-from vision.engine import analyze_media, _compact_specialized_observations, _merge_segment_analyses
+from vision.engine import (
+    analyze_media, _compact_specialized_observations, _merge_segment_analyses,
+    _specialized_predictions,
+)
 from vision.worker import load_optional_models
 
 
@@ -97,6 +100,108 @@ def test_optional_release_check_failure_does_not_disable_base_vision(tmp_path):
     assert flood is None
     assert capabilities["accident_recognition_supported"] is False
     assert capabilities["accident_recognition_release_status"] == "release_check_failed"
+
+
+def test_accident_inference_covers_each_marked_vehicle_lane_roi():
+    class AccidentModel:
+        model_id = "fake-aider"
+
+        def __init__(self):
+            self.shapes = []
+
+        def predict(self, crop):
+            self.shapes.append(crop.shape[:2])
+            return {"traffic_accident_probability": 0.96, "model_id": self.model_id}
+
+    lane_left = {"id": "lane-left", "kind": "vehicle_lane",
+                 "polygon": [[0, 0], [0.4, 0], [0.4, 1], [0, 1]]}
+    lane_right = {"id": "lane-right", "kind": "vehicle_lane",
+                  "polygon": [[0.6, 0], [1, 0], [1, 1], [0.6, 1]]}
+    model = AccidentModel()
+
+    observations, failures = _specialized_predictions(
+        np.zeros((80, 100, 3), dtype=np.uint8), 0.0,
+        [lane_left, lane_right], model, None,
+    )
+
+    assert failures == []
+    assert {item["region_id"] for item in observations} == {"lane-left", "lane-right"}
+    assert len(model.shapes) == 2
+
+
+def test_specialized_models_are_sampled_about_once_per_second_at_24_fps(tmp_path, monkeypatch):
+    import config
+
+    class TwentyFourFpsCapture(FakeCapture):
+        def __init__(self, total_frames):
+            super().__init__(total_frames, fps=24)
+
+    class TwentyFourFpsCV2(FakeCV2):
+        _total_frames = 240
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            return TwentyFourFpsCapture(cls._total_frames)
+
+    class FloodModel:
+        model_id = "fake-flood"
+        min_area_ratio = 0.08
+
+        def __init__(self):
+            self.calls = 0
+
+        def predict(self, _frame, region):
+            self.calls += 1
+            return {"flooded_road_area_ratio": 0.1, "region_id": region["id"]}
+
+    source = tmp_path / "24fps.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", TwentyFourFpsCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 200)
+    flood_model = FloodModel()
+
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True, detector=FakeDetector(),
+        flood_segmenter=flood_model,
+        regions=[{"id": "road", "kind": "road_surface",
+                  "polygon": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]]}],
+    )
+
+    assert 9 <= flood_model.calls <= 11
+    assert result["metrics"]["specialized_frames_analyzed"] == flood_model.calls
+
+
+def test_video_evidence_uses_decoder_timestamps_instead_of_nominal_fps(tmp_path, monkeypatch):
+    import config
+
+    class TimestampCapture(FakeCapture):
+        def get(self, prop):
+            if prop == TimestampCV2.CAP_PROP_POS_MSEC:
+                return max(0, self.index - 1) * 108.0
+            return super().get(prop)
+
+    class TimestampCV2(FakeCV2):
+        CAP_PROP_POS_MSEC = 8
+        _total_frames = 21
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            return TimestampCapture(cls._total_frames, fps=10)
+
+    source = tmp_path / "variable-presentation-time.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", TimestampCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 50)
+
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True, detector=FakeDetector(),
+    )
+
+    assert result["preview_frames"][1]["time_seconds"] == pytest.approx(1.08)
+    assert result["video_coverage"]["analyzed_through_seconds"] == pytest.approx(2.052)
+    assert result["video_coverage"]["timeline_basis"] == "decoder_pts"
 
 
 def test_single_image_pipeline_returns_vehicle_boxes_without_claiming_accident_or_geolocation(tmp_path):
@@ -943,6 +1048,80 @@ def test_resume_restarts_from_zero_and_replaces_checkpoint_when_decoder_cannot_s
     assert progress[0]["checkpoint"]["next_frame_index"] == 0
     assert progress[0]["checkpoint"]["segments"] == []
     assert progress[0]["checkpoint"]["analysis_fingerprint"]
+
+
+def test_resume_reopens_capture_after_failed_seek_moves_to_wrong_frame(tmp_path, monkeypatch):
+    import config
+
+    class PositionCapture(FakeCapture):
+        def __init__(self, total_frames, *, partial_seek=False):
+            super().__init__(total_frames, fps=10)
+            self.partial_seek = partial_seek
+
+        def set(self, prop, value):
+            if prop == FakeCV2.CAP_PROP_POS_FRAMES and self.partial_seek:
+                self.index = int(value) + 7
+                return False
+            return super().set(prop, value)
+
+        def read(self):
+            if self.index >= self.decodable_frames:
+                return False, None
+            current = self.index
+            self.index += 1
+            return True, np.full((80, 100, 3), current % 256, dtype=np.uint8)
+
+    class PartialSeekCV2(FakeCV2):
+        _total_frames = 100
+        captures = []
+
+        @classmethod
+        def VideoCapture(cls, _path):
+            capture = PositionCapture(
+                cls._total_frames, partial_seek=len(cls.captures) == 1,
+            )
+            cls.captures.append(capture)
+            return capture
+
+    class PositionRecordingDetector:
+        model_id = "position-recorder"
+        model_version = "1"
+        confidence_threshold = 0.4
+
+        def __init__(self):
+            self.first_pixels = []
+
+        def detect(self, frame, *, tracking=False):
+            self.first_pixels.append(int(frame[0, 0, 0]))
+            return []
+
+    source = tmp_path / "partial-seek.mp4"
+    source.write_bytes(b"fake-video")
+    monkeypatch.setitem(sys.modules, "cv2", PartialSeekCV2)
+    monkeypatch.setattr(config, "VISION_SAMPLE_FPS", 5)
+    monkeypatch.setattr(config, "VISION_SEGMENT_FRAMES", 20)
+    checkpoint = {}
+
+    def stop_after_first_segment(payload):
+        checkpoint.update(payload["checkpoint"])
+        raise RuntimeError("pause after segment")
+
+    with pytest.raises(RuntimeError, match="pause after segment"):
+        analyze_media(
+            source, "video", None, camera_stabilized=True,
+            detector=PositionRecordingDetector(), progress_callback=stop_after_first_segment,
+        )
+
+    resumed_detector = PositionRecordingDetector()
+    result = analyze_media(
+        source, "video", None, camera_stabilized=True,
+        detector=resumed_detector, resume_state=checkpoint,
+    )
+
+    assert len(PartialSeekCV2.captures) == 3
+    assert PartialSeekCV2.captures[1].released is True
+    assert resumed_detector.first_pixels[0] == 0
+    assert result["video_coverage"]["sampled_frames"] == 50
 
 
 def test_video_with_missing_declared_tail_frames_is_not_reported_as_complete(tmp_path, monkeypatch):

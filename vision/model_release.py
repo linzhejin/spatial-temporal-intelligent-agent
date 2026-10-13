@@ -31,6 +31,15 @@ def _number(value: object) -> float | None:
     return value if math.isfinite(value) else None
 
 
+def _same_number(left: object, right: object) -> bool:
+    left_value = _number(left)
+    right_value = _number(right)
+    return (
+        left_value is not None and right_value is not None
+        and math.isclose(left_value, right_value, rel_tol=0, abs_tol=1e-9)
+    )
+
+
 MAX_APPROVAL_VALIDITY = timedelta(days=365)
 MAX_READINESS_AGE = timedelta(days=90)
 
@@ -53,6 +62,7 @@ def check_optional_model_release(
     model_revision: str | None,
     release_manifest_path: str | Path | None,
     readiness_report_path: str | Path | None,
+    runtime_config: dict | None = None,
 ) -> dict[str, object]:
     """Validate rights, exact weight identity, and campus field evidence before loading.
 
@@ -116,6 +126,10 @@ def check_optional_model_release(
         return rejected("model_revision_mismatch")
     if entry.get("readiness_report_sha256") != _sha256(readiness_path):
         return rejected("readiness_hash_mismatch")
+    if not isinstance(runtime_config, dict) or not runtime_config:
+        return rejected("runtime_config_missing")
+    if entry.get("runtime_config") != runtime_config:
+        return rejected("runtime_config_mismatch")
     readiness_generated_at = _aware_time(readiness.get("generated_at"))
     if readiness_generated_at is None or readiness_generated_at > now:
         return rejected("readiness_report_time_invalid")
@@ -137,6 +151,11 @@ def check_optional_model_release(
     if model_kind == "accident":
         evaluation = checks.get("event_evaluation")
         evaluation = evaluation if isinstance(evaluation, dict) else {}
+        thresholds = evaluation.get("thresholds")
+        validated_threshold = _number(thresholds.get("accident")) if isinstance(thresholds, dict) else None
+        if not _same_number(
+                validated_threshold, runtime_config.get("decision_threshold")):
+            return rejected("accident_runtime_threshold_mismatch")
         targets = evaluation.get("event_metric_targets")
         target = targets.get("accident") if isinstance(targets, dict) else None
         precision = _number(target.get("precision")) if isinstance(target, dict) else None
@@ -152,6 +171,22 @@ def check_optional_model_release(
                 or type(positive_flights) is not int or positive_flights < 1):
             return rejected("accident_field_evidence_not_met")
     else:
+        evaluation = checks.get("event_evaluation")
+        evaluation = evaluation if isinstance(evaluation, dict) else {}
+        thresholds = evaluation.get("thresholds")
+        validated_area = _number(thresholds.get("flood_min_area_ratio")) if isinstance(thresholds, dict) else None
+        validated_probability = (
+            thresholds.get("flood_probability")
+            if isinstance(thresholds, dict) and "flood_probability" in thresholds else "missing"
+        )
+        runtime_probability = runtime_config.get("probability_threshold")
+        if (not _same_number(validated_area, runtime_config.get("min_area_ratio"))
+                or validated_probability == "missing"
+                or (validated_probability is None) != (runtime_probability is None)
+                or (validated_probability is not None and (
+                    not _same_number(validated_probability, runtime_probability)
+                ))):
+            return rejected("flood_runtime_threshold_mismatch")
         water = checks.get("visible_water_segmentation")
         water = water if isinstance(water, dict) else {}
         iou = _number(water.get("iou"))

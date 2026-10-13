@@ -285,6 +285,7 @@ def audit_campus_field_readiness(
         manifest_sha256=event_manifest_sha256,
         model_hashes=event_model_hashes,
     )
+    event_runtime_thresholds = None
     if event_report_value is not None and event_validated is not None:
         if event_report_value.get("test_group_count") != len(
                 event_validated["split_groups"]["test"]):
@@ -293,6 +294,34 @@ def audit_campus_field_readiness(
             event_issues.append("report sample_count does not match manifest")
         if event_report_value.get("event_kinds") != event_validated["event_kinds"]:
             event_issues.append("report event_kinds do not match manifest")
+        reported_thresholds = event_report_value.get("thresholds")
+        event_runtime_thresholds = {}
+        specialized_event_kinds = {"accident", "flooding"}.intersection(event_kinds)
+        if specialized_event_kinds and not isinstance(reported_thresholds, dict):
+            event_issues.append("report thresholds are missing or invalid")
+        elif isinstance(reported_thresholds, dict):
+            if "accident" in event_kinds:
+                value = _metric(reported_thresholds, "accident")
+                if value is None or not 0 < value <= 1:
+                    event_issues.append("accident decision threshold is missing or invalid")
+                else:
+                    event_runtime_thresholds["accident"] = value
+            if "flooding" in event_kinds:
+                area = _metric(reported_thresholds, "flood_min_area_ratio")
+                probability_present = "flood_probability" in reported_thresholds
+                probability_value = reported_thresholds.get("flood_probability")
+                probability = (
+                    None if probability_value is None
+                    else _metric(reported_thresholds, "flood_probability")
+                )
+                if area is None or not 0 < area <= 1:
+                    event_issues.append("flood minimum area threshold is missing or invalid")
+                if (not probability_present or (probability_value is not None
+                        and (probability is None or not 0 <= probability <= 1))):
+                    event_issues.append("flood probability threshold is missing or invalid")
+                if area is not None and 0 < area <= 1 and probability_present:
+                    event_runtime_thresholds["flood_min_area_ratio"] = area
+                    event_runtime_thresholds["flood_probability"] = probability
     missing_models = []
     if "accident" in event_kinds and accident["status"] != "present":
         missing_models.append("accident")
@@ -770,6 +799,7 @@ def audit_campus_field_readiness(
     checks["event_evaluation"] = {
         "status": event_status,
         "event_kinds": event_kinds,
+        "thresholds": event_runtime_thresholds,
         "test_flight_count": len(event_test_groups) if event_validated else None,
         "test_ground_truth_counts": event_counts,
         "event_metric_targets": event_targets,

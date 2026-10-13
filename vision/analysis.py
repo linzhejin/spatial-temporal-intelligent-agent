@@ -390,6 +390,7 @@ def build_specialized_candidates(
 def analyze_observations(
     frames: list[list[dict]], *, frame_width: int, frame_height: int,
     sample_interval_s: float = 1.0,
+    frame_times_s: list[float] | None = None,
     camera_stabilized: bool = False,
     frame_transforms: list[list[list[float]] | None] | None = None,
     region_transforms: list[list[list[float]] | None] | None = None,
@@ -417,6 +418,15 @@ def analyze_observations(
     """
     if frame_width <= 0 or frame_height <= 0 or sample_interval_s <= 0:
         raise ValueError("valid frame dimensions and sample interval are required")
+    if frame_times_s is None:
+        frame_times_s = [index * sample_interval_s for index in range(len(frames))]
+    if (len(frame_times_s) != len(frames)
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(float(value)) for value in frame_times_s)
+            or any(float(right) <= float(left)
+                   for left, right in zip(frame_times_s, frame_times_s[1:]))):
+        raise ValueError("frame timestamps must be finite, increasing, and match the frames")
+    frame_times_s = [float(value) for value in frame_times_s]
     if (isinstance(min_congestion_duration_s, bool)
             or not isinstance(min_congestion_duration_s, (int, float))
             or not math.isfinite(float(min_congestion_duration_s))
@@ -504,8 +514,11 @@ def analyze_observations(
                 or not math.isfinite(float(preview_frame_interval_s))
                 or preview_frame_interval_s <= 0):
             raise ValueError("preview frame interval must be finite and positive")
-        preview_stride = max(1, math.ceil(preview_frame_interval_s / sample_interval_s))
-        for frame_index in range(0, len(track_frames), preview_stride):
+        last_preview_time = -float("inf")
+        for frame_index in range(len(track_frames)):
+            frame_time = frame_times_s[frame_index]
+            if frame_time + 1e-9 < last_preview_time + preview_frame_interval_s:
+                continue
             detections = []
             for item in track_frames[frame_index]:
                 label = str(item.get("label", "")).strip().lower()
@@ -539,8 +552,10 @@ def analyze_observations(
             detections.sort(key=lambda item: item["confidence"], reverse=True)
             preview_frames.append({
                 "frame_index": frame_index,
+                "time_seconds": round(frame_time, 3),
                 "detections": detections[:MAX_PREVIEW_DETECTIONS_PER_FRAME],
             })
+            last_preview_time = frame_time
     vehicle_frames: list[list[dict]] = []
     pedestrian_counts: list[int] = []
     track_positions: dict[str, list[tuple[float, float, int]]] = defaultdict(list)
@@ -665,6 +680,9 @@ def analyze_observations(
             for left, right in zip(positions, positions[1:]):
                 if right[2] != left[2] + 1:
                     continue
+                elapsed_s = frame_times_s[right[2]] - frame_times_s[left[2]]
+                if elapsed_s <= 0 or elapsed_s > max(0.5, sample_interval_s * 1.5):
+                    continue
                 matrix = (
                     [[1, 0, 0], [0, 1, 0], [0, 0, 1]] if camera_stabilized
                     else frame_transforms[right[2]]
@@ -673,9 +691,11 @@ def analyze_observations(
                 )
                 predicted = _transform_point(matrix, (left[0], left[1]))
                 if predicted is not None:
-                    residuals.append(hypot(right[0] - predicted[0], right[1] - predicted[1]))
+                    residuals.append(
+                        hypot(right[0] - predicted[0], right[1] - predicted[1]) / elapsed_s
+                    )
             if len(residuals) >= 2:
-                speeds.append(mean(residuals) / diagonal / sample_interval_s)
+                speeds.append(mean(residuals) / diagonal)
         return speeds
 
     track_speeds = speeds_for_tracks(track_positions)
@@ -692,11 +712,31 @@ def analyze_observations(
     stationary_ratio = stationary_count / len(track_speeds) if track_speeds else 0.0
     avg_vehicle_count = mean(vehicle_counts) if vehicle_counts else 0.0
     candidates = []
-    observed_duration_s = max(0.0, (len(valid_frames) - 1) * sample_interval_s)
+    observed_duration_s = (
+        max(0.0, frame_times_s[-1] - frame_times_s[0]) if frame_times_s else 0.0
+    )
 
     def mapped_duration(frame_indices):
-        return max(0.0, (frame_indices[-1] - frame_indices[0]) * sample_interval_s) \
+        return max(0.0, frame_times_s[frame_indices[-1]] - frame_times_s[frame_indices[0]]) \
             if len(frame_indices) >= 2 else 0.0
+
+    def is_contiguous(previous_index, current_index):
+        return (
+            current_index == previous_index + 1
+            and frame_times_s[current_index] - frame_times_s[previous_index]
+            <= max(0.5, sample_interval_s * 1.5)
+        )
+
+    def longest_contiguous_duration(frame_indices):
+        longest = []
+        current = []
+        for index in frame_indices:
+            if current and not is_contiguous(current[-1], index):
+                current = []
+            current.append(index)
+            if len(current) > len(longest):
+                longest = current
+        return mapped_duration(longest)
 
     region_mapping_basis = (
         "operator_declared_stabilized" if camera_stabilized
@@ -712,7 +752,8 @@ def analyze_observations(
         counts = vehicle_counts_by_region[region_id]
         mapping_ratio = region_mapping_ratios.get(region_id, 0.0)
         supporting_mapping_ratio = candidate_mapping_ratio(region)
-        region_duration_s = mapped_duration(vehicle_observed_frames[region_id])
+        region_observed_span_s = mapped_duration(vehicle_observed_frames[region_id])
+        region_duration_s = longest_contiguous_duration(vehicle_observed_frames[region_id])
         if len(valid_frames) == 1 and counts and counts[0] >= min_vehicle_count:
             candidates.append(_candidate(
                 "vehicle_cluster_review", min(0.9, counts[0] / (min_vehicle_count * 2)),
@@ -746,6 +787,7 @@ def analyze_observations(
                     "stationary_track_ratio": round(region_stationary_ratio, 3),
                     "observed_duration_seconds": round(observed_duration_s, 3),
                     "region_observed_duration_seconds": round(region_duration_s, 3),
+                    "region_observed_span_seconds": round(region_observed_span_s, 3),
                     "minimum_duration_seconds": float(min_congestion_duration_s),
                     "camera_motion_compensated": bool(camera_stabilized or motion_compensation_ready),
                     "camera_stabilization_basis": "operator_declared" if camera_stabilized else "estimated_transforms",
@@ -771,7 +813,7 @@ def analyze_observations(
             if group_size < min_crowding_cluster_size:
                 current_cluster_run = []
                 continue
-            if current_cluster_run and frame_index != current_cluster_run[-1] + 1:
+            if current_cluster_run and not is_contiguous(current_cluster_run[-1], frame_index):
                 current_cluster_run = []
             current_cluster_run.append(frame_index)
             if len(current_cluster_run) > len(longest_cluster_run):

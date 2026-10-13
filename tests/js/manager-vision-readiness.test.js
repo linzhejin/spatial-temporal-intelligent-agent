@@ -202,6 +202,11 @@ function managerHarness(sessionSeed = []) {
         roadEvents = roadEvents.filter((event) => event.id !== conditionId);
         return { ok: true, json: async () => ({ data: { message: 'deleted' } }) };
       }
+      if (url.startsWith('/api/road-conditions/') && options.method === 'PATCH') {
+        const conditionId = decodeURIComponent(url.split('/').pop() || '');
+        const event = roadEvents.find((item) => item.id === conditionId);
+        return { ok: true, json: async () => ({ data: { condition: event || { id: conditionId } } }) };
+      }
       if (url.startsWith('/api/manager/vision-status') && (visionStatusFailure || sessionExpired)) {
         return { ok: false, status: sessionExpired ? 401 : 503,
           json: async () => ({ message: sessionExpired ? '需要管理员权限' : '状态读取失败' }) };
@@ -277,8 +282,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261013-videooverlay1/);
-  assert.match(managerHtml, /manager\.js\?v=20261013-videooverlay1/);
+  assert.match(managerHtml, /manager\.css\?v=20261014-road-rebind1/);
+  assert.match(managerHtml, /manager\.js\?v=20261014-road-rebind1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1393,6 +1398,49 @@ test('road event deletion removes its record from the manager list after refresh
   assert.match(harness.elements.get('event-list').children[0].textContent, /目前没有路况记录/);
 });
 
+test('manager can correct a published vision event road association with evidence', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setRoadEvents([{
+    id: 'vision-event-1', name: '航拍拥堵候选', type: 'event', status: 'active',
+    source: { kind: 'vision_job', job_id: 'vision-job-1', candidate_index: 0,
+      candidate_kind: 'possible_congestion', associated_edge: { road_name: '旧道路' } },
+    edge: { road_name: '旧道路', geometry_gcj: [[114.36, 30.53], [114.361, 30.53]] },
+  }]);
+  harness.elements.get('refresh-events').listeners.click();
+  await flush();
+  const row = harness.elements.get('event-list').children[0];
+  const start = descendants(row).find((node) => node.tagName === 'button' && node.textContent === '更正道路');
+  assert.ok(start);
+  start.listeners.click();
+  await flush();
+
+  const activeRow = harness.elements.get('event-list').children[0];
+  const cancelPick = descendants(activeRow).find((node) => node.tagName === 'button' && node.textContent === '取消地图选路');
+  assert.ok(cancelPick, 'opening the correction panel should immediately enable map picking');
+  await harness.mapListeners.click({ latlng: { lng: 114.3601, lat: 30.53 } });
+  await flush();
+
+  const selectedRow = harness.elements.get('event-list').children[0];
+  const reason = descendants(selectedRow).find((node) => node.tagName === 'textarea');
+  assert.ok(reason);
+  reason.value = '复核原始影像后确认此事件实际对应测试路，已重新核对其道路范围。';
+  reason.listeners.input();
+  const confirm = descendants(selectedRow).find((node) => node.tagName === 'button' && node.textContent === '确认更正');
+  assert.ok(confirm);
+  assert.equal(confirm.disabled, false);
+  confirm.listeners.click();
+  await flush();
+
+  const update = harness.calls.find((call) => call.url === '/api/road-conditions/vision-event-1' && call.options.method === 'PATCH');
+  assert.ok(update);
+  const body = JSON.parse(update.options.body);
+  assert.deepEqual(body.road_point, { lng: 114.3601, lat: 30.53 });
+  assert.match(body.field_confirmation, /复核原始影像/);
+  assert.equal(harness.calls.some((call) => call.url === '/api/road-conditions' && call.options.method === 'POST'), false);
+  assert.match(harness.elements.get('form-message').textContent, /道路绑定已更正/);
+});
+
 test('old session-only cleared images are permanently deleted after manager login', async () => {
   const harness = managerHarness([['managerDismissedVisionJobs', '["old-hidden-job"]']]);
   await flush();
@@ -1444,6 +1492,27 @@ test('review of multiple visual candidates records the selected item and human n
   assert.ok(posted);
   assert.equal(JSON.parse(posted.options.body).status, 'confirmed');
   assert.equal(JSON.parse(posted.options.body).note, note.value);
+});
+
+test('candidate review records show who reviewed the evidence and when', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'job-reviewed', status: 'needs_review', media_kind: 'video', original_name: '路段.mp4',
+    candidate_reviews: { '0': {
+      status: 'confirmed', reviewed_by: 'manager-1', reviewed_at: '2026-10-14T08:30:00Z',
+      note: '逐帧核对后确认该路段存在持续排队。',
+    } },
+    result: { candidates: [{ kind: 'possible_congestion',
+      evidence: { segments: [{ start_seconds: 10, end_seconds: 16 }] } }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const text = descendants(harness.elements.get('vision-jobs').children[0])
+    .map((node) => node.textContent || '').join(' ');
+  assert.match(text, /单项复核：已确认 · manager-1/);
+  assert.match(text, /2026/);
+  assert.match(text, /逐帧核对后确认该路段存在持续排队/);
 });
 
 test('flood candidates show their limits and expose per-candidate review', async () => {

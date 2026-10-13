@@ -61,6 +61,7 @@ from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, add_condition, remove_condition, update_condition,
+    rebind_vision_condition_edge,
     purge_revoked_conditions, snap_to_edge, CONDITION_LABELS, CONDITION_EFFECTS,
     SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS,
     RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
@@ -221,6 +222,53 @@ def _valid_review_only_candidate(candidate) -> bool:
         and candidate.get("review_required") is True
         and candidate.get("auto_publish") is False
     )
+
+
+def _vision_review_evidence(candidate: dict, candidate_index: int) -> dict:
+    """Keep a small, privacy-safe evidence pointer when an image candidate is published."""
+    evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
+    segments = []
+    for segment in (evidence.get("segments") or [])[:8]:
+        if not isinstance(segment, dict):
+            continue
+        start, end = segment.get("start_seconds"), segment.get("end_seconds")
+        if (isinstance(start, bool) or isinstance(end, bool)
+                or not isinstance(start, (int, float)) or not isinstance(end, (int, float))
+                or not math.isfinite(float(start)) or not math.isfinite(float(end))
+                or start < 0 or end < start):
+            continue
+        segments.append({"start_seconds": round(float(start), 3),
+                         "end_seconds": round(float(end), 3)})
+    raw_summary = evidence.get("summary") if isinstance(evidence.get("summary"), dict) else {}
+    numeric_summary = {}
+    for key in ("peak_vehicle_count", "peak_person_count", "mean_vehicle_count",
+                "max_vehicle_count", "peak_flood_area_ratio", "frames_observed"):
+        value = raw_summary.get(key)
+        if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                and math.isfinite(float(value))):
+            numeric_summary[key] = round(float(value), 4) if isinstance(value, float) else value
+    result = {
+        "candidate_index": candidate_index,
+        "candidate_kind": str(candidate.get("kind") or "unknown")[:80],
+        "segments": segments,
+        "summary": numeric_summary,
+    }
+    confidence = candidate.get("confidence")
+    if (isinstance(confidence, (int, float)) and not isinstance(confidence, bool)
+            and math.isfinite(float(confidence)) and 0 <= confidence <= 1):
+        result["model_score"] = round(float(confidence), 4)
+    reason = candidate.get("reason")
+    if isinstance(reason, str) and reason.strip():
+        result["candidate_note"] = reason.strip()[:300]
+    return result
+
+
+def _iso_review_time(value):
+    if isinstance(value, datetime):
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
+        return value.isoformat()
+    return str(value)[:64] if value else None
 
 
 def _parse_vision_observation_regions(value) -> list[dict]:
@@ -2358,6 +2406,24 @@ def create_road_condition():
                   "road_association": "manager_selected_edge"}
         if manual_registration:
             source["manual_registration"] = True
+        else:
+            legacy_confirmed = (
+                source_job.get("review_status") == "confirmed"
+                and source_job.get("review_candidate_index") == candidate_index
+            )
+            review_record = candidate_review if isinstance(candidate_review, dict) else {}
+            if legacy_confirmed:
+                review_record = {
+                    "reviewed_by": source_job.get("reviewed_by"),
+                    "reviewed_at": source_job.get("reviewed_at"),
+                    "note": source_job.get("review_note"),
+                }
+            source.update({
+                "reviewed_by": str(review_record.get("reviewed_by") or "unknown")[:100],
+                "reviewed_at": _iso_review_time(review_record.get("reviewed_at")),
+                "review_note": str(review_record.get("note") or "")[:1000],
+                "evidence_reference": _vision_review_evidence(candidate, candidate_index),
+            })
         if observation_region is not None:
             source.update({
                 "region_id": region_id,
@@ -2473,6 +2539,56 @@ def patch_road_condition(cond_id):
     if auth_error:
         return auth_error
     body = request.get_json(silent=True) or {}
+
+    if "road_point" in body:
+        if body.get("action") is not None or any(
+                body.get(field) is not None for field in ("name", "description", "start_time", "end_time")):
+            return _err("invalid_rebind_request", "道路更正请单独提交，不要同时修改事件其他字段。", 400)
+        point = body.get("road_point")
+        if not isinstance(point, dict):
+            return _err("invalid_road_point", "请在地图上重新选择道路。", 400)
+        if isinstance(point.get("lng"), bool) or isinstance(point.get("lat"), bool):
+            return _err("invalid_road_point", "道路位置坐标无效。", 400)
+        try:
+            lng, lat = float(point.get("lng")), float(point.get("lat"))
+        except (TypeError, ValueError):
+            return _err("invalid_road_point", "道路位置坐标无效。", 400)
+        if (not math.isfinite(lng) or not math.isfinite(lat)
+                or not 70 <= lng <= 140 or not 0 <= lat <= 60):
+            return _err("invalid_road_point", "道路位置坐标无效。", 400)
+        field_confirmation = str(body.get("field_confirmation") or "").strip()
+        if not 8 <= len(field_confirmation) <= 300:
+            return _err("field_confirmation_required", "请填写道路更正依据（8 至 300 字）。", 400)
+        try:
+            existing = next((item for item in list_conditions(include_inactive=True, strict=True)
+                             if item.get("id") == cond_id), None)
+            if existing is None or existing.get("revoked_at"):
+                return _err("not_found", f"路况事件 {cond_id} 不存在", 404)
+            if (existing.get("source") or {}).get("kind") != "vision_job":
+                return _err("vision_event_required", "只有影像来源事件可以使用此项道路更正。", 409)
+            graph, error = _ensure_network()
+            if error:
+                return error
+            snap = snap_to_edge(graph, lng, lat)
+            if snap is None or float(snap.get("dist_m", float("inf"))) > SNAP_MAX_DIST_M:
+                return _err(
+                    "too_far_from_road",
+                    f"新位置离校园路网超过 {int(SNAP_MAX_DIST_M)} 米，请放大地图后点在正确道路上。",
+                    400,
+                )
+            updated = rebind_vision_condition_edge(
+                cond_id, snap, field_confirmation=field_confirmation,
+                actor=_admin_identity() or "unknown",
+            )
+        except RoadConditionsUnavailableError:
+            logger.exception("读取路况事件失败，拒绝更正道路绑定")
+            return _err("road_conditions_unavailable", "路况数据暂时不可用，无法更正道路。", 503)
+        except ValueError as error:
+            return _err("invalid_field", str(error), 400)
+        if updated is None:
+            return _err("not_found", f"路况事件 {cond_id} 不存在", 404)
+        updated["type_label"] = CONDITION_LABELS.get(updated.get("type"), updated.get("type"))
+        return _ok({"condition": updated, "snap": snap})
 
     changes = {}
     if body.get("action") == "end":

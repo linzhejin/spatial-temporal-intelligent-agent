@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
 MAX_VIDEO_PREVIEW_FRAMES = 180
 # Bump this when detector/tracker/segment aggregation semantics change.
-VIDEO_CHECKPOINT_ANALYSIS_REVISION = 4
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 5
 VIDEO_TEMPORAL_CONTEXT_SECONDS = 15.0
 
 
@@ -66,7 +66,8 @@ def _video_checkpoint_fingerprint(*, path: Path, width: int, height: int,
         "video": {"width": width, "height": height, "fps": round(fps, 6),
                   "total_frames": total_frames},
         "sampling": {"target_fps": target_fps, "stride": stride,
-                     "segment_limit": segment_limit},
+                     "segment_limit": segment_limit,
+                     "timestamp_policy": "decoder_pts_or_nominal_v1"},
         "accident_dense_sampling": {"trigger_threshold": dense_trigger_threshold,
                                     "window_seconds": dense_window_seconds},
         "camera_stabilized": bool(camera_stabilized),
@@ -633,18 +634,20 @@ def _specialized_predictions(frame, time_seconds, regions, accident_model, flood
     road_regions = [region for region in regions or []
                     if isinstance(region, dict) and region.get("kind") in {"vehicle_lane", "road_surface"}]
     if accident_model is not None and road_regions:
-        region = next((item for item in road_regions if item.get("kind") == "vehicle_lane"), road_regions[0])
-        try:
-            prediction = accident_model.predict(_region_crop(frame, region))
-            observations.append({
-                "time_seconds": float(time_seconds),
-                "traffic_accident_probability": prediction["traffic_accident_probability"],
-                "accident_model_id": prediction["model_id"],
-                "region_id": str(region.get("id") or "road"),
-            })
-        except Exception as error:
-            logger.exception("Optional accident model inference failed")
-            failures.append({"model": "accident", "error_type": type(error).__name__})
+        vehicle_lanes = [item for item in road_regions if item.get("kind") == "vehicle_lane"]
+        accident_regions = vehicle_lanes or road_regions[:1]
+        for region in accident_regions:
+            try:
+                prediction = accident_model.predict(_region_crop(frame, region))
+                observations.append({
+                    "time_seconds": float(time_seconds),
+                    "traffic_accident_probability": prediction["traffic_accident_probability"],
+                    "accident_model_id": prediction["model_id"],
+                    "region_id": str(region.get("id") or "road"),
+                })
+            except Exception as error:
+                logger.exception("Optional accident model inference failed for ROI %s", region.get("id"))
+                failures.append({"model": "accident", "error_type": type(error).__name__})
     if flood_segmenter is not None:
         for region in regions or []:
             if not isinstance(region, dict) or region.get("kind") != "road_surface":
@@ -709,9 +712,11 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
     transforms: list[list[list[float]] | None] = [None]
     region_transforms: list[list[list[float]] | None] = []
     frame_indices: list[int] = []
+    frame_times_s: list[float] = []
     completed_segments = []
     temporal_context = {
         "frames": [], "transforms": [], "region_transforms": [], "frame_indices": [],
+        "frame_times_s": [],
     }
     width = height = 0
     sample_interval = 1.0
@@ -789,8 +794,78 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             target_fps = max(0.1, float(getattr(config, "VISION_SAMPLE_FPS", 5)))
             stride = max(1, round(fps / target_fps))
             total_sampled_frames = math.ceil(total_frames / stride) if total_frames else None
-            sample_interval = stride / fps
-            specialized_stride = max(stride, round(fps))
+            sample_interval = 1.0 / target_fps
+            specialized_interval = 1.0
+            next_detector_sample_time = 0.0
+            next_specialized_sample_time = 0.0
+            accident_dense_until_seconds = -1.0
+            timeline_state = {
+                "mode": "undetermined", "origin_pts_ms": None,
+                "last_pts_ms": None, "last_time_seconds": None,
+                "last_interval_seconds": None,
+            }
+
+            def decoded_time_seconds(current_frame_index: int) -> float:
+                """Read decoder PTS when it is monotonic; otherwise lock to FPS fallback."""
+                property_id = getattr(cv2, "CAP_PROP_POS_MSEC", None)
+                raw_pts = None
+                if property_id is not None and hasattr(capture, "get"):
+                    try:
+                        value = capture.get(property_id)
+                    except Exception:
+                        value = None
+                    if (isinstance(value, (int, float)) and not isinstance(value, bool)
+                            and math.isfinite(float(value)) and float(value) >= 0):
+                        raw_pts = float(value)
+
+                mode = timeline_state["mode"]
+                if mode == "undetermined":
+                    if raw_pts is None:
+                        timeline_state.update({
+                            "mode": "nominal_fps", "origin_pts_ms": None,
+                            "last_pts_ms": None,
+                        })
+                        timestamp = current_frame_index / fps
+                    elif timeline_state["origin_pts_ms"] is None:
+                        timeline_state["origin_pts_ms"] = raw_pts
+                        timeline_state["last_pts_ms"] = raw_pts
+                        timestamp = 0.0
+                    elif raw_pts > timeline_state["last_pts_ms"]:
+                        timeline_state["mode"] = "decoder_pts"
+                        timestamp = (raw_pts - timeline_state["origin_pts_ms"]) / 1000.0
+                        timeline_state["last_interval_seconds"] = (
+                            raw_pts - timeline_state["last_pts_ms"]
+                        ) / 1000.0
+                        timeline_state["last_pts_ms"] = raw_pts
+                    else:
+                        # Some OpenCV backends expose the property but return 0
+                        # for every frame. Detect that once at startup and use
+                        # the declared frame rate consistently for this video.
+                        timeline_state.update({
+                            "mode": "nominal_fps", "origin_pts_ms": None,
+                            "last_pts_ms": None,
+                        })
+                        timestamp = current_frame_index / fps
+                elif mode == "decoder_pts":
+                    previous_pts = timeline_state.get("last_pts_ms")
+                    if raw_pts is None or previous_pts is None or raw_pts <= previous_pts:
+                        raise ValueError(
+                            "视频呈现时间戳中断或倒退；为避免证据时间错位，已停止分析。"
+                        )
+                    timestamp = (raw_pts - timeline_state["origin_pts_ms"]) / 1000.0
+                    timeline_state["last_interval_seconds"] = (raw_pts - previous_pts) / 1000.0
+                    timeline_state["last_pts_ms"] = raw_pts
+                else:
+                    timestamp = current_frame_index / fps
+
+                previous_time = timeline_state.get("last_time_seconds")
+                if previous_time is not None and timestamp <= previous_time:
+                    raise ValueError("视频时间轴不是严格递增，无法可靠标注证据时间。")
+                if (previous_time is not None
+                        and timeline_state.get("last_interval_seconds") is None):
+                    timeline_state["last_interval_seconds"] = timestamp - previous_time
+                timeline_state["last_time_seconds"] = timestamp
+                return timestamp
             dense_trigger_threshold = float(getattr(
                 config, "VISION_ACCIDENT_DENSE_TRIGGER_THRESHOLD", 0.5,
             ))
@@ -836,6 +911,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         "checkpoint": {
                             "next_frame_index": 0, "segments": [],
                             "accident_dense_until_frame": -1,
+                            "accident_dense_until_seconds": -1.0,
+                            "next_detector_sample_time": 0.0,
+                            "next_specialized_sample_time": 0.0,
+                            "timeline_state": timeline_state,
                             "analysis_fingerprint": checkpoint_fingerprint,
                         },
                     })
@@ -857,18 +936,52 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 accident_dense_until_frame = int(
                     saved_checkpoint.get("accident_dense_until_frame", -1)
                 )
+                try:
+                    accident_dense_until_seconds = float(
+                        saved_checkpoint.get("accident_dense_until_seconds", -1.0)
+                    )
+                    next_detector_sample_time = float(
+                        saved_checkpoint.get("next_detector_sample_time", 0.0)
+                    )
+                    next_specialized_sample_time = float(
+                        saved_checkpoint.get("next_specialized_sample_time", 0.0)
+                    )
+                    saved_timeline = saved_checkpoint.get("timeline_state")
+                    if (isinstance(saved_timeline, dict)
+                            and saved_timeline.get("mode") in {
+                                "undetermined", "nominal_fps", "decoder_pts",
+                            }):
+                        timeline_state = {
+                            **timeline_state, **saved_timeline,
+                        }
+                except (TypeError, ValueError, OverflowError):
+                    accident_dense_until_seconds = -1.0
+                    next_detector_sample_time = 0.0
+                    next_specialized_sample_time = 0.0
+                    timeline_state = {
+                        "mode": "undetermined", "origin_pts_ms": None,
+                        "last_pts_ms": None, "last_time_seconds": None,
+                        "last_interval_seconds": None,
+                    }
                 saved_context = saved_checkpoint.get("temporal_context")
                 if isinstance(saved_context, dict):
                     context_frames = saved_context.get("frames")
                     context_transforms = saved_context.get("transforms")
                     context_indices = saved_context.get("frame_indices")
+                    context_times = saved_context.get("frame_times_s")
                     context_region_transforms = saved_context.get("region_transforms")
                     if (isinstance(context_frames, list)
                             and isinstance(context_transforms, list)
                             and isinstance(context_indices, list)
+                            and isinstance(context_times, list)
                             and isinstance(context_region_transforms, list)
                             and len(context_frames) == len(context_transforms)
                             and len(context_frames) == len(context_indices)
+                            and len(context_frames) == len(context_times)
+                            and all(isinstance(value, (int, float)) and not isinstance(value, bool)
+                                    and math.isfinite(float(value)) for value in context_times)
+                            and all(float(right) > float(left)
+                                    for left, right in zip(context_times, context_times[1:]))
                             and (not regions or len(context_frames) == len(context_region_transforms))
                             and len(context_indices) <= math.ceil(
                                 VIDEO_TEMPORAL_CONTEXT_SECONDS / sample_interval,
@@ -878,6 +991,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             "transforms": context_transforms,
                             "region_transforms": context_region_transforms,
                             "frame_indices": context_indices,
+                            "frame_times_s": [float(value) for value in context_times],
                         }
             frame_index = (
                 int(saved_checkpoint.get("next_frame_index", 0))
@@ -898,15 +1012,36 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     and abs(float(reported_position) - frame_index) <= 0.5
                 )
                 if not seeked or not seek_position_valid:
-                    # Some codecs report success but do not honor random access.
-                    # Discard stale checkpoints and reprocess from the beginning
-                    # rather than assigning incorrect timestamps to earlier frames.
+                    # A failed seek may still move the decoder. Reopen the media
+                    # instead of trusting the partially repositioned capture.
+                    capture.release()
+                    capture = cv2.VideoCapture(str(path))
+                    if not capture.isOpened():
+                        raise ValueError("视频恢复失败，无法从头重新打开文件")
+                    reset_position = (
+                        capture.get(cv2.CAP_PROP_POS_FRAMES)
+                        if hasattr(capture, "get") else None
+                    )
+                    if (isinstance(reset_position, (int, float))
+                            and math.isfinite(float(reset_position))
+                            and abs(float(reset_position)) > 0.5):
+                        capture.release()
+                        raise ValueError("视频解码器无法从头重新定位，恢复任务已停止")
                     frame_index = 0
                     accident_dense_until_frame = -1
+                    accident_dense_until_seconds = -1.0
+                    next_detector_sample_time = 0.0
+                    next_specialized_sample_time = 0.0
+                    timeline_state = {
+                        "mode": "undetermined", "origin_pts_ms": None,
+                        "last_pts_ms": None, "last_time_seconds": None,
+                        "last_interval_seconds": None,
+                    }
                     completed_segments = []
                     temporal_context = {
                         "frames": [], "transforms": [],
                         "region_transforms": [], "frame_indices": [],
+                        "frame_times_s": [],
                     }
                     report_checkpoint_reset()
             previous_gray = None
@@ -914,15 +1049,17 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             previous_region_transform = None
 
             def flush_segment(next_frame_index: int):
-                nonlocal frames, transforms, region_transforms, frame_indices, specialized_observations
+                nonlocal frames, transforms, region_transforms, frame_indices, frame_times_s
+                nonlocal specialized_observations
                 nonlocal last_live_progress_at, temporal_context
                 if not frames:
                     return
-                segment_start = frame_indices[0] / fps
-                segment_end = frame_indices[-1] / fps
+                segment_start = frame_times_s[0]
+                segment_end = frame_times_s[-1]
                 result = analyze_observations(
                     frames, frame_width=width, frame_height=height,
                     sample_interval_s=sample_interval,
+                    frame_times_s=frame_times_s,
                     camera_stabilized=camera_stabilized,
                     frame_transforms=transforms,
                     region_transforms=region_transforms if regions else None,
@@ -934,6 +1071,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 context_frames = temporal_context["frames"]
                 temporal_frames = context_frames + frames
                 temporal_frame_indices = temporal_context["frame_indices"] + frame_indices
+                temporal_frame_times_s = temporal_context["frame_times_s"] + frame_times_s
                 if context_frames:
                     temporal_transforms = (
                         temporal_context["transforms"] + [None] + transforms[1:]
@@ -945,7 +1083,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     temporal_transforms = transforms
                     temporal_region_transforms = region_transforms if regions else None
                 if context_frames:
-                    context_window_start_seconds = temporal_frame_indices[0] / fps
+                    context_window_start_seconds = temporal_frame_times_s[0]
                     for candidate in result["candidates"]:
                         if candidate.get("kind") in {"possible_congestion", "possible_crowding"}:
                             candidate["_candidate_window_start_seconds"] = round(segment_start, 3)
@@ -953,6 +1091,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     temporal_result = analyze_observations(
                         temporal_frames, frame_width=width, frame_height=height,
                         sample_interval_s=sample_interval,
+                        frame_times_s=temporal_frame_times_s,
                         camera_stabilized=camera_stabilized,
                         frame_transforms=temporal_transforms,
                         region_transforms=temporal_region_transforms,
@@ -992,10 +1131,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         if candidate.get("kind") not in temporal_kinds
                     ] + list(selected_temporal_candidates.values())
                     preview_source = temporal_result
-                    preview_source_indices = temporal_frame_indices
+                    preview_source_times_s = temporal_frame_times_s
                 else:
                     preview_source = result
-                    preview_source_indices = frame_indices
+                    preview_source_times_s = frame_times_s
                 last_preview_bucket = max((
                     math.floor(
                         float(item["time_seconds"]) / preview_interval_seconds + 1e-9
@@ -1011,9 +1150,9 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 for item in preview_source.get("preview_frames", []):
                     local_index = item.get("frame_index") if isinstance(item, dict) else None
                     if (isinstance(local_index, bool) or not isinstance(local_index, int)
-                            or not 0 <= local_index < len(preview_source_indices)):
+                            or not 0 <= local_index < len(preview_source_times_s)):
                         continue
-                    when = preview_source_indices[local_index] / fps
+                    when = preview_source_times_s[local_index]
                     bucket = math.floor(when / preview_interval_seconds + 1e-9)
                     if bucket <= last_preview_bucket or bucket >= MAX_VIDEO_PREVIEW_FRAMES:
                         continue
@@ -1027,7 +1166,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     last_preview_bucket = bucket
                 result["preview_frames"] = bounded_previews
                 candidate_window_start_seconds = (
-                    temporal_frame_indices[0] / fps if temporal_frame_indices else segment_start
+                    temporal_frame_times_s[0] if temporal_frame_times_s else segment_start
                 )
                 context_limit = max(
                     2, math.ceil(VIDEO_TEMPORAL_CONTEXT_SECONDS / sample_interval) + 1,
@@ -1043,6 +1182,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         if regions and temporal_region_transforms is not None else []
                     ),
                     "frame_indices": temporal_frame_indices[keep_from:],
+                    "frame_times_s": temporal_frame_times_s[keep_from:],
                 }
                 result["safety"]["accident_recognition_supported"] = accident_model is not None
                 result["safety"]["flood_segmentation_supported"] = flood_segmenter is not None
@@ -1066,6 +1206,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     "next_frame_index": next_frame_index,
                     "segments": completed_segments,
                     "accident_dense_until_frame": accident_dense_until_frame,
+                    "accident_dense_until_seconds": accident_dense_until_seconds,
+                    "next_detector_sample_time": next_detector_sample_time,
+                    "next_specialized_sample_time": next_specialized_sample_time,
+                    "timeline_state": timeline_state,
                     "temporal_context": temporal_context,
                     "analysis_fingerprint": checkpoint_fingerprint,
                 }
@@ -1087,6 +1231,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 transforms = [None]
                 region_transforms = []
                 frame_indices = []
+                frame_times_s = []
                 specialized_observations = []
 
             def persist_cancel_checkpoint(next_frame_index: int):
@@ -1117,6 +1262,10 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             "next_frame_index": next_frame_index,
                             "segments": completed_segments,
                             "accident_dense_until_frame": accident_dense_until_frame,
+                            "accident_dense_until_seconds": accident_dense_until_seconds,
+                            "next_detector_sample_time": next_detector_sample_time,
+                            "next_specialized_sample_time": next_specialized_sample_time,
+                            "timeline_state": timeline_state,
                             "temporal_context": temporal_context,
                             "analysis_fingerprint": checkpoint_fingerprint,
                         },
@@ -1135,7 +1284,21 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                                 "未分析的尾部不会作为完整结果发布，请检查视频后重新上传。"
                             )
                         break
-                    if frame_index % stride == 0:
+                    decoded_time = decoded_time_seconds(frame_index)
+                    detector_sample = decoded_time + 1e-9 >= next_detector_sample_time
+                    if detector_sample:
+                        next_detector_sample_time = (
+                            math.floor((decoded_time + 1e-9) / sample_interval) + 1
+                        ) * sample_interval
+                    regular_specialized_frame = (
+                        detector_sample
+                        and decoded_time + 1e-9 >= next_specialized_sample_time
+                    )
+                    if regular_specialized_frame:
+                        next_specialized_sample_time = (
+                            math.floor((decoded_time + 1e-9) / specialized_interval) + 1
+                        ) * specialized_interval
+                    if detector_sample:
                         height, width = frame.shape[:2]
                         _validate_frame_dimensions(width, height)
                         gray = None
@@ -1167,7 +1330,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         )
                         frames.append(frame_detections)
                         frame_indices.append(frame_index)
-                        regular_specialized_frame = frame_index % specialized_stride == 0
+                        frame_times_s.append(decoded_time)
                         accident_model_available = (
                             accident_model is not None and "accident" not in optional_model_errors
                         )
@@ -1176,7 +1339,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         )
                         dense_accident_frame = (
                             accident_model_available
-                            and frame_index <= accident_dense_until_frame
+                            and decoded_time <= accident_dense_until_seconds + 1e-9
                         )
                         if (
                             regular_specialized_frame
@@ -1184,7 +1347,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         ) or dense_accident_frame:
                             was_in_dense_window = dense_accident_frame
                             observations, failures = _specialized_predictions(
-                                frame, frame_index / fps, frame_regions,
+                                frame, decoded_time, frame_regions,
                                 accident_model if (
                                     regular_specialized_frame or dense_accident_frame
                                 ) and accident_model_available else None,
@@ -1209,7 +1372,11 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                                         and accident_score >= dense_trigger_threshold):
                                     accident_dense_until_frame = max(
                                         accident_dense_until_frame,
-                                        frame_index + math.ceil(dense_window_seconds * fps),
+                                        math.ceil((decoded_time + dense_window_seconds) * fps),
+                                    )
+                                    accident_dense_until_seconds = max(
+                                        accident_dense_until_seconds,
+                                        decoded_time + dense_window_seconds,
                                     )
                         if len(frames) > 1 and camera_stabilized:
                             transforms.append([[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]])
@@ -1256,8 +1423,8 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                                     "frames_analyzed": sampled_count, "total_frames": total_frames,
                                     "total_sampled_frames": total_sampled_frames,
                                     "analyzed_through_seconds": round(
-                                        min(duration_seconds, frame_index / fps)
-                                        if duration_seconds else frame_index / fps, 3,
+                                        min(duration_seconds, decoded_time)
+                                        if duration_seconds else decoded_time, 3,
                                     ),
                                     "duration_seconds": round(duration_seconds, 3) if duration_seconds else None,
                                 },
@@ -1271,6 +1438,15 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 flush_segment(frame_index)
             finally:
                 capture.release()
+            if timeline_state.get("mode") == "decoder_pts":
+                last_time = timeline_state.get("last_time_seconds")
+                last_interval = timeline_state.get("last_interval_seconds")
+                if isinstance(last_time, (int, float)) and math.isfinite(float(last_time)):
+                    duration_seconds = float(last_time) + max(
+                        0.0,
+                        float(last_interval) if isinstance(last_interval, (int, float))
+                        and math.isfinite(float(last_interval)) else 1.0 / fps,
+                    )
             if not completed_segments:
                 raise ValueError("视频中没有可读取的画面")
             analysis = _merge_segment_analyses(
@@ -1297,6 +1473,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             analysis["video_coverage"] = {
                 "complete": True,
                 "duration_seconds": round(duration_seconds, 3) if duration_seconds else None,
+                "timeline_basis": timeline_state.get("mode"),
                 "analyzed_from_seconds": completed_segments[0]["start_seconds"],
                 "analyzed_through_seconds": round(last_sampled, 3),
                 "sampled_frames": analyzed_frames,

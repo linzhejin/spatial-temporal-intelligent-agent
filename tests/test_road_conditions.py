@@ -204,6 +204,28 @@ def test_road_condition_mutations_reject_corrupt_store(tmp_path, monkeypatch, op
     assert path.read_text(encoding="utf-8") == original
 
 
+@pytest.mark.parametrize("change", [
+    {"u": True},
+    {"dist_m": rc.SNAP_MAX_DIST_M + 1},
+    {"edges": [[1, 2]]},
+    {"geometry_gcj": [[114.36, 30.53]]},
+])
+def test_vision_road_rebinding_rejects_malformed_snap_data_before_writing(change):
+    edge = {
+        "u": 1, "v": 2, "key": 0, "edges": [[1, 2, 0]],
+        "chain_length_m": 40, "road_name": "示例路",
+        "snap_lng_gcj": 114.36, "snap_lat_gcj": 30.53, "dist_m": 0.4,
+        "geometry_gcj": [[114.36, 30.53], [114.3604, 30.53]],
+    }
+    edge.update(change)
+
+    with pytest.raises(ValueError):
+        rc.rebind_vision_condition_edge(
+            "vision-event", edge,
+            field_confirmation="已复核原始航拍证据并确认正确道路绑定。",
+        )
+
+
 def _edge_condition(G, cond_type, u=1, v=2, **overrides):
     """直接在边 (u,v) 中点吸附，构造一条绑定该边的事件。"""
     x1, y1 = G.nodes[u]["x"], G.nodes[u]["y"]
@@ -1226,6 +1248,12 @@ class TestRoadConditionAPI:
             "kind": "vehicle_cluster_review",
             "review_required": True,
             "auto_publish": False,
+            "confidence": 0.74,
+            "reason": "车辆在观察区域内持续低速移动。",
+            "evidence": {
+                "segments": [{"start_seconds": 12.5, "end_seconds": 18.2}],
+                "summary": {"peak_vehicle_count": 7, "private_media_path": "must-not-leak"},
+            },
         }
         job = {
             "job_id": job_id,
@@ -1242,6 +1270,7 @@ class TestRoadConditionAPI:
                 "status": kwargs["review_status"],
                 "note": kwargs["review_note"],
                 "reviewed_by": kwargs["reviewed_by"],
+                "reviewed_at": "2026-10-14T08:30:00+00:00",
             }
             return job
 
@@ -1275,6 +1304,13 @@ class TestRoadConditionAPI:
         condition = conditions[0]
         assert condition["source"]["candidate_index"] == 0
         assert condition["edge"]["road_name"] == "自强大道"
+        assert condition["source"]["reviewed_by"] == "token"
+        assert condition["source"]["reviewed_at"] == "2026-10-14T08:30:00+00:00"
+        assert condition["source"]["review_note"] == "已核对视频，确认该路段需要临时管制。"
+        evidence_ref = condition["source"]["evidence_reference"]
+        assert evidence_ref["segments"] == [{"start_seconds": 12.5, "end_seconds": 18.2}]
+        assert evidence_ref["summary"] == {"peak_vehicle_count": 7}
+        assert "media_path" not in condition["source"]
 
         tool_result, _ = agent_tools.execute_tool("list_road_conditions", {})
         agent_condition = tool_result["conditions"][0]
@@ -1285,6 +1321,10 @@ class TestRoadConditionAPI:
             "affected_modes": ["walk"],
             "cost_multiplier": cost_multiplier,
         }
+        assert agent_condition["vision_evidence"]["job_id"] == job_id
+        assert agent_condition["vision_evidence"]["reviewed_by"] == "token"
+        assert agent_condition["vision_evidence"]["evidence_reference"] == evidence_ref
+        assert agent_condition["vision_evidence"]["associated_edge"]["road_name"] == "自强大道"
 
         baseline = compute_route(
             G, 0, 3, mode="walk", strategy_name="shortest", road_conditions=[],
@@ -1349,6 +1389,101 @@ class TestRoadConditionAPI:
         assert source["field_confirmation"] == body["field_confirmation"]
         assert source["road_association"] == "manager_selected_edge"
         assert source["associated_edge"]["road_name"] == "自强大道"
+
+    def test_published_vision_event_can_be_rebound_with_audited_road_correction(
+        self, client, G, monkeypatch,
+    ):
+        from storage import database, vision_repository
+
+        job_id = "a6f6c6b1-d237-43fa-8ea2-b01ae48a3e8e"
+        job = {
+            "job_id": job_id, "status": "needs_review", "captured_at": time.time(),
+            "candidate_reviews": {"0": {
+                "status": "confirmed", "reviewed_by": "manager-1",
+                "reviewed_at": "2026-10-14T08:30:00+00:00", "note": "已核对影像证据并确认候选。",
+            }},
+            "result": {"candidates": [{
+                "kind": "possible_congestion", "review_required": True, "auto_publish": False,
+                "evidence": {"segments": [{"start_seconds": 4, "end_seconds": 11}]},
+            }]},
+        }
+        monkeypatch.setattr(database, "initialize", lambda *_args: None)
+        monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
+        headers = {"X-Admin-Token": "test-token-xyz"}
+        old_lng, old_lat = _mid_12_gcj(G)
+        created = client.post("/api/road-conditions", json={
+            "type": "event", "action": "slowdown", "affected_modes": ["walk"],
+            "cost_multiplier": 1.4, "name": "需要更正绑定的影像事件",
+            "lng": old_lng, "lat": old_lat,
+            "source_vision_job_id": job_id, "source_vision_candidate_index": 0,
+            "field_confirmation": "现场核实该道路存在持续缓行，请按影像时间判断是否发布。",
+            "end_time": time.time() + 1800,
+        }, headers=headers)
+        assert created.status_code == 201
+        condition_id = created.get_json()["data"]["condition"]["id"]
+        old_condition = rc.list_conditions(strict=True)[0]
+        assert old_condition["edge"]["road_name"] == "自强大道"
+        malformed = client.patch(
+            f"/api/road-conditions/{condition_id}",
+            json={"road_point": {"lng": True, "lat": 30.53},
+                  "field_confirmation": "重新核对后更正影像事件的道路绑定。"},
+            headers=headers,
+        )
+        assert malformed.status_code == 400
+        assert malformed.get_json()["error"] == "invalid_road_point"
+
+        new_lng = (G.nodes[4]["x"] + G.nodes[5]["x"]) / 2
+        new_lat = (G.nodes[4]["y"] + G.nodes[5]["y"]) / 2
+        new_lng, new_lat = wgs84_to_gcj02(new_lng, new_lat)
+        correction_note = "复核原视频后确认候选实际对应北环路，已在地图重新吸附到正确路段。"
+        response = client.patch(
+            f"/api/road-conditions/{condition_id}",
+            json={"road_point": {"lng": new_lng, "lat": new_lat},
+                  "field_confirmation": correction_note},
+            headers=headers,
+        )
+        assert response.status_code == 200
+        corrected = response.get_json()["data"]["condition"]
+        assert corrected["edge"]["road_name"] == "北环路"
+        assert corrected["source"]["associated_edge"]["road_name"] == "北环路"
+        assert corrected["source"]["road_association"] == "manager_corrected_edge"
+        assert corrected["source"]["field_confirmation"] == correction_note
+        assert corrected["source"]["association_history"][-1]["associated_edge"]["road_name"] == "自强大道"
+        assert corrected["audit"][-1]["action"] == "vision_road_rebound"
+        assert corrected["audit"][-1]["changes"]["new_edge"]["road_name"] == "北环路"
+        assert corrected["action"] == "slowdown"
+        assert corrected["affected_modes"] == ["walk"]
+
+        far = client.patch(
+            f"/api/road-conditions/{condition_id}",
+            json={"road_point": {"lng": 114.38, "lat": 30.55},
+                  "field_confirmation": correction_note},
+            headers=headers,
+        )
+        assert far.status_code == 400
+        assert far.get_json()["error"] == "too_far_from_road"
+        assert rc.list_conditions(strict=True)[0]["edge"]["road_name"] == "北环路"
+
+    def test_road_rebinding_requires_admin_and_is_limited_to_vision_events(self, client, G):
+        headers = {"X-Admin-Token": "test-token-xyz"}
+        lng, lat = _mid_12_gcj(G)
+        created = client.post("/api/road-conditions", json={
+            "type": "event", "action": "notice", "affected_modes": ["walk"],
+            "name": "普通管理事件", "lng": lng, "lat": lat,
+        }, headers=headers)
+        condition_id = created.get_json()["data"]["condition"]["id"]
+        rejected = client.patch(f"/api/road-conditions/{condition_id}", json={
+            "road_point": {"lng": lng, "lat": lat},
+            "field_confirmation": "已确认事件绑定道路有误，重新选择。",
+        }, headers=headers)
+        assert rejected.status_code == 409
+        assert rejected.get_json()["error"] == "vision_event_required"
+
+        unauthorized = client.patch(f"/api/road-conditions/{condition_id}", json={
+            "road_point": {"lng": lng, "lat": lat},
+            "field_confirmation": "已确认事件绑定道路有误，重新选择。",
+        })
+        assert unauthorized.status_code == 401
 
     @pytest.mark.parametrize("candidate_kind", ["possible_congestion", "possible_flooding"])
     def test_independently_confirmed_recent_candidate_can_publish_with_expiry(
