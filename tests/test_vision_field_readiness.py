@@ -2,7 +2,251 @@ import json
 import hashlib
 from datetime import datetime
 
+from vision.event_evaluation import summarize_event_detection
+
 from scripts.vision.audit_campus_field_readiness import audit_campus_field_readiness
+
+
+def test_public_accident_benchmark_is_separate_from_campus_accuracy_claim(tmp_path):
+    detector_path = tmp_path / "detector.onnx"
+    detector_path.write_bytes(b"detector")
+    accident_path = tmp_path / "accident.onnx"
+    accident_path.write_bytes(b"accident")
+    manifest = {
+        "schema_version": 1,
+        "task": "accident_event_detection",
+        "dataset": "Public road incident video benchmark",
+        "source_provenance": {
+            "source": "Public road incident benchmark",
+            "url": "https://example.org/benchmark",
+            "license": "CC BY 4.0",
+            "license_evidence": "dataset-card",
+        },
+        "split_unit": "incident_id",
+        "split_groups": {
+            "train": ["train-1"],
+            "validation": ["validation-1"],
+            "test": ["test-1", "test-2", "test-3"],
+        },
+        "samples": [],
+    }
+    predictions = {}
+    for index in range(1, 4):
+        sample_id = f"positive-{index}"
+        manifest["samples"].append({
+            "sample_id": sample_id,
+            "video": f"test/{sample_id}.mp4",
+            "group_id": f"test-{index}",
+            "camera_stabilized": True,
+            "observation_regions": [{
+                "id": "lane-1", "kind": "vehicle_lane",
+                "polygon": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+            }],
+            "events": [{
+                "event_id": f"event-{index}", "region_id": "lane-1",
+                "start_seconds": 1, "end_seconds": 2,
+            }],
+        })
+        predictions[sample_id] = [{
+            "candidate_id": f"candidate-{index}", "region_id": "lane-1",
+            "start_seconds": 1, "end_seconds": 2,
+        }]
+    event_metrics = summarize_event_detection(
+        manifest, predictions, bootstrap_repetitions=100,
+    )
+    manifest_path = tmp_path / "public-events.json"
+    manifest_bytes = json.dumps(manifest).encode("utf-8")
+    manifest_path.write_bytes(manifest_bytes)
+    report_path = tmp_path / "public-report.json"
+    report_path.write_text(json.dumps({
+        "task": "accident_event_detection",
+        "dataset": manifest["dataset"],
+        "split": "test",
+        "test_group_count": 3,
+        "sample_count": 3,
+        "event_metrics": event_metrics,
+        "threshold": 0.93,
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "model_provenance": {
+            "detector_sha256": hashlib.sha256(b"detector").hexdigest(),
+            "accident_model_sha256": hashlib.sha256(b"accident").hexdigest(),
+        },
+    }), encoding="utf-8")
+
+    result = audit_campus_field_readiness(
+        external_accident_manifest=manifest_path,
+        external_accident_report=report_path,
+        detector_model=detector_path,
+        accident_model=accident_path,
+    )
+
+    external = result["checks"]["external_accident_evaluation"]
+    assert external["status"] == "ready"
+    assert external["scope"] == "public_benchmark"
+    assert external["positive_test_group_count"] == 3
+    assert external["precision"] == 1.0
+    assert external["recall"] == 1.0
+    assert result["accuracy_claim_allowed"] is False
+
+    altered_report = json.loads(report_path.read_text(encoding="utf-8"))
+    altered_report["event_metrics"]["samples"]["positive-1"]["counts"]["tp"] = 0
+    report_path.write_text(json.dumps(altered_report), encoding="utf-8")
+    altered_result = audit_campus_field_readiness(
+        external_accident_manifest=manifest_path,
+        external_accident_report=report_path,
+        detector_model=detector_path,
+        accident_model=accident_path,
+    )
+    altered = altered_result["checks"]["external_accident_evaluation"]
+    assert altered["status"] == "invalid"
+    assert any("per-sample" in issue for issue in altered["issues"])
+
+
+def test_campus_accident_negatives_can_validate_zero_false_alarms_without_accuracy_claim(tmp_path):
+    detector_path = tmp_path / "detector.onnx"
+    detector_path.write_bytes(b"detector")
+    accident_path = tmp_path / "accident.onnx"
+    accident_path.write_bytes(b"accident")
+    dataset_root = tmp_path / "campus-data"
+    for split in ("train", "validation", "test"):
+        (dataset_root / split).mkdir(parents=True)
+    flight_rows = []
+    for split, flight_ids in {
+        "train": ["train-flight"],
+        "validation": ["validation-flight"],
+        "test": ["test-flight-1", "test-flight-2", "test-flight-3"],
+    }.items():
+        for flight_id in flight_ids:
+            relative_video = f"{split}/{flight_id}.mp4"
+            video_path = dataset_root / relative_video
+            video_path.write_bytes(f"video-{flight_id}".encode())
+            flight_rows.append({
+                "flight_id": flight_id,
+                "split": split,
+                "site_id": f"site-{flight_id}",
+                "location": "武汉大学校园",
+                "captured_at": "2026-10-01T10:00:00+08:00",
+                "video": relative_video,
+            })
+    flight_manifest_path = tmp_path / "flights.json"
+    flight_manifest_path.write_text(json.dumps({
+        "schema_version": 1,
+        "task": "campus_visible_water_frame_extraction",
+        "dataset": "WHU campus normal traffic review",
+        "split_unit": "flight_id",
+        "split_groups": {
+            "train": ["train-flight"],
+            "validation": ["validation-flight"],
+            "test": ["test-flight-1", "test-flight-2", "test-flight-3"],
+        },
+        "flights": flight_rows,
+    }), encoding="utf-8")
+
+    manifest = {
+        "schema_version": 1,
+        "task": "campus_event_detection",
+        "dataset": "WHU campus normal traffic review",
+        "split_unit": "flight_id",
+        "label_source": "manual",
+        "event_kinds": ["accident"],
+        "split_groups": {
+            "train": ["train-flight"],
+            "validation": ["validation-flight"],
+            "test": ["test-flight-1", "test-flight-2", "test-flight-3"],
+        },
+        "samples": [],
+    }
+    predictions = {}
+    for index in range(1, 4):
+        sample_id = f"test-flight-{index}"
+        manifest["samples"].append({
+            "sample_id": sample_id,
+            "video": f"test/test-flight-{index}.mp4",
+            "group_id": f"test-flight-{index}",
+            "source_sha256": hashlib.sha256(
+                (dataset_root / f"test/test-flight-{index}.mp4").read_bytes()
+            ).hexdigest(),
+            "camera_stabilized": True,
+            "event_kinds": ["accident"],
+            "observation_regions": [{
+                "id": "lane-1", "kind": "vehicle_lane",
+                "polygon": [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]],
+            }],
+            "events": [],
+        })
+        predictions[sample_id] = []
+    event_metrics = summarize_event_detection(
+        manifest, predictions, bootstrap_repetitions=100,
+    )
+    manifest_path = tmp_path / "campus-events.json"
+    manifest_bytes = json.dumps(manifest).encode("utf-8")
+    manifest_path.write_bytes(manifest_bytes)
+    report_path = tmp_path / "campus-events-report.json"
+    report_path.write_text(json.dumps({
+        "task": "campus_event_detection",
+        "split": "test",
+        "test_group_count": 3,
+        "sample_count": 3,
+        "event_kinds": ["accident"],
+        "manifest_sha256": hashlib.sha256(manifest_bytes).hexdigest(),
+        "model_provenance": {
+            "detector_sha256": hashlib.sha256(b"detector").hexdigest(),
+            "accident_model": {
+                "sha256": hashlib.sha256(b"accident").hexdigest(),
+            },
+            "flood_model": None,
+        },
+        "thresholds": {"accident": 0.93, "flood_min_area_ratio": None,
+                       "flood_probability": None, "min_temporal_iou": 0.1},
+        "event_metrics": event_metrics,
+    }), encoding="utf-8")
+
+    result = audit_campus_field_readiness(
+        dataset_root=dataset_root,
+        flight_manifest=flight_manifest_path,
+        event_manifest=manifest_path,
+        event_report=report_path,
+        detector_model=detector_path,
+        accident_model=accident_path,
+    )
+
+    event_check = result["checks"]["event_evaluation"]
+    accident_target = event_check["event_metric_targets"]["accident"]
+    assert event_check["status"] == "ready"
+    assert event_check["accuracy_claim_ready"] is False
+    assert accident_target["test_flight_count"] == 3
+    assert accident_target["positive_test_flight_count"] == 0
+    assert accident_target["false_positive_count"] == 0
+    assert event_check["campus_negative_safety_ready"] is True
+    assert result["accuracy_claim_allowed"] is False
+
+    # A same-label event report over an unrelated video must not count as
+    # the required campus negative-flight evidence.
+    tampered = json.loads(manifest_path.read_text(encoding="utf-8"))
+    unrelated = dataset_root / "test/unrelated.mp4"
+    unrelated.write_bytes(b"not-a-campus-flight")
+    tampered["samples"][0]["video"] = "test/unrelated.mp4"
+    tampered["samples"][0]["source_sha256"] = hashlib.sha256(unrelated.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(tampered), encoding="utf-8")
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    manifest_bytes = manifest_path.read_bytes()
+    report["manifest_sha256"] = hashlib.sha256(manifest_bytes).hexdigest()
+    report["event_metrics"] = summarize_event_detection(
+        tampered, predictions, bootstrap_repetitions=100,
+    )
+    report_path.write_text(json.dumps(report), encoding="utf-8")
+    unrelated_result = audit_campus_field_readiness(
+        dataset_root=dataset_root,
+        flight_manifest=flight_manifest_path,
+        event_manifest=manifest_path,
+        event_report=report_path,
+        detector_model=detector_path,
+        accident_model=accident_path,
+    )
+    unrelated_check = unrelated_result["checks"]["event_evaluation"]
+    assert unrelated_check["campus_negative_safety_ready"] is False
+    assert any("does not match a validated campus flight" in issue
+               for issue in unrelated_check["campus_link_issues"])
 
 
 def test_readiness_audit_names_missing_campus_evidence_without_claiming_ready(tmp_path):

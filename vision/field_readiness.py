@@ -5,7 +5,7 @@ import hashlib
 import json
 import math
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 from vision.campus_detection_evaluation import validate_campus_detection_manifest
 from vision.campus_water_data import build_campus_flight_plan
@@ -81,6 +81,49 @@ def _valid_cluster_interval(value: object, *, expected_group_count: int) -> bool
     )
 
 
+def _campus_event_flight_linkage(event_validated: dict | None, flight_plan: dict | None) -> dict:
+    """Bind each campus event-test video to the exact registered test flight file."""
+    issues: list[str] = []
+    if event_validated is None or event_validated.get("task") != "campus_event_detection":
+        return {"status": "missing", "linked_test_flight_count": 0, "issues": [
+            "a validated campus_event_detection manifest is required",
+        ]}
+    if flight_plan is None:
+        return {"status": "missing", "linked_test_flight_count": 0, "issues": [
+            "a validated campus flight inventory is required",
+        ]}
+
+    campus_flights = {
+        flight["flight_id"]: flight
+        for flight in flight_plan["flights"] if flight["split"] == "test"
+    }
+    event_test_groups = set(event_validated["split_groups"]["test"])
+    if event_test_groups != set(campus_flights):
+        issues.append("event test groups do not match the validated campus test-flight inventory")
+
+    linked: set[str] = set()
+    for sample in event_validated["samples"]:
+        group_id = sample["group_id"]
+        flight = campus_flights.get(group_id)
+        if flight is None:
+            issues.append(f"sample {sample['sample_id']} does not match a validated campus flight")
+            continue
+        sample_video = PurePosixPath(sample["video"].replace("\\", "/")).as_posix()
+        if sample_video != flight["video"] or sample["sample_id"] != flight["flight_id"]:
+            issues.append(f"sample {sample['sample_id']} does not match a validated campus flight")
+            continue
+        if sample.get("source_sha256") != flight["source_sha256"]:
+            issues.append(f"sample {sample['sample_id']} source hash does not match its campus flight")
+            continue
+        linked.add(group_id)
+
+    return {
+        "status": "ready" if not issues and linked == set(campus_flights) else "invalid",
+        "linked_test_flight_count": len(linked),
+        "issues": issues,
+    }
+
+
 def _report_check(
     report_path: Path | None,
     *,
@@ -102,6 +145,17 @@ def _report_check(
         if model_hashes.get("detector") is None or report.get("model_sha256") != model_hashes["detector"]:
             issues.append("model_sha256")
         if report.get("split") != "test" or not isinstance(report.get("groups"), dict):
+            issues.append("test metrics")
+    elif expected_task == "accident_event_detection":
+        provenance = report.get("model_provenance")
+        provenance = provenance if isinstance(provenance, dict) else {}
+        if (model_hashes.get("detector") is None
+                or provenance.get("detector_sha256") != model_hashes["detector"]):
+            issues.append("detector_sha256")
+        if (model_hashes.get("accident") is None
+                or provenance.get("accident_model_sha256") != model_hashes["accident"]):
+            issues.append("accident_model_sha256")
+        if report.get("split") != "test" or not isinstance(report.get("event_metrics"), dict):
             issues.append("test metrics")
     else:
         provenance = report.get("model_provenance")
@@ -126,6 +180,214 @@ def _report_check(
     }, report
 
 
+def _external_accident_check(
+    manifest_path: Path | None,
+    report_path: Path | None,
+    *,
+    detector_hash: str | None,
+    accident_hash: str | None,
+) -> tuple[dict, list[str]]:
+    """Validate public held-out accident-event evidence without calling it campus accuracy."""
+    if manifest_path is None and report_path is None:
+        return {"status": "missing", "scope": "public_benchmark", "issues": []}, []
+
+    issues: list[str] = []
+    manifest, manifest_hash = _json_file(manifest_path, "external_accident_manifest", issues)
+    validated = None
+    if manifest is not None:
+        try:
+            validated = validate_event_manifest(manifest)
+            if validated["task"] != "accident_event_detection":
+                issues.append("external accident manifest task must be accident_event_detection")
+        except ValueError as error:
+            issues.append(f"external_accident_manifest: {error}")
+
+    provenance = manifest.get("source_provenance") if isinstance(manifest, dict) else None
+    provenance = provenance if isinstance(provenance, dict) else {}
+    for field in ("source", "url", "license", "license_evidence"):
+        if not isinstance(provenance.get(field), str) or not provenance[field].strip():
+            issues.append(f"source_provenance.{field}")
+    if (isinstance(provenance.get("url"), str)
+            and not provenance["url"].lower().startswith(("https://", "http://"))):
+        issues.append("source_provenance.url must be an http(s) URL")
+
+    report_check, report = _report_check(
+        report_path,
+        expected_task="accident_event_detection",
+        manifest_sha256=manifest_hash,
+        model_hashes={"detector": detector_hash, "accident": accident_hash},
+    )
+    if report_check["status"] == "invalid":
+        issues.extend(f"report: {item}" for item in report_check["issues"])
+
+    target = None
+    group_count = 0
+    positive_group_count = 0
+    threshold = None
+    if validated is not None and report is not None:
+        groups = validated["split_groups"]["test"]
+        group_count = len(groups)
+        positive_group_count = len({
+            sample["group_id"] for sample in validated["samples"] if sample["events"]
+        })
+        if report.get("dataset") != validated.get("dataset"):
+            issues.append("report dataset does not match manifest")
+        if report.get("test_group_count") != group_count:
+            issues.append("report test_group_count does not match manifest")
+        if report.get("sample_count") != len(validated["samples"]):
+            issues.append("report sample_count does not match manifest")
+        threshold = _metric({"value": report.get("threshold")}, "value")
+        if threshold is None or threshold <= 0:
+            issues.append("report accident threshold is missing or invalid")
+
+        metrics = report.get("event_metrics")
+        by_kind = metrics.get("by_kind") if isinstance(metrics, dict) else None
+        row = by_kind.get("accident") if isinstance(by_kind, dict) else None
+        counts = row.get("counts") if isinstance(row, dict) else None
+        values = {
+            key: _count(counts, key) for key in ("tp", "fp", "fn")
+        }
+        scores = row.get("metrics") if isinstance(row, dict) else None
+        precision = _metric(scores, "precision")
+        recall = _metric(scores, "recall")
+        f1 = _metric(scores, "f1")
+        if (not isinstance(metrics, dict) or not isinstance(by_kind, dict)
+                or set(by_kind) != {"accident"}):
+            issues.append("report must contain only accident event metrics")
+        if any(value is None for value in values.values()):
+            issues.append("report accident event counts are invalid")
+        else:
+            expected_truth = sum(len(sample["events"]) for sample in validated["samples"])
+            if values["tp"] + values["fn"] != expected_truth:
+                issues.append("report accident ground-truth count does not match manifest")
+            expected_scores = summarize_binary_counts(**values)
+            for name, actual in (("precision", precision), ("recall", recall), ("f1", f1)):
+                if actual is None or not math.isclose(
+                        actual, expected_scores[name], rel_tol=0.0, abs_tol=1e-6):
+                    issues.append(f"report accident {name} does not match counts")
+        if (isinstance(row, dict)
+                and row.get("flight_group_count") != group_count):
+            issues.append("report accident test group count does not match manifest")
+        if isinstance(metrics, dict):
+            if (metrics.get("flight_group_count") != group_count
+                    or metrics.get("test_sample_count") != len(validated["samples"])):
+                issues.append("report event summary counts do not match manifest")
+            overall_counts = metrics.get("counts")
+            if isinstance(overall_counts, dict) and all(value is not None for value in values.values()):
+                if any(_count(overall_counts, key) != values[key] for key in ("tp", "fp", "fn")):
+                    issues.append("report aggregate counts do not match accident metrics")
+            elif overall_counts is None:
+                issues.append("report aggregate counts are missing")
+
+            details = metrics.get("samples")
+            expected_ids = {sample["sample_id"] for sample in validated["samples"]}
+            if not isinstance(details, dict) or set(details) != expected_ids:
+                issues.append("report per-sample event diagnostics do not match manifest")
+            else:
+                sample_totals = {key: 0 for key in ("tp", "fp", "fn")}
+                for sample in validated["samples"]:
+                    detail = details.get(sample["sample_id"])
+                    detail_counts = detail.get("counts") if isinstance(detail, dict) else None
+                    detail_values = {key: _count(detail_counts, key)
+                                     for key in ("tp", "fp", "fn")}
+                    actual_ids = {event["event_id"] for event in sample["events"]}
+                    matches = detail.get("matches") if isinstance(detail, dict) else None
+                    matched_ids = [item.get("event_id") for item in matches
+                                   if isinstance(item, dict)] if isinstance(matches, list) else []
+                    matched_candidate_ids = [item.get("candidate_id") for item in matches
+                                             if isinstance(item, dict)] if isinstance(matches, list) else []
+                    missed_ids = detail.get("unmatched_event_ids") if isinstance(detail, dict) else None
+                    extras = detail.get("unmatched_candidate_ids") if isinstance(detail, dict) else None
+                    candidates = detail.get("candidate_count") if isinstance(detail, dict) else None
+                    truth_count = detail.get("ground_truth_event_count") if isinstance(detail, dict) else None
+                    by_kind = detail.get("counts_by_kind") if isinstance(detail, dict) else None
+                    accident_counts = by_kind.get("accident") if isinstance(by_kind, dict) else None
+                    if (not isinstance(detail, dict)
+                            or detail.get("group_id") != sample["group_id"]
+                            or any(value is None for value in detail_values.values())
+                            or not isinstance(matches, list)
+                            or not isinstance(missed_ids, list)
+                            or not isinstance(extras, list)
+                            or any(not isinstance(item, dict)
+                                   or not isinstance(item.get("event_id"), str)
+                                   or not isinstance(item.get("candidate_id"), str)
+                                   for item in matches)
+                            or any(not isinstance(item, str) or not item for item in missed_ids)
+                            or any(not isinstance(item, str) or not item for item in extras)
+                            or len(set(matched_ids)) != len(matched_ids)
+                            or len(set(matched_candidate_ids)) != len(matched_candidate_ids)
+                            or set(matched_ids) & set(missed_ids)
+                            or set(matched_ids) | set(missed_ids) != actual_ids
+                            or set(matched_candidate_ids) & set(extras)
+                            or len(set(matched_candidate_ids) | set(extras)) != candidates
+                            or any(_count(accident_counts, key) != detail_values[key]
+                                   for key in ("tp", "fp", "fn"))
+                            or any(item.get("kind") != "accident"
+                                   or item.get("event_id") not in actual_ids
+                                   or not item.get("candidate_id")
+                                   for item in matches)
+                            or len(set(extras)) != len(extras)
+                            or detail_values["tp"] != len(matches)
+                            or detail_values["fp"] != len(extras)
+                            or detail_values["fn"] != len(missed_ids)
+                            or truth_count != len(actual_ids)
+                            or type(candidates) is not int
+                            or candidates != detail_values["tp"] + detail_values["fp"]):
+                        issues.append(
+                            f"report per-sample event diagnostics are inconsistent: {sample['sample_id']}"
+                        )
+                        continue
+                    for key, value in detail_values.items():
+                        sample_totals[key] += value
+                if all(value is not None for value in values.values()) and sample_totals != values:
+                    issues.append("report per-sample totals do not match aggregate metrics")
+        intervals = row.get("flight_cluster_bootstrap_95_ci") if isinstance(row, dict) else None
+        if not isinstance(intervals, dict) or any(
+                not _valid_cluster_interval(intervals.get(name), expected_group_count=group_count)
+                for name in ("precision", "recall", "f1")):
+            issues.append("report accident confidence intervals are missing or invalid")
+        if isinstance(row, dict) and all(value is not None for value in values.values()):
+            target = {
+                "precision": precision,
+                "recall": recall,
+                "f1": f1,
+                "true_positive_count": values["tp"],
+                "false_positive_count": values["fp"],
+                "false_negative_count": values["fn"],
+                "precision_target": 0.90,
+                "recall_target": 0.80,
+                "test_group_count": group_count,
+                "positive_test_group_count": positive_group_count,
+                "met": bool(precision is not None and precision >= 0.90
+                            and recall is not None and recall >= 0.80
+                            and group_count >= 3 and positive_group_count >= 1),
+            }
+
+    missing = manifest_path is None or report_path is None
+    status = "missing" if missing else "invalid" if issues else (
+        "ready" if target and target["met"] else "not_met"
+    )
+    result = {
+        "status": status,
+        "scope": "public_benchmark",
+        "source_provenance": provenance,
+        "manifest": str(Path(manifest_path).resolve()) if manifest_path else None,
+        "manifest_sha256": manifest_hash,
+        "report": report_check,
+        "report_sha256": report_check.get("sha256"),
+        "model_sha256": accident_hash,
+        "detector_sha256": detector_hash,
+        "threshold": threshold,
+        "test_group_count": group_count,
+        "positive_test_group_count": positive_group_count,
+        "precision": target.get("precision") if target else None,
+        "recall": target.get("recall") if target else None,
+        "event_metric_target": target,
+        "issues": issues,
+    }
+    return result, issues
+
+
 def audit_campus_field_readiness(
     *,
     dataset_root: Path | None = None,
@@ -134,6 +396,8 @@ def audit_campus_field_readiness(
     detection_report: Path | None = None,
     event_manifest: Path | None = None,
     event_report: Path | None = None,
+    external_accident_manifest: Path | None = None,
+    external_accident_report: Path | None = None,
     visible_water_manifest: Path | None = None,
     visible_water_report: Path | None = None,
     detector_model: Path | None = None,
@@ -273,6 +537,7 @@ def audit_campus_field_readiness(
             event_validated = validate_event_manifest(event_value)
         except ValueError as error:
             event_issues.append(f"event_manifest: {error}")
+    campus_flight_linkage = _campus_event_flight_linkage(event_validated, flight_plan)
     event_kinds = event_validated["event_kinds"] if event_validated else []
     event_model_hashes = {
         "detector": detector["sha256"],
@@ -545,6 +810,7 @@ def audit_campus_field_readiness(
                     "recall_target": 0.80,
                     "test_flight_count": len(event_kind_test_groups.get(kind, set())),
                     "positive_test_flight_count": len(event_kind_positive_groups.get(kind, set())),
+                    "false_positive_count": event_counts.get(kind, {}).get("fp"),
                     "flight_coverage_met": len(event_kind_test_groups.get(kind, set())) >= 3,
                     "met": bool(
                         isinstance(row, dict)
@@ -578,6 +844,23 @@ def audit_campus_field_readiness(
         event_claim_ready = False
     if event_status == "ready" and not event_claim_ready:
         next_actions.append("每类要报告效果的事件至少覆盖 3 个独立校园航次，并包含人工确认的正例。")
+
+    accident_target = event_targets.get("accident") if isinstance(event_targets, dict) else None
+    campus_negative_safety_ready = bool(
+        flight_status == "ready" and explicitly_campus
+        and campus_flight_linkage["status"] == "ready"
+        and event_status == "ready"
+        and "accident" in event_kinds
+        and event_kind_test_groups.get("accident", set())
+        == set(event_validated["split_groups"]["test"] if event_validated else [])
+        and isinstance(accident_target, dict)
+        and accident_target.get("test_flight_count", 0) >= 3
+        and accident_target.get("false_positive_count") == 0
+    )
+    if "accident" in event_kinds and not campus_negative_safety_ready:
+        next_actions.append(
+            "事故候选的校园零误报证据必须绑定至少 3 个已登记校园测试航次的原片路径和 SHA-256。"
+        )
 
     water_issues: list[str] = []
     water_manifest_value, water_manifest_sha256 = _json_file(
@@ -803,12 +1086,26 @@ def audit_campus_field_readiness(
         "test_flight_count": len(event_test_groups) if event_validated else None,
         "test_ground_truth_counts": event_counts,
         "event_metric_targets": event_targets,
+        "campus_negative_safety_ready": campus_negative_safety_ready,
+        "campus_flight_linkage": campus_flight_linkage,
+        "campus_link_issues": campus_flight_linkage["issues"],
         "missing_specialized_models": missing_models,
         "report": event_report_check,
         "issues": event_issues,
         "accuracy_claim_ready": bool(event_claim_ready),
     }
     checks["models"] = {"detector": detector, "accident": accident, "flood": flood}
+
+    external_accident, _ = _external_accident_check(
+        Path(external_accident_manifest) if external_accident_manifest is not None else None,
+        Path(external_accident_report) if external_accident_report is not None else None,
+        detector_hash=detector["sha256"], accident_hash=accident["sha256"],
+    )
+    checks["external_accident_evaluation"] = external_accident
+    if external_accident["status"] in {"missing", "not_met", "invalid"}:
+        next_actions.append(
+            "事故候选启用需补齐独立公开视频正例评测、来源与许可记录；公开指标只用于候选筛查，不代表校园精度。"
+        )
 
     campus_field_data_present = flight_status == "ready" and explicitly_campus
     accuracy_claim_allowed = (

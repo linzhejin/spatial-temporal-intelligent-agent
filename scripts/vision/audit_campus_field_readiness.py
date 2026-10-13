@@ -27,6 +27,10 @@ def main() -> int:
                         help="manually reviewed campus event test manifest")
     parser.add_argument("--event-report", type=Path,
                         help="output from evaluate_campus_events.py")
+    parser.add_argument("--external-accident-manifest", type=Path,
+                        help="public accident-event benchmark manifest with source and license metadata")
+    parser.add_argument("--external-accident-report", type=Path,
+                        help="held-out event report from evaluate_accident_events.py")
     parser.add_argument("--visible-water-manifest", type=Path,
                         help="manually labeled held-out campus road-water manifest")
     parser.add_argument("--visible-water-report", type=Path,
@@ -50,6 +54,8 @@ def main() -> int:
             detection_report=args.detection_report,
             event_manifest=args.event_manifest,
             event_report=args.event_report,
+            external_accident_manifest=args.external_accident_manifest,
+            external_accident_report=args.external_accident_report,
             visible_water_manifest=args.visible_water_manifest,
             visible_water_report=args.visible_water_report,
             detector_model=args.detector_model,

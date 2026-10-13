@@ -34,6 +34,7 @@ def _release_fixture(tmp_path, model_kind):
         "status": "ready",
         "accuracy_claim_ready": True,
         "event_kinds": ["accident"],
+        "campus_negative_safety_ready": True,
         "thresholds": {"accident": 0.93},
         "event_metric_targets": {
             "accident": {
@@ -41,6 +42,7 @@ def _release_fixture(tmp_path, model_kind):
                 "recall": 0.84,
                 "test_flight_count": 3,
                 "positive_test_flight_count": 2,
+                "false_positive_count": 0,
                 "met": True,
             },
         },
@@ -64,14 +66,38 @@ def _release_fixture(tmp_path, model_kind):
     readiness = {
         "task": "campus_uav_field_readiness",
         "generated_at": datetime.now(timezone.utc).isoformat(),
+        "campus_field_data_present": True,
         "accuracy_claim_allowed": True,
         "checks": {
             "models": {
+                "detector": {
+                    "status": "present",
+                    "sha256": hashlib.sha256(b"detector").hexdigest(),
+                },
                 "accident": {"status": "present", "sha256": model_hash},
                 "flood": {"status": "present", "sha256": model_hash},
             },
             "event_evaluation": event_model,
             "visible_water_segmentation": water,
+            "external_accident_evaluation": {
+                "status": "ready",
+                "scope": "public_benchmark",
+                "source_provenance": {
+                    "source": "public accident event test fixture",
+                    "url": "https://example.org/accident-set",
+                    "license": "CC BY 4.0",
+                    "license_evidence": "fixture-dataset-card",
+                },
+                "manifest_sha256": "a" * 64,
+                "report_sha256": "b" * 64,
+                "model_sha256": model_hash,
+                "detector_sha256": hashlib.sha256(b"detector").hexdigest(),
+                "threshold": 0.93,
+                "test_group_count": 3,
+                "positive_test_group_count": 1,
+                "precision": 0.93,
+                "recall": 0.84,
+            },
         },
     }
     readiness_path = _write_json(tmp_path / "readiness.json", readiness)
@@ -90,6 +116,16 @@ def _release_fixture(tmp_path, model_kind):
                 "model_revision": f"{model_kind}-v1",
                 "readiness_report_sha256": readiness_hash,
                 "runtime_config": runtime_config,
+                **({
+                    "benchmark_approval": {
+                        "approved": True,
+                        "approved_by": "dataset-reviewer",
+                        "evidence": "dataset-rights-review-2026-10-14",
+                        "manifest_sha256": "a" * 64,
+                        "approved_at": datetime.now(timezone.utc).isoformat(),
+                        "expires_at": (datetime.now(timezone.utc) + timedelta(days=30)).isoformat(),
+                    },
+                } if model_kind == "accident" else {}),
             },
         },
     }
@@ -134,6 +170,83 @@ def test_optional_model_release_rejects_runtime_config_drift(tmp_path):
     assert result == {"approved": False, "reason": "runtime_config_mismatch"}
 
 
+def test_accident_release_uses_public_positive_benchmark_and_campus_negative_flights(tmp_path):
+    model_path, readiness_path, release_path, release, readiness, runtime_config = (
+        _release_fixture(tmp_path, "accident")
+    )
+    readiness["campus_field_data_present"] = True
+    readiness["accuracy_claim_allowed"] = False
+    readiness["checks"]["event_evaluation"] = {
+        "status": "ready",
+        "campus_negative_safety_ready": True,
+        "event_kinds": ["accident"],
+        "thresholds": {"accident": 0.93},
+        "event_metric_targets": {
+            "accident": {
+                "false_positive_count": 0,
+                "test_flight_count": 3,
+                "positive_test_flight_count": 0,
+            },
+        },
+    }
+    readiness["checks"]["external_accident_evaluation"] = {
+        "status": "ready",
+        "scope": "public_benchmark",
+        "source_provenance": {
+            "source": "public video benchmark",
+            "url": "https://example.org/benchmark",
+            "license": "CC BY 4.0",
+            "license_evidence": "dataset-card",
+        },
+        "manifest_sha256": "a" * 64,
+        "report_sha256": "b" * 64,
+        "model_sha256": hashlib.sha256(model_path.read_bytes()).hexdigest(),
+        "detector_sha256": readiness["checks"]["models"]["detector"]["sha256"],
+        "threshold": 0.93,
+        "positive_test_group_count": 3,
+        "test_group_count": 4,
+        "precision": 0.93,
+        "recall": 0.84,
+    }
+    _write_json(readiness_path, readiness)
+    release["models"]["accident"]["readiness_report_sha256"] = hashlib.sha256(
+        readiness_path.read_bytes()
+    ).hexdigest()
+    _write_json(release_path, release)
+
+    result = check_optional_model_release(
+        "accident", model_path, "accident-v1", release_path, readiness_path,
+        runtime_config,
+    )
+
+    assert result == {"approved": True, "reason": "approved"}
+
+
+@pytest.mark.parametrize("tamper", ["missing", "expired", "too_long"])
+def test_accident_release_requires_current_benchmark_source_approval(tmp_path, tamper):
+    model_path, readiness_path, release_path, release, _readiness, runtime_config = (
+        _release_fixture(tmp_path, "accident")
+    )
+    approval = release["models"]["accident"]["benchmark_approval"]
+    now = datetime.now(timezone.utc)
+    if tamper == "missing":
+        release["models"]["accident"].pop("benchmark_approval")
+    elif tamper == "expired":
+        approval["approved_at"] = (now - timedelta(days=2)).isoformat()
+        approval["expires_at"] = (now - timedelta(seconds=1)).isoformat()
+    else:
+        approval["approved_at"] = now.isoformat()
+        approval["expires_at"] = (now + timedelta(days=366)).isoformat()
+    _write_json(release_path, release)
+
+    result = check_optional_model_release(
+        "accident", model_path, "accident-v1", release_path, readiness_path,
+        runtime_config,
+    )
+
+    assert result == {"approved": False, "reason": "accident_field_evidence_not_met"}
+
+
 def test_optional_model_release_rejects_evaluation_threshold_drift(tmp_path):
     model_path, readiness_path, release_path, release, readiness, runtime_config = (
         _release_fixture(tmp_path, "accident")
@@ -176,7 +289,12 @@ def test_flood_release_accepts_zero_probability_threshold(tmp_path):
     assert result == {"approved": True, "reason": "approved"}
 
 
-@pytest.mark.parametrize("tamper", ["model_hash", "readiness_hash", "rights", "metrics"])
+@pytest.mark.parametrize(
+    "tamper", [
+        "model_hash", "readiness_hash", "rights", "metrics", "campus_false_alarm",
+        "campus_source_link", "benchmark_source_approval",
+    ]
+)
 def test_optional_model_release_rejects_unverified_or_ineligible_evidence(tmp_path, tamper):
     model_path, readiness_path, release_path, release, readiness, runtime_config = _release_fixture(
         tmp_path, "accident",
@@ -188,8 +306,20 @@ def test_optional_model_release_rejects_unverified_or_ineligible_evidence(tmp_pa
         entry["readiness_report_sha256"] = "0" * 64
     elif tamper == "rights":
         entry["rights_status"] = "unknown"
+    elif tamper == "campus_false_alarm":
+        readiness["checks"]["event_evaluation"]["event_metric_targets"]["accident"][
+            "false_positive_count"
+        ] = 1
+        _write_json(readiness_path, readiness)
+        entry["readiness_report_sha256"] = hashlib.sha256(readiness_path.read_bytes()).hexdigest()
+    elif tamper == "campus_source_link":
+        readiness["checks"]["event_evaluation"]["campus_negative_safety_ready"] = False
+        _write_json(readiness_path, readiness)
+        entry["readiness_report_sha256"] = hashlib.sha256(readiness_path.read_bytes()).hexdigest()
+    elif tamper == "benchmark_source_approval":
+        entry["benchmark_approval"]["manifest_sha256"] = "0" * 64
     else:
-        readiness["checks"]["event_evaluation"]["event_metric_targets"]["accident"]["recall"] = 0.2
+        readiness["checks"]["external_accident_evaluation"]["recall"] = 0.2
         _write_json(readiness_path, readiness)
         entry["readiness_report_sha256"] = hashlib.sha256(readiness_path.read_bytes()).hexdigest()
     _write_json(release_path, release)

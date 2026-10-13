@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -42,6 +43,7 @@ def _same_number(left: object, right: object) -> bool:
 
 MAX_APPROVAL_VALIDITY = timedelta(days=365)
 MAX_READINESS_AGE = timedelta(days=90)
+_SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 
 
 def _aware_time(value: object) -> datetime | None:
@@ -135,8 +137,12 @@ def check_optional_model_release(
         return rejected("readiness_report_time_invalid")
     if now - readiness_generated_at > MAX_READINESS_AGE:
         return rejected("readiness_report_stale")
-    if (readiness.get("task") != "campus_uav_field_readiness"
-            or readiness.get("accuracy_claim_allowed") is not True):
+    if readiness.get("task") != "campus_uav_field_readiness":
+        return rejected("campus_readiness_not_met")
+    if model_kind == "accident":
+        if readiness.get("campus_field_data_present") is not True:
+            return rejected("campus_readiness_not_met")
+    elif readiness.get("accuracy_claim_allowed") is not True:
         return rejected("campus_readiness_not_met")
 
     checks = readiness.get("checks")
@@ -156,19 +162,70 @@ def check_optional_model_release(
         if not _same_number(
                 validated_threshold, runtime_config.get("decision_threshold")):
             return rejected("accident_runtime_threshold_mismatch")
-        targets = evaluation.get("event_metric_targets")
-        target = targets.get("accident") if isinstance(targets, dict) else None
-        precision = _number(target.get("precision")) if isinstance(target, dict) else None
-        recall = _number(target.get("recall")) if isinstance(target, dict) else None
-        flights = target.get("test_flight_count") if isinstance(target, dict) else None
-        positive_flights = target.get("positive_test_flight_count") if isinstance(target, dict) else None
+        campus_targets = evaluation.get("event_metric_targets")
+        campus_target = campus_targets.get("accident") if isinstance(campus_targets, dict) else None
+        campus_fp = (campus_target.get("false_positive_count")
+                     if isinstance(campus_target, dict) else None)
+        campus_flights = (campus_target.get("test_flight_count")
+                          if isinstance(campus_target, dict) else None)
+
+        external = checks.get("external_accident_evaluation")
+        external = external if isinstance(external, dict) else {}
+        benchmark_approval = entry.get("benchmark_approval")
+        benchmark_approval = benchmark_approval if isinstance(benchmark_approval, dict) else {}
+        benchmark_approved_at = _aware_time(benchmark_approval.get("approved_at"))
+        benchmark_expires_at = _aware_time(benchmark_approval.get("expires_at"))
+        benchmark_approval_valid = bool(
+            benchmark_approval.get("approved") is True
+            and isinstance(benchmark_approval.get("approved_by"), str)
+            and benchmark_approval["approved_by"].strip()
+            and isinstance(benchmark_approval.get("evidence"), str)
+            and benchmark_approval["evidence"].strip()
+            and benchmark_approval.get("manifest_sha256") == external.get("manifest_sha256")
+            and benchmark_approved_at is not None and benchmark_approved_at <= now
+            and benchmark_expires_at is not None
+            and benchmark_expires_at > now
+            and benchmark_expires_at > benchmark_approved_at
+            and benchmark_expires_at - benchmark_approved_at <= MAX_APPROVAL_VALIDITY
+        )
+        external_source = external.get("source_provenance")
+        external_source = external_source if isinstance(external_source, dict) else {}
+        external_precision = _number(external.get("precision"))
+        external_recall = _number(external.get("recall"))
+        external_groups = external.get("test_group_count")
+        external_positive_groups = external.get("positive_test_group_count")
+        external_hashes_valid = all(
+            isinstance(external.get(field), str) and _SHA256_RE.fullmatch(external[field])
+            for field in ("manifest_sha256", "report_sha256")
+        )
+        detector_model_check = models.get("detector")
+        detector_model_hash = (detector_model_check.get("sha256")
+                               if isinstance(detector_model_check, dict) else None)
         if (evaluation.get("status") != "ready"
-                or evaluation.get("accuracy_claim_ready") is not True
+                or evaluation.get("campus_negative_safety_ready") is not True
                 or "accident" not in (evaluation.get("event_kinds") or [])
-                or precision is None or precision < 0.90
-                or recall is None or recall < 0.80
-                or type(flights) is not int or flights < 3
-                or type(positive_flights) is not int or positive_flights < 1):
+                or type(campus_flights) is not int or campus_flights < 3
+                or type(campus_fp) is not int or campus_fp != 0
+                or external.get("status") != "ready"
+                or external.get("scope") != "public_benchmark"
+                or not benchmark_approval_valid
+                or not isinstance(external_source.get("source"), str)
+                or not external_source["source"].strip()
+                or not isinstance(external_source.get("license"), str)
+                or not external_source["license"].strip()
+                or not isinstance(external_source.get("url"), str)
+                or not external_source["url"].lower().startswith(("https://", "http://"))
+                or not isinstance(external_source.get("license_evidence"), str)
+                or not external_source["license_evidence"].strip()
+                or external.get("model_sha256") != actual_model_hash
+                or external.get("detector_sha256") != detector_model_hash
+                or not _same_number(
+                    external.get("threshold"), runtime_config.get("decision_threshold"))
+                or not external_hashes_valid
+                or external_precision is None or external_precision < 0.90
+                or external_recall is None or external_recall < 0.80
+                or type(external_groups) is not int or external_groups < 3
+                or type(external_positive_groups) is not int or external_positive_groups < 1):
             return rejected("accident_field_evidence_not_met")
     else:
         evaluation = checks.get("event_evaluation")
