@@ -8,7 +8,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ 8ec0e1b ｜ origin/main 落后 2 ｜ gitee/main 落后 2 ｜ 生成于 2026-10-14 02:43
+- 版本：codex/aerial-vision-release @ 69ac52e ｜ origin/main 落后 1 ｜ gitee/main 落后 1 ｜ 生成于 2026-10-15 21:37
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v91 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 13（最新 013）
 <!-- FACTS:END -->

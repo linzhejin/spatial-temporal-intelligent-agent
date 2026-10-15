@@ -147,7 +147,7 @@ class ReviewedProductionTests(unittest.TestCase):
         import spatial.poi as poi
         with patch.object(poi, '_record_search'):
             for query, expected in [('澄波门','澄波门'), ('明贤门','珞南二门'),
-                                    ('工学部校医院','武汉大学医院一门诊部'),
+                                    ('工学部校医院','工学部社区卫生服务中心'),
                                     ('信息学部校医院','武汉大学医院二门诊部'),
                                     ('信息学部3舍','武汉大学信息学部学生宿舍3舍'),
                                     ('测量仪器陈列馆','测量仪器陈列馆')]:

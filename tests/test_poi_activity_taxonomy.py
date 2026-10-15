@@ -98,6 +98,27 @@ def test_osm_cafe_is_not_an_alias_of_the_museum_and_is_searchable_as_coffee():
                for source in cafe["source_refs"])
 
 
+def test_manual_renames_keep_specific_former_names_on_the_same_poi():
+    pois = list(_by_id().values())
+    for query, poi_id in [
+        ("湖滨十三舍", "poi_135"),
+        ("工学部清真食堂", "poi_202"),
+        ("武汉大学医院一门诊部", "poi_426"),
+        ("泥沙实验楼", "poi_437"),
+        ("高压大厅", "poi_439"),
+        ("珞珈咖啡", "poi_452"),
+    ]:
+        assert [poi["id"] for poi in _exact_master_poi_matches(query, pois)] == [poi_id]
+
+
+def test_manual_canteen_name_has_one_owner_without_removing_other_facilities():
+    pois = list(_by_id().values())
+    for query in ("工学部一食堂", "工学部1食堂"):
+        assert [poi["id"] for poi in _exact_master_poi_matches(query, pois)] == ["poi_202"]
+    assert [poi["id"] for poi in _exact_master_poi_matches(
+        "武汉大学工学部学生一食堂", pois)] == ["poi_203"]
+
+
 def test_named_table_tennis_and_badminton_osm_candidates_have_audited_decisions():
     pois = _by_id()
     by_source = {

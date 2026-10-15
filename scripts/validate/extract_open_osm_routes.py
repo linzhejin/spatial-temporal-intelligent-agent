@@ -34,15 +34,37 @@ def load_boundaries(path):
     """Use assembled local OSM education areas when available; otherwise config."""
     areas = []
     if path.exists():
-        for area in json.loads(path.read_text(encoding="utf-8")).get("education_areas", []):
+        evidence = json.loads(path.read_text(encoding="utf-8"))
+        osm_ids = {"relation/7728026", "relation/20349098", "relation/20349097"}
+        if evidence.get("education_areas"):
+            candidates = evidence["education_areas"]
+            boundary_source = "assembled_OSM_education_areas"
+        elif evidence.get("type") == "FeatureCollection":
+            candidates = [
+                {
+                    "name": feature.get("properties", {}).get("name", ""),
+                    "osm_id": feature.get("properties", {}).get("osm_id"),
+                    "tags": feature.get("properties", {}).get("tags") or {},
+                    "geometry": feature.get("geometry"),
+                }
+                for feature in evidence.get("features", [])
+            ]
+            boundary_source = "osm_campus_boundary_geojson"
+        else:
+            candidates = []
+            boundary_source = ""
+        for area in candidates:
             tags = area.get("tags", {})
-            name = tags.get("name", "")
-            if area.get("osm_id") in {"relation/7728026", "relation/20349098", "relation/20349097"} and area.get("geometry"):
-                geom = shape(area["geometry"])
-                if not geom.is_empty and geom.is_valid:
-                    areas.append({"name": name, "osm_id": area.get("osm_id"), "geometry": geom, "tags": tags})
+            osm_id = area.get("osm_id")
+            geometry = area.get("geometry")
+            if osm_id not in osm_ids or not geometry:
+                continue
+            geom = shape(geometry)
+            if not geom.is_empty and geom.is_valid:
+                areas.append({"name": area.get("name") or tags.get("name", ""),
+                              "osm_id": osm_id, "geometry": geom, "tags": tags})
     if areas:
-        return areas, "assembled_OSM_education_areas"
+        return areas, boundary_source
     return [{"name": name, "osm_id": None, "tags": {}, "geometry": Polygon(
         [gcj02_to_wgs84(*p) for p in points])} for name, points in CAMPUS_POLYS_GCJ.items()], "config_polygons_fallback"
 
@@ -146,6 +168,14 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+def output_reference(path):
+    """Keep repository outputs concise and allow research outputs on other drives."""
+    try:
+        return path.relative_to(ROOT).as_posix()
+    except ValueError:
+        return path.as_posix()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pbf", type=Path, default=ROOT / "scripts/audit_output/hubei-260924.osm.pbf")
@@ -188,7 +218,7 @@ def main():
         "entrance_node_count": sum("entrance" in f["properties"]["tags"] for f in handler.nodes),
         "crossing_node_count": sum(f["properties"]["tags"].get("highway") == "crossing" for f in handler.nodes),
         "restriction_relations": handler.restrictions,
-        "outputs": [str(p.relative_to(ROOT)) for p in (ways_path, nodes_path, boundary_path, buildings_path)],
+        "outputs": [output_reference(p) for p in (ways_path, nodes_path, boundary_path, buildings_path)],
         "limitations": ["Source timestamp is newer than the production graph; differences include mapping updates.",
                         "Raw OSM tags need mode-specific interpretation before routing; access uncertainty remains explicit.",
                         "Complete ways can extend outside selection polygons; use intersects_campus_boundary and boundary layer when reviewing."]}
