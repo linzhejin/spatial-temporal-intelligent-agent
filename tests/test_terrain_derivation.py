@@ -68,3 +68,26 @@ def test_sample_profile_uses_complete_geometry_and_spacing():
     assert profile[0] == pytest.approx(100.0)
     assert profile[-1] == pytest.approx(110.0)
     assert all(math.isfinite(value) for value in profile if value is not None)
+
+
+class _ProjectedDataset:
+    crs = "EPSG:32650"
+    nodata = None
+
+    def __init__(self):
+        self.coords = []
+
+    def sample(self, coords):
+        self.coords = list(coords)
+        for _ in self.coords:
+            yield [100.0]
+
+
+def test_sample_profile_reprojects_wgs84_geometry_for_projected_dem():
+    dataset = _ProjectedDataset()
+    profile = sample_profile(
+        dataset, [(114.0, 30.0), (114.001, 30.0)], spacing_m=30.0
+    )
+
+    assert len(profile) >= 4
+    assert all(x > 100_000 and y > 1_000_000 for x, y in dataset.coords)

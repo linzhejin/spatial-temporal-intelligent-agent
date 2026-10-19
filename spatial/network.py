@@ -91,12 +91,26 @@ def load_or_download_network(bbox: Optional[dict] = None) -> nx.MultiDiGraph:
         except Exception as e:
             logger.warning("路网缓存失败（不影响运行）: %s", e)
 
-    _mark_osm_provenance(_G)
-
     ann_path = _annotations_path()
+    expected_network_version = None
     if os.path.exists(ann_path):
         try:
-            _annotation_coverage_rate = _merge_annotations(_G, ann_path)
+            with open(ann_path, "r", encoding="utf-8") as f:
+                snapshot_version = json.load(f).get("network_version")
+            if snapshot_version:
+                from scripts.network.build_edge_attribute_master import graph_fingerprint
+                expected_network_version = graph_fingerprint(_G)
+        except Exception:
+            # _merge_annotations reports malformed snapshots through the normal path below.
+            expected_network_version = None
+
+    _mark_osm_provenance(_G)
+
+    if os.path.exists(ann_path):
+        try:
+            _annotation_coverage_rate = _merge_annotations(
+                _G, ann_path, expected_network_version=expected_network_version
+            )
             logger.info(
                 "路段标注 merge 完成: coverage_rate=%.3f (%s)",
                 _annotation_coverage_rate, ann_path
@@ -367,6 +381,9 @@ def get_node_coords(G: nx.MultiDiGraph, node_id: int) -> tuple:
 
 
 def _annotations_path() -> str:
+    override = os.environ.get("ROAD_ANNOTATIONS_PATH")
+    if override:
+        return os.path.abspath(os.path.expanduser(override))
     try:
         from config import ROAD_ANNOTATIONS_PATH
         return ROAD_ANNOTATIONS_PATH
@@ -395,9 +412,21 @@ def _parse_edge_id(edge_id_raw) -> Optional[Tuple]:
     return None
 
 
-def _merge_annotations(G: nx.MultiDiGraph, annotations_path: str) -> float:
+def _merge_annotations(
+    G: nx.MultiDiGraph,
+    annotations_path: str,
+    expected_network_version: Optional[str] = None,
+) -> float:
     with open(annotations_path, "r", encoding="utf-8") as f:
         ann_data = json.load(f)
+
+    snapshot_version = ann_data.get("network_version")
+    if snapshot_version:
+        if expected_network_version is None:
+            from scripts.network.build_edge_attribute_master import graph_fingerprint
+            expected_network_version = graph_fingerprint(G)
+        if snapshot_version != expected_network_version:
+            raise ValueError("annotation network_version does not match the current graph")
 
     if (G.graph.get("annotation_policy") == "source_scoped_only"
             and ann_data.get("graph_source_sha256") != G.graph.get("source_sha256")):
@@ -448,12 +477,20 @@ def _merge_annotations(G: nx.MultiDiGraph, annotations_path: str) -> float:
         edge_data = G[orig_u][orig_v][orig_k]
         course_geometry_replaced = str(edge_data.get("course_geometry_replaced", "")).lower() == "true"
         course_name_authoritative = edge_data.get("course_name_source") == "course"
-        if (not course_geometry_replaced and "slope_level" in ann
+        current_graph_oge_candidate = bool(snapshot_version and ann.get("terrain_source_id"))
+        if ((not course_geometry_replaced or current_graph_oge_candidate) and "slope_level" in ann
                 and ann["slope_level"] is not None):
             try:
                 edge_data["slope_level"] = int(ann["slope_level"])
             except (ValueError, TypeError):
                 pass
+        for attr in (
+            "terrain_confidence", "terrain_verification_status", "grade_abs_pct",
+            "grade_p90_pct", "terrain_source_id", "terrain_method_version",
+            "terrain_source_refs",
+        ):
+            if attr in ann:
+                edge_data[attr] = ann[attr]
         if (not course_geometry_replaced and "scenery_level" in ann
                 and ann["scenery_level"] is not None):
             try:

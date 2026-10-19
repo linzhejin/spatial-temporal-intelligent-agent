@@ -7,6 +7,8 @@
     "test:js": "node --test tests/js/*.test.js"
   },
   "dependencies": {
-    "docx": "^9.7.1"
+    "docx": "^9.8.1",
+    "fast-xml-parser": "^5.11.2",
+    "temml": "^0.13.5"
   }
 }

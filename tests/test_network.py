@@ -59,6 +59,11 @@ class TestNetworkCacheRecovery:
 
 
 class TestMergeAnnotations:
+    def test_annotations_path_uses_explicit_environment_override(self, monkeypatch, tmp_path):
+        custom = tmp_path / "oge-runtime.json"
+        monkeypatch.setenv("ROAD_ANNOTATIONS_PATH", str(custom))
+        assert network._annotations_path() == str(custom)
+
     def test_merge_annotations_applies_attributes_and_counts_coverage(self, tmp_path):
         G = _make_graph(4)
         ann_path = tmp_path / "road_annotations.json"
