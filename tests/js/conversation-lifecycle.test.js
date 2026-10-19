@@ -7,7 +7,7 @@ const routeState = require('../../static/js/route-state.js');
 // Run the real app control flow. Only DOM/map/network boundaries are replaced;
 // exposing lexical functions here avoids shipping test hooks in the application.
 function harness(storage = new Map()) {
-    const bubbles = [], rendered = [], requests = [], userBubbles = [];
+    const bubbles = [], rendered = [], candidateRenders = [], comparisonRenders = [], requests = [], userBubbles = [];
     let clears = 0, stopped = 0, locationCalls = 0, reloads = 0;
     const localStorage = {
         getItem: k => storage.get(k) ?? null,
@@ -15,7 +15,9 @@ function harness(storage = new Map()) {
         removeItem: k => storage.delete(k),
     };
     const noop = () => {};
-    const element = () => ({ hidden: false, style: {}, children: [], classList: { add: noop, remove: noop, toggle: noop },
+    const element = () => ({ hidden: false, style: {}, children: [], innerHTML: '', scrollTop: 0, clientHeight: 100, scrollHeight: 100,
+        scrollTo: noop, classList: { add: noop, remove: noop, toggle: noop },
+        setAttribute: noop,
         querySelectorAll: () => [],
         querySelector(selector) { return this.children.find(child => selector.includes(child.dataset && child.dataset.action)) || null; },
         appendChild(child) { this.children.push(child); } });
@@ -25,7 +27,10 @@ function harness(storage = new Map()) {
         localStorage, navigator: { userAgent: 'desktop', platform: 'Win32' },
         window: { localStorage, WHURouteState: routeState, location: { reload: () => { reloads++; } } },
         document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [],
-            createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, textContent: '', disabled: false }), getElementById: id => {
+            createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, children: [], textContent: '', disabled: false,
+                addEventListener(name, fn) { this['on' + name] = fn; },
+                appendChild(child) { this.children.push(child); },
+                querySelectorAll: () => [] }), getElementById: id => {
             if (!elements.has(id)) elements.set(id, element()); return elements.get(id);
         } },
         boundaries: {
@@ -35,6 +40,8 @@ function harness(storage = new Map()) {
             clearRouteResult: () => { clears++; stopped++; }, clearMap: () => { clears++; },
             stopNavigation: () => { stopped++; },
             renderRoute: r => { rendered.push(r); context.app.state.routeStore.replace(r.route_state || null); },
+            renderCandidateCards: (candidates, taskId, revision) => candidateRenders.push({ candidates, taskId, revision }),
+            renderRouteComparison: comparison => comparisonRenders.push(comparison),
             ensureUserLocation: async () => {
                 locationCalls++;
                 const fix = { lng: 114.3, lat: 30.5, accuracy: 35 };
@@ -55,8 +62,11 @@ function harness(storage = new Map()) {
     assert.ok(end > 0);
     vm.runInContext(source.slice(0,end) + `
         var realApiRequest = apiRequest;
+        var realRenderRoute = renderRoute;
+        var realRenderClarifyOptions = renderClarifyOptions;
+        var realShowSuggestions = showSuggestions;
         [${['hideError','startLoadingMessages','hideWelcomeElements','stopLoadingMessages','hideLoading',
-            'renderClarifyOptions','renderCandidateCards','syncModeFromServer','showResults','trackRouteShown','showTopBanner',
+            'renderClarifyOptions','renderCandidateCards','renderRouteComparison','renderRouteComparisonCard','syncModeFromServer','showResults','trackRouteShown','showTopBanner',
             'applyProductMode','loadTravelMode','bindEvents','syncTravelModeUI','syncRouteStrategyUI',
             'startRoadConditionVersionMonitor',
             'showWelcomeHint','initMap','consumeMobileHandoff'].map(n => JSON.stringify(n)).join(',')}]
@@ -68,12 +78,17 @@ function harness(storage = new Map()) {
         clearMap = boundaries.clearMap;
         stopNavigation = boundaries.stopNavigation;
         renderRoute = boundaries.renderRoute;
+        renderCandidateCards = boundaries.renderCandidateCards;
+        renderRouteComparisonCard = boundaries.renderRouteComparison;
         ensureUserLocation = boundaries.ensureUserLocation;
         apiRequest = boundaries.apiRequest;
         var realSubmitQueuedMessage = submitQueuedMessage;
         globalThis.app = { state: state, init: init, submit: handleNlSubmit, reset: handleReset,
             candidateRouteQuery: candidateRouteQuery,
             buildRouteSummary: buildRouteSummary,
+            renderRouteDirect: realRenderRoute,
+            renderClarifyOptions: realRenderClarifyOptions,
+            showSuggestions: realShowSuggestions,
             globalKeydown: handleGlobalKeydown,
             load: loadContext, save: saveContext, request: realApiRequest, queued: submitQueuedMessage,
             removeMapPoint: removeMapPoint,
@@ -100,13 +115,33 @@ function harness(storage = new Map()) {
             focus: focusPoiOnMap };
     })();`, context);
     context.app.state.productMode = 'planning';
-    return { ...context.app, context, bubbles, rendered, requests, userBubbles, storage,
+    return { ...context.app, context, bubbles, rendered, candidateRenders, comparisonRenders, requests, userBubbles, storage,
         clearCount: () => clears, stopCount: () => stopped, locationCount: () => locationCalls,
         reloadCount: () => reloads };
 }
 const existingRoute = () => ({ route_id: 'existing', start: { name: '星湖园' }, end: { name: '科技门' }, travel_mode: 'walk' });
 const routeResult = id => ({ task_type: 'path_planning', response_kind: 'route', recommended: [[1,2],[2,3]], route_state: { ...existingRoute(), route_id: id }, explanation: id });
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return { promise, resolve, reject }; }
+
+test('an over-time shortest reference is not drawn as a selectable comparison', () => {
+    const h = harness();
+    const lines = [];
+    h.context.L = { polyline: (coords, style) => {
+        const line = { coords, style, addTo: () => line,
+            getBounds: () => ({ extend() {} }) };
+        lines.push(line);
+        return line;
+    } };
+    h.state.map = { fitBounds() {} };
+    h.state.poiMarkers = [];
+    h.renderRouteDirect({
+        recommended: [{ lng: 114.3, lat: 30.5 }, { lng: 114.31, lat: 30.51 }],
+        shortest: [{ lng: 114.3, lat: 30.5 }, { lng: 114.32, lat: 30.52 }],
+        shortest_baseline_feasible: false, mode: 'walk', pois: [],
+    });
+    assert.equal(lines.length, 1);
+    assert.equal(h.state.shortestLine, null);
+});
 
 test('R starts a clean conversation without reloading the page', () => {
     const h = harness();
@@ -527,6 +562,45 @@ test('route overview separates road-network length from estimated unverified end
     assert.match(summary, /路网段.*237/);
     assert.match(summary, /接驳.*直线.*37.*未核实/);
 });
+test('route overview states when route checks do not include field passability verification', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '信息学部' }, end: { name: '卓尔体育馆' },
+        mode: 'walk', recommended_length_m: 640, duration_min: 9,
+        strategy: { name: 'shortest' },
+        route_verification: { status: 'pass', field_truth_verified: false },
+    });
+
+    assert.match(summary, /核对的是路网和路线约束/);
+    assert.match(summary, /未实地确认道路当前可通行/);
+});
+test('route overview does not add an unverified-field caveat when field truth is confirmed', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '信息学部' }, end: { name: '卓尔体育馆' },
+        mode: 'walk', recommended_length_m: 640, duration_min: 9,
+        strategy: { name: 'shortest' },
+        route_verification: { status: 'pass', field_truth_verified: true },
+    });
+
+    assert.doesNotMatch(summary, /未实地确认道路当前可通行/);
+});
+test('mobile route feedback keeps the route explanation and appends the field-passability limit once', async () => {
+    const h = harness();
+    h.state.productMode = 'navigation';
+    h.setApi(async () => ({
+        ...routeResult('mobile-field-limit'),
+        explanation: '路线约 800 米，预计步行 10 分钟。',
+        route_verification: { status: 'pass', field_truth_verified: false },
+    }));
+
+    await h.submit('从信息学部到图书馆');
+
+    const reply = h.bubbles.at(-1).text;
+    assert.match(reply, /路线约 800 米，预计步行 10 分钟/);
+    assert.match(reply, /未实地确认道路当前可通行/);
+    assert.equal((reply.match(/未实地确认道路当前可通行/g) || []).length, 1);
+});
 test('desktop route details are compact and use collapsed disclosures for long lists', () => {
     const html = fs.readFileSync(require.resolve('../../static/index.html'), 'utf8');
     const css = fs.readFileSync(require.resolve('../../static/css/style.css'), 'utf8');
@@ -672,6 +746,102 @@ test('free-form location answer continues the original pending task', async () =
     await h.submit('我在信息学部');
     assert.equal(sent.continuation_task_id, 'pending-route');
     assert.equal(sent.base_revision, 3);
+});
+test('free-form ball type answer continues the pending activity task', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'sports-task';
+    h.state.pendingServerTaskRevision = 3;
+    h.state.pendingServerQuestion = '想打什么球？';
+    let sent;
+    h.setApi(async (_url, body) => { sent = body; return routeResult('continued'); });
+
+    await h.submit('橄榄球');
+
+    assert.equal(sent.query, '橄榄球');
+    assert.equal(sent.continuation_task_id, 'sports-task');
+    assert.equal(sent.base_revision, 3);
+});
+test('ball clarification renders all five choices and leaves other ball types for free input', () => {
+    const h = harness();
+    h.renderClarifyOptions(['篮球', '羽毛球', '乒乓球', '足球', '其他球类'], 'sports-task', 3);
+    const chat = h.context.document.getElementById('chat-content');
+    const buttons = chat.children[0].children[0].children;
+    assert.deepEqual(Array.from(buttons, button => button.textContent),
+        ['篮球', '羽毛球', '乒乓球', '足球', '其他球类']);
+
+    const input = h.context.document.getElementById('nl-input');
+    let focused = false;
+    input.focus = () => { focused = true; };
+    buttons[4].onclick();
+
+    assert.equal(focused, true);
+    assert.match(input.placeholder, /补充球类/);
+});
+test('follow-up suggestions render from the agent result and submit the selected query', () => {
+    const h = harness();
+    let submitted = 0;
+    const submitButton = h.context.document.getElementById('submit-btn');
+    submitButton.click = () => { submitted++; };
+
+    h.showSuggestions({ suggestions: [{ label: '附近的食堂', query: '找附近食堂' }] });
+
+    const area = h.context.document.getElementById('suggestions-area');
+    const chips = h.context.document.getElementById('suggestions-chips');
+    assert.equal(area.hidden, false);
+    assert.equal(chips.children.length, 1);
+    assert.equal(chips.children[0].textContent, '附近的食堂');
+    assert.equal(chips.children[0].title, '找附近食堂');
+    chips.children[0].onclick();
+    assert.equal(h.context.document.getElementById('nl-input').value, '找附近食堂');
+    assert.equal(submitted, 1);
+});
+test('chat follow-up suggestions are placed directly after the reply bubble', () => {
+    const h = harness();
+    const replyBubble = { after(node) { this.nextNode = node; } };
+
+    h.showSuggestions({ suggestions: [{ label: '查附近道路', query: '查看附近道路管制' }] }, replyBubble);
+
+    assert.equal(replyBubble.nextNode, h.context.document.getElementById('suggestions-area'));
+});
+test('chat responses render tool-provided follow-up suggestions', async () => {
+    const h = harness();
+    h.setApi(async () => ({
+        task_type: 'chat', reply: '有几处路况信息。',
+        suggestions: [{ label: '查附近道路', query: '查看附近道路管制' }],
+    }));
+
+    await h.submit('附近有什么路况？');
+
+    const chips = h.context.document.getElementById('suggestions-chips');
+    assert.equal(chips.children.length, 1);
+    assert.equal(chips.children[0].textContent, '查附近道路');
+    assert.equal(chips.children[0].title, '查看附近道路管制');
+});
+test('route comparison responses render structured data without replacing the current route', async () => {
+    const h = harness();
+    h.state.routeStore.replace(existingRoute());
+    const comparison = {
+        alternatives: [{ strategy: 'shortest', label: '最短路径', distance_m: 500 }],
+        unavailable: [{ strategy: 'scenery', label: '风景优先', reason: '缺少数据' }],
+    };
+    h.setApi(async () => ({ task_type: 'chat', response_kind: 'route_comparison',
+        reply: '比较了可用路线。', route_comparison: comparison }));
+
+    await h.submit('比较三种走法');
+
+    assert.equal(h.comparisonRenders.length, 1);
+    assert.equal(h.comparisonRenders[0], comparison);
+    assert.equal(h.state.routeStore.current().route_id, 'existing');
+    assert.equal(h.clearCount(), 0);
+});
+test('chat responses without suggestions hide stale route suggestion chips', async () => {
+    const h = harness();
+    h.showSuggestions({ suggestions: [{ label: '看风景路线', query: '规划风景优先路线' }] });
+    h.setApi(async () => ({ task_type: 'chat', reply: '今天天气晴。' }));
+
+    await h.submit('今天天气怎么样？');
+
+    assert.equal(h.context.document.getElementById('suggestions-area').hidden, true);
 });
 test('independent POI search does not get attached to a pending route clarification', async () => {
     const h = harness();
@@ -1309,4 +1479,20 @@ test('unchanged road conditions do not interrupt the displayed route', async () 
 
     assert.equal(notice.hidden, true);
     assert.equal(h.state.routeStore.current().route_id, 'existing');
+});
+
+test('route with next-stage place choices keeps the same task open', async () => {
+    const h = harness();
+    const reply = { ...routeResult('stage-one'), needs_input: true,
+        _task_id: 'task-composite', _task_revision: 3,
+        clarify: { question: 'Choose a meal place', options: [] },
+        candidates: [{ poi_id: 'poi_310', name: 'Canteen' }],
+    };
+    h.setApi(async () => reply);
+    await h.submit('first place');
+    assert.equal(h.rendered.length, 1);
+    assert.equal(h.candidateRenders.length, 1);
+    assert.equal(h.candidateRenders[0].taskId, 'task-composite');
+    assert.equal(h.state.pendingServerTaskId, 'task-composite');
+    assert.equal(h.state.pendingServerTaskRevision, 3);
 });

@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+import math
+import os
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -31,6 +33,19 @@ def _emit(
     stored = append_run_event(
         database_url, state["run_id"], runtime.context["worker_id"], event,
         {"label": label}, node_id=node,
+    )
+    if stored is None:
+        raise RuntimeError("run lease lost or task cancelled")
+
+
+def _tool_trace_enabled() -> bool:
+    return os.getenv("AGENT_TOOL_TRACE_ENABLED", "").strip().lower() in {"1", "true", "yes"}
+
+
+def _emit_agent_tool_trace(state, runtime, database_url, event_type, payload):
+    stored = append_run_event(
+        database_url, state["run_id"], runtime.context["worker_id"],
+        event_type, payload, node_id="agent_tool",
     )
     if stored is None:
         raise RuntimeError("run lease lost or task cancelled")
@@ -70,6 +85,74 @@ def _run_weather_tool():
         detail = result.get("message") if isinstance(result, dict) else None
         raise RuntimeError(detail or "天气暂时获取不到")
     return result
+
+
+def _agent_requirement_status(response: dict[str, Any], requirement_id: str) -> str:
+    if response.get("needs_input") or response.get("response_kind") in {"clarify", "candidates"}:
+        return "needs_input"
+    if response.get("response_kind") == "route_comparison":
+        return "satisfied" if _route_comparison_satisfies(response) else "failed"
+    if requirement_id != "route":
+        return "satisfied"
+    route = response.get("route")
+    if (response.get("response_kind") == "route" and isinstance(route, dict)
+            and isinstance(route.get("route_verification"), dict)
+            and route["route_verification"].get("status") == "pass"
+            and isinstance(route.get("recommended_edge_ids"), list)
+            and isinstance(route.get("recommended"), list)):
+        return "satisfied"
+    return "failed"
+
+
+def _route_comparison_satisfies(response: dict[str, Any]) -> bool:
+    """Count a real comparison as fulfillment without requiring one chosen route."""
+    comparison = response.get("route_comparison")
+    if not isinstance(comparison, dict):
+        return False
+    expected = {"shortest", "scenery", "flat"}
+    alternatives = comparison.get("alternatives")
+    unavailable = comparison.get("unavailable")
+    if not isinstance(alternatives, list) or not isinstance(unavailable, list):
+        return False
+    available_strategies = set()
+    for item in alternatives:
+        if not isinstance(item, dict):
+            return False
+        strategy = item.get("strategy")
+        distance = item.get("distance_m")
+        if (not isinstance(strategy, str) or strategy not in expected
+                or strategy in available_strategies
+                or isinstance(distance, bool) or not isinstance(distance, (int, float))):
+            return False
+        try:
+            distance = float(distance)
+        except (OverflowError, ValueError):
+            return False
+        if not math.isfinite(distance) or distance < 0:
+            return False
+        available_strategies.add(strategy)
+    unavailable_strategies = set()
+    for item in unavailable:
+        if not isinstance(item, dict):
+            return False
+        strategy = item.get("strategy")
+        if (not isinstance(strategy, str) or strategy not in expected
+                or strategy in unavailable_strategies
+                or not isinstance(item.get("reason"), str) or not item["reason"].strip()):
+            return False
+        unavailable_strategies.add(strategy)
+    if available_strategies & unavailable_strategies:
+        return False
+    evidence = comparison.get("evidence")
+    if (not isinstance(evidence, dict) or not evidence.get("data_version")
+            or not evidence.get("road_condition_version")):
+        return False
+    status = comparison.get("status")
+    if status == "complete":
+        return available_strategies == expected and not unavailable_strategies
+    return (status == "partial" and len(available_strategies) >= 2
+            and available_strategies | unavailable_strategies == expected
+            and bool(unavailable_strategies))
 
 
 def build_agent_workflow(
@@ -125,6 +208,7 @@ def build_agent_workflow(
             context["selected_poi_id"] = data["selected_poi_id"]
         from api.routes import _normalize_chat_context
         context = _normalize_chat_context(context)
+        context["task_revision"] = data.get("task_revision")
         route_state = task.get("route_spec") or {}
         from agents.task_planner import build_task_plan
         plan = build_task_plan(
@@ -136,29 +220,89 @@ def build_agent_workflow(
         requirement_results: dict[str, str] = {}
         errors: dict[str, str] = {}
 
+        record_tool_call = None
+        if _tool_trace_enabled():
+            _emit_agent_tool_trace(
+                state, runtime, database_url, "agent_tool_trace_started",
+                {"source": "agent_execution"},
+            )
+
+            def record_tool_call(item):
+                item = item if isinstance(item, dict) else {}
+                raw_keys = item.get("argument_keys")
+                argument_keys = sorted({
+                    key for key in raw_keys
+                    if isinstance(key, str) and key and len(key) <= 80
+                }) if isinstance(raw_keys, list) else []
+                artifact_kind = item.get("artifact_kind")
+                if artifact_kind not in {
+                        "route", "candidates", "clarify", "suggestions", "route_comparison", None}:
+                    artifact_kind = None
+                outcome = item.get("outcome")
+                if outcome not in {
+                        "success", "tool_error", "invalid_args", "exception",
+                        "skipped_after_route_verification_retry",
+                        "skipped_after_route_verification_failure"}:
+                    outcome = "exception"
+                _emit_agent_tool_trace(
+                    state, runtime, database_url, "agent_tool_call", {
+                        "tool_name": str(item.get("tool_name") or "unknown")[:80],
+                        "argument_keys": argument_keys,
+                        "outcome": outcome,
+                        "artifact_kind": artifact_kind,
+                    },
+                )
+
+        def run_weather_tool():
+            try:
+                result = _run_weather_tool()
+            except Exception:
+                if record_tool_call:
+                    record_tool_call({
+                        "tool_name": "get_weather", "argument_keys": [],
+                        "outcome": "exception", "artifact_kind": None,
+                    })
+                raise
+            if record_tool_call:
+                record_tool_call({
+                    "tool_name": "get_weather", "argument_keys": [],
+                    "outcome": "success", "artifact_kind": None,
+                })
+            return result
+
         def run_route_agent():
-            return agent(
-                data["query"], context=context, history=history,
+            agent_kwargs = dict(
+                context=context, history=history,
                 coord_start=start, coord_end=end, coord_waypoints=waypoints,
                 travel_mode=route_state.get("travel_mode", "walk"),
                 uid=data.get("owner_id"),
+                proof_identity={
+                    "database_url": database_url,
+                    "owner_id": data.get("owner_id"),
+                    "task_id": data.get("task_id"),
+                    "task_revision": data.get("task_revision"),
+                },
             )
+            if record_tool_call:
+                agent_kwargs["tool_trace_callback"] = record_tool_call
+            return agent(data["query"], **agent_kwargs)
 
         if plan.kind == "composite":
             # Route interpretation and live weather are independent, so neither
             # is allowed to hold the other requirement hostage.
             with ThreadPoolExecutor(max_workers=2, thread_name_prefix="agent-subtask") as pool:
                 route_future = pool.submit(run_route_agent)
-                weather_future = pool.submit(_run_weather_tool)
+                weather_future = pool.submit(run_weather_tool)
                 try:
                     response = route_future.result()
                     if not isinstance(response, dict):
                         raise TypeError("agent returned a non-object response")
                     agent_requirement = plan.nodes[0].requirement_ids[0]
-                    requirement_results[agent_requirement] = (
-                        "needs_input" if response.get("response_kind") in {"clarify", "candidates"}
-                        else "satisfied"
+                    requirement_results[agent_requirement] = _agent_requirement_status(
+                        response, agent_requirement,
                     )
+                    if requirement_results[agent_requirement] == "failed":
+                        errors[agent_requirement] = "route_output_missing_or_unverified"
                 except Exception as error:
                     agent_requirement = plan.nodes[0].requirement_ids[0]
                     errors[agent_requirement] = type(error).__name__
@@ -171,7 +315,7 @@ def build_agent_workflow(
                     requirement_results["weather"] = "failed"
         elif plan.kind == "weather":
             try:
-                weather = _run_weather_tool()
+                weather = run_weather_tool()
                 requirement_results["weather"] = "satisfied"
             except Exception as error:
                 errors["weather"] = type(error).__name__
@@ -181,10 +325,12 @@ def build_agent_workflow(
                 response = run_route_agent()
                 if not isinstance(response, dict):
                     raise TypeError("agent returned a non-object response")
-                requirement_results["route" if plan.kind == "route" else "answer"] = (
-                    "needs_input" if response.get("response_kind") in {"clarify", "candidates"}
-                    else "satisfied"
+                agent_requirement = "route" if plan.kind == "route" else "answer"
+                requirement_results[agent_requirement] = _agent_requirement_status(
+                    response, agent_requirement,
                 )
+                if requirement_results[agent_requirement] == "failed":
+                    errors[agent_requirement] = "route_output_missing_or_unverified"
             except Exception as error:
                 errors["route" if plan.kind == "route" else "answer"] = type(error).__name__
                 requirement_results["route" if plan.kind == "route" else "answer"] = "failed"
@@ -193,12 +339,21 @@ def build_agent_workflow(
         needs_user_selection = bool(response and response.get("response_kind") == "candidates")
         succeeded = sum(value in {"satisfied", "needs_input"} for value in requirement_results.values())
         total = len(plan.requirements)
-        execution_status = "completed" if succeeded == total else ("partial" if succeeded else "failed")
+        execution_status = ("needs_input" if "needs_input" in requirement_results.values()
+                            else "completed" if succeeded == total
+                            else "partial" if succeeded else "failed")
         if response is None:
             response = {
                 "response_kind": "chat",
                 "message": "这次没有完成请求，请稍后重试。",
                 "turns": 0,
+            }
+        elif (requirement_results.get("route") == "failed"
+              and response.get("response_kind") == "route"):
+            response = {
+                "response_kind": "chat",
+                "message": "路线核验没有通过，请调整条件后重试。",
+                "turns": response.get("turns", 0),
             }
         if weather:
             weather_text = _weather_message(weather)
@@ -221,7 +376,7 @@ def build_agent_workflow(
             "execution_status": execution_status,
             "requirement_results": requirement_results,
             "requirement_errors": errors,
-            "needs_input": clarify or needs_user_selection,
+            "needs_input": bool(response.get("needs_input")) or clarify or needs_user_selection,
         })
         _emit(state, runtime, "node_completed", "execute_agent", "需求分析与空间工具执行完成", database_url)
         return {"agent_response": response}
@@ -237,7 +392,7 @@ def build_agent_workflow(
         result = _agent_response_to_legacy(state["agent_response"], start, end)
         response = state["agent_response"]
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
-                    "place_request"):
+                    "place_request", "candidates"):
             result[key] = response.get(key)
         if response.get("needs_input"):
             result["needs_input"] = True

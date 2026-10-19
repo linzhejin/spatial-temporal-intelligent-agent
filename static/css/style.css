@@ -2119,6 +2119,78 @@ body.is-planning-mode .desktop-route-workbench {
     color: var(--ink-light);
 }
 
+/* Read-only comparison stays in the conversation and never implies a route was selected. */
+.route-comparison-row {
+    padding: 3px 0 5px 44px;
+    max-width: min(520px, 94%);
+}
+.route-comparison-card {
+    width: 100%;
+    padding: 12px 14px 10px;
+    border: 1px solid var(--divider);
+    border-left: 3px solid var(--cherry);
+    border-radius: 3px 10px 10px 3px;
+    background: var(--surface);
+    box-shadow: var(--shadow-sm);
+}
+.route-comparison-heading,
+.route-comparison-option-primary {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+}
+.route-comparison-heading { padding-bottom: 8px; }
+.route-comparison-endpoints {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    color: var(--ink);
+    font-size: 12px;
+    font-weight: 700;
+}
+.route-comparison-availability,
+.route-comparison-unavailable-label {
+    flex: 0 0 auto;
+    color: var(--ink-light);
+    font-size: 10px;
+    font-variant-numeric: tabular-nums;
+}
+.route-comparison-option {
+    padding: 8px 0 7px;
+    border-top: 1px solid var(--divider);
+}
+.route-comparison-label {
+    color: var(--ink);
+    font-size: 11px;
+    font-weight: 650;
+}
+.route-comparison-distance {
+    color: var(--cherry);
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+.route-comparison-meta,
+.route-comparison-note,
+.route-comparison-empty {
+    margin: 4px 0 0;
+    color: var(--ink-light);
+    font-size: 10px;
+    line-height: 1.55;
+}
+.route-comparison-option.is-unavailable .route-comparison-label,
+.route-comparison-option.is-unavailable .route-comparison-unavailable-label {
+    color: var(--ink-light);
+}
+.route-comparison-empty {
+    padding: 8px 0;
+    border-top: 1px solid var(--divider);
+}
+.route-comparison-note {
+    padding-top: 8px;
+    border-top: 1px solid var(--divider);
+}
+
 .clarify-chips {
     display: flex;
     flex-wrap: wrap;
@@ -2658,6 +2730,8 @@ body.nav-running .whu-locate-btn { opacity: 0; pointer-events: none; }
     .nav-bottom__dist { font-size: 1.2rem; }
     .nav-bottom__road { display: none; }  /* 窄屏路名让位给距离/操作 */
     .nav-arrive { width: 82%; }
+    .route-comparison-row { padding-left: 43px; max-width: 96%; }
+    .route-comparison-card { padding: 10px 11px 9px; }
 
     /* 导航中：地图占满整屏（高德同款沉浸态），退出导航恢复 */
     body.nav-running { grid-template-rows: 1fr; }

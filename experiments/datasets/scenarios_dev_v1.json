@@ -1,0 +1,2686 @@
+{
+  "protocol_version": "scenario-v1",
+  "version": "scenarios-dev-draft60-v1",
+  "split": "development",
+  "repeats": 1,
+  "authoring_status": "60 unadjudicated development drafts; NOT SCOREABLE AS RESEARCH EVIDENCE. No frozen snapshot, independent review, or baseline run exists for this authoring bank.",
+  "cases": [
+    {
+      "id": "seed_place_01",
+      "category": "place_recommendation",
+      "template_group": "nearby_food",
+      "od_group": "yulan_food",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在玉兰2门附近，推荐一个能吃饭的地方"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "food_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "seed_mode_01",
+      "category": "mode_access",
+      "template_group": "mode_and_steps",
+      "od_group": "yulan_laozhai",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门到樱顶，步行且不要走已标记的台阶"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "seed_via_01",
+      "category": "multi_via_itinerary",
+      "template_group": "ordered_vias",
+      "od_group": "yulan_sports_food_laozhai",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门先到卓尔体育馆，再到桂园食堂，最后到樱顶"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [
+            "poi_418",
+            "poi_070"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "seed_compound_01",
+      "category": "compound_tools",
+      "template_group": "route_weather",
+      "od_group": "yulan_laozhai",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查一下天气，再规划从玉兰2门到樱顶的步行路线"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "weather",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "seed_revision_01",
+      "category": "multi_turn_revision",
+      "template_group": "mode_after_interleaved_query",
+      "od_group": "yulan_laozhai",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门到樱顶，别走已标记台阶"
+        },
+        {
+          "role": "user",
+          "content": "顺便查一下天气"
+        },
+        {
+          "role": "user",
+          "content": "刚才路线改为平坦优先，别走台阶仍然保留"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "information",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "flat",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "seed_event_01",
+      "category": "event_infeasible",
+      "template_group": "blocked_access_fixture_pending",
+      "od_group": "yulan_laozhai",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "如果活动封闭了唯一可通行入口，从玉兰2门到樱顶并且不能穿越封闭路段，该怎么走？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_161",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_closed_edges": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_02",
+      "category": "place_recommendation",
+      "template_group": "sport_unspecified_clarification",
+      "od_group": "meiyuan_unspecified_sport",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在梅园操场，附近想找个地方打球，还没决定什么球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_082",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_03",
+      "category": "place_recommendation",
+      "template_group": "basketball_explicit_activity",
+      "od_group": "library_basketball",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学图书馆总馆门口，想找附近能打篮球的场地，请列出候选。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "basketball_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_04",
+      "category": "place_recommendation",
+      "template_group": "running_verified_use",
+      "od_group": "xinghu_running",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂附近出发，有哪些明确适合跑步的场地？用途不确定的请说明。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "running_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_05",
+      "category": "place_recommendation",
+      "template_group": "study_not_department_default",
+      "od_group": "zhuoer_study",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在卓尔体育馆附近，推荐能自习的地方，不要仅凭是教学楼就认定开放。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_418",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "study_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_06",
+      "category": "place_recommendation",
+      "template_group": "service_parcel_search",
+      "od_group": "keji_parcel",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我现在在科技门，想找取快递的服务点，先给我地点候选。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "parcel_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_07",
+      "category": "place_recommendation",
+      "template_group": "retail_water_distinct_from_food",
+      "od_group": "luojia_water",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在珞珈广场，想买瓶水，找附近可以零售饮用水的店，不是去餐厅吃饭。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "water_shop_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_08",
+      "category": "place_recommendation",
+      "template_group": "food_missing_current_origin",
+      "od_group": "unknown_food",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "推荐离我近的吃饭地点，但我还没有提供位置。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "unknown",
+          "start_poi_id": null,
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "start",
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_09",
+      "category": "place_recommendation",
+      "template_group": "volleyball_explicit_activity",
+      "od_group": "meiyuan_volleyball",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从梅园食堂附近找排球场，候选请按排球用途检索。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "volleyball_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_place_recommendation_10",
+      "category": "place_recommendation",
+      "template_group": "catalog_lookup_without_location",
+      "od_group": "catalog_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "不用定位，只查询校园图书馆有哪些，先给地点列表。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": null,
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "library_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_02",
+      "category": "mode_access",
+      "template_group": "bike_explicit_shortest",
+      "od_group": "keji_xinghu",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门骑自行车到星湖园食堂，按最短距离规划。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_03",
+      "category": "mode_access",
+      "template_group": "verified_accessibility_required",
+      "od_group": "library_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学图书馆总馆步行到卓尔体育馆，我使用轮椅，需要有证据核实的无障碍通路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "require_verified_accessibility": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_04",
+      "category": "mode_access",
+      "template_group": "whole_route_distance_cap",
+      "od_group": "meiyuan_luojia",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从梅园食堂步行到珞珈广场，全程距离不能超过1500米，不满足请说明。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 1500
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_05",
+      "category": "mode_access",
+      "template_group": "duration_cap_without_silent_relaxation",
+      "od_group": "xinghu_info_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂走到信息学部图书馆，必须在15分钟内，不能为给路线而放宽限制。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 900
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_06",
+      "category": "mode_access",
+      "template_group": "flat_preference_with_hard_steps",
+      "od_group": "yulan_main_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门步行到武汉大学图书馆总馆，平坦优先，并且不要走已标记台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "flat",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_07",
+      "category": "mode_access",
+      "template_group": "scenic_preference_with_distance_cap",
+      "od_group": "luojia_meiyuan_sports",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞珈广场步行到梅园操场，风景优先，但距离不能超过两公里。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {
+            "max_distance_m": 2000
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_08",
+      "category": "mode_access",
+      "template_group": "motor_vehicle_access_request",
+      "od_group": "keji_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门开车到卓尔体育馆，按最短距离规划，只考虑允许汽车通行的道路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "drive",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_09",
+      "category": "mode_access",
+      "template_group": "coincident_endpoints_zero_distance",
+      "od_group": "main_library_self",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学图书馆总馆到武汉大学图书馆总馆，步行，不走已标记台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_mode_access_10",
+      "category": "mode_access",
+      "template_group": "bike_and_combined_budgets",
+      "od_group": "info_parcel_yulan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从信息学部快递服务中心骑车到玉兰2门，总距离不超过3000米，时间不超过20分钟。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 3000,
+            "max_duration_s": 1200
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_02",
+      "category": "multi_via_itinerary",
+      "template_group": "parcel_before_meal",
+      "od_group": "yulan_parcel_meiyuan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门步行出发，先到梅园快递服务中心，最后到梅园食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_073",
+          "via_poi_ids": [
+            "poi_423"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_03",
+      "category": "multi_via_itinerary",
+      "template_group": "two_libraries_ordered",
+      "od_group": "keji_info_main_luojia",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门步行出发，先到信息学部图书馆，再到武汉大学图书馆总馆，最后到珞珈广场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [
+            "poi_240",
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_04",
+      "category": "multi_via_itinerary",
+      "template_group": "closed_loop_return_to_origin",
+      "od_group": "meiyuan_loop",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从梅园食堂步行出发，依次到梅园操场、梅园快递服务中心，最后回到梅园食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_073",
+          "via_poi_ids": [
+            "poi_082",
+            "poi_423"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_05",
+      "category": "multi_via_itinerary",
+      "template_group": "whole_itinerary_distance_budget",
+      "od_group": "xinghu_info_parcel_keji",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂步行，经信息学部快递服务中心到科技门，整趟行程距离不超过2500米。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_139",
+          "via_poi_ids": [
+            "poi_424"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 2500
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_06",
+      "category": "multi_via_itinerary",
+      "template_group": "ordered_stops_step_constraint",
+      "od_group": "main_luojia_zhuoer_yulan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学图书馆总馆步行，先到珞珈广场，再到卓尔体育馆，最后到玉兰2门，全程避开已标记台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [
+            "poi_159",
+            "poi_418"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_07",
+      "category": "multi_via_itinerary",
+      "template_group": "bicycle_multiple_stops",
+      "od_group": "keji_xinghu_info_parcel",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门骑车，先到星湖园食堂，再到信息学部图书馆，终点是信息学部快递服务中心。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_424",
+          "via_poi_ids": [
+            "poi_307",
+            "poi_240"
+          ],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_08",
+      "category": "multi_via_itinerary",
+      "template_group": "repeated_via_is_explicit",
+      "od_group": "yulan_meiyuan_revisit_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门步行，先到梅园食堂，再到梅园操场，然后再回梅园食堂，最后到卓尔体育馆。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [
+            "poi_073",
+            "poi_082",
+            "poi_073"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_09",
+      "category": "multi_via_itinerary",
+      "template_group": "via_with_verified_accessibility",
+      "od_group": "luojia_main_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞珈广场步行，经过武汉大学图书馆总馆到卓尔体育馆，全程要求已经核实的无障碍通路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "require_verified_accessibility": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_via_itinerary_10",
+      "category": "multi_via_itinerary",
+      "template_group": "three_vias_total_duration",
+      "od_group": "info_parcel_xinghu_main_luojia_meiyuan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从信息学部快递服务中心步行，依次经过星湖园食堂、武汉大学图书馆总馆、珞珈广场，到梅园操场，总行走时间不超过45分钟。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [
+            "poi_307",
+            "poi_015",
+            "poi_159"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 2700
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_02",
+      "category": "compound_tools",
+      "template_group": "weather_and_food_candidates",
+      "od_group": "xinghu_weather_food",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在星湖园食堂附近，先查天气，再推荐附近其他吃饭地点。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "weather",
+            "food_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_03",
+      "category": "compound_tools",
+      "template_group": "traffic_and_bike_route",
+      "od_group": "keji_info_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "先查当前道路事件，再规划从科技门骑车到信息学部图书馆的路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_04",
+      "category": "compound_tools",
+      "template_group": "poi_details_and_walking_route",
+      "od_group": "yulan_main_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查武汉大学图书馆总馆的地点信息，并给我从玉兰2门步行过去的路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "place_details",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_05",
+      "category": "compound_tools",
+      "template_group": "weather_and_ordered_parcel_route",
+      "od_group": "meiyuan_parcel_luojia",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气，同时规划从梅园食堂步行、经梅园快递服务中心到珞珈广场的路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [
+            "poi_423"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "weather",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_06",
+      "category": "compound_tools",
+      "template_group": "traffic_and_accessibility_route",
+      "od_group": "zhuoer_main_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查询道路事件，并规划从卓尔体育馆步行到武汉大学图书馆总馆的路线，要求已核实无障碍。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_418",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "require_verified_accessibility": true
+          },
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_07",
+      "category": "compound_tools",
+      "template_group": "two_information_queries_without_route",
+      "od_group": "catalog_weather_library",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查一下天气，再列出校园图书馆地点，这次不用规划路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "information",
+          "feasibility": "unknown",
+          "start_poi_id": null,
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "weather",
+            "library_candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_08",
+      "category": "compound_tools",
+      "template_group": "weather_route_distance_cap",
+      "od_group": "xinghu_yulan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "天气怎么样？再给我星湖园食堂到玉兰2门的步行路线，总距离限制为两公里。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 2000
+          },
+          "required_outputs": [
+            "weather",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_09",
+      "category": "compound_tools",
+      "template_group": "three_outputs_keep_each_request",
+      "od_group": "luojia_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞珈广场步行到卓尔体育馆，查天气和道路事件，路线不要走已标记台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "weather",
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_compound_tools_10",
+      "category": "compound_tools",
+      "template_group": "catalog_details_and_route_with_time_cap",
+      "od_group": "info_library_parcel",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "查询信息学部快递服务中心的地点信息，再从信息学部图书馆步行过去，总行走时间不能超过10分钟。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_240",
+          "end_poi_id": "poi_424",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 600
+          },
+          "required_outputs": [
+            "place_details",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_02",
+      "category": "multi_turn_revision",
+      "template_group": "replace_destination_retain_step_constraint",
+      "od_group": "yulan_main_to_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门步行到武汉大学图书馆总馆，不走已标记台阶。"
+        },
+        {
+          "role": "user",
+          "content": "终点改成卓尔体育馆，步行和不走台阶的条件都保留。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_03",
+      "category": "multi_turn_revision",
+      "template_group": "replace_start_retain_destination_budget",
+      "od_group": "meiyuan_to_keji_info",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从梅园食堂步行到信息学部图书馆，总距离不超过3000米。"
+        },
+        {
+          "role": "user",
+          "content": "起点改成科技门，终点、步行方式和距离限制保留。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 3000
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 3000
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_04",
+      "category": "multi_turn_revision",
+      "template_group": "change_mode_retain_via",
+      "od_group": "keji_xinghu_yulan",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门步行，经星湖园食堂到玉兰2门。"
+        },
+        {
+          "role": "user",
+          "content": "改骑自行车，途经点和终点保持。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [
+            "poi_307"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [
+            "poi_307"
+          ],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_05",
+      "category": "multi_turn_revision",
+      "template_group": "append_via_without_dropping_existing",
+      "od_group": "main_luojia_meiyuan_zhuoer",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学图书馆总馆步行，经珞珈广场到卓尔体育馆。"
+        },
+        {
+          "role": "user",
+          "content": "在珞珈广场之后再增加梅园食堂，最后仍到卓尔体育馆。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [
+            "poi_159"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [
+            "poi_159",
+            "poi_073"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_06",
+      "category": "multi_turn_revision",
+      "template_group": "reorder_existing_vias",
+      "od_group": "yulan_parcel_sports_luojia",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门步行，先到梅园快递服务中心，再到梅园操场，最后到珞珈广场。"
+        },
+        {
+          "role": "user",
+          "content": "把两个途经点顺序交换，先梅园操场再取快递，其他不变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [
+            "poi_423",
+            "poi_082"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [
+            "poi_082",
+            "poi_423"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_07",
+      "category": "multi_turn_revision",
+      "template_group": "remove_one_via_retain_budget",
+      "od_group": "xinghu_info_library_parcel_keji",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂步行，经过信息学部图书馆、信息学部快递服务中心到科技门，总时间不超过30分钟。"
+        },
+        {
+          "role": "user",
+          "content": "不用去图书馆了，快递点和30分钟限制保留。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_139",
+          "via_poi_ids": [
+            "poi_240",
+            "poi_424"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 1800
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_139",
+          "via_poi_ids": [
+            "poi_424"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 1800
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_08",
+      "category": "multi_turn_revision",
+      "template_group": "explicit_budget_tightening",
+      "od_group": "luojia_main_budget",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞珈广场步行到武汉大学图书馆总馆，总距离不超过2000米。"
+        },
+        {
+          "role": "user",
+          "content": "把距离上限收紧为1000米，不能满足就说明。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 2000
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 1000
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_09",
+      "category": "multi_turn_revision",
+      "template_group": "explicit_single_constraint_removal",
+      "od_group": "meiyuan_zhuoer_constraint",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从梅园食堂步行到卓尔体育馆，不走已标记台阶，总时间不超过20分钟。"
+        },
+        {
+          "role": "user",
+          "content": "允许走台阶了，但20分钟上限保留。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true,
+            "max_duration_s": 1200
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 1200
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_multi_turn_revision_10",
+      "category": "multi_turn_revision",
+      "template_group": "new_origin_after_interleaved_information",
+      "od_group": "main_xinghu_parcel_interleaved",
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学图书馆总馆步行到梅园快递服务中心。"
+        },
+        {
+          "role": "user",
+          "content": "先告诉我天气。"
+        },
+        {
+          "role": "user",
+          "content": "我现在到了星湖园食堂，用这里作新起点去刚才的快递点，仍然步行。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_423",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "information",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_423",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_423",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_02",
+      "category": "event_infeasible",
+      "template_group": "closure_snapshot_replan",
+      "od_group": "keji_xinghu_closure",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "如果冻结路况里有道路封闭，请从科技门骑车到星湖园食堂，避开对自行车生效的封闭路段；是否有路请按快照核实。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_closed_edges": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_03",
+      "category": "event_infeasible",
+      "template_group": "slowdown_with_hard_duration_cap",
+      "od_group": "meiyuan_zhuoer_slowdown",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "若事件快照中有步行缓行，从梅园食堂步行到卓尔体育馆仍必须在10分钟内，请判断能否满足。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_073",
+          "end_poi_id": "poi_418",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_duration_s": 600
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_04",
+      "category": "event_infeasible",
+      "template_group": "notice_only_event_route",
+      "od_group": "main_luojia_notice",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "如果路况只有提示类事件，查出提示并规划武汉大学图书馆总馆到珞珈广场的最短步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_159",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_05",
+      "category": "event_infeasible",
+      "template_group": "closure_expiry_requires_snapshot_refresh",
+      "od_group": "yulan_main_expiry",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "若之前封路已到期，请核实最新事件快照，再规划从玉兰2门步行到武汉大学图书馆总馆的路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_06",
+      "category": "event_infeasible",
+      "template_group": "revoked_event_requires_recheck",
+      "od_group": "info_parcel_keji_revoked",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "若信息学部快递服务中心到科技门途中原有封路已撤销，请根据核实后的快照重新给出骑车路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_139",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_07",
+      "category": "event_infeasible",
+      "template_group": "mode_specific_closure_scope",
+      "od_group": "xinghu_info_walk_scope",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "如果某路段只对机动车封闭，从星湖园食堂步行到信息学部图书馆时，请按步行适用范围判断，不要直接当成所有方式都封闭。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_closed_edges": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_08",
+      "category": "event_infeasible",
+      "template_group": "tiny_budget_feasibility_unknown",
+      "od_group": "keji_main_tiny_budget",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "从科技门步行到武汉大学图书馆总馆，总距离上限50米；请核实能否满足，不能偷偷放宽。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "max_distance_m": 50
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_09",
+      "category": "event_infeasible",
+      "template_group": "accessibility_evidence_missing_conditional",
+      "od_group": "luojia_meiyuan_access_unknown",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "若快照没有无障碍证据，从珞珈广场步行到梅园操场且必须已核实无障碍时，请说明证据限制，不要把未标台阶当作已经核实。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_159",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "require_verified_accessibility": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    },
+    {
+      "id": "draft_event_infeasible_10",
+      "category": "event_infeasible",
+      "template_group": "blocked_via_preserve_order_and_constraints",
+      "od_group": "yulan_parcel_meiyuan_blocked",
+      "snapshot_id": "PENDING_EVENT_FIXTURE_AND_FROZEN_SNAPSHOT",
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "messages": [
+        {
+          "role": "user",
+          "content": "如果梅园快递服务中心的通路在事件快照中封闭，从玉兰2门先到该快递点再到梅园食堂的步行任务，请核实能否完成，不允许省略途经点或穿越封闭路段。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_073",
+          "via_poi_ids": [
+            "poi_423"
+          ],
+          "travel_mode": "walk",
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_closed_edges": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": []
+        }
+      ]
+    }
+  ],
+  "authoring_notes": [
+    "Expectations express requested intent and provisional interaction shape only; completed/route does not assert that a route exists or that any system completed it. Status, kind, entity aliases and clarification behavior still require independent adjudication.",
+    "All feasibility values are unknown, including nonspatial turns, until independently adjudicated. Empty candidate_poi_ids means candidate membership/order is unadjudicated, not that no candidates exist. No ranking, score, real event, or feasibility evidence is supplied.",
+    "Event messages are conditional requests or requests to consult a future frozen event snapshot. They do not instantiate closures, restrictions, expiry, or changed graph edges. Event cases remain pending fixture and snapshot design.",
+    "Seed IDs and user conversations are preserved. The original seed event infeasible/no_route expectation is demoted to unknown intent-level route pending a fixture; the seed food candidate is removed pending independent candidate review. Seed default walk/shortest values are authoring conventions, not adjudicated policy.",
+    "Catalog ID existence is checked, but it does not establish alias binding, access, opening hours, activity suitability, or route reachability. In particular seed 樱顶 -> poi_161 (catalog 老斋舍) remains a provisional alias requiring human review.",
+    "Template and OD groups describe authoring clusters only. Distinct conversations do not prove independence; future test scenarios require separate unseen templates and independently frozen evidence."
+  ]
+}

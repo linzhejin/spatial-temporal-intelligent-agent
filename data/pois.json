@@ -1993,8 +1993,8 @@
    "name": "桂园食堂",
    "aliases": [],
    "coordinates": {
-     "lng": 114.358985,
-     "lat": 30.538436
+    "lng": 114.358985,
+    "lat": 30.538436
    },
    "type": "dining",
    "campus": "文理学部",
@@ -2222,8 +2222,8 @@
    "name": "梅园排球场",
    "aliases": [],
    "coordinates": {
-     "lng": 114.364212,
-     "lat": 30.538319
+    "lng": 114.364212,
+    "lat": 30.538319
    },
    "type": "sports",
    "campus": "文理学部",
@@ -2478,9 +2478,11 @@
    "is_minor": false,
    "poi_id": "poi_086",
    "activities": [
-    "fitness"
+    "fitness",
+    "badminton",
+    "table_tennis"
    ],
-   "activity_basis": "indoor wind-and-rain sports hall; no ball sport is claimed",
+   "activity_basis": "武汉大学学生资助管理中心《生活在珞珈丨第7期：运动场地大盘点——文理学部》（2024-04-24）记载风雨体育馆设羽毛球、乒乓球场地；场馆当前开放和预约情况未核实；https://zzgl.whu.edu.cn/info/1017/1028.htm",
    "activity_review_status": "source_supported"
   },
   {
@@ -2501,8 +2503,8 @@
     "枫园六舍"
    ],
    "coordinates": {
-     "lng": 114.373539,
-     "lat": 30.536943
+    "lng": 114.373539,
+    "lat": 30.536943
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -2561,8 +2563,8 @@
     "梅园5舍"
    ],
    "coordinates": {
-     "lng": 114.365298,
-     "lat": 30.536443
+    "lng": 114.365298,
+    "lat": 30.536443
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -2591,8 +2593,8 @@
     "梅园4舍"
    ],
    "coordinates": {
-     "lng": 114.365323,
-     "lat": 30.536363
+    "lng": 114.365323,
+    "lat": 30.536363
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -3908,8 +3910,8 @@
     "湖滨17舍"
    ],
    "coordinates": {
-     "lng": 114.36918,
-     "lat": 30.542009
+    "lng": 114.36918,
+    "lat": 30.542009
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -3961,8 +3963,8 @@
     "湖滨16舍"
    ],
    "coordinates": {
-     "lng": 114.368884,
-     "lat": 30.541858
+    "lng": 114.368884,
+    "lat": 30.541858
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -4073,8 +4075,8 @@
     "科技门"
    ],
    "coordinates": {
-     "lng": 114.360677,
-     "lat": 30.532155
+    "lng": 114.360677,
+    "lat": 30.532155
    },
    "type": "gate",
    "campus": "文理学部",
@@ -4135,8 +4137,8 @@
     "武汉大学校门牌坊"
    ],
    "coordinates": {
-     "lng": 114.357351,
-     "lat": 30.532624
+    "lng": 114.357351,
+    "lat": 30.532624
    },
    "type": "gate",
    "campus": "文理学部",
@@ -6013,9 +6015,12 @@
    "is_minor": false,
    "poi_id": "poi_204",
    "activities": [
-    "fitness"
+    "fitness",
+    "badminton",
+    "table_tennis",
+    "volleyball"
    ],
-   "activity_basis": "sports hall subcategory; no ball sport is claimed",
+   "activity_basis": "武汉大学学生资助管理中心《生活在珞珈丨第8期：运动场地大盘点——工学部》（2024-04-24）记载工学部体育馆设羽毛球、乒乓球和排球场地；场馆当前开放和预约情况未核实；https://zzgl.whu.edu.cn/info/1017/1029.htm",
    "activity_review_status": "source_supported"
   },
   {
@@ -6085,8 +6090,8 @@
     "工学部十五舍"
    ],
    "coordinates": {
-     "lng": 114.366265,
-     "lat": 30.541513
+    "lng": 114.366265,
+    "lat": 30.541513
    },
    "type": "dorm",
    "campus": "工学部",
@@ -6115,8 +6120,8 @@
     "工学部三舍"
    ],
    "coordinates": {
-     "lng": 114.366131,
-     "lat": 30.542486
+    "lng": 114.366131,
+    "lat": 30.542486
    },
    "type": "dorm",
    "campus": "工学部",
@@ -6175,8 +6180,8 @@
     "工学部八舍"
    ],
    "coordinates": {
-     "lng": 114.364556,
-     "lat": 30.543943
+    "lng": 114.364556,
+    "lat": 30.543943
    },
    "type": "dorm",
    "campus": "工学部",
@@ -6625,8 +6630,8 @@
     "留3号楼"
    ],
    "coordinates": {
-     "lng": 114.372765,
-     "lat": 30.537666
+    "lng": 114.372765,
+    "lat": 30.537666
    },
    "type": "dorm",
    "campus": "文理学部",
@@ -6653,8 +6658,8 @@
     "茶港门"
    ],
    "coordinates": {
-     "lng": 114.354682,
-     "lat": 30.539337
+    "lng": 114.354682,
+    "lat": 30.539337
    },
    "type": "gate",
    "campus": "工学部",
@@ -7536,9 +7541,10 @@
    "is_minor": false,
    "poi_id": "poi_257",
    "activities": [
-    "fitness"
+    "fitness",
+    "badminton"
    ],
-   "activity_basis": "sports hall subcategory; no ball sport is claimed",
+   "activity_basis": "武汉大学学生资助管理中心《生活在珞珈丨第9期：运动场地大盘点——信息学部》（2024-04-25）明确记载星湖体育馆内设羽毛球场；实时开放和预约安排未核实；https://zzgl.whu.edu.cn/info/1017/1030.htm",
    "activity_review_status": "source_supported"
   },
   {
@@ -7601,7 +7607,8 @@
    "name": "武汉大学信息学部操场",
    "aliases": [
     "信息学部操场",
-    "信操"
+    "信操",
+    "竹园操场"
    ],
    "coordinates": {
     "lng": 114.36127,
@@ -7620,9 +7627,11 @@
    "is_minor": false,
    "poi_id": "poi_260",
    "activities": [
-    "running"
+    "running",
+    "football",
+    "volleyball"
    ],
-   "activity_basis": "poi name identifies an athletic ground",
+   "activity_basis": "武汉大学学生资助管理中心《生活在珞珈丨第9期：运动场地大盘点——信息学部》（2024-04-25）记载：信息学部田径场又称竹园操场/信操，场区包含足球场和排球场；https://zzgl.whu.edu.cn/info/1017/1030.htm",
    "activity_review_status": "source_supported"
   },
   {
@@ -8606,8 +8615,8 @@
     "武汉大学信息学部（南2门）"
    ],
    "coordinates": {
-     "lng": 114.357668,
-     "lat": 30.526034
+    "lng": 114.357668,
+    "lat": 30.526034
    },
    "type": "gate",
    "campus": "信息学部",
@@ -8666,8 +8675,8 @@
     "珞喻门"
    ],
    "coordinates": {
-     "lng": 114.361271,
-     "lat": 30.524728
+    "lng": 114.361271,
+    "lat": 30.524728
    },
    "type": "gate",
    "campus": "信息学部",
@@ -12377,8 +12386,8 @@
    "name": "澄波门",
    "aliases": [],
    "coordinates": {
-     "lng": 114.357777,
-     "lat": 30.543913
+    "lng": 114.357777,
+    "lat": 30.543913
    },
    "type": "gate",
    "campus": "工学部",
@@ -12421,8 +12430,8 @@
    "name": "珞东二门",
    "aliases": [],
    "coordinates": {
-     "lng": 114.371819,
-     "lat": 30.532197
+    "lng": 114.371819,
+    "lat": 30.532197
    },
    "type": "gate",
    "campus": "文理学部",
@@ -12467,8 +12476,8 @@
     "明贤门"
    ],
    "coordinates": {
-     "lng": 114.363179,
-     "lat": 30.5310414
+    "lng": 114.363179,
+    "lat": 30.5310414
    },
    "type": "gate",
    "campus": "文理学部",
@@ -12600,8 +12609,8 @@
     "武汉大学（信息学部学生区）快递服务中心"
    ],
    "coordinates": {
-     "lng": 114.359131,
-     "lat": 30.527836
+    "lng": 114.359131,
+    "lat": 30.527836
    },
    "type": "service",
    "campus": "信息学部",
@@ -13103,8 +13112,8 @@
     "泥沙实验楼"
    ],
    "coordinates": {
-     "lng": 114.36036,
-     "lat": 30.541511
+    "lng": 114.36036,
+    "lat": 30.541511
    },
    "type": "study",
    "campus": "工学部",
@@ -13179,8 +13188,8 @@
     "高压大厅"
    ],
    "coordinates": {
-     "lng": 114.36385,
-     "lat": 30.542759
+    "lng": 114.36385,
+    "lat": 30.542759
    },
    "type": "study",
    "campus": "工学部",
@@ -13559,8 +13568,8 @@
     "武汉大学玉兰二门"
    ],
    "coordinates": {
-     "lng": 114.360107,
-     "lat": 30.531594
+    "lng": 114.360107,
+    "lat": 30.531594
    },
    "type": "gate",
    "campus": "信息学部",
@@ -13651,8 +13660,8 @@
    "name": "竹园羽毛球场",
    "aliases": [],
    "coordinates": {
-     "lng": 114.362133,
-     "lat": 30.528145
+    "lng": 114.362133,
+    "lat": 30.528145
    },
    "type": "sports",
    "campus": "信息学部",
@@ -13692,8 +13701,8 @@
     "珞珈咖啡"
    ],
    "coordinates": {
-     "lng": 114.363225,
-     "lat": 30.536625
+    "lng": 114.363225,
+    "lat": 30.536625
    },
    "type": "dining",
    "campus": "文理学部",

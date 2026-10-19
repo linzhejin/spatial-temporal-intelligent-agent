@@ -1,6 +1,7 @@
 """Owner-scoped, revision-checked persistence for conversations and tasks."""
 from __future__ import annotations
 
+from copy import deepcopy
 import hashlib
 import re
 import secrets
@@ -28,6 +29,20 @@ def create_conversation(url: str | None = None) -> tuple[str, str, str]:
             (conversation_id, owner_id, credential_hash),
         )
     return owner_id, token, conversation_id
+
+
+def get_owner_by_conversation_token(url: str | None, token: str) -> str | None:
+    """Authenticate a durable anonymous identity by its server-stored token hash."""
+    if not isinstance(token, str) or not token:
+        return None
+    credential_hash = hashlib.sha256(token.encode("utf-8")).digest()
+    with database.connect(url) as conn:
+        rows = conn.execute(
+            "SELECT owner_id FROM conversation WHERE credential_hash=%s LIMIT 2",
+            (credential_hash,),
+        ).fetchall()
+    # Ambiguous credentials cannot establish an owner, even on old schemas.
+    return str(rows[0]["owner_id"]) if len(rows) == 1 else None
 
 
 def get_conversation(url: str | None, conversation_id: str, token: str) -> dict | None:
@@ -670,16 +685,28 @@ def finish_run(
 
     if status not in {"completed", "partial", "failed", "needs_input", "cancelled", "superseded"}:
         raise ValueError("invalid terminal run status")
+    if isinstance(result, dict):
+        result = deepcopy(result)
+        route_state = result.get("route_state")
+        if isinstance(route_state, dict) and "reuse_certificate" in route_state:
+            from agents.route_reuse import has_valid_reuse_certificate
+
+            if not has_valid_reuse_certificate(route_state):
+                # The proof is optional acceleration metadata. Drop a
+                # malformed handle from every terminal result so it cannot
+                # poison a later route refresh or historical replay.
+                route_state.pop("reuse_certificate", None)
     with database.connect(url) as conn:
         run = conn.execute(
             "SELECT r.task_id, r.task_revision, r.event_seq, r.cancel_requested,"
             " r.status AS run_status, r.lease_until, r.deadline_at,"
-            " t.revision AS current_revision, t.state, t.conversation_id,"
+            " t.revision AS current_revision, t.state, t.conversation_id, c.owner_id,"
             " (SELECT m.seq FROM conversation_message m"
             "  WHERE m.task_id=r.task_id AND m.role='user'"
             "    AND m.metadata->>'request_id'=r.idempotency_key"
             "  ORDER BY m.seq DESC LIMIT 1) AS source_message_seq"
             " FROM run r JOIN task t USING (task_id)"
+            " JOIN conversation c USING (conversation_id)"
             " WHERE r.run_id=%s AND r.worker_id=%s FOR UPDATE OF r, t",
             (run_id, worker_id),
         ).fetchone()
@@ -690,12 +717,6 @@ def finish_run(
         actual_status = status
         if run["current_revision"] != run["task_revision"]:
             actual_status = "superseded"
-        conn.execute(
-            "UPDATE run SET status=%s, result=%s, error=%s, lease_until=NULL, updated_at=now() "
-            "WHERE run_id=%s",
-            (actual_status, Jsonb(result) if result is not None else None,
-             Jsonb(error) if error is not None else None, run_id),
-        )
         if actual_status != "superseded" and actual_status != "cancelled":
             current = TaskState.model_validate(run["state"])
             document = current.model_dump(mode="python")
@@ -726,9 +747,39 @@ def finish_run(
                 elif actual_status == "failed":
                     requirement["status"] = "failed"
             if isinstance(result, dict) and isinstance(result.get("route_state"), dict):
-                route_spec, _ = _route_spec_from_result(current, result["route_state"])
+                route_state = result["route_state"]
+                route_spec, _ = _route_spec_from_result(current, route_state)
                 document["route_spec"] = route_spec.model_dump(mode="python")
             serialized = TaskState.model_validate(document).model_dump(mode="json")
+            route_state = result.get("route_state") if isinstance(result, dict) else None
+            handle = route_state.get("reuse_certificate") if isinstance(route_state, dict) else None
+            if isinstance(handle, dict) and ("task_id" in handle or "task_revision" in handle):
+                current_binding = (
+                    handle.get("task_id") == str(run["task_id"])
+                    and type(handle.get("task_revision")) is int
+                    and handle.get("task_revision") == run["task_revision"]
+                )
+                rebound = False
+                if current_binding:
+                    from storage.route_proof_repository import rebind_verified_proof_task_revision
+
+                    try:
+                        rebound = rebind_verified_proof_task_revision(
+                            conn,
+                            proof_id=handle.get("proof_id"),
+                            owner_id=str(run["owner_id"]),
+                            task_id=str(run["task_id"]),
+                            old_revision=run["task_revision"],
+                            new_revision=serialized["revision"],
+                        )
+                    except (TypeError, ValueError):
+                        # A malformed optional acceleration handle must not turn
+                        # a valid route result into a failed user task.
+                        rebound = False
+                if rebound:
+                    handle["task_revision"] = serialized["revision"]
+                else:
+                    route_state.pop("reuse_certificate", None)
             conn.execute(
                 "UPDATE task SET revision=%s, status=%s, state=%s, updated_at=now() WHERE task_id=%s",
                 (serialized["revision"], actual_status, Jsonb(serialized), run["task_id"]),
@@ -766,6 +817,12 @@ def finish_run(
                             if isinstance(result, dict) and result.get("route_state") else {}),
                      })),
                 )
+        conn.execute(
+            "UPDATE run SET status=%s, result=%s, error=%s, lease_until=NULL, updated_at=now() "
+            "WHERE run_id=%s",
+            (actual_status, Jsonb(result) if result is not None else None,
+             Jsonb(error) if error is not None else None, run_id),
+        )
         event_seq = run["event_seq"] + 1
         conn.execute("UPDATE run SET event_seq=%s WHERE run_id=%s", (event_seq, run_id))
         conn.execute(

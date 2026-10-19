@@ -50,7 +50,7 @@ class FakeClient:
         return self
 
     def create(self, **kwargs):
-        self.calls.append(kwargs)
+        self.calls.append({**kwargs, "messages": list(kwargs.get("messages") or [])})
         item = self.scripted.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -65,6 +65,12 @@ def _api_key(monkeypatch):
 def _run(client, **kwargs):
     with patch.object(planner, "_make_client", return_value=client):
         return planner.run_agent("测试 query", **kwargs)
+
+
+def test_model_client_requests_supported_response_encoding():
+    with patch("openai.OpenAI") as client_constructor:
+        planner._make_client()
+    assert client_constructor.call_args.kwargs["default_headers"]["Accept-Encoding"] == "gzip, deflate"
 
 
 class TestAgentLoop:
@@ -91,16 +97,45 @@ class TestAgentLoop:
         with patch.object(planner, "_make_client") as client, \
              patch.object(planner.agent_tools, "execute_tool",
                           return_value=(route, {"route": route, "route_kind": "via"})) as execute:
-            result = planner.run_agent(query, context={"previous_route_state": previous})
+            result = planner.run_agent(query, context={
+                "previous_route_state": previous, "task_revision": 12,
+            })
         client.assert_not_called()
         name, args, _context = execute.call_args.args
         assert name == "plan_via_route"
+        assert _context["task_revision"] == 12
         assert args["start"]["name"] == "玉兰2门"
         assert args["end"]["name"] == expected_end
         assert args["via_name"] == "卓尔体育馆"
         assert args["strategy"] == expected_strategy
         assert args["constraints"] == expected_constraints
         assert result["response_kind"] == "route"
+
+    def test_deterministic_route_edit_preserves_verification_failure_report(self):
+        previous = {
+            "schema_version": 1, "route_id": "route-before", "route_kind": "direct",
+            "original_query": "从玉兰2门到樱顶",
+            "start": {"name": "玉兰2门", "type": "poi"},
+            "end": {"name": "樱顶", "type": "poi"},
+            "via": None, "tour": None, "legs": [], "travel_mode": "walk",
+            "hard_constraints": {},
+            "strategy": {"name": "shortest", "source": "commute_default"},
+            "data_version": "data-test", "road_condition_version": "roads-test",
+        }
+        report = {"status": "unknown", "unknowns": ["endpoint_unknown"]}
+        failure = {"error": "route_verification_unknown", "message": "缺少独立核验依据。",
+                   "route_verification": report}
+        with patch.object(planner, "_make_client") as client, \
+             patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)):
+            result = planner.run_agent(
+                "刚才的路线改为平坦优先",
+                context={"previous_route_state": previous},
+            )
+
+        client.assert_not_called()
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["route_verification"] == report
 
     def test_spoken_edit_preserves_ordered_multi_via_and_hard_constraint(self):
         previous = {
@@ -133,6 +168,34 @@ class TestAgentLoop:
         assert args["constraints"] == {"avoid_steps": True}
         assert args["strategy"] == "scenery"
         assert result["route_kind"] == "via"
+
+    def test_spoken_flat_edit_after_weather_keeps_avoid_steps_without_llm(self):
+        previous = {
+            "schema_version": 1, "route_id": "route-before", "route_kind": "direct",
+            "original_query": "从玉兰2门到樱顶，别走已标记台阶",
+            "start": {"name": "玉兰2门", "type": "poi"},
+            "end": {"name": "樱顶", "type": "poi"},
+            "via": None, "tour": None, "legs": [], "travel_mode": "walk",
+            "hard_constraints": {"avoid_steps": True},
+            "strategy": {"name": "shortest", "source": "explicit_nl"},
+            "data_version": "data-test", "road_condition_version": "roads-test",
+        }
+        route = {"recommended": [[1, 2]], "start_name": "玉兰2门",
+                 "end_name": "樱顶", "mode": "walk"}
+        with patch.object(planner, "_make_client") as client, \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route, "route_kind": "direct"})) as execute:
+            result = planner.run_agent(
+                "刚才路线改为平坦优先，别走台阶仍然保留",
+                context={"previous_route_state": previous,
+                         "history": [{"role": "user", "content": "顺便查天气"}]},
+            )
+        client.assert_not_called()
+        name, args, _ = execute.call_args.args
+        assert name == "plan_route"
+        assert args["strategy"] == "flat"
+        assert args["constraints"] == {"avoid_steps": True}
+        assert result["response_kind"] == "route"
 
     def test_explicit_mode_followup_replans_saved_via_route_without_llm(self):
         previous = {
@@ -270,9 +333,30 @@ class TestAgentLoop:
         assert resp["message"] == "已为你规划好从牌坊到樱顶的步行路线，约 800 米。"
         assert len(client.calls) == 1
 
+    def test_tool_trace_callback_records_safe_tool_metadata_only(self):
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {"location": "武汉大学"})]),
+            _fake_response(content="当前天气晴。"),
+        ])
+        trace = []
+        with patch.object(planner.agent_tools, "execute_tool",
+                          return_value=({"weather": "晴", "temperature": 22}, None)):
+            result = _run(client, tool_trace_callback=trace.append)
+
+        assert trace == [{
+            "tool_name": "get_weather",
+            "argument_keys": ["location"],
+            "outcome": "success",
+            "artifact_kind": None,
+        }]
+        assert "武汉大学" not in json.dumps(trace, ensure_ascii=False)
+        assert "晴" not in json.dumps(trace, ensure_ascii=False)
+        assert result["message"] == "当前天气晴。"
+
     def test_manual_map_start_is_used_when_natural_language_omits_the_origin(self):
         selected_start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
         client = FakeClient([])
+        trace = []
         candidate = {"name": "星湖园食堂", "distance_m": 320, "subcategory": "canteen"}
         route = {"recommended": [[114.31, 30.51]], "start_name": "地图起点",
                  "end_name": "星湖园食堂", "mode": "walk"}
@@ -283,7 +367,10 @@ class TestAgentLoop:
                                {"candidates": [candidate]}),
                               (route, {"route": route}),
                           ]) as execute:
-            result = planner.run_agent("带我去最近的食堂", coord_start=selected_start)
+            result = planner.run_agent(
+                "带我去最近的食堂", coord_start=selected_start,
+                tool_trace_callback=trace.append,
+            )
 
         search_args = execute.call_args_list[0].args[1]
         assert search_args["start"] == {
@@ -293,6 +380,22 @@ class TestAgentLoop:
         assert route_args["end"] == {"name": "星湖园食堂", "type": "poi"}
         assert result["response_kind"] == "route"
         assert client.calls == []
+        assert trace == [
+            {
+                "tool_name": "search_poi_candidates",
+                "argument_keys": sorted(execute.call_args_list[0].args[1]),
+                "outcome": "success",
+                "artifact_kind": "candidates",
+            },
+            {
+                "tool_name": "plan_route",
+                "argument_keys": sorted(route_args),
+                "outcome": "success",
+                "artifact_kind": "route",
+            },
+        ]
+        assert "星湖园" not in json.dumps(trace, ensure_ascii=False)
+        assert "114.31" not in json.dumps(trace, ensure_ascii=False)
 
     def test_agent_cannot_ask_for_start_again_after_map_selection(self):
         selected_start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
@@ -374,6 +477,59 @@ class TestAgentLoop:
         assert resp["response_kind"] == "candidates"
         assert resp["candidates"] == cands
 
+    def test_route_comparison_artifact_is_returned_without_model_rephrasing(self):
+        comparison = {
+            "status": "partial",
+            "start_name": "星湖园食堂",
+            "end_name": "卓尔体育馆",
+            "mode": "walk",
+            "alternatives": [
+                {"strategy": "shortest", "label": "最短路径", "distance_m": 500,
+                 "duration_min": 7.0, "distance_delta_from_shortest_m": 0},
+                {"strategy": "flat", "label": "平坦优先", "distance_m": 540,
+                 "duration_min": 7.8, "distance_delta_from_shortest_m": 40},
+            ],
+            "unavailable": [
+                {"strategy": "scenery", "label": "风景优先", "reason": "缺少景观数据"},
+            ],
+            "comparison_basis": "相同起终点、方式、约束与数据快照。",
+            "selection_note": "比较不改变当前路线。",
+        }
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("compare_routes", {
+                "start": {"name": "星湖园食堂"}, "end": {"name": "卓尔体育馆"},
+            })]),
+        ])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(comparison, {"route_comparison": comparison})):
+            result = _run(client)
+
+        assert result["response_kind"] == "route_comparison"
+        assert result["route_comparison"] == comparison
+        assert "比较不会改变当前地图路线" in result["message"]
+        assert len(client.calls) == 1
+
+    def test_followup_suggestions_artifact_survives_planner_chat_response(self):
+        suggestions = [{"label": "查附近道路", "query": "查看附近道路管制"}]
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("suggest_followup", {
+                "suggestions": suggestions,
+            })]),
+            _fake_response(content="附近暂无已发布的道路管制。"),
+        ])
+        with patch.object(planner.agent_tools, "execute_tool",
+                          return_value=({"suggestions": suggestions},
+                                        {"suggestions": suggestions})):
+            resp = _run(client)
+
+        assert resp["response_kind"] == "chat"
+        assert resp["suggestions"] == suggestions
+        tool_messages = [message for message in client.calls[1]["messages"]
+                         if message.get("role") == "tool"]
+        assert len(tool_messages) == 1
+        assert json.loads(tool_messages[0]["content"]) == {"suggestions": suggestions}
+
     def test_ask_user_terminates_loop(self):
         client = FakeClient([
             _fake_response(tool_calls=[_fake_tool_call("ask_user", {"question": "从哪里出发？", "options": ["牌坊", "我的位置"]})]),
@@ -384,6 +540,230 @@ class TestAgentLoop:
         assert resp["response_kind"] == "clarify"
         assert resp["clarify"]["question"] == "从哪里出发？"
         assert len(client.calls) == 1  # 终止型工具：不再继续循环
+
+    def test_second_route_verification_failure_stops_without_unverified_route(self):
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[route_call]),
+            _fake_response(tool_calls=[route_call]),
+            _fake_response(content="不应执行到第三轮"),
+        ])
+        failure = {
+            "error": "route_verification_failed",
+            "message": "路线边序列与约束无法核对。",
+            "route_verification": {"status": "fail", "violations": ["mode_forbidden"]},
+        }
+        with patch.object(planner.agent_tools, "execute_tool",
+                          side_effect=[(failure, None), (failure, None)]) as execute:
+            result = _run(client)
+
+        assert execute.call_count == 2
+        assert len(client.calls) == 2
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert "路线" in result["message"] and "核验" in result["message"]
+
+    def test_one_route_verification_repair_can_succeed(self):
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[route_call]),
+            _fake_response(tool_calls=[route_call]),
+        ])
+        failure = {"error": "route_verification_failed", "message": "边序列不符"}
+        route = {"recommended": [[1, 2]], "recommended_length_m": 10}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=[
+                (failure, None), (route, {"route": route})]) as execute, \
+             patch.object(planner, "_build_route_message", return_value="路线已核验"):
+            result = _run(client)
+
+        assert execute.call_count == 2
+        assert len(client.calls) == 2
+        assert result["response_kind"] == "route"
+        assert result["route"] is route
+        assert result["message"] == "路线已核验"
+
+    def test_last_planner_turn_route_verification_failure_fails_closed(self):
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([_fake_response(tool_calls=[route_call])])
+        failure = {
+            "error": "route_verification_unknown",
+            "message": "缺少独立核验依据。",
+            "route_verification": {"status": "unknown", "unknowns": ["endpoint_unknown"]},
+        }
+        with patch.object(planner, "MAX_TURNS", 1), \
+             patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)) as execute:
+            result = _run(client)
+
+        assert execute.call_count == 1
+        assert len(client.calls) == 1
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert "核验" in result["message"]
+
+    def test_route_verification_failure_skips_other_calls_in_same_model_batch(self):
+        failed_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点A"},
+        })
+        failed_call.id = "call_route_failed"
+        same_batch_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点B"},
+        })
+        same_batch_call.id = "call_route_must_wait"
+        repair_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点C"},
+        })
+        repair_call.id = "call_route_repair"
+        client = FakeClient([
+            _fake_response(tool_calls=[failed_call, same_batch_call]),
+            _fake_response(tool_calls=[repair_call]),
+        ])
+        failure = {"error": "route_verification_failed", "message": "边序列不符"}
+        route = {"recommended": [[114.36, 30.53]], "recommended_length_m": 10}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=[
+                (failure, None), (route, {"route": route})]) as execute, \
+             patch.object(planner, "_build_route_message", return_value="路线已核验"):
+            result = _run(client)
+
+        assert execute.call_count == 2
+        assert len(client.calls) == 2
+        first_turn_tools = [message for message in client.calls[1]["messages"]
+                            if message.get("role") == "tool"]
+        assert [message["tool_call_id"] for message in first_turn_tools] == [
+            "call_route_failed", "call_route_must_wait",
+        ]
+        assert "未执行" in first_turn_tools[1]["content"]
+        assert result["response_kind"] == "route"
+        assert result["route"] is route
+
+    def test_repair_llm_error_fails_closed_without_legacy_fallback(self):
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[route_call]),
+            RuntimeError("repair request unavailable"),
+        ])
+        report = {"status": "unknown", "unknowns": ["endpoint_unknown"]}
+        failure = {"error": "route_verification_unknown", "message": "缺少独立核验依据。",
+                   "route_verification": report}
+        with patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)) as execute:
+            result = _run(client)
+
+        execute.assert_called_once()
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["route_verification"] == report
+        assert "修正" in result["message"]
+
+    def test_ordinary_error_during_single_repair_does_not_execute_another_route(self):
+        first_route = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        repair_route = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        forbidden_extra_route = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "另一个终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[first_route]),
+            _fake_response(tool_calls=[repair_route, forbidden_extra_route]),
+        ])
+        report = {"status": "fail", "violations": ["mode_forbidden"]}
+        verification_failure = {
+            "error": "route_verification_failed", "message": "路线未通过核验。",
+            "route_verification": report,
+        }
+        ordinary_failure = {"error": "route_not_found", "message": "未找到可行路线。"}
+        extra_route = {"recommended": [[114.36, 30.53]], "recommended_length_m": 10}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=[
+                (verification_failure, None), (ordinary_failure, None),
+                (extra_route, {"route": extra_route})]) as execute:
+            result = _run(client)
+
+        assert execute.call_count == 2
+        assert len(client.calls) == 2
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["route_verification"] == report
+        assert "修正" in result["message"]
+
+    def test_route_verification_failure_takes_precedence_over_clarification_in_same_batch(self):
+        clarify_call = _fake_tool_call("ask_user", {
+            "question": "从哪里出发？", "options": ["信息学部", "工学部"],
+        })
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[clarify_call, route_call]),
+            _fake_response(content="这条路线无法修正。"),
+        ])
+        failure = {
+            "error": "route_verification_unknown",
+            "message": "缺少独立核验依据。",
+            "route_verification": {"status": "unknown", "unknowns": ["endpoint_unknown"]},
+        }
+        clarify_artifact = {"clarify": {"question": "从哪里出发？", "options": ["信息学部"]}}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=[
+                ({"question": "从哪里出发？"}, clarify_artifact), (failure, None)]):
+            result = _run(client)
+
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["clarify"] is None
+        assert result["route_verification"]["status"] == "unknown"
+        assert "核验" in result["message"]
+
+    def test_manual_map_route_verification_failure_does_not_rewrite_selected_points(self):
+        selected_start = {"lng": 114.36, "lat": 30.53, "name": "地图起点"}
+        selected_end = {"lng": 114.37, "lat": 30.54, "name": "地图终点"}
+        selected_via = [{"lng": 114.365, "lat": 30.535, "name": "地图途经点1"}]
+        client = FakeClient([])
+        failure = {
+            "error": "route_verification_failed",
+            "message": "所选点之间的路线未通过核验。",
+        }
+        with patch.object(planner, "_make_client", return_value=client) as make_client, \
+             patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)) as execute:
+            result = planner.run_agent(
+                "从地图标记起点经过地图标记途经点到地图标记终点",
+                coord_start=selected_start,
+                coord_end=selected_end,
+                coord_waypoints=selected_via,
+            )
+
+        make_client.assert_not_called()
+        execute.assert_called_once()
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["clarify"] is None
+        assert "核验" in result["message"]
+
+    def test_explicit_named_via_verification_failure_is_not_reported_as_name_clarification(self):
+        client = FakeClient([])
+        failure = {
+            "error": "route_verification_unknown",
+            "message": "缺少道路证据。",
+            "route_verification": {"status": "unknown", "unknowns": ["missing_edge_sequence"]},
+        }
+        with patch.object(planner, "_make_client", return_value=client) as make_client, \
+             patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)) as execute:
+            result = planner.run_agent("从桂园操场经过樱顶到星湖园食堂")
+
+        make_client.assert_not_called()
+        execute.assert_called_once()
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert result["clarify"] is None
+        assert result["route_verification"]["status"] == "unknown"
+        assert "核验" in result["message"]
 
     def test_invalid_tool_args_reinjected(self):
         """工具参数非法 JSON → 错误回注，循环继续直至 LLM 给出答复。"""
@@ -451,6 +831,19 @@ class TestChatEndpointAgentFirst:
         data = r.get_json()["data"]
         assert data["task_type"] == "chat"
         assert data["reply"] == "你好呀"
+
+    def test_chat_preserves_route_verification_report(self, client):
+        report = {"status": "unknown", "unknowns": ["endpoint_unknown"]}
+        fake_resp = {
+            "response_kind": "chat", "message": "路线未通过独立核验。",
+            "route": None, "route_kind": None, "candidates": None,
+            "clarify": None, "turns": 1, "route_verification": report,
+        }
+        with patch("agents.planner.run_agent", return_value=fake_resp):
+            response = client.post("/api/chat", json={"query": "从起点到终点"})
+
+        assert response.status_code == 200
+        assert response.get_json()["data"]["route_verification"] == report
 
     def test_chat_falls_back_when_planner_raises(self, client):
         with patch("agents.planner.run_agent", side_effect=planner.PlannerError("down")), \

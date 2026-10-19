@@ -1,8 +1,5 @@
 import json
 from types import SimpleNamespace
-from unittest.mock import patch
-
-import pytest
 
 import agents.planner as planner
 import agents.tools as tools
@@ -29,8 +26,13 @@ def _route_state(via):
 
 
 def test_every_declared_tool_has_an_executor():
-    declared = {item["function"]["name"] for item in tools.TOOL_SCHEMAS}
-    assert declared == set(tools._EXECUTORS)
+    schema_names = [item["function"]["name"] for item in tools.TOOL_SCHEMAS]
+    assert len(schema_names) == len(set(schema_names))
+    assert set(schema_names) == set(tools._EXECUTORS)
+    for schema in tools.TOOL_SCHEMAS:
+        parameters = schema["function"]["parameters"]
+        assert parameters.get("type") == "object"
+        assert set(parameters.get("required", [])) <= set(parameters.get("properties", {}))
 
 
 def test_via_tool_schema_accepts_an_ordered_list_of_multiple_points():
@@ -161,7 +163,10 @@ def test_via_tool_routes_through_all_points_in_order(monkeypatch):
             "steps": [{"type": "depart", "cumulative_m": 0},
                       {"type": "arrive", "cumulative_m": result["recommended_length_m"]}],
             "pois": [], "recommended_length_m": result["recommended_length_m"],
-            "shortest_length_m": result["shortest_length_m"], "timings_ms": {},
+            "shortest_length_m": result["shortest_length_m"],
+            "duration_min": result["duration_min"],
+            "shortest_duration_min": result["shortest_duration_min"],
+            "timings_ms": {},
         }
 
     monkeypatch.setattr(tools, "_plan_common", lambda args, ctx: (graph, graph, "walk", None))
@@ -171,6 +176,9 @@ def test_via_tool_routes_through_all_points_in_order(monkeypatch):
     monkeypatch.setattr(tools, "_route_payload", fake_payload)
     monkeypatch.setattr(tools, "current_data_version", lambda graph: "data-test")
     monkeypatch.setattr(tools, "current_road_condition_version", lambda: "roads-test")
+    # This ordering-only test mocks the graph as an object. The verifier has
+    # dedicated tests against exact edges and a real MultiDiGraph.
+    monkeypatch.setattr(tools, "_audit_tool_route", lambda *_args: None)
 
     payload, artifact = tools.execute_tool("plan_via_route", {
         "start": {"name": "起点"}, "end": {"name": "终点"},
@@ -183,6 +191,7 @@ def test_via_tool_routes_through_all_points_in_order(monkeypatch):
     assert payload["via"]["name"] == "甲点、乙点"
     assert payload["route_state"]["via"]["type"] == "multi"
     assert [point["name"] for point in payload["route_state"]["via"]["points"]] == ["甲点", "乙点"]
+    assert payload["duration_min"] == 6.0
     assert artifact["route_kind"] == "via"
 
 

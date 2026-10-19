@@ -1,0 +1,9 @@
+{
+  "protocol_version": "scenario-v1",
+  "version": "scenarios-test-v1-pending",
+  "split": "test",
+  "repeats": 3,
+  "status": "NOT_AUTHORED_OR_ADJUDICATED",
+  "note": "Reserved path only. The 300 independent test scenarios, six category quotas, frozen snapshot IDs, and manual adjudication evidence have not been collected. The evaluator intentionally rejects this empty file.",
+  "cases": []
+}

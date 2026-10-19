@@ -4,6 +4,8 @@ import threading
 from pathlib import Path
 from types import SimpleNamespace
 
+import pytest
+
 from langgraph.checkpoint.memory import InMemorySaver
 
 
@@ -14,6 +16,21 @@ def _c1_runtime_case(case_id):
         .read_text(encoding="utf-8")
     )
     return next(case for case in replay["runtime_cases"] if case["id"] == case_id)
+
+
+def _verified_route_response(message):
+    """Small deterministic route artifact for workflow status replay tests."""
+    return {
+        "response_kind": "route",
+        "message": message,
+        "route": {
+            "start_name": "起点",
+            "end_name": "终点",
+            "recommended": [[114.36, 30.53], [114.3601, 30.53]],
+            "recommended_edge_ids": [[1, 2, 0]],
+            "route_verification": {"status": "pass"},
+        },
+    }
 
 
 def test_c1_runtime_case_manifest_matches_context_and_cancellation_regressions():
@@ -67,6 +84,104 @@ def test_resumed_graph_emits_events_with_the_current_lease_worker(monkeypatch):
     assert events[2:] and set(events[2:]) == {"worker-new"}
 
 
+@pytest.mark.parametrize("outcome,artifact_kind,expected_outcome,expected_artifact", [
+    ("success", None, "success", None),
+    ("success", "route_comparison", "success", "route_comparison"),
+    ("skipped_after_route_verification_retry", None,
+     "skipped_after_route_verification_retry", None),
+    ("skipped_after_route_verification_failure", None,
+     "skipped_after_route_verification_failure", None),
+    ("unknown_outcome", None, "exception", None),
+    ("success", "unknown_artifact", "success", None),
+])
+def test_opt_in_agent_tool_trace_records_safe_metadata_as_run_events(
+    monkeypatch, outcome, artifact_kind, expected_outcome, expected_artifact,
+):
+    from agents import workflow
+
+    monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    events = []
+
+    def append(_url, run_id, worker_id, event_type, payload, node_id=None):
+        events.append({"run_id": run_id, "worker_id": worker_id,
+                       "event_type": event_type, "payload": payload,
+                       "node_id": node_id})
+        return {"stored": True}
+
+    monkeypatch.setattr(workflow, "append_run_event", append)
+    monkeypatch.setattr(workflow, "get_run_input", lambda _url, _run: {
+        "query": "介绍樱顶", "history": [], "task": {},
+    })
+
+    def fake_agent(_query, *, tool_trace_callback=None, **_kwargs):
+        assert callable(tool_trace_callback)
+        tool_trace_callback({
+            "tool_name": "get_place_details", "argument_keys": ["name"],
+            "outcome": outcome, "artifact_kind": artifact_kind,
+            "raw_arguments": {"name": "private argument"},
+            "raw_result": {"message": "private result"},
+        })
+        return {"response_kind": "chat", "message": "樱顶在珞珈山上。"}
+
+    result = workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent).invoke(
+        {"run_id": "trace-run"},
+        {"configurable": {"thread_id": "trace-run"}},
+        context={"worker_id": "trace-worker"},
+    )
+
+    trace_events = [event for event in events if event["event_type"].startswith("agent_tool_")]
+    assert [event["event_type"] for event in trace_events] == [
+        "agent_tool_trace_started", "agent_tool_call",
+    ]
+    assert trace_events[1]["worker_id"] == "trace-worker"
+    assert trace_events[1]["payload"] == {
+        "tool_name": "get_place_details", "argument_keys": ["name"],
+        "outcome": expected_outcome, "artifact_kind": expected_artifact,
+    }
+    assert result["result"]["reply"] == "樱顶在珞珈山上。"
+
+
+def test_opt_in_agent_tool_trace_records_direct_weather_execution(monkeypatch):
+    from agents import workflow
+
+    monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    events = []
+
+    def append(_url, run_id, worker_id, event_type, payload, node_id=None):
+        events.append({"run_id": run_id, "worker_id": worker_id,
+                       "event_type": event_type, "payload": payload,
+                       "node_id": node_id})
+        return {"stored": True}
+
+    monkeypatch.setattr(workflow, "append_run_event", append)
+    monkeypatch.setattr(workflow, "get_run_input", lambda _url, _run: {
+        "query": "查一下天气", "history": [], "task": {},
+    })
+    monkeypatch.setattr(workflow, "_run_weather_tool", lambda: {
+        "weather": "晴", "temperature": 22,
+    })
+
+    result = workflow.build_agent_workflow(
+        InMemorySaver(), agent=lambda *_args, **_kwargs: pytest.fail("weather-only request called Agent"),
+    ).invoke(
+        {"run_id": "weather-trace-run"},
+        {"configurable": {"thread_id": "weather-trace-run"}},
+        context={"worker_id": "weather-trace-worker"},
+    )
+
+    trace_events = [event for event in events if event["event_type"].startswith("agent_tool_")]
+    assert [event["event_type"] for event in trace_events] == [
+        "agent_tool_trace_started", "agent_tool_call",
+    ]
+    assert trace_events[0]["payload"] == {"source": "agent_execution"}
+    assert trace_events[1]["payload"] == {
+        "tool_name": "get_weather", "argument_keys": [],
+        "outcome": "success", "artifact_kind": None,
+    }
+    assert trace_events[1]["worker_id"] == "weather-trace-worker"
+    assert result["result"]["weather"]["temperature"] == 22
+
+
 def test_clarification_answer_keeps_original_multitool_request(monkeypatch):
     from agents import workflow
 
@@ -86,7 +201,7 @@ def test_clarification_answer_keeps_original_multitool_request(monkeypatch):
 
     def fake_agent(query, *, context, travel_mode, **_kwargs):
         observed.update(query=query, context=context, travel_mode=travel_mode)
-        return {"response_kind": "chat", "message": "路线已规划"}
+        return _verified_route_response("路线已规划")
 
     graph = workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent)
     result = graph.invoke(
@@ -97,8 +212,13 @@ def test_clarification_answer_keeps_original_multitool_request(monkeypatch):
 
     assert observed["query"] == "从信息学部出发"
     assert observed["context"]["active_task_request"] == original
+    assert observed["context"]["task_revision"] == 2
     assert observed["travel_mode"] == "bike"
+    assert result["execution_status"] == "completed"
     assert result["requirement_results"] == {"route": "satisfied", "weather": "satisfied"}
+    assert result["requirement_errors"] == {}
+    assert "路线已规划" in result["explanation"]
+    assert "当前天气：晴" in result["explanation"]
     assert result["weather"]["temperature"] == 22
 
 
@@ -273,7 +393,7 @@ def test_c1_production_context_replay_cases_follow_route_inheritance_policy(monk
         observed[query] = context
         if active_case["fail_route"] and query == active_case["query"]:
             raise RuntimeError("simulated route agent failure")
-        return {"response_kind": "chat", "message": f"AGENT:{query}"}
+        return _verified_route_response(f"AGENT:{query}")
 
     graph = workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent)
     results = {}
@@ -307,7 +427,7 @@ def test_c1_production_context_replay_cases_follow_route_inheritance_policy(monk
         if case.get("execution_kind") != "composite":
             continue
         result = results[case["id"]]["result"]
-        assert result["execution_status"] == case.get("expected_status", "completed")
+        assert result["execution_status"] == case.get("expected_status", "completed"), case["id"]
         assert result["requirement_results"]["route"] == (
             "failed" if case.get("fail_route") else "satisfied"
         )
@@ -317,15 +437,17 @@ def test_c1_production_context_replay_cases_follow_route_inheritance_policy(monk
         if case.get("fail_weather"):
             assert result["weather"] is None
             assert result["requirement_errors"]["weather"] == "RuntimeError"
-            assert f"AGENT:{case['query']}" in result["reply"]
+            assert f"AGENT:{case['query']}" in result["explanation"]
         else:
             assert result["weather"]["temperature"] == 23
-            assert workflow._weather_message(result["weather"]) in result["reply"]
+            response_text = result["reply"] if case.get("fail_route") else result["explanation"]
+            assert workflow._weather_message(result["weather"]) in response_text
         if case.get("fail_route"):
             assert result["requirement_errors"]["route"] == "RuntimeError"
             assert "路线暂时无法规划" in result["reply"]
         else:
-            assert f"AGENT:{case['query']}" in result["reply"]
+            assert "route" not in result["requirement_errors"]
+            assert f"AGENT:{case['query']}" in result["explanation"]
 
 
 def test_worker_passes_current_identity_when_resuming_a_reclaimed_run(monkeypatch):

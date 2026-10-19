@@ -3,6 +3,22 @@ from types import SimpleNamespace
 import agents.tools as tools
 
 
+def test_route_tools_expose_the_same_hard_budget_and_access_contract():
+    names = {
+        "plan_route", "plan_via_route", "plan_itinerary",
+        "plan_tour", "plan_multimodal_route", "compare_routes",
+    }
+    expected = {
+        "max_distance_m", "max_duration_s", "excluded_edge_ids",
+        "require_verified_accessibility", "avoid_steps",
+    }
+    for schema in tools.TOOL_SCHEMAS:
+        name = schema["function"]["name"]
+        if name in names:
+            properties = schema["function"]["parameters"]["properties"]
+            assert expected <= set(properties["constraints"]["properties"]), name
+
+
 def test_non_routing_tool_executors_return_schema_shaped_results(monkeypatch):
     poi = {"name": "卓尔体育馆", "type": "sports", "subcategory": "gym",
            "lat": 30.53, "lon": 114.36, "description": "体育场馆"}
@@ -50,14 +66,34 @@ def test_non_routing_tool_executors_return_schema_shaped_results(monkeypatch):
     }
     assert condition["confirmation_note"] == "现场确认"
 
-    result, artifact = tools.execute_tool("ask_user", {"question": "从哪里出发？"})
-    assert artifact["clarify"]["question"] == "从哪里出发？"
+    ball_options = ["篮球", "羽毛球", "乒乓球", "足球", "其他球类", "其他"]
+    ask_user_schema = next(
+        schema for schema in tools.TOOL_SCHEMAS
+        if schema["function"]["name"] == "ask_user"
+    )
+    assert ask_user_schema["function"]["parameters"]["properties"]["options"]["maxItems"] == 5
+    result, artifact = tools.execute_tool("ask_user", {
+        "question": "想打什么球？", "options": ball_options,
+    })
+    expected_options = ball_options[:5]
+    assert result["options"] == expected_options
+    assert artifact["clarify"]["question"] == "想打什么球？"
+    assert artifact["clarify"]["options"] == expected_options
 
     result, artifact = tools.execute_tool("suggest_followup", {"suggestions": [
         {"label": "附近食堂", "query": "附近有什么食堂"},
     ]})
     assert result["suggestions"][0]["label"] == "附近食堂"
     assert artifact["suggestions"] == result["suggestions"]
+
+
+def test_get_weather_returns_explicit_unavailable_result(monkeypatch):
+    monkeypatch.setattr(tools, "_weather_snapshot", lambda: None)
+
+    result, artifact = tools.execute_tool("get_weather", {})
+
+    assert result["error"] == "weather_unavailable"
+    assert artifact is None
 
 
 def test_direct_tour_and_multimodal_route_executors_accept_their_declared_shapes(monkeypatch):
@@ -95,6 +131,14 @@ def test_direct_tour_and_multimodal_route_executors_accept_their_declared_shapes
 
     monkeypatch.setattr(tools, "compute_route", route_result)
     monkeypatch.setattr(tools, "_attach_route_state", lambda *args, **kwargs: None)
+    # This shape-only test uses an object instead of a graph; edge verification
+    # is exercised separately with real MultiDiGraph fixtures.
+    monkeypatch.setattr(tools, "_audit_tool_route", lambda *_args: None)
+    monkeypatch.setattr(tools, "_audit_tool_tour", lambda *_args: None)
+    monkeypatch.setattr(tools, "verify_segmented_route_result", lambda *_args, **_kwargs: {
+        "status": "pass", "issues": [], "field_truth_verified": False,
+    })
+    monkeypatch.setattr(tools, "_audit_segment_geometry", lambda *_args: None)
 
     def payload(_graph, result, start_name, end_name, mode):
         a, b = result["recommended"]

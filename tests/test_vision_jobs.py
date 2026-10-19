@@ -1,17 +1,17 @@
 import io
-import os
-from datetime import datetime
+import time
 
 import pytest
 
 from storage import database, vision_repository
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="requires TEST_DATABASE_URL")
+DATABASE_URL = None  # assigned only after isolated_test_database validates the target
+pytestmark = pytest.mark.usefixtures("isolated_test_database")
 
 
 def manager_client(monkeypatch, tmp_path):
     import api.routes as routes
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     from app import create_app
 
     monkeypatch.setattr(routes.config, "ROAD_CONDITION_ADMIN_PASSWORD", "manager-secret")
@@ -26,7 +26,6 @@ def manager_client(monkeypatch, tmp_path):
 
 
 def test_manager_upload_is_private_and_queues_reviewable_media(monkeypatch, tmp_path):
-    import api.routes as routes
     from vision import worker
 
     database.initialize(DATABASE_URL)
@@ -37,6 +36,7 @@ def test_manager_upload_is_private_and_queues_reviewable_media(monkeypatch, tmp_
         "/api/manager/vision-jobs",
         data={
             "lng": "114.363", "lat": "30.5365",
+            "captured_at": str(time.time()),
             "media": (io.BytesIO(b"\x89PNG\r\n\x1a\nsynthetic-public-test"), "campus.png", "image/png"),
         },
         headers={"X-CSRF-Token": csrf},
@@ -108,8 +108,6 @@ def test_unconfigured_detector_cannot_accept_jobs_that_would_silently_fail(monke
 
 
 def test_vision_review_only_allows_one_audited_decision(monkeypatch):
-    import uuid
-
     database.initialize(DATABASE_URL)
     item = vision_repository.create_job(
         DATABASE_URL, created_by="web", original_name="campus.png", media_kind="image",

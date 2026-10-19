@@ -2,7 +2,7 @@
   'use strict';
 
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
-  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
+  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, editingEventId: null, eventEditBusy: false, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   var visionPreviewStates = new Map();
   var playingVisionVideos = new Set();
@@ -1331,6 +1331,93 @@
     return item.status || 'active';
   }
 
+  function eventEditDateTime(epochSeconds) {
+    if (!Number.isFinite(Number(epochSeconds))) return '';
+    return new Date(Number(epochSeconds) * 1000 + 8 * 3600000).toISOString().slice(0, 19);
+  }
+
+  function eventEditTimestamp(value) {
+    var text = String(value || '').trim();
+    if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(text)) return NaN;
+    var milliseconds = Date.parse(text + '+08:00');
+    if (!Number.isFinite(milliseconds) || eventEditDateTime(milliseconds / 1000) !== text) return NaN;
+    return milliseconds / 1000;
+  }
+
+  function eventEditField(labelText, className, type, value, attributes) {
+    var label = document.createElement('label');
+    label.textContent = labelText;
+    var input = document.createElement(type === 'textarea' ? 'textarea' : 'input');
+    input.className = className;
+    if (type !== 'textarea') input.type = type;
+    Object.keys(attributes || {}).forEach(function (key) { input.setAttribute(key, attributes[key]); });
+    input.value = value;
+    label.appendChild(input);
+    return { label: label, input: input };
+  }
+
+  function renderEventEditPanel(item) {
+    var panel = document.createElement('form');
+    panel.className = 'event-edit-panel';
+    var name = eventEditField('事件名称', 'event-edit-name', 'text', item.name || '', { maxlength: '200', required: 'required' });
+    var description = eventEditField('情况说明', 'event-edit-description', 'textarea', item.description || '', { maxlength: '200', rows: '2' });
+    var start = eventEditField('开始时间（北京时间）', 'event-edit-start', 'datetime-local',
+      eventEditDateTime(item.start_time), { step: '1', required: 'required' });
+    var end = eventEditField('结束时间（留空表示长期有效）', 'event-edit-end', 'datetime-local',
+      Number(item.end_time || 0) > 0 ? eventEditDateTime(item.end_time) : '', { step: '1' });
+    panel.append(name.label, description.label, start.label, end.label);
+    var hint = document.createElement('p');
+    hint.className = 'event-edit-message';
+    hint.setAttribute('role', 'status');
+    var actions = document.createElement('div');
+    actions.className = 'event-edit-actions';
+    var save = document.createElement('button');
+    save.type = 'submit';
+    save.className = 'event-edit-save';
+    save.textContent = '保存修改';
+    save.disabled = state.eventEditBusy;
+    var cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.className = 'event-edit-cancel';
+    cancel.textContent = '取消';
+    cancel.addEventListener('click', function () { state.editingEventId = null; refreshEvents(); });
+    actions.append(save, cancel);
+    panel.append(hint, actions);
+    panel.addEventListener('submit', async function (event) {
+      event.preventDefault();
+      if (state.eventEditBusy) return;
+      var startTime = eventEditTimestamp(start.input.value);
+      var endTime = end.input.value ? eventEditTimestamp(end.input.value) : 0;
+      if (!Number.isFinite(startTime) || (end.input.value && !Number.isFinite(endTime))) {
+        hint.textContent = '请填写有效的开始和结束时间。';
+        return;
+      }
+      if (endTime && endTime <= startTime) {
+        hint.textContent = '结束时间必须晚于开始时间。';
+        return;
+      }
+      state.eventEditBusy = true;
+      save.disabled = true;
+      try {
+        await request('/api/road-conditions/' + encodeURIComponent(item.id), 'PATCH', {
+          name: name.input.value.trim(),
+          description: description.input.value.trim(),
+          start_time: new Date(startTime * 1000).toISOString(),
+          end_time: endTime ? new Date(endTime * 1000).toISOString() : null,
+        });
+        state.editingEventId = null;
+        message('form-message', '事件信息已保存。', true);
+        refreshEvents();
+      } catch (error) {
+        hint.textContent = error.message || '保存失败，请检查时间后重试。';
+      } finally {
+        state.eventEditBusy = false;
+        save.disabled = false;
+      }
+    });
+    return panel;
+  }
+
   function renderEventRow(item) {
     var row = document.createElement('article');
     row.className = 'event-row';
@@ -1397,6 +1484,9 @@
       rebindPanel.append(rebindHelp, rebindSelection, rebindReason, rebindActions);
       name.appendChild(rebindPanel);
     }
+    if (eventStatus(item) !== 'revoked' && state.editingEventId === item.id) {
+      row.appendChild(renderEventEditPanel(item));
+    }
     var type = document.createElement('div'); type.className = 'event-type'; type.textContent = item.type_label || item.type || '管制';
     var road = document.createElement('div'); road.className = 'event-meta';
     var edge = item.edge || {};
@@ -1415,6 +1505,15 @@
     if (eventStatus(item) === 'active') {
       var endButton = document.createElement('button'); endButton.type = 'button'; endButton.textContent = '结束事件';
       endButton.addEventListener('click', function () { endEvent(item.id); }); actions.appendChild(endButton);
+    }
+    if (eventStatus(item) !== 'revoked') {
+      var editButton = document.createElement('button'); editButton.type = 'button';
+      editButton.textContent = state.editingEventId === item.id ? '收起修改' : '修改事件';
+      editButton.addEventListener('click', function () {
+        state.editingEventId = state.editingEventId === item.id ? null : item.id;
+        refreshEvents();
+      });
+      actions.appendChild(editButton);
     }
     var deleteButton = document.createElement('button'); deleteButton.type = 'button'; deleteButton.textContent = '永久删除';
     deleteButton.addEventListener('click', function () { deleteEvent(item.id); }); actions.appendChild(deleteButton);

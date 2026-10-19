@@ -4,6 +4,17 @@
 
 > 本文件是当前交接入口。先看这里，再按需打开功能验收文档。项目代码、远程分支与线上部署状态分别记录，不把本机最新提交误当成已上线版本。
 
+> **全项目交接快照（2026-10-19）：**架构、当前 worktree、验收边界和接手步骤见[项目全量交接](docs/development/33_项目全量交接_20261019.md)。本文件下方保留各功能及发布的详细历史记录。
+
+## 交接建议四步执行（2026-10-19）
+
+- 目标工作树 `C:\Users\HUAWEI\.codex\worktrees\agent-experiment-implementation\campus-spatial-intelligence-agent`；桌面仓库为另一目录，本轮未改动。
+- 第一步（状态核对）：`HEAD (no branch)` @ `9e1392e`；工作区 110 条改动（51 修改 / 59 未跟踪）；`git diff --check` 通过，仅有既有 LF/CRLF 提示。
+- 第二步（送人工裁决）：新草稿审计 `output/experiments/scenario_draft_audit_20261019_193625.json`——60 题 / 72 轮，仍为 60 题未独立裁决、60 题快照未冻结、72 轮缺意图标签与工具序列、58 轮路线可行性无证据、11 项事件快照未定义、9 轮候选集未裁决、2 个事件类目缺事件文本；新拆分审计 `scripts/audit_output/scenario_split_readiness_handoff_20261019.json`——开发 60 / 盲测 0、`formal_ready=false`、14 项阻断。既有裁决工作簿 `output/experiments/scenario_adjudication_queue_20261018_intent-tools.xlsx` 记录的源集 SHA-256（`d48de8d2…`）与协议 SHA-256（`d34aedad…`）与当前文件完全一致，3 表 / 60 场景 / 72 轮、金标准栏全空，**可直接交付审查人，未重建**。裁决回填后按 `import_scenario_adjudication.py` 协议导入，Agent 不填金标准。
+- 第三步（正式快照）：未生成——`experiments/research_snapshot.json` 不存在；跟踪工作区不干净，`check_agent_research_readiness.py --write-snapshot` 会拒绝。新诊断输入清单 `output/experiments/agent_input_inventory_dev_20261019_01.json`，有效输入指纹 `d0c999a6f2c17f96fd2716da6b6e327ba91ea9279b1ea22bd5c06bbca4875e21`（相对 10-18 的 `af936ccc…` 发生变化，源于 10-19 对 `agents/` 轨迹记录的改动，非数据漂移）。外部依赖：盲测集 0→300 题、6 条代表路线 + 1 份独立步行参照、坡度/景观属性证据、模型密钥。
+- 第四步（回归与复核）：范围内回归 `python -m pytest tests/test_scenario_protocol.py tests/test_scenario_split_audit.py tests/test_scenario_draft_audit.py tests/test_scenario_adjudication_import.py tests/test_scenario_live_adapter.py -q` **89 passed**；`compileall`、三份新报告 JSON 解析与 `git diff --check` 通过；`ruff check experiments scripts/validate/check_agent_research_readiness.py` 报 4 条 F401，均落在未改动的既有文件（`baselines/rule_baseline.py`、`c1_history_ablation.py`、`evaluator.py`），非本轮引入。本轮无代码修复，未提交、未推送、未部署；发布需在正式门槛满足并另行审核后进行。
+- 三步未完成项均为人类/外部依赖，不由程序代填：人工独立裁决 60 题、真实模型回放（缺密钥）、未见盲测集与代表路线证据。
+
 ## 当前结论
 
 项目已具备校园地点检索、路线规划、多轮路线修改、用户端网页/Android 壳应用，以及 `/manager` 道路事件管理和航拍影像上传、车辆/行人分析、人工复核流程。管理端可以把候选观察区域绑定到正式路网，并保存、复用命名场景；复用仍需人工核对。事故和积水模型未达到启用条件，影像框也不能自动定位到地面道路；尚无武汉大学航拍样本，不能声称校园精度已验证。
@@ -14,9 +25,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/aerial-vision-release @ 4162144 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-15 21:54
+- 版本：HEAD @ 9e1392e ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-19 21:07
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v91 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 13（最新 013）
+- 前端 SW whu-walker-v92 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 15（最新 015）
 <!-- FACTS:END -->
 
 ## 管理台道路事件表单（2026-10-12）
@@ -74,6 +85,31 @@
 - 管理端支持影像上传、单图/视频车辆检测、候选复核、重新选路及人工事件交接。事件发布仍须管理员选择具体道路并填写依据；地图参考点不是车辆框的地理位置。
 - 对单张图，识别数量代表当前画面检测结果，不是路段车流量。候选生成还要求达到分析规则的数量门槛；没有候选时任务状态为正常完成。详见[影像识别验收](docs/development/19_视觉图像识别功能实施与验收_20261003.md)和[管理端流程验收](docs/development/20_管理端双流程实施与验收_20261003.md)。
 - 数据规模与审计结果属于有日期的快照。2026-10-01 的 440 个 POI、17 个校门、5,087 个节点和 14,622 条有向边不是本轮重新统计结果；另一对话的数据任务不在这里继续。
+
+## 研究实验续验（2026-10-18）
+
+- Agent 工具调用轨迹已接入实验流程，默认关闭；仅设置 `AGENT_TOOL_TRACE_ENABLED=1` 才记录工具名、参数键名、调用状态和 artifact 类型，不保存参数值、工具结果正文或模型思维文本。实时实验适配器会按白名单投影，回放协议检查结构和调用计数。
+- 坡度/景观主库审计命令为 `python scripts/validate/audit_edge_attribute_master.py`，报告位于 `scripts/audit_output/attribute_master_data_readiness.json`。当前 14,622 条有向边全部绑定到当前路网几何，无漏绑/陈旧绑定；坡度有 2,876 条派生数值但未经现场/校方核实，景观没有可用数值，field/institution verified 可用于偏好实验的路段均为 0，报告为结构有效、质量降级，不能据此声称风景/平坦偏好已由可靠数据支持。
+- 最新研究就绪报告 `scripts/audit_output/agent_research_readiness.json`：Agent 主实验代码/合同 **9/9 项通过**；路线样本仍缺 6 条代表性路线证据和 1 份独立步行路线参照；偏好属性门槛未通过；视觉检测、拥堵、人流、事故、积水五类都缺武大校园样本证据。数据审计列出的 297 个开放候选、443 个未核实 POI、9 个长距离吸附 POI 和 9,510 条占位属性是治理线索，不应解读为需要把数千道路和地点全部实地测量；按论文范围选择关键路线和连接点抽样复核。
+- 凭证状态已于 2026-10-18 重新核实：桌面主项目 `.env` 中有 DeepSeek 与 AMap 配置；隔离工作树没有自己的 `.env`，本地诊断启动器只将明确白名单项读入进程内存，没有记录或输出密钥值。本地真实回放已运行 DeepSeek Agent 和天气请求；这不等于完整工具选择准确率评测，也不等于高德路线对照已经建立。
+- 新增坡度/景观审计器回归 3/3 通过；最新隔离测试库全量 Python 为 **1,620 passed / 22 skipped / 1 xfailed**（1,643 项，183.60 秒）。JS 全集 151/151 和本地 Playwright 聊天建议交互已通过。Ruff、compileall、JSON 解析及 `git diff --check` 通过；仅有既有 LF/CRLF 提示。本轮未提交、推送或部署。
+
+## 场景集防泄漏门禁（2026-10-18）
+
+- 运行 `python -m experiments.scenario_split_audit` 可检查开发/盲测场景集是否共享模板、OD、用户提示或可用影像来源组，并核验测试集的正式金标准与冻结条件。默认报告写入 `scripts/audit_output/scenario_split_readiness.json`；提示只做哈希比对，不会写入报告。
+- 当前数据为 60 个未裁决开发草稿、0 个盲测案例。报告为“泄漏不可评估、正式就绪 false”；这不是已证明数据集独立，也不是模型评测结果。需先建立独立测试场景与人工裁决，再冻结 Agent 输入和匹配提交，才可启动正式基线。
+- 正式回放入口已强制要求另传 `--development-dataset` 并执行同一拆分审计；未通过前不会创建正式结果目录。当前空盲测仍会被拒绝。
+## 本轮相关回归（2026-10-18）
+
+- POI 推荐/多轮状态及硬约束路由相关聚焦 Python 回归在隔离 PostgreSQL `whu_agent_test` 下 **441/441 通过**；随后全量 Python **1,628 passed / 22 skipped / 1 xfailed**（1,651 项、186.26 秒）；场景协议与拆分审计 **65/65 通过**；JavaScript **151/151 通过**。这是软件回归，不是正式真实模型评测或论文实验结果。
+
+## 本地真实 Agent 与视觉并发续验（2026-10-18）
+
+- 六个未裁决开发场景经 loopback API、PostgreSQL、Agent worker 与真实 DeepSeek 模型回放；多途经场景由 `plan_via_route` 完成，用户输入目的地“樱顶”，当前 POI 主数据将该别名解析为“武汉大学老斋舍”，因此这次确认调用链完成，不代表该别名指代经过现场核实。天气请求得到实时天气。它们是开发诊断样本，不是盲测准确率。
+- 首轮真实路线比较揭示工作流只接受“核验通过的最终 route”，把有效的三策略 `route_comparison` 错判为失败。已补足比较结果结构验收：完整三策略通过；部分比较需至少两种有效策略、剩余策略有明确失败原因、距离有效且含路网/路况版本证据。真实重放现为 `completed`，shortest/scenery/flat 均可用；畸形策略字段与无法表示的距离数值失败关闭。
+- 本机用 RT-DETRv4 ONNX CPU 推理与六条 Agent 请求做完整重叠测量：10.32 秒视频覆盖 51 帧；六条请求全部与真实推理调用区间完全重叠，Agent 状态为 3 completed、3 needs_input、0 failed。负载期 Web/worker/视觉进程平均 RSS 约 81/302/676 MiB，CPU 均值约 8%/90%/97%（进程口径 100% 约为一个逻辑核）。基线与负载各 N=6，终态延迟 P50 5.23/5.65 秒，P95 14.09/14.83 秒；只能说明这一轮本机没有明显阻塞，不能作为容量或精度结论。详细时序、哈希和资源采样见未提交产物 `output/experiments/agent_vision_concurrency_20261018_03/` 与 `.superpowers/sdd/concurrency-report.md`。
+- 视觉子进程因安全环境未带 `APPDATA` 而找不到已安装在用户 site-packages 的 ONNX Runtime；仅将 `APPDATA` 加入允许环境项后，实际模型加载及完整视频推理通过，应用凭证仍不进入视觉子进程。
+- 本轮聚焦测试 **30 passed**，`compileall` 与范围内 `git diff --check` 通过。上述诊断尚未提交、推送或部署；未标注视频没有精度结论，正式 Agent 盲测仍因独立测试集为 0 条、缺人工裁决而未就绪。
 
 ## 推荐接手顺序
 

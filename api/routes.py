@@ -35,7 +35,9 @@ from werkzeug.utils import secure_filename
 import config
 from agents.parser import parse_query, detect_travel_mode
 from agents.planner import PlannerError
+from agents import route_reuse as route_reuse_module
 from agents.routing_policy import select_route_strategy
+from agents.route_reuse import has_valid_reuse_certificate
 from agents.route_state import (
     RouteStateVersionConflict,
     apply_change,
@@ -50,6 +52,7 @@ from agents.explainer import generate_explanation, generate_chat_response, gener
 from spatial.poi import get_poi, search_pois, list_all_pois, load_pois, find_poi_ambiguous, importance_score
 from spatial.network import get_network, load_or_download_network, get_nearest_node, get_node_coords
 from spatial.routing import (
+    BudgetSearchIncomplete,
     compute_route,
     _path_length,
     TRAVEL_MODES,
@@ -58,6 +61,7 @@ from spatial.routing import (
     build_turn_by_turn,
 )
 from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
+from spatial.result_verifier import verify_display_geometry, verify_route_result
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, add_condition, remove_condition, update_condition,
@@ -429,6 +433,19 @@ def _ok(data, status=200):
 
 def _err(code, message, status):
     return jsonify({"error": code, "message": message}), status
+
+
+def _route_verification_message(report):
+    issues = set(report.get("issues") or [])
+    if "distance_budget_exceeded" in issues:
+        return "当前路线超过你设定的距离上限，请调整上限或起终点。"
+    if "duration_budget_exceeded" in issues:
+        return "当前路线超过你设定的时间上限，请调整上限或起终点。"
+    if "accessibility_unverified" in issues:
+        return "当前道路或末端接驳缺少已核实的无障碍证据，无法保证满足要求。"
+    if report.get("status") == "unknown":
+        return "路线校验依据不足，请稍后重试。"
+    return "路线未通过道路与通行约束校验，暂时不能可靠展示。"
 
 
 def _current_data_version(G=None):
@@ -826,12 +843,13 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             out["start"]["coordinates"] = {"lng": coord_start.get("lng"), "lat": coord_start.get("lat")}
         if coord_end:
             out["end"]["coordinates"] = {"lng": coord_end.get("lng"), "lat": coord_end.get("lat")}
-        for k in ("recommended", "shortest", "steps", "pois", "filter_status", "overlap_rate",
+        for k in ("recommended", "recommended_edge_ids", "shortest", "steps", "pois", "filter_status", "overlap_rate",
                   "recommended_length_m", "shortest_length_m", "length_capped", "degraded",
+                  "hard_budget_fallback", "shortest_baseline_feasible",
                   "distance_m", "shortest_distance_m", "applied_weights", "mode",
                   "duration_min", "shortest_duration_min", "speed_kmh",
                   "legs", "via", "tour", "detour_ratio", "strategy", "route_state",
-                  "endpoint_access", "timings_ms"):
+                  "endpoint_access", "timings_ms", "route_verification"):
             if k in route:
                 out[k] = route[k]
         out.setdefault("shortest", out.get("recommended", []))
@@ -853,20 +871,34 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
 
     if kind == "clarify":
         clarify = resp.get("clarify") or {}
-        return {
+        out = {
             "task_type": "unknown",
             "response_kind": kind,
             "message": clarify.get("question") or resp.get("message", ""),
             "clarify": clarify,
             "place_request": resp.get("place_request"),
         }
+        if resp.get("route_verification") is not None:
+            out["route_verification"] = resp["route_verification"]
+        return out
 
-    return {
+    if kind == "route_comparison":
+        return {
+            "task_type": "chat",
+            "response_kind": kind,
+            "reply": resp.get("message", ""),
+            "route_comparison": resp.get("route_comparison"),
+        }
+
+    out = {
         "task_type": "chat",
         "response_kind": kind,
         "query": "",
         "reply": resp.get("message", ""),
     }
+    if resp.get("route_verification") is not None:
+        out["route_verification"] = resp["route_verification"]
+    return out
 
 
 @api_bp.route("/weather", methods=["GET"])
@@ -1148,6 +1180,8 @@ def route():
             strategy_name=decision.name,
             detour_cap=decision.detour_cap,
         )
+    except BudgetSearchIncomplete as e:
+        return _err("route_search_incomplete", str(e), 503)
     except ValueError as e:
         # 如驾车不可达："驾车无法到达…建议切换骑行或步行"，消息原样透传给前端
         return _err("route_not_found", str(e), 404)
@@ -1157,6 +1191,70 @@ def route():
     except Exception as e:
         logger.exception("路径计算异常")
         return _err("route_computation_failed", f"路径计算失败: {e}", 500)
+
+    # Audit exact directed edges against this request's graph and road-event
+    # snapshot before geometry expansion; an invalid edge key cannot be drawn.
+    route_state = build_route_state(
+        route_kind="direct",
+        original_query=body.get("query", ""),
+        start=start,
+        end=end,
+        travel_mode=final_mode,
+        hard_constraints=constraints,
+        strategy=decision.as_dict(),
+        data_version=_current_data_version(G),
+        road_condition_version=_current_road_condition_version(route_conditions),
+    )
+    route_verification = None
+    for path_name, edge_field, length_field in (
+        ("recommended", "recommended_edges", "recommended_length_m"),
+        ("shortest", "shortest_edges", "shortest_length_m"),
+    ):
+        audit_input = {
+            "recommended_edge_ids": route_result.get(edge_field),
+            "recommended_length_m": route_result.get(length_field),
+            "duration_min": route_result.get(
+                "duration_min" if path_name == "recommended" else "shortest_duration_min"
+            ),
+            "mode": route_result.get("mode"),
+            "route_state": route_state,
+            "road_condition_version": route_state["road_condition_version"],
+        }
+        try:
+            report = verify_route_result(
+                G, audit_input, road_conditions=route_conditions,
+                expected_start_node=start_node, expected_end_node=end_node,
+                enforce_budgets=(path_name == "recommended" or
+                                 route_result.get("shortest_baseline_feasible") is not False),
+                duration_context_available=True, weather_info=weather_info,
+            )
+        except Exception:
+            logger.exception("直达路线结果核验不可用，拒绝发布")
+            report = {
+                "status": "unknown", "valid": False,
+                "issues": ["verification_unavailable"],
+                "scope": "internal_graph_and_event_snapshot",
+                "data_version_scope": "metadata_only",
+                "field_truth_verified": False,
+                "endpoint_status": "unknown",
+            }
+        if report["status"] != "pass":
+            route_verification = {**report, "path": path_name}
+            break
+        if route_verification is None:
+            route_verification = report
+    else:
+        route_verification = {
+            **route_verification,
+            "checked_paths": ["recommended", "shortest"],
+        }
+    if route_verification["status"] != "pass":
+        unknown = route_verification["status"] == "unknown"
+        return jsonify({
+            "error": "route_verification_unknown" if unknown else "route_verification_failed",
+            "message": _route_verification_message(route_verification),
+            "route_verification": route_verification,
+        }), 503
 
     response_started = time.perf_counter()
     recommended_nodes = route_result["recommended"]
@@ -1179,6 +1277,23 @@ def route():
     # 注意：pois_along 里的 POI 本身来自 pois.json(GCJ-02)，不需要再转！
     recommended_coords = _coords_wgs_to_gcj(recommended_coords)
     shortest_coords = _coords_wgs_to_gcj(shortest_coords)
+    for path_name, edge_ids, coordinates in (
+        ("recommended", recommended_edges, recommended_coords),
+        ("shortest", shortest_edges, shortest_coords),
+    ):
+        geometry_report = verify_display_geometry(G, edge_ids, coordinates)
+        if geometry_report["status"] != "pass":
+            unknown = geometry_report["status"] == "unknown"
+            return jsonify({
+                "error": "route_verification_unknown" if unknown else "route_verification_failed",
+                "message": "路线画线与实际选用道路无法核对，暂时不能可靠展示。",
+                "route_verification": {
+                    **route_verification,
+                    "status": geometry_report["status"], "path": path_name,
+                    "issues": geometry_report["issues"],
+                },
+            }), 503
+    route_verification["display_geometry_checked"] = ["recommended", "shortest"]
 
     # 逐步转向指令（动作点同步转 GCJ-02），供前端实时导航与语音播报
     steps = _build_steps_gcj(
@@ -1199,6 +1314,8 @@ def route():
         "recommended_length_m": route_result["recommended_length_m"],
         "shortest_length_m": route_result["shortest_length_m"],
         "length_capped": route_result["length_capped"],
+        "hard_budget_fallback": route_result.get("hard_budget_fallback", False),
+        "shortest_baseline_feasible": route_result.get("shortest_baseline_feasible", True),
         "degraded": route_result["degraded"],
         "distance_m": route_result["recommended_length_m"],
         "shortest_distance_m": route_result["shortest_length_m"],
@@ -1217,16 +1334,10 @@ def route():
         "strategy": decision.as_dict(),
     }
 
-    response["route_state"] = build_route_state(
-        route_kind="direct",
-        original_query=body.get("query", ""),
-        start=start,
-        end=end,
-        travel_mode=final_mode,
-        hard_constraints=constraints,
-        strategy=decision.as_dict(),
-        data_version=_current_data_version(G),
-        road_condition_version=_current_road_condition_version(route_conditions),
+    response["route_verification"] = route_verification
+    response["route_state"] = route_reuse_module.issue_shortest_path_reuse_certificate(
+        route_state, response, G, route_conditions, verified=True,
+        proof_identity=route_reuse_module.authenticated_proof_identity(),
     )
 
     timings = normalize_timings(route_result.get("timings_ms"))
@@ -1306,6 +1417,55 @@ def _replan_tool_request(state):
     return "plan_multimodal_route", {**common, "legs": legs}
 
 
+def _replan_result_matches_request(requested, payload):
+    """Keep the tool's audited state only when it fulfills the requested task."""
+    if not isinstance(payload, dict):
+        return False
+    verification = payload.get("route_verification")
+    if not isinstance(verification, dict) or verification.get("status") != "pass":
+        return False
+    if requested["route_kind"] == "itinerary" and (
+        not isinstance(verification.get("itinerary_budget"), dict)
+        or verification["itinerary_budget"].get("status") != "pass"
+    ):
+        return False
+    try:
+        actual = validate_route_state(payload.get("route_state"))
+    except (TypeError, ValueError):
+        return False
+    for field in (
+        "route_kind", "original_query", "start", "travel_mode",
+        "hard_constraints", "strategy", "data_version", "road_condition_version",
+    ):
+        if actual[field] != requested[field]:
+            return False
+    if requested["route_kind"] == "tour":
+        old_tour = requested["tour"]
+        new_tour = actual["tour"]
+        if (new_tour.get("theme") != old_tour.get("theme")
+                or new_tour.get("loop") != old_tour.get("loop")):
+            return False
+        old_names = sorted(p.get("name") for p in old_tour.get("pois", []))
+        new_names = sorted(p.get("name") for p in new_tour.get("pois", []))
+        if old_names != new_names:
+            return False
+    else:
+        if actual["end"] != requested["end"]:
+            return False
+        if actual["via"] != requested["via"]:
+            return False
+        if actual["legs"] != requested["legs"]:
+            return False
+        if requested["route_kind"] == "itinerary" and actual["itinerary"] != requested["itinerary"]:
+            return False
+    displayed_mode = payload.get("mode")
+    if requested["route_kind"] == "tour":
+        displayed_mode = (payload.get("tour") or {}).get("mode")
+    if displayed_mode is not None and displayed_mode != actual["travel_mode"]:
+        return False
+    return True
+
+
 @api_bp.route("/route/replan", methods=["POST"])
 def replan_route():
     """Recompute a route-state change without invoking the LLM."""
@@ -1339,14 +1499,28 @@ def replan_route():
     from agents.tools import execute_tool
 
     tool_name, args = _replan_tool_request(requested)
+    tool_context = {
+        "query": requested["original_query"], "replan": True,
+        "_route_conditions_snapshot": route_conditions,
+        "_route_proof_identity": route_reuse_module.authenticated_proof_identity(),
+    }
+    if (
+        body.get("change") == {"refresh_road_conditions": True}
+        and prior["route_kind"] == "direct"
+        and prior["strategy"]["name"] == "shortest"
+        and has_valid_reuse_certificate(prior)
+        and tool_context["_route_proof_identity"] is not None
+    ):
+        tool_context["_reuse_route_state"] = prior
+        tool_context["_reuse_expected_state"] = requested
+
     result, artifact = execute_tool(
         tool_name,
         args,
-        {
-            "query": requested["original_query"], "replan": True,
-            "_route_conditions_snapshot": route_conditions,
-        },
+        tool_context,
     )
+    if not isinstance(result, dict):
+        return _err("route_verification_failed", "重算工具未返回可核对的路线结果。", 503)
     if result.get("error"):
         status = 503 if result["error"] == "road_conditions_unavailable" else 404
         return _err(result["error"], result.get("message", "路线重新规划失败"), status)
@@ -1362,10 +1536,9 @@ def replan_route():
             "重算后的路线缺少有效的时间预算校验，未返回路线。",
             503,
         )
-    payload = (artifact or {}).get("route") or result
-    payload["route_state"] = validate_route_state(requested)
-    if requested["route_kind"] == "itinerary":
-        payload["route_kind"] = "itinerary"
+    payload = artifact.get("route") if isinstance(artifact, dict) else None
+    if not _replan_result_matches_request(requested, payload):
+        return _err("route_verification_failed", "重算路线与原任务、路况或核验记录不一致，未替换当前路线。", 503)
     payload["timings_ms"] = normalize_timings(payload.get("timings_ms"), agent=0.0)
     return _ok(payload)
 
@@ -1674,6 +1847,8 @@ def chat():
             strategy_name=decision.name,
             detour_cap=decision.detour_cap,
         )
+    except BudgetSearchIncomplete as e:
+        return _err("route_search_incomplete", str(e), 503)
     except ValueError as e:
         # 如驾车不可达："驾车无法到达…建议切换骑行或步行"，消息原样透传给前端
         return _err("route_not_found", str(e), 404)
@@ -1757,6 +1932,8 @@ def chat():
         "recommended_length_m": route_result["recommended_length_m"],
         "shortest_length_m": route_result["shortest_length_m"],
         "length_capped": route_result["length_capped"],
+        "hard_budget_fallback": route_result.get("hard_budget_fallback", False),
+        "shortest_baseline_feasible": route_result.get("shortest_baseline_feasible", True),
         "degraded": route_result["degraded"],
         "distance_m": route_result["recommended_length_m"],
         "shortest_distance_m": route_result["shortest_length_m"],
@@ -2174,7 +2351,7 @@ def _build_road_condition_impact_preview(
         if action not in CONDITION_ACTIONS:
             raise ValueError("路况影响动作无效")
         selected_modes = set(affected_modes or TRAVEL_MODES)
-        if not selected_modes or selected_modes - TRAVEL_MODES:
+        if not selected_modes or selected_modes - set(TRAVEL_MODES):
             raise ValueError("受影响的出行方式无效")
         if action == "slowdown" and not 1 <= float(cost_multiplier) <= 5:
             raise ValueError("缓行成本倍数必须在 1 到 5 之间")
@@ -2534,6 +2711,7 @@ def patch_road_condition(cond_id):
       {"action": "end"}                         立即结束（end_time=now，保留记录可审计）
       {"name": "..."} / {"description": "..."}  改名/补充描述
       {"start_time": ..., "end_time": ...}      调整生效时段（ISO 或时间戳）
+      {"end_time": null}                         普通事件改为长期有效；影像来源事件仍必须设置到期时间
     """
     auth_error = _require_admin()
     if auth_error:
@@ -2598,7 +2776,21 @@ def patch_road_condition(cond_id):
             if body.get(field) is not None:
                 changes[field] = str(body[field])[:200]
         start_ts = _parse_time_input(body.get("start_time")) if body.get("start_time") is not None else None
-        end_ts = _parse_time_input(body.get("end_time")) if body.get("end_time") is not None else None
+        end_ts = None
+        if "end_time" in body:
+            end_ts = _parse_time_input(body.get("end_time"))
+            if end_ts is None:
+                try:
+                    current = next((item for item in list_conditions(include_inactive=True, strict=True)
+                                    if item.get("id") == cond_id), None)
+                except RoadConditionsUnavailableError:
+                    logger.exception("读取路况事件失败，拒绝修改结束时间")
+                    return _err("road_conditions_unavailable", "路况数据暂不可用，无法修改事件时间。", 503)
+                if current is None:
+                    return _err("not_found", f"路况事件 {cond_id} 不存在", 404)
+                if (current.get("source") or {}).get("kind") == "vision_job":
+                    return _err("vision_event_expiry_required", "影像来源事件必须设置结束时间。", 400)
+                end_ts = 0  # 显式传 null/空值表示改为长期有效；未传则保留原结束时间。
         if start_ts is not None:
             changes["start_time"] = start_ts
         if end_ts is not None:

@@ -28,6 +28,7 @@ STATE_FIELDS = {
     "strategy",
     "data_version",
     "road_condition_version",
+    "reuse_certificate",
 }
 STRATEGY_FIELDS = {"name", "source", "task_class", "weights", "detour_cap"}
 
@@ -37,25 +38,45 @@ class RouteStateVersionConflict(ValueError):
 
 
 def current_data_version(graph=None) -> str:
-    """Version the graph and source files that affect deterministic replanning."""
+    """Hash the effective graph and local source bytes used by replanning."""
     if graph is None:
         from spatial.network import get_network
         graph = get_network()
-    parts = []
+    digest = hashlib.sha256()
+
+    def add(value) -> None:
+        digest.update(json.dumps(
+            value, ensure_ascii=False, sort_keys=True, default=str,
+            separators=(",", ":"),
+        ).encode("utf-8"))
+        digest.update(b"\n")
+
     if graph is not None:
-        parts.extend([
-            str(graph.graph.get("source_sha256") or ""),
-            str(graph.graph.get("course_release_fingerprint") or ""),
-            str(graph.number_of_nodes()),
-            str(graph.number_of_edges()),
-        ])
+        add(("graph", graph.graph))
+        for node, attrs in sorted(graph.nodes(data=True), key=lambda row: repr(row[0])):
+            add(("node", repr(node), attrs))
+        for u, v, key, attrs in sorted(
+            graph.edges(keys=True, data=True),
+            key=lambda row: (repr(row[0]), repr(row[1]), repr(row[2])),
+        ):
+            add(("edge", repr(u), repr(v), repr(key), attrs))
+    else:
+        add(("graph", None))
     import config
-    for filename in ("pois.json", "road_annotations.json", "campus_review_decisions.json"):
+
+    for filename in (
+        "whu_road_network.graphml", "pois.json", "road_annotations.json",
+        "edge_overrides.json", "edge_attribute_master.json",
+        "campus_review_decisions.json",
+    ):
         path = Path(config.DATA_DIR) / filename
-        if path.exists():
-            stat = path.stat()
-            parts.extend([filename, str(stat.st_size), str(stat.st_mtime_ns)])
-    return "data-" + hashlib.sha256("|".join(parts).encode()).hexdigest()[:16]
+        add(("file", filename, path.is_file()))
+        if path.is_file():
+            with path.open("rb") as source:
+                for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                    digest.update(chunk)
+            digest.update(b"\n")
+    return "data-" + digest.hexdigest()[:16]
 
 
 def current_road_condition_version(conditions=None) -> str:
@@ -102,14 +123,14 @@ def validate_route_state(raw) -> dict:
     """Return a deep-copied whitelist of route semantics from client input."""
     if not isinstance(raw, dict):
         raise ValueError("route_state must be an object")
-    state = {key: deepcopy(raw.get(key)) for key in STATE_FIELDS}
-    if state["schema_version"] != SCHEMA_VERSION:
+    state = {key: deepcopy(raw.get(key)) for key in STATE_FIELDS if key in raw}
+    if state.get("schema_version") != SCHEMA_VERSION:
         raise ValueError("unsupported route_state schema_version")
-    if state["route_kind"] not in ROUTE_KINDS:
+    if state.get("route_kind") not in ROUTE_KINDS:
         raise ValueError("invalid route_kind")
-    if state["travel_mode"] not in TRAVEL_MODES:
+    if state.get("travel_mode") not in TRAVEL_MODES:
         raise ValueError("invalid travel_mode")
-    if not isinstance(state["start"], dict) or not isinstance(state["end"], dict):
+    if not isinstance(state.get("start"), dict) or not isinstance(state.get("end"), dict):
         raise ValueError("route endpoints are required")
     if not isinstance(state.get("route_id"), str) or not state["route_id"]:
         raise ValueError("route_id is required")
@@ -119,6 +140,9 @@ def validate_route_state(raw) -> dict:
         raise ValueError("hard_constraints must be an object")
     if not isinstance(state.get("legs"), list):
         raise ValueError("legs must be a list")
+    if ("reuse_certificate" in state
+            and not isinstance(state["reuse_certificate"], dict)):
+        raise ValueError("reuse_certificate must be an object")
     if state["route_kind"] in {"via", "itinerary"}:
         via = state.get("via")
         if not isinstance(via, dict):
@@ -173,6 +197,14 @@ def apply_change(state, change) -> dict:
         if change["travel_mode"] not in TRAVEL_MODES:
             raise ValueError("invalid travel_mode")
         out["travel_mode"] = change["travel_mode"]
+        if out["route_kind"] == "multimodal":
+            # The global mode button changes every travel leg while preserving
+            # their ordered stops. Otherwise the top-level mode lies about the
+            # route that is actually recomputed.
+            out["legs"] = [
+                {**leg, "travel_mode": change["travel_mode"]}
+                for leg in out["legs"]
+            ]
     else:
         if change["strategy"] not in STRATEGIES:
             raise ValueError("invalid strategy")

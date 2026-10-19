@@ -109,6 +109,26 @@ def test_routing_snapshot_rejects_corrupt_road_condition_store(tmp_path, monkeyp
         rc.list_conditions(strict=True)
 
 
+def test_resolve_condition_effects_returns_closures_without_copying_graph(G, monkeypatch):
+    _edge_condition(G, "closure")
+    snapshot = rc.list_conditions(strict=True)
+    original_edge_count = G.number_of_edges()
+
+    def unexpected_copy():
+        raise AssertionError("effect resolution must not copy the road graph")
+
+    monkeypatch.setattr(G, "copy", unexpected_copy)
+
+    penalties, closed, applied = rc.resolve_condition_effects(
+        G, snapshot, "walk", strict=True,
+    )
+
+    assert penalties == {}
+    assert closed
+    assert applied == 1
+    assert G.number_of_edges() == original_edge_count
+
+
 def test_lenient_corrupt_read_does_not_poison_strict_snapshot(tmp_path, monkeypatch):
     path = tmp_path / "road_conditions.json"
     path.write_text("{ invalid json", encoding="utf-8")
@@ -1055,6 +1075,31 @@ class TestRoadConditionAPI:
         assert calls[1][3][1]["id"] == "preview-only"
         assert len(calls) == 6
 
+    def test_snap_action_preview_accepts_selected_modes_and_reports_effects(self, client, G, monkeypatch):
+        import api.routes as routes
+
+        monkeypatch.setattr(routes, "list_conditions", lambda **_kwargs: [])
+        monkeypatch.setattr(
+            routes,
+            "compute_route",
+            lambda graph, start, end, **_kwargs: {
+                "recommended_length_m": 100,
+                "duration_min": 2,
+            },
+        )
+        gj = _mid_12_gcj(G)
+        response = client.get(
+            f"/api/road-conditions/snap?lng={gj[0]}&lat={gj[1]}"
+            "&type=event&action=closure&modes=walk",
+            headers={"X-Admin-Token": "test-token-xyz"},
+        )
+
+        assert response.status_code == 200
+        effects = response.get_json()["data"]["impact_preview"]["effects_by_mode"]
+        assert effects["walk"]["status"] == "blocked"
+        assert effects["bike"]["status"] == "unaffected"
+        assert effects["drive"]["status"] == "unaffected"
+
     def test_snap_rejects_unknown_preview_event_type(self, client, G):
         gj = _mid_12_gcj(G)
         response = client.get(
@@ -1732,6 +1777,44 @@ class TestRoadConditionAPI:
             headers={"X-Admin-Token": "test-token-xyz"},
         ).get_json()["data"]["conditions"][0]
         assert saved["end_time"] == 2000003600
+
+    def test_patch_null_end_time_sets_manual_event_to_long_term(self, client, G):
+        gj = _mid_12_gcj(G)
+        created = client.post("/api/road-conditions", json={
+            "type": "event", "action": "notice", "affected_modes": ["walk"],
+            "name": "改为长期有效", "lng": gj[0], "lat": gj[1],
+            "end_time": time.time() + 1800,
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+        assert created.status_code == 201
+        condition_id = created.get_json()["data"]["condition"]["id"]
+
+        response = client.patch(
+            f"/api/road-conditions/{condition_id}",
+            json={"end_time": None},
+            headers={"X-Admin-Token": "test-token-xyz"},
+        )
+
+        assert response.status_code == 200
+        assert response.get_json()["data"]["condition"]["end_time"] == 0
+
+    def test_vision_event_cannot_be_changed_to_long_term(self, client, G):
+        snap = rc.snap_to_edge(G, *_mid_12_gcj(G))
+        vision_event = rc.add_condition(
+            "event", "影像来源事件", snap, start_time=time.time() - 60,
+            end_time=time.time() + 1800,
+            source={"kind": "vision_job", "job_id": "test-vision-job", "candidate_index": 0},
+            action="closure", affected_modes=["walk"],
+        )
+
+        response = client.patch(
+            f"/api/road-conditions/{vision_event['id']}",
+            json={"end_time": None},
+            headers={"X-Admin-Token": "test-token-xyz"},
+        )
+
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "vision_event_expiry_required"
+        assert rc.list_conditions(strict=True)[0]["end_time"] > 0
 
     def test_public_list_shape(self, client, G):
         gj = _mid_12_gcj(G)

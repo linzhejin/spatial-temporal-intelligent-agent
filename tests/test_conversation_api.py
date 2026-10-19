@@ -1,5 +1,3 @@
-import os
-import uuid
 from datetime import datetime, timedelta, timezone
 
 import pytest
@@ -7,19 +5,22 @@ import pytest
 from storage import database
 
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="requires a real PostgreSQL TEST_DATABASE_URL")
+DATABASE_URL = None  # assigned only after isolated_test_database validates the target
+pytestmark = pytest.mark.usefixtures("isolated_test_database")
 
 
 @pytest.fixture
-def client():
+def client(monkeypatch):
+    # app.py creates an app at import time and immediately migrates DATABASE_URL.
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     import app as app_module
 
     database.initialize(DATABASE_URL)
-    app_module.app.config.update(TESTING=True, DATABASE_URL=DATABASE_URL)
+    test_app = app_module.create_app()
+    test_app.config.update(TESTING=True, DATABASE_URL=DATABASE_URL)
     with database.connect(DATABASE_URL) as conn:
         conn.execute("TRUNCATE run_event, run, task_history, task, profile, conversation CASCADE")
-    return app_module.app.test_client()
+    return test_app.test_client()
 
 
 def test_conversation_cookie_restores_task_after_client_restart(client):

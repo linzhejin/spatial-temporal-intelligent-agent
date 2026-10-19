@@ -1,7 +1,25 @@
 """发布门槛只接受有来源和现场证据的数据。"""
 
 from scripts.validate.check_deployment_readiness import assess
-from scripts.validate.check_agent_research_readiness import assess_research_readiness
+from scripts.validate.check_agent_research_readiness import (
+    CHECKS, REQUIRED_INPUTS, _sha256_paths, _versions, assess_research_readiness,
+)
+
+
+REQUIRED_CHECKS = tuple(CHECKS)
+
+
+def test_agent_gate_covers_core_task_and_tool_suites_without_db_integration():
+    commands = {name: set(command) for name, command in CHECKS.items()}
+    assert {"task_planning", "poi_activity", "multi_via", "tool_registry"} <= commands.keys()
+    assert {"tests/test_task_planner.py", "tests/test_task_patch.py"} <= commands["task_planning"]
+    assert {"tests/test_poi_activity_recommendations.py",
+            "tests/test_poi_activity_taxonomy.py"} <= commands["poi_activity"]
+    assert "tests/test_multi_via_agent.py" in commands["multi_via"]
+    assert "tests/test_agent_tool_registry.py" in commands["tool_registry"]
+    assert not any("test_task_repository.py" in command
+                   or "test_run_worker.py" in command
+                   for command in commands.values())
 
 
 def _verified_inputs():
@@ -192,27 +210,22 @@ def test_candidate_graph_deviation_and_building_crossing_block_replacement():
         row["code"] for row in result["blockers"]}
 
 
-def test_research_readiness_requires_code_checks_data_and_attributes():
-    ready_checks = {
-        "routing_policy": {"passed": True},
-        "route_state": {"passed": True},
-        "profile_telemetry": {"passed": True},
-        "routing": {"passed": True},
-        "frontend_state": {"passed": True},
-    }
+def test_research_readiness_separates_agent_and_preference_gates():
+    ready_checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
     result = assess_research_readiness(
         ready_checks,
         deployment={"ready": True, "blockers": []},
         attributes={"ready": False, "degraded": True, "blockers": ["placeholder data"]},
     )
-    assert result["ready"] is False
-    assert "attribute_master_data" in result["blockers"]
+    assert result["ready"] is True
+    assert result["scope"] == "agent_main_experiment"
+    assert result["scopes"]["agent_main_experiment"]["ready"] is True
+    assert result["scopes"]["preference_attributes"]["ready"] is False
+    assert "attribute_master_data" in result["scopes"]["preference_attributes"]["blockers"]
 
 
-def test_research_readiness_passes_only_when_every_gate_passes():
-    checks = {name: {"passed": True} for name in (
-        "routing_policy", "route_state", "profile_telemetry", "routing", "frontend_state"
-    )}
+def test_research_readiness_does_not_claim_all_scopes_pass_from_agent_inputs():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
     result = assess_research_readiness(
         checks,
         deployment={"ready": True, "blockers": []},
@@ -220,6 +233,194 @@ def test_research_readiness_passes_only_when_every_gate_passes():
     )
     assert result["ready"] is True
     assert result["blockers"] == {}
+    assert result["scopes"]["sampled_route_evidence"]["ready"] is True
+    assert result["scopes"]["vision"]["detection"]["ready"] is False
+
+
+def test_research_readiness_route_and_campus_evidence_do_not_block_agent():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
+    deployment = {"ready": False, "blockers": [
+        {"code": "unverified_pois", "count": 2},
+        {"code": "unverified_reference_routes", "count": 3},
+    ]}
+    result = assess_research_readiness(checks, deployment, {"ready": False})
+    assert result["ready"] is True
+    assert result["scopes"]["sampled_route_evidence"]["ready"] is False
+    assert result["scopes"]["preference_attributes"]["ready"] is False
+
+
+def test_research_readiness_missing_code_check_and_structural_error_block_agent():
+    result = assess_research_readiness(
+        {"routing_policy": {"passed": True}},
+        {"ready": False, "blockers": [{"code": "structural_errors", "count": 1}]},
+        {"ready": True, "degraded": False},
+    )
+    assert result["ready"] is False
+    assert "code_checks" in result["blockers"]
+    assert "campus_structure" in result["blockers"]
+
+
+def test_missing_tool_registry_result_blocks_agent_experiment():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS
+              if name != "tool_registry"}
+    result = assess_research_readiness(
+        checks, {"ready": True, "blockers": []}, {"ready": True},
+    )
+    assert result["ready"] is False
+    assert result["blockers"]["code_checks"] == ["tool_registry"]
+
+
+def test_research_versions_hash_changed_inputs_and_report_missing_files(tmp_path):
+    (tmp_path / "data").mkdir()
+    source = tmp_path / "data" / "edge_overrides.json"
+    source.write_text("{}", encoding="utf-8")
+    first = _sha256_paths(["data/edge_overrides.json", "data/missing.json"], root=tmp_path)
+    source.write_text('{"blocked": true}', encoding="utf-8")
+    second = _sha256_paths(["data/edge_overrides.json", "data/missing.json"], root=tmp_path)
+    assert first["sha256"] != second["sha256"]
+    assert first["missing"] == ["data/missing.json"]
+
+
+def test_effective_snapshot_changes_with_runtime_code_requirements_and_environment(
+        monkeypatch, tmp_path):
+    import scripts.validate.check_agent_research_readiness as readiness
+
+    (tmp_path / "agents").mkdir()
+    planner = tmp_path / "agents" / "planner.py"
+    planner.write_text("ROUTE_POLICY = 1\n", encoding="utf-8")
+    requirements = tmp_path / "requirements.txt"
+    requirements.write_text("networkx==3.0\n", encoding="utf-8")
+    monkeypatch.setattr(readiness, "ROOT", tmp_path)
+    monkeypatch.setattr(readiness, "_runtime_model_config", lambda: {
+        "sha256": "a" * 64, "values": {},
+    })
+    monkeypatch.setattr(readiness, "_event_state_version", lambda: {
+        "sha256": "b" * 64, "active_sha256": "c" * 64,
+        "files": ["event_state"], "missing": [],
+    })
+    environment = {"sha256": "e" * 64, "files": ["runtime_environment"],
+                   "missing": [], "values": {"python": "3.13"}}
+    monkeypatch.setattr(readiness, "_runtime_environment_version", lambda: environment)
+    monkeypatch.setattr(readiness, "_git", lambda *_args: "d" * 40)
+
+    first = _versions()
+    planner.write_text("ROUTE_POLICY = 2\n", encoding="utf-8")
+    changed_code = _versions()
+    requirements.write_text("networkx==3.1\n", encoding="utf-8")
+    changed_requirements = _versions()
+    environment = {"sha256": "f" * 64, "files": ["runtime_environment"],
+                   "missing": [], "values": {"python": "3.14"}}
+    changed_environment = _versions()
+
+    assert {"runtime_code", "requirements", "runtime_environment"} <= set(REQUIRED_INPUTS)
+    assert first["runtime_code"]["files"] == ["agents/planner.py"]
+    assert "vision" not in readiness.RUNTIME_SOURCE_PATHS
+    assert first["effective_inputs_sha256"] != changed_code["effective_inputs_sha256"]
+    assert changed_code["effective_inputs_sha256"] != changed_requirements["effective_inputs_sha256"]
+    assert changed_requirements["effective_inputs_sha256"] != changed_environment[
+        "effective_inputs_sha256"]
+
+
+def test_research_readiness_vision_evidence_is_independent_by_category():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
+    vision = {"task": "campus_uav_field_readiness", "campus_field_data_present": True,
+              "checks": {
+                  "object_detection": {"accuracy_claim_ready": True},
+                  "event_evaluation": {"status": "ready", "event_metric_targets": {
+                      "congestion": {"met": True, "flight_coverage_met": True,
+                                     "positive_test_flight_count": 1},
+                      "crowding": {"met": False},
+                  }},
+                  "visible_water_segmentation": {"status": "missing"},
+              }}
+    result = assess_research_readiness(
+        checks, {"ready": True, "blockers": []}, {"ready": True}, vision=vision,
+    )
+    categories = result["scopes"]["vision"]
+    assert categories["detection"]["ready"] is True
+    assert categories["congestion"]["ready"] is True
+    assert categories["crowding"]["ready"] is False
+    assert categories["accident"]["ready"] is False
+    assert categories["flooding"]["ready"] is False
+
+
+def test_malformed_vision_report_fails_closed_for_each_category():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
+    vision = {"task": "campus_uav_field_readiness", "campus_field_data_present": True,
+              "checks": {"object_detection": ["ready"],
+                         "event_evaluation": {"event_metric_targets": ["ready"]},
+                         "models": ["ready"]}}
+    result = assess_research_readiness(
+        checks, {"ready": True, "blockers": []}, {"ready": True}, vision=vision,
+    )
+    assert all(not item["ready"] for item in result["scopes"]["vision"].values())
+
+
+def test_missing_snapshot_input_blocks_agent_gate():
+    checks = {name: {"passed": True} for name in REQUIRED_CHECKS}
+    versions = {name: {"files": [name], "missing": []} for name in REQUIRED_INPUTS}
+    versions["edge_overrides"] = {"files": [], "missing": ["data/edge_overrides.json"]}
+    result = assess_research_readiness(
+        checks, {"ready": True, "blockers": []}, {"ready": True}, versions=versions,
+    )
+    assert result["ready"] is False
+    assert result["blockers"]["snapshot_inputs"] == ["edge_overrides"]
+
+
+def test_agent_snapshot_does_not_require_preference_or_vision_evidence(
+        monkeypatch, tmp_path):
+    import json
+    import scripts.validate.check_agent_research_readiness as readiness
+
+    audit = tmp_path / "audit"
+    audit.mkdir()
+    monkeypatch.setattr(readiness, "ROOT", tmp_path)
+    monkeypatch.setattr(readiness, "AUDIT", audit)
+    monkeypatch.setattr(readiness, "_run_checks", lambda: {
+        name: {"passed": True} for name in REQUIRED_CHECKS
+    })
+    monkeypatch.setattr(readiness, "_deployment_result", lambda: {
+        "ready": False, "blockers": [{"code": "unverified_reference_routes", "count": 1}],
+    })
+    monkeypatch.setattr(readiness, "_versions", lambda: {
+        **{name: {"files": [name], "missing": []} for name in REQUIRED_INPUTS},
+        "effective_inputs_sha256": "a" * 64,
+    })
+    monkeypatch.setattr(readiness, "_git", lambda *_args: "")
+
+    assert readiness.main(["--write-snapshot"]) == 0
+    snapshot = json.loads((tmp_path / "experiments" / "research_snapshot.json").read_text(
+        encoding="utf-8"))
+    assert snapshot["ready"] is True
+    assert snapshot["scopes"]["sampled_route_evidence"]["ready"] is False
+    assert snapshot["scopes"]["preference_attributes"]["ready"] is False
+    assert snapshot["scopes"]["vision"]["detection"]["ready"] is False
+
+
+def test_diagnostic_input_snapshot_is_explicit_and_never_overwritten(
+        monkeypatch, tmp_path, capsys):
+    import json
+    import pytest
+    import scripts.validate.check_agent_research_readiness as readiness
+
+    monkeypatch.setattr(readiness, "_versions", lambda: {
+        "effective_inputs_sha256": "a" * 64,
+        "poi": {"sha256": "b" * 64, "files": ["data/pois.json"], "missing": []},
+    })
+    monkeypatch.setattr(readiness, "_git", lambda *_args: "c" * 40)
+    monkeypatch.setattr(readiness, "_run_checks", lambda: pytest.fail(
+        "diagnostic capture must not run the readiness test suite"))
+    path = tmp_path / "diagnostic.json"
+
+    assert readiness.main(["--capture-inputs", str(path)]) == 0
+    row = json.loads(path.read_text(encoding="utf-8"))
+    assert row["snapshot_kind"] == "diagnostic"
+    assert row["formal_eligible"] is False
+    assert row["versions"]["effective_inputs_sha256"] == "a" * 64
+    assert "api_key" not in json.dumps(row).lower()
+    with pytest.raises(FileExistsError, match="refusing to overwrite"):
+        readiness.main(["--capture-inputs", str(path)])
+
 
 def test_inline_deploy_checks_load_dotenv_from_the_project_directory():
     from pathlib import Path

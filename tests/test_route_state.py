@@ -132,6 +132,22 @@ def test_validation_sanitizes_client_computed_fields_without_mutating_input():
     assert poisoned["recommended_edge_ids"] == [[1, 2, 0]]
 
 
+def test_route_state_preserves_optional_reuse_certificate_for_server_verification():
+    state = deepcopy(BASE)
+    certificate = {
+        "version": 1,
+        "semantic_digest": "signed-digest",
+        "edge_ids": [[1, 2, 0]],
+        "previously_closed_edge_ids": [],
+        "signature": "server-signature",
+    }
+    state["reuse_certificate"] = certificate
+
+    validated = validate_route_state(state)
+
+    assert validated["reuse_certificate"] == certificate
+
+
 def test_course_release_fingerprint_invalidates_existing_route_state(tmp_path, monkeypatch):
     import config
     import networkx as nx
@@ -144,6 +160,42 @@ def test_course_release_fingerprint_invalidates_existing_route_state(tmp_path, m
     after.graph["course_release_fingerprint"] = "release-b"
 
     assert current_data_version(before) != current_data_version(after)
+
+
+def test_graph_edge_content_change_invalidates_route_state_without_count_change(tmp_path, monkeypatch):
+    import config
+    import networkx as nx
+
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.35, y=30.53)
+    graph.add_node(2, x=114.36, y=30.54)
+    graph.add_edge(1, 2, key=0, length=10, blocked_modes=[])
+    before = current_data_version(graph)
+
+    graph[1][2][0]["blocked_modes"] = ["walk"]
+
+    assert current_data_version(graph) != before
+
+
+def test_poi_file_content_change_invalidates_route_state_with_same_stat(tmp_path, monkeypatch):
+    import config
+    import networkx as nx
+
+    monkeypatch.setattr(config, "DATA_DIR", str(tmp_path))
+    path = tmp_path / "pois.json"
+    path.write_text('{"name":"A"}', encoding="utf-8")
+    graph = nx.MultiDiGraph()
+    before = current_data_version(graph)
+    original_stat = path.stat()
+
+    path.write_text('{"name":"B"}', encoding="utf-8")
+    import os
+    os.utime(path, ns=(original_stat.st_atime_ns, original_stat.st_mtime_ns))
+
+    assert path.stat().st_size == original_stat.st_size
+    assert path.stat().st_mtime_ns == original_stat.st_mtime_ns
+    assert current_data_version(graph) != before
 
 
 @pytest.mark.parametrize(
@@ -186,4 +238,13 @@ def test_rejects_invalid_core_state(field, value, message):
     raw[field] = value
 
     with pytest.raises(ValueError, match=message):
+        validate_route_state(raw)
+
+
+@pytest.mark.parametrize("field", ["schema_version", "route_kind", "travel_mode", "start", "end"])
+def test_missing_core_state_field_raises_value_error(field):
+    raw = deepcopy(BASE)
+    del raw[field]
+
+    with pytest.raises(ValueError):
         validate_route_state(raw)

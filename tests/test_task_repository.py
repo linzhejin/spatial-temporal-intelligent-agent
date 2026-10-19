@@ -1,4 +1,3 @@
-import os
 import threading
 import uuid
 from concurrent.futures import ThreadPoolExecutor
@@ -29,8 +28,8 @@ from storage.task_repository import (
 )
 
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="requires a real PostgreSQL TEST_DATABASE_URL")
+DATABASE_URL = None  # assigned only after isolated_test_database validates the target
+pytestmark = pytest.mark.usefixtures("isolated_test_database")
 
 
 @pytest.fixture(autouse=True)
@@ -389,3 +388,23 @@ def test_active_run_exposes_original_user_message_sequence():
     run = next(item for item in active if item["run_id"] == queued["run_id"])
     assert run["query"] == "从玉兰二门去图书馆"
     assert run["message_seq"] == 1
+
+
+def test_cancelled_run_drops_malformed_optional_route_proof():
+    owner, _, conversation_id = create_conversation(DATABASE_URL)
+    queued = create_task_run(
+        DATABASE_URL, owner, conversation_id, "从樱顶去图书馆", "cancelled-bad-proof",
+        datetime.now(timezone.utc) + timedelta(minutes=2),
+    )
+    claim_next_run(DATABASE_URL, "worker-cancelled-proof", 30)
+    route_state = sample_route_state("樱顶", "图书馆")
+    route_state["reuse_certificate"] = "malformed-handle"
+
+    assert finish_run(
+        DATABASE_URL, queued["run_id"], "worker-cancelled-proof", status="cancelled",
+        result={"route_state": route_state},
+    )
+
+    restored = get_run(DATABASE_URL, owner, queued["run_id"])
+    assert restored["status"] == "cancelled"
+    assert "reuse_certificate" not in restored["result"]["route_state"]

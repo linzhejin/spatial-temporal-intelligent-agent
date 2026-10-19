@@ -1071,27 +1071,18 @@ def _geometry_covered_by_edges(G, coords_gcj, keys, tolerance_m) -> bool:
         return False
 
 
-def apply_conditions_to_graph(
+def resolve_condition_effects(
     G: nx.MultiDiGraph,
     conditions: Optional[list] = None,
     mode: str = "walk",
     *,
     strict: bool = False,
 ) -> tuple:
-    """
-    按出行模式把路况应用到路网。
-
-    Returns:
-        (G_modified, penalty_map, closed_edges, applied_count)
-        - G_modified: 硬封边移除后的图（无封边时为原图）
-        - penalty_map: {(u,v,k): 成本倍数} 软惩罚边
-        - closed_edges: 被硬封的边集合（用于不可达诊断，不可恢复通行）
-        - applied_count: 在该模式图上实际命中至少一条边的事件数
-    """
+    """Resolve event effects without copying or mutating the supplied graph."""
     if conditions is None:
         conditions = list_conditions(strict=strict)
     if not conditions:
-        return G, {}, set(), 0
+        return {}, set(), 0
 
     if strict and mode not in {"walk", "bike", "drive"}:
         raise RoadConditionBindingError("未知出行方式，无法校验路况影响")
@@ -1160,6 +1151,25 @@ def apply_conditions_to_graph(
                 if factor > penalties.get(key, 1.0):
                     penalties[key] = factor
 
+    return penalties, closed, applied
+
+
+def apply_conditions_to_graph(
+    G: nx.MultiDiGraph,
+    conditions: Optional[list] = None,
+    mode: str = "walk",
+    *,
+    strict: bool = False,
+) -> tuple:
+    """Apply active event effects, materializing a graph copy only for closures.
+
+    Returns ``(G_modified, penalty_map, closed_edges, applied_count)``. Callers
+    that only need to compare snapshots should use ``resolve_condition_effects``
+    and avoid copying a campus-sized graph.
+    """
+    penalties, closed, applied = resolve_condition_effects(
+        G, conditions, mode, strict=strict,
+    )
     G_modified = G
     if closed:
         G_modified = G.copy()
@@ -1167,5 +1177,4 @@ def apply_conditions_to_graph(
         isolated = [n for n, deg in G_modified.degree() if deg == 0]
         if isolated:
             G_modified.remove_nodes_from(isolated)
-
     return G_modified, penalties, closed, applied

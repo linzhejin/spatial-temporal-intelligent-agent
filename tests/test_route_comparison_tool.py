@@ -47,7 +47,7 @@ def test_compare_routes_returns_three_comparable_summaries_without_committing_ro
     assert result["alternatives"][1]["duration_min"] == 8.1
     assert result["alternatives"][1]["slope_level_avg"] == 2.8
     assert result["alternatives"][1]["scenery_level_avg"] == 4.1
-    assert artifact is None
+    assert artifact == {"route_comparison": result}
 
 
 def test_compare_routes_reports_partial_success_and_each_unavailable_strategy(monkeypatch):
@@ -79,6 +79,26 @@ def test_compare_routes_reports_partial_success_and_each_unavailable_strategy(mo
     assert result["status"] == "partial"
 
 
+def test_compare_routes_returns_structured_artifact_when_every_strategy_is_unavailable(monkeypatch):
+    def plan_route(_args, _ctx):
+        return {"error": "route_not_found", "message": "当前条件下无可行路线"}, None
+
+    monkeypatch.setattr(tools, "_tool_plan_route", plan_route)
+    monkeypatch.setattr(tools, "_ensure_graph", lambda: object())
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
+    monkeypatch.setattr(tools, "_weather_snapshot", lambda: None)
+
+    result, artifact = tools.execute_tool("compare_routes", {
+        "start": {"type": "coord", "name": "起点", "lng": 114.36, "lat": 30.53},
+        "end": {"type": "coord", "name": "终点", "lng": 114.37, "lat": 30.54},
+    }, {})
+
+    assert result["status"] == "unavailable"
+    assert result["alternatives"] == []
+    assert len(result["unavailable"]) == 3
+    assert artifact == {"route_comparison": result}
+
+
 def test_compare_routes_reuses_supplied_snapshots(monkeypatch):
     graph = object()
     conditions = [{"id": "closure-1", "type": "closure"}]
@@ -107,7 +127,7 @@ def test_compare_routes_reuses_supplied_snapshots(monkeypatch):
     })
 
     assert result["status"] == "complete"
-    assert artifact is None
+    assert artifact == {"route_comparison": result}
     assert len(seen_contexts) == 3
     assert all(ctx["_route_graph_snapshot"] is graph for ctx in seen_contexts)
     assert all(ctx["_route_conditions_snapshot"] is conditions for ctx in seen_contexts)

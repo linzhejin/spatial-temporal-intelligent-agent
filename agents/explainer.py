@@ -232,6 +232,7 @@ def generate_explanation(
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=OPENAI_BASE_URL,
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0),
     )
 
@@ -298,6 +299,7 @@ def generate_chat_response(query: str) -> str:
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=OPENAI_BASE_URL,
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0),
     )
 
@@ -388,6 +390,7 @@ def generate_suggestions(
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=OPENAI_BASE_URL,
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0),
     )
 
@@ -515,6 +518,7 @@ def generate_poi_guidance(query: str, unknown_name: str, alternatives: list = No
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=OPENAI_BASE_URL,
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         timeout=httpx.Timeout(connect=5.0, read=10.0, write=10.0, pool=5.0),
     )
 

@@ -1,4 +1,3 @@
-import os
 import threading
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
@@ -10,8 +9,8 @@ from storage import database
 from storage.task_repository import create_conversation, create_task_run, get_run, get_task
 
 
-DATABASE_URL = os.environ.get("TEST_DATABASE_URL") or os.environ.get("DATABASE_URL")
-pytestmark = pytest.mark.skipif(not DATABASE_URL, reason="requires a real PostgreSQL TEST_DATABASE_URL")
+DATABASE_URL = None  # assigned only after isolated_test_database validates the target
+pytestmark = pytest.mark.usefixtures("isolated_test_database")
 
 
 def test_worker_executes_langgraph_and_persists_result_and_progress():
@@ -105,15 +104,50 @@ def test_composite_route_and_weather_requirements_execute_independently(monkeypa
         graph = build_agent_workflow(saver, agent=fake_agent, database_url=DATABASE_URL)
         result = process_next_run(DATABASE_URL, "worker-composite", graph, lease_seconds=30)
 
-    assert result["status"] == "completed"
+    assert result["status"] == "partial"
     run = get_run(DATABASE_URL, owner, queued["run_id"])
     task = get_task(DATABASE_URL, owner, queued["task_id"])
     assert run["result"]["weather"]["temperature"] == 23
-    assert "路线需求已识别" in run["result"]["reply"]
+    assert "路线暂时无法规划" in run["result"]["reply"]
     assert "多云" in run["result"]["reply"]
     assert {r["requirement_id"]: r["status"] for r in task["state"]["requirements"]} == {
-        "route": "satisfied", "weather": "satisfied",
+        "route": "failed", "weather": "satisfied",
     }
+
+
+@pytest.mark.parametrize("agent_response", [
+    {"response_kind": "chat", "message": "路线核验没有通过，请调整条件。"},
+    {"response_kind": "route", "message": "已规划", "route": {
+        "recommended": [[114.0, 30.0], [114.1, 30.1]],
+        "recommended_edge_ids": [[1, 2, 0]],
+    }},
+])
+def test_unproven_route_reply_does_not_satisfy_route_requirement(agent_response):
+    from agents.workflow import build_agent_workflow
+    from jobs.worker import process_next_run
+
+    database.initialize(DATABASE_URL)
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("TRUNCATE run_event, run, task_history, task, conversation_message, profile, conversation CASCADE")
+    owner, _, conversation_id = create_conversation(DATABASE_URL)
+    queued = create_task_run(
+        DATABASE_URL, owner, conversation_id, "从玉兰2门到樱顶，走平坦路线", "route-chat-failure",
+        datetime.now(timezone.utc) + timedelta(minutes=2),
+    )
+
+    def fake_agent(_query, **_kwargs):
+        return agent_response
+
+    with PostgresSaver.from_conn_string(DATABASE_URL) as saver:
+        saver.setup()
+        graph = build_agent_workflow(saver, agent=fake_agent, database_url=DATABASE_URL)
+        outcome = process_next_run(DATABASE_URL, "worker-route-chat", graph)
+
+    run = get_run(DATABASE_URL, owner, queued["run_id"])
+    assert outcome["status"] == "failed"
+    assert run["result"]["requirement_results"]["route"] == "failed"
+    assert run["result"]["response_kind"] == "chat"
+    assert run["result"]["task_type"] == "chat"
 
 
 def test_weather_only_run_skips_route_agent(monkeypatch):

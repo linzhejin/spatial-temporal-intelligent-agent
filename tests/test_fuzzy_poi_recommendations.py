@@ -327,6 +327,32 @@ def test_catalog_question_does_not_require_current_origin():
     assert tools.is_poi_catalog_query("我想吃美食") is False
 
 
+def test_large_catalog_reports_total_and_truncation_instead_of_claiming_all_results():
+    candidates = [{"poi_id": f"poi-{index}", "name": f"食堂{index}"} for index in range(20)]
+    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+        {"candidates": candidates, "count": 20, "total_count": 25, "has_more": True},
+        {"candidates": candidates},
+    )):
+        result = planner.run_agent("武汉大学有哪些食堂")
+
+    assert "25" in result["message"]
+    assert "先列出 20 个" in result["message"]
+
+
+def test_catalog_summary_does_not_claim_campus_grouping_when_candidates_are_not_grouped():
+    candidates = [
+        {"poi_id": "a", "name": "文理食堂", "campus": "文理学部"},
+        {"poi_id": "b", "name": "工学部食堂", "campus": "工学部"},
+    ]
+    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+        {"candidates": candidates, "count": 2, "total_count": 2},
+        {"candidates": candidates},
+    )):
+        result = planner.run_agent("武汉大学有哪些食堂")
+
+    assert "按学部列出" not in result["message"]
+
+
 def test_explicit_poi_destination_is_not_rewritten_as_a_nearby_recommendation():
     client = FakeClient([_fake_response(content="正在确认目的地。")])
     with patch.object(planner, "_make_client", return_value=client), \

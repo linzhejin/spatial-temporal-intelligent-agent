@@ -1,0 +1,102 @@
+{
+  "format": "road-events-synthetic-fixture-v1",
+  "scope": "synthetic_unit_only",
+  "campus_truth": false,
+  "description": "Synthetic graph and event records for isolated road-condition behavior tests. These are not Wuhan University observations and are not scenario gold.",
+  "writes_to": [],
+  "evaluation_epoch": 1798761600,
+  "graph_fixture": {
+    "node_ids": [1, 2],
+    "edge_ids": [[1, 2, 0], [2, 1, 0]],
+    "note": "Tests create a two-node synthetic graph in memory. No campus graph or production store is used."
+  },
+  "snapshots": [
+    {
+      "id": "synthetic_mode_specific_closure",
+      "as_of_epoch": 1798761600,
+      "conditions": [
+        {
+          "id": "synthetic-bike-closure",
+          "type": "closure",
+          "action": "closure",
+          "affected_modes": ["bike"],
+          "name": "合成骑行封闭事件",
+          "description": "仅验证出行方式作用范围，不代表校园道路状态。",
+          "edge": {"u": 1, "v": 2, "key": 0, "snap": {"lng": 114.0005, "lat": 30.0}},
+          "start_time": 1798758000,
+          "end_time": 0
+        }
+      ]
+    },
+    {
+      "id": "synthetic_walk_slowdown",
+      "as_of_epoch": 1798761600,
+      "conditions": [
+        {
+          "id": "synthetic-walk-slowdown",
+          "type": "construction",
+          "action": "slowdown",
+          "affected_modes": ["walk"],
+          "cost_multiplier": 1.5,
+          "name": "合成步行缓行事件",
+          "description": "仅验证软惩罚，不代表校园道路状态。",
+          "edge": {"u": 1, "v": 2, "key": 0, "snap": {"lng": 114.0005, "lat": 30.0}},
+          "start_time": 1798758000,
+          "end_time": 0
+        }
+      ]
+    },
+    {
+      "id": "synthetic_notice_only",
+      "as_of_epoch": 1798761600,
+      "conditions": [
+        {
+          "id": "synthetic-notice",
+          "type": "event",
+          "action": "notice",
+          "affected_modes": ["walk", "bike", "drive"],
+          "name": "合成提示事件",
+          "description": "仅验证提示不改变路线成本，不代表校园道路状态。",
+          "edge": {"u": 1, "v": 2, "key": 0, "snap": {"lng": 114.0005, "lat": 30.0}},
+          "start_time": 1798758000,
+          "end_time": 0
+        }
+      ]
+    },
+    {
+      "id": "synthetic_expired_closure",
+      "as_of_epoch": 1798761600,
+      "conditions": [
+        {
+          "id": "synthetic-expired-closure",
+          "type": "closure",
+          "action": "closure",
+          "affected_modes": ["walk"],
+          "name": "合成已过期封闭",
+          "description": "用于验证过期记录不会进入当前有效快照。",
+          "edge": {"u": 1, "v": 2, "key": 0, "snap": {"lng": 114.0005, "lat": 30.0}},
+          "start_time": 1798750000,
+          "end_time": 1798760000
+        }
+      ]
+    },
+    {
+      "id": "synthetic_revoked_closure",
+      "as_of_epoch": 1798761600,
+      "conditions": [
+        {
+          "id": "synthetic-revoked-closure",
+          "type": "closure",
+          "action": "closure",
+          "affected_modes": ["walk"],
+          "name": "合成已撤销封闭",
+          "description": "用于验证撤销记录不会进入当前有效快照。",
+          "edge": {"u": 1, "v": 2, "key": 0, "snap": {"lng": 114.0005, "lat": 30.0}},
+          "start_time": 1798750000,
+          "end_time": 1798765200,
+          "revoked_at": 1798761000
+        }
+      ]
+    }
+  ]
+}

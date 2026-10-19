@@ -1727,7 +1727,7 @@
             }).addTo(state.map);
         }
 
-        if (!navActive && shortest.length > 0) {
+        if (!navActive && routeData.shortest_baseline_feasible !== false && shortest.length > 0) {
             // 最短路径：灰色虚线对照
             var shortPath = shortest.map(function (c) {
                 return gcjToLatLng(c.lng, c.lat);
@@ -2934,6 +2934,7 @@
         lines.push('方式：' + (TRAVEL_MODES[data.mode || state.travelMode] || TRAVEL_MODES.walk).label);
         lines.push('策略：' + (STRATEGY_LABELS[strategy.name] || '综合推荐') + '（' + strategyWeightsText(strategy) + '）');
         lines.push('距离：' + Number(data.recommended_length_m || data.distance_m || 0).toFixed(0) + ' m；用时：' + estimateDurationText(data));
+        if (data.hard_budget_fallback) lines.push('说明：原偏好路线超过上限，已采用符合上限的最短路线。');
         if (data.explanation) lines.push('说明：' + data.explanation);
         var steps = Array.isArray(data.steps) ? data.steps : [];
         if (steps.length) {
@@ -3133,8 +3134,10 @@
         } else {
             // 直接路线：保持原有逻辑
             document.getElementById('shortest-distance').textContent =
-                (data.shortest_length_m || data.shortest_distance_m || 0).toFixed(0) + ' m';
-            if (shortestLabel) shortestLabel.textContent = '最短距离';
+                data.shortest_baseline_feasible === false ? '超出时限' :
+                    (data.shortest_length_m || data.shortest_distance_m || 0).toFixed(0) + ' m';
+            if (shortestLabel) shortestLabel.textContent =
+                data.shortest_baseline_feasible === false ? '最短路参考' : '最短距离';
             document.getElementById('overlap-rate').textContent =
                 ((data.overlap_rate || 0) * 100).toFixed(0) + '%';
             if (overlapLabel) overlapLabel.textContent = '重叠率';
@@ -3204,14 +3207,19 @@
         }
     }
 
-    function showSuggestions(data) {
+    function showSuggestions(data, anchor) {
         var area = document.getElementById('suggestions-area');
         var chips = document.getElementById('suggestions-chips');
         if (!area || !chips) return;
 
-        var suggestions = (data.suggestions && data.suggestions.length > 0)
-            ? data.suggestions        // 后端 LLM 动态生成的建议
-            : buildSuggestions(data); // 兜底：规则建议
+        var placement = anchor || document.getElementById('explanation-box');
+        if (placement && typeof placement.after === 'function') placement.after(area);
+
+        var suggestions = data.needs_input && Array.isArray(data.candidates) && data.candidates.length
+            ? []
+            : (data.suggestions && data.suggestions.length > 0)
+                ? data.suggestions
+                : buildSuggestions(data);
         if (suggestions.length === 0) { area.hidden = true; return; }
 
         chips.innerHTML = '';
@@ -3249,7 +3257,8 @@
         if (constraints.scenery !== 'high') {
             suggestions.push({ label: '🌸 想看风景好的路', query: '走风景更好的路线' });
         }
-        if (mode !== 'drive' && recLen > shortLen * 1.3 && constraints.distance !== 'short') {
+        if (mode !== 'drive' && data.shortest_baseline_feasible !== false &&
+                recLen > shortLen * 1.3 && constraints.distance !== 'short') {
             suggestions.push({ label: '⚡ 我要最短路径', query: '帮我规划最短路径' });
         }
 
@@ -3747,9 +3756,31 @@
 
             if (taskType === 'path_planning' && requestUsesSelectedMapPoints) state.mapPointRouteActive = true;
 
+            // A comparison is a read-only answer with its own deterministic payload;
+            // keep it out of the generic chat branch so the measurements stay visible.
+            if (result.response_kind === 'route_comparison') {
+                hideWelcomeElements();
+                updateChatBubble(thinkingBubble, result.reply || result.message || '路线比较结果见下方。');
+                if (result.route_comparison) renderRouteComparisonCard(result.route_comparison);
+                if (Array.isArray(result.suggestions) && result.suggestions.length) {
+                    showSuggestions(result, thinkingBubble);
+                } else {
+                    var comparisonSuggestions = document.getElementById('suggestions-area');
+                    if (comparisonSuggestions) comparisonSuggestions.hidden = true;
+                }
+                addConversationTurn(query, result, turnId);
+                return;
+            }
+
             if (taskType === 'chat') {
                 hideWelcomeElements();
                 updateChatBubble(thinkingBubble, result.reply || result.message || '嗯…这个问题有点难，换个问法试试？');
+                if (Array.isArray(result.suggestions) && result.suggestions.length) {
+                    showSuggestions(result, thinkingBubble);
+                } else {
+                    var suggestionsArea = document.getElementById('suggestions-area');
+                    if (suggestionsArea) suggestionsArea.hidden = true;
+                }
                 addConversationTurn(query, result, turnId);
                 return;
             }
@@ -3836,8 +3867,22 @@
                     trackRouteShown();
                     var reply = state.productMode === 'planning'
                         ? buildRouteSummary(result)
-                        : (result.explanation || buildRouteSummary(result));
+                        : appendRouteFieldTruthNotice(result.explanation || buildRouteSummary(result), result);
                     updateChatBubble(thinkingBubble, reply);
+                    if (result.needs_input && result._task_id
+                            && Number.isInteger(result._task_revision)) {
+                        var nextQuestion = result.clarify && result.clarify.question;
+                        if (setPendingServerClarification(
+                            result._task_id, result._task_revision, nextQuestion, turnId
+                        )) saveContext();
+                        if (nextQuestion) showChatBubble('', nextQuestion);
+                        if (Array.isArray(result.candidates) && result.candidates.length) {
+                            renderCandidateCards(result.candidates, result._task_id, result._task_revision);
+                        } else if (result.clarify && Array.isArray(result.clarify.options)) {
+                            renderClarifyOptions(result.clarify.options,
+                                result._task_id, result._task_revision);
+                        }
+                    }
                     addConversationTurn(query, result, turnId);
                 } else {
                     updateChatBubble(thinkingBubble, '这条较早提交的路线已返回；地图保留了你之后生成的路线。');
@@ -3897,6 +3942,114 @@
         return bubble;
     }
 
+    function renderRouteComparisonCard(comparison) {
+        var chatContent = document.getElementById('chat-content');
+        if (!chatContent || !comparison) return;
+        var alternatives = Array.isArray(comparison.alternatives) ? comparison.alternatives : [];
+        var unavailable = Array.isArray(comparison.unavailable) ? comparison.unavailable : [];
+        var modeLabels = { walk: '步行', bike: '骑行', drive: '驾车' };
+        var start = String(comparison.start_name || '起点');
+        var end = String(comparison.end_name || '终点');
+
+        var row = document.createElement('div');
+        row.className = 'chat-bubble-row route-comparison-row';
+        var card = document.createElement('section');
+        card.className = 'route-comparison-card';
+        card.setAttribute('role', 'group');
+        card.setAttribute('aria-label', '路线方案比较');
+
+        var heading = document.createElement('div');
+        heading.className = 'route-comparison-heading';
+        var endpoints = document.createElement('strong');
+        endpoints.className = 'route-comparison-endpoints';
+        endpoints.textContent = start + ' → ' + end;
+        var availability = document.createElement('span');
+        availability.className = 'route-comparison-availability';
+        availability.textContent = (modeLabels[comparison.mode] || '步行') + ' · ' + alternatives.length + ' 种可用';
+        heading.appendChild(endpoints);
+        heading.appendChild(availability);
+        card.appendChild(heading);
+
+        if (!alternatives.length) {
+            var empty = document.createElement('p');
+            empty.className = 'route-comparison-empty';
+            empty.textContent = '当前条件下没有可行方案。';
+            card.appendChild(empty);
+        }
+
+        alternatives.forEach(function (item) {
+            if (!item || typeof item !== 'object') return;
+            var option = document.createElement('div');
+            option.className = 'route-comparison-option';
+            var primary = document.createElement('div');
+            primary.className = 'route-comparison-option-primary';
+            var label = document.createElement('span');
+            label.className = 'route-comparison-label';
+            label.textContent = String(item.label || item.strategy || '路线方案');
+            var distance = document.createElement('strong');
+            distance.className = 'route-comparison-distance';
+            var metres = Number(item.distance_m);
+            distance.textContent = isFinite(metres)
+                ? (metres >= 1000 ? (metres / 1000).toFixed(1) + ' km' : Math.round(metres) + ' m')
+                : '距离未知';
+            primary.appendChild(label);
+            primary.appendChild(distance);
+            option.appendChild(primary);
+
+            var details = [];
+            var duration = Number(item.duration_min);
+            if (item.duration_min != null && isFinite(duration)) details.push('约 ' + duration.toFixed(1) + ' 分钟');
+            var delta = Number(item.distance_delta_from_shortest_m);
+            if (item.distance_delta_from_shortest_m != null && isFinite(delta) && delta > 0) {
+                details.push('比最短多 ' + Math.round(delta) + ' m');
+            }
+            var slope = Number(item.slope_level_avg);
+            if (item.slope_level_avg != null && isFinite(slope)) details.push('坡度 ' + slope.toFixed(1));
+            var scenery = Number(item.scenery_level_avg);
+            if (item.scenery_level_avg != null && isFinite(scenery)) details.push('风景 ' + scenery.toFixed(1));
+            if (details.length) {
+                var meta = document.createElement('p');
+                meta.className = 'route-comparison-meta';
+                meta.textContent = details.join(' · ');
+                option.appendChild(meta);
+            }
+            card.appendChild(option);
+        });
+
+        unavailable.forEach(function (item) {
+            if (!item || typeof item !== 'object') return;
+            var missing = document.createElement('div');
+            missing.className = 'route-comparison-option is-unavailable';
+            var primary = document.createElement('div');
+            primary.className = 'route-comparison-option-primary';
+            var label = document.createElement('span');
+            label.className = 'route-comparison-label';
+            label.textContent = String(item.label || item.strategy || '路线方案');
+            var status = document.createElement('span');
+            status.className = 'route-comparison-unavailable-label';
+            status.textContent = '暂不可用';
+            primary.appendChild(label);
+            primary.appendChild(status);
+            missing.appendChild(primary);
+            if (item.reason) {
+                var reason = document.createElement('p');
+                reason.className = 'route-comparison-meta';
+                reason.textContent = String(item.reason);
+                missing.appendChild(reason);
+            }
+            card.appendChild(missing);
+        });
+
+        var note = document.createElement('p');
+        note.className = 'route-comparison-note';
+        note.textContent = '时间为速度模型估算；坡度数值越低越平缓，风景数值越高代表沿线景观属性更高。';
+        card.appendChild(note);
+        row.appendChild(card);
+        var followLatest = chatIsNearLatest(chatContent);
+        chatContent.appendChild(row);
+        scrollChatToLatest(chatContent, followLatest);
+    }
+
     // 替换已有气泡内容（用于"思考中"→最终回复）
     function updateChatBubble(bubble, text) {
         if (!bubble) return;
@@ -3947,6 +4100,19 @@
             .trim();
     }
 
+    function routeFieldTruthNotice(data) {
+        var verification = data && data.route_verification || {};
+        if (verification.status !== 'pass' || verification.field_truth_verified !== false) return '';
+        return '提示：本次核对的是路网和路线约束，未实地确认道路当前可通行。';
+    }
+
+    function appendRouteFieldTruthNotice(text, data) {
+        var summary = String(text || '').trim();
+        var notice = routeFieldTruthNotice(data);
+        if (!notice || summary.indexOf(notice) !== -1) return summary;
+        return summary ? summary + ' ' + notice : notice;
+    }
+
     // 电脑端把路线信息合并成一条可读总览，避免统计卡与助手反馈重复报数。
     function buildRouteSummary(data) {
         data = data || {};
@@ -3986,7 +4152,9 @@
             : '路线总览：' + start + ' → ' + end + '。' + distancePhrase;
         if (duration !== '—') overview += '，预计用时约 ' + duration;
         overview += '；采用' + strategyLabel + '策略。';
+        if (data.hard_budget_fallback) overview += ' 原偏好路线超过上限，已采用符合上限的最短路线。';
         if (connectorDisclosure) overview += ' ' + connectorDisclosure;
+        overview = appendRouteFieldTruthNotice(overview, data);
 
         var facts = [];
         var stopCount = routeOverviewStopCount(routeKind, current, data);

@@ -159,19 +159,25 @@ def test_reachability_schema_exposes_avoid_steps_constraint():
     assert schema["function"]["parameters"]["properties"]["constraints"]["properties"]["avoid_steps"]["type"] == "boolean"
 
 
-def test_reachability_excludes_and_counts_long_unverified_access_connectors(monkeypatch):
+def test_reachability_keeps_route_supported_connector_and_excludes_longer_one(monkeypatch):
     graph = nx.MultiDiGraph()
     graph.add_node(1, x=114.3600, y=30.5300)
     graph.add_node(2, x=114.3610, y=30.5300)
     graph.add_edge(1, 2, 0, length=100.0)
-    poi = {"id": "poi-far", "name": "接驳较远地点", "type": "dining", "subcategory": "canteen",
-           "coordinates": {"lng": 114.3610, "lat": 30.5310}, "lat": 30.5310, "lon": 114.3610}
+    near_poi = {
+        "id": "poi-near", "name": "端点规则内地点", "type": "dining", "subcategory": "canteen",
+        "coordinates": {"lng": 114.3610, "lat": 30.5306}, "lat": 30.5306, "lon": 114.3610,
+    }
+    far_poi = {
+        "id": "poi-far", "name": "超出端点规则地点", "type": "dining", "subcategory": "canteen",
+        "coordinates": {"lng": 114.3610, "lat": 30.5310}, "lat": 30.5310, "lon": 114.3610,
+    }
     mode_index = SimpleNamespace(graph=graph, mode_penalty={})
     monkeypatch.setattr(tools, "_ensure_graph", lambda: graph)
     monkeypatch.setattr(tools, "get_routing_index",
                         lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
     monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "起点", None))
-    monkeypatch.setattr(tools, "search_by_category", lambda **_: [poi])
+    monkeypatch.setattr(tools, "search_by_category", lambda **_: [near_poi, far_poi])
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
 
@@ -181,6 +187,9 @@ def test_reachability_excludes_and_counts_long_unverified_access_connectors(monk
         "max_distance_m": 500,
     })
 
-    assert result["count"] == 0
+    assert result["count"] == 1
     assert result["excluded_long_access_count"] == 1
-    assert artifact["candidates"] == []
+    assert result["max_access_snap_m"] == tools._MAX_ENDPOINT_ACCESS_SNAP_M
+    assert artifact["candidates"][0]["poi_id"] == "poi-near"
+    assert artifact["candidates"][0]["access_link_verified"] is False
+    assert artifact["candidates"][0]["access_snap_m"] > 60

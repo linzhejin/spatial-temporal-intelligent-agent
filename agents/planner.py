@@ -11,8 +11,10 @@ v2 全 Agent 架构的唯一入口：所有用户输入（含明确 A→B、闲�
 
 import json
 import logging
+import math
 import re
 import time
+from collections.abc import Callable
 from copy import deepcopy
 from pathlib import Path
 from uuid import uuid4
@@ -24,6 +26,7 @@ from agents import tools as agent_tools
 from agents import knowledge, profile
 from agents.preferences import route_preference_requested
 from agents.timings import normalize_timings
+from spatial.route_constraints import positive_budget
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +54,8 @@ def _make_client():
     return OpenAI(
         api_key=config.DEEPSEEK_API_KEY,
         base_url=config.OPENAI_BASE_URL,
+        # Some supported runtimes cannot decode Brotli responses from this API.
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         # 循环内每次调用给 25s read；总时长由 TIME_BUDGET_S 兜底
         timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0),
     )
@@ -94,7 +99,8 @@ def _build_route_message(route: dict) -> str:
             head += f"、{dur:g} 分钟"
     # 最短路线明显更短（>7%）才提示，地图上灰虚线可直接对比
     tail = ""
-    if shortest and length and shortest < length * 0.93:
+    if (route.get("shortest_baseline_feasible") is not False
+            and shortest and length and shortest < length * 0.93):
         sd = _fmt_dist(shortest)
         if sd:
             tail = f"最短路线约 {sd}"
@@ -102,6 +108,35 @@ def _build_route_message(route: dict) -> str:
                 tail += f"、{shortest_dur:g} 分钟"
             tail += "，地图灰虚线可对比"
     return head + "。" + (tail + "。" if tail else "")
+
+
+def _build_route_comparison_message(comparison: dict) -> str:
+    """Summarize a comparison without asking the model to restate its measurements."""
+    start = comparison.get("start_name") or "起点"
+    end = comparison.get("end_name") or "终点"
+    verb = _MODE_VERB.get(comparison.get("mode", "walk"), "步行")
+    alternatives = comparison.get("alternatives") or []
+    unavailable = comparison.get("unavailable") or []
+    if not alternatives:
+        return (f"目前无法生成从{start}到{end}的{verb}方案。"
+                "请检查起终点和通行限制后再试。")
+    message = (f"已比较从{start}到{end}的{verb}方案："
+               f"{len(alternatives)} 种可用，{len(unavailable)} 种未能生成。"
+               "距离和估算时间见下方；比较不会改变当前地图路线。")
+    return message
+
+
+def _route_verification_failure_response(result, *, message, turns=0):
+    detail = str((result or {}).get("message") or "") if isinstance(result, dict) else ""
+    if detail:
+        message += f"原因：{detail}"
+    return {
+        "response_kind": "chat", "message": message,
+        "route": None, "route_kind": None, "candidates": None,
+        "clarify": None, "suggestions": None, "turns": turns,
+        "route_verification": (result or {}).get("route_verification")
+        if isinstance(result, dict) else None,
+    }
 
 
 _NAMED_VIA_RE = re.compile(
@@ -203,14 +238,18 @@ def _explicit_route_edit(query: str, prior_route: dict) -> dict | None:
     from agents.route_state import apply_change, validate_route_state
 
     text = (query or "").strip().rstrip("。")
-    prefix = r"(?:把|将)?(?:刚才的|这条|原)路线"
+    prefix = r"(?:把|将)?(?:刚才(?:的)?|这条|原)路线"
     strategy = re.fullmatch(
-        prefix + r"(?:改为|改成|走)(平坦优先|风景优先|最短路径)", text
+        prefix + r"(?:改为|改成|走)(平坦优先|风景优先|最短路径)"
+        r"(?:[，,；;]\s*((?:别走|不走|避开)(?:已标记的)?(?:台阶|楼梯)(?:仍然|继续)保留))?",
+        text,
     )
     if strategy:
         name = {"平坦优先": "flat", "风景优先": "scenery",
                 "最短路径": "shortest"}[strategy.group(1)]
         changed = apply_change(prior_route, {"strategy": name})
+        if strategy.group(2):
+            changed["hard_constraints"]["avoid_steps"] = True
         changed["strategy"]["source"] = "explicit_nl"
         return changed
 
@@ -357,6 +396,142 @@ def _build_messages(query: str, context: dict = None, history: list = None,
     return messages
 
 
+def _join_leg_paths(legs: list[dict], field: str) -> list:
+    joined = []
+    for leg in legs:
+        part = leg.get(field) or []
+        if joined and part and joined[-1] == part[0]:
+            part = part[1:]
+        joined.extend(part)
+    return joined
+
+
+def _place_route_join_issue(legs: list[dict]) -> str | None:
+    states = [leg.get("route_state") for leg in legs]
+    if all(isinstance(state, dict) for state in states):
+        if len({state.get("data_version") for state in states}) > 1 or len({
+            state.get("road_condition_version") for state in states
+        }) > 1:
+            return "两段路线使用的路网或路况版本不同"
+    for first, second in zip(legs, legs[1:]):
+        if not all(isinstance(leg.get("recommended_edge_ids"), list)
+                   and leg["recommended_edge_ids"] for leg in (first, second)):
+            return "路段缺少可核对的实际边序列"
+        first_path, second_path = first.get("recommended"), second.get("recommended")
+        if not first_path or not second_path:
+            return "路段缺少可核对的路线几何"
+        try:
+            lon1, lat1 = map(float, first_path[-1])
+            lon2, lat2 = map(float, second_path[0])
+            gap_m = math.hypot((lon2 - lon1) * 96000, (lat2 - lat1) * 111000)
+        except (TypeError, ValueError):
+            return "路段衔接坐标无效"
+        if gap_m > 3:
+            return "相邻路段尚未在同一位置接通"
+    return None
+
+
+def _combined_place_route(legs: list[dict]) -> dict:
+    """Retain each chosen leg's actual geometry and edges in order."""
+    from agents.route_state import build_route_state
+
+    combined = deepcopy(legs[-1])
+    combined["start_name"] = legs[0].get("start_name", "")
+    combined["recommended"] = _join_leg_paths(legs, "recommended")
+    if all(leg.get("shortest") for leg in legs):
+        combined["shortest"] = _join_leg_paths(legs, "shortest")
+    else:
+        combined.pop("shortest", None)
+    for field in ("recommended_edge_ids", "shortest_edge_ids"):
+        if all(isinstance(leg.get(field), list) for leg in legs):
+            combined[field] = [edge for leg in legs for edge in leg[field]]
+        else:
+            combined.pop(field, None)
+    for field in ("recommended_length_m", "shortest_length_m", "distance_m",
+                  "duration_min", "shortest_duration_min"):
+        if all(isinstance(leg.get(field), (int, float)) for leg in legs):
+            combined[field] = round(sum(leg[field] for leg in legs), 2)
+        elif field == "distance_m" and all(
+            isinstance(leg.get("recommended_length_m"), (int, float)) for leg in legs
+        ):
+            combined[field] = round(sum(leg["recommended_length_m"] for leg in legs), 2)
+        else:
+            combined.pop(field, None)
+    combined["legs"] = deepcopy(legs)
+    combined["steps"] = agent_tools._merge_leg_steps(legs)
+    combined["pois"] = [poi for leg in legs for poi in leg.get("pois") or []]
+    combined["via"] = {"type": "multi", "points": [
+        {"name": leg.get("end_name", "")} for leg in legs[:-1]
+    ]}
+    combined["degraded"] = any(bool(leg.get("degraded")) for leg in legs)
+    combined["length_capped"] = any(bool(leg.get("length_capped")) for leg in legs)
+    combined["hard_budget_fallback"] = any(bool(leg.get("hard_budget_fallback")) for leg in legs)
+    combined["shortest_baseline_feasible"] = all(
+        leg.get("shortest_baseline_feasible") is True for leg in legs
+    )
+    statuses = [leg.get("filter_status") for leg in legs if leg.get("filter_status")]
+    if statuses:
+        combined["filter_status"] = ";".join(dict.fromkeys(statuses))
+    if all(isinstance(leg.get("endpoint_access"), dict) for leg in legs):
+        combined["endpoint_access"] = {
+            "start": legs[0]["endpoint_access"].get("start"),
+            "via": [leg["endpoint_access"].get("end") for leg in legs[:-1]],
+            "end": legs[-1]["endpoint_access"].get("end"),
+            "max_snap_m": legs[-1]["endpoint_access"].get("max_snap_m"),
+        }
+    states = [leg.get("route_state") for leg in legs]
+    if all(isinstance(state, dict) for state in states):
+        data_versions = {state.get("data_version") for state in states}
+        road_versions = {state.get("road_condition_version") for state in states}
+        same_modes = len({state.get("travel_mode") for state in states}) == 1
+        same_constraints = all(
+            state.get("hard_constraints") == states[0].get("hard_constraints")
+            for state in states
+        )
+        if len(data_versions) == len(road_versions) == 1 and same_modes and same_constraints:
+            constraints = states[0].get("hard_constraints") or {}
+            try:
+                max_distance = positive_budget(constraints, "max_distance_m")
+                max_duration = positive_budget(constraints, "max_duration_s")
+                if max_distance is not None:
+                    shortest_distance = combined.get("shortest_length_m")
+                    combined["shortest_baseline_feasible"] &= (
+                        isinstance(shortest_distance, (int, float))
+                        and shortest_distance <= max_distance + 0.15
+                    )
+                if max_duration is not None:
+                    shortest_duration = combined.get("shortest_duration_min")
+                    combined["shortest_baseline_feasible"] &= (
+                        isinstance(shortest_duration, (int, float))
+                        and shortest_duration * 60 <= max_duration + 3
+                    )
+            except ValueError:
+                combined["shortest_baseline_feasible"] = False
+            via_points = [state["end"] for state in states[:-1]]
+            first, last = states[0], states[-1]
+            combined["route_state"] = build_route_state(
+                route_kind="via",
+                original_query=" → ".join(
+                    [combined["start_name"]] + [leg.get("end_name", "") for leg in legs]
+                ),
+                start=first["start"], end=last["end"],
+                via=(via_points[0] if len(via_points) == 1 else
+                     {"type": "multi", "points": via_points}),
+                legs=[],
+                travel_mode=last["travel_mode"],
+                hard_constraints=last["hard_constraints"],
+                strategy=last["strategy"],
+                data_version=last["data_version"],
+                road_condition_version=last["road_condition_version"],
+            )
+        else:
+            combined.pop("route_state", None)
+            combined["route_state_unavailable"] = "各段方式或约束不同，不能统一重算"
+    else:
+        combined.pop("route_state", None)
+    return combined
+
+
 def _place_request_state(query: str, *, activities=None, subcategories=None,
                          pending_slot=None, start=None, constraints=None,
                          previous=None, candidate_poi_ids=None, selected_poi_id=None,
@@ -370,6 +545,7 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
         "subcategories": list(subcategories if subcategories is not None else previous.get("subcategories") or []),
         "follow_up_requests": list(follow_up_requests if follow_up_requests is not None
                                    else previous.get("follow_up_requests") or []),
+        "completed_legs": list(previous.get("completed_legs") or []),
         "pending_slot": pending_slot,
         "start": start if start is not None else previous.get("start"),
         "selected_poi_id": (selected_poi_id if selected_poi_id is not None
@@ -381,10 +557,33 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
     }
 
 
+def _apply_place_request_correction(saved: dict, query: str) -> dict:
+    """Keep unanswered slots while applying only explicit current-turn changes."""
+    from agents.parser import detect_travel_mode
+
+    updated = deepcopy(saved)
+    mode, explicit_mode = detect_travel_mode(query)
+    if explicit_mode:
+        updated["mode"] = mode
+    constraints = dict(updated.get("constraints") or {})
+    if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+        constraints["avoid_steps"] = True
+    elif re.search(r"(?:可以|允许)(?:走|经过)?(?:楼梯|台阶)|不(?:用|需要)避开(?:楼梯|台阶)", query):
+        constraints["avoid_steps"] = False
+    if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", query):
+        constraints["avoid_slope"] = True
+    elif re.search(r"不(?:用|需要)(?:再)?避(?:开)?(?:陡坡|坡)|可以(?:爬|走)(?:坡|陡坡)", query):
+        constraints["avoid_slope"] = False
+    updated["constraints"] = constraints
+    return updated
+
+
 def run_agent(query: str, context: dict = None, history: list = None,
               coord_start: dict = None, coord_end: dict = None,
               uid: str = None, travel_mode: str = None,
-              coord_waypoints: list = None) -> dict:
+              coord_waypoints: list = None,
+              proof_identity: dict = None,
+              tool_trace_callback: Callable[[dict], None] | None = None) -> dict:
     """Agent 主循环。
 
     Returns:
@@ -401,6 +600,44 @@ def run_agent(query: str, context: dict = None, history: list = None,
     Raises:
         PlannerError: LLM API 不可用（调用方落回旧管道）
     """
+    def execute_tool(name, args, tool_context, *, record_trace=True):
+        # This keyword is supplied only by trusted workflow code, separately
+        # from browser context, uid and model-produced tool arguments.
+        tool_context = dict(tool_context)
+        if isinstance(context, dict) and isinstance(context.get("task_revision"), int):
+            tool_context.setdefault("task_revision", context["task_revision"])
+        if proof_identity is not None:
+            tool_context["_route_proof_identity"] = proof_identity
+        try:
+            result, artifact = agent_tools.execute_tool(name, args, tool_context)
+        except Exception:
+            if record_trace and tool_trace_callback:
+                tool_trace_callback({
+                    "tool_name": name,
+                    "argument_keys": sorted(args) if isinstance(args, dict) else [],
+                    "outcome": "exception",
+                    "artifact_kind": None,
+                })
+            raise
+        if record_trace and tool_trace_callback:
+            artifact_kind = next(
+                (kind for key, kind in (("route", "route"),
+                                        ("candidates", "candidates"),
+                                        ("clarify", "clarify"),
+                                        ("suggestions", "suggestions"),
+                                        ("route_comparison", "route_comparison"))
+                 if isinstance(artifact, dict) and key in artifact),
+                None,
+            )
+            tool_trace_callback({
+                "tool_name": name,
+                "argument_keys": sorted(args) if isinstance(args, dict) else [],
+                "outcome": "tool_error" if isinstance(result, dict) and result.get("error")
+                          else "success",
+                "artifact_kind": artifact_kind,
+            })
+        return result, artifact
+
     # 地图端已经把起点、终点和每个途经点解析成精确坐标，不应再让 LLM
     # 决定是否调用工具或重排用户选点。直接执行同一个 plan_via_route 工具，
     # 使地图多点规划不受模型超时、漏调工具或无工具文本回答影响。
@@ -422,7 +659,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 ],
                 "mode": travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
             }
-            result, artifact = agent_tools.execute_tool(
+            result, artifact = execute_tool(
                 "plan_via_route", args, {"query": query, "uid": uid}
             )
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
@@ -435,6 +672,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "route_kind": (artifact or {}).get("route_kind", "via"),
                     "candidates": None, "clarify": None, "suggestions": None, "turns": 0,
                 }
+            if isinstance(result, dict) and result.get("error") in {
+                    "route_verification_failed", "route_verification_unknown"}:
+                # Explicit map points must not be altered by an LLM repair path.
+                return _route_verification_failure_response(
+                    result, message="你选定的地图点路线未通过独立核验，没有显示路线。",
+                )
             return {
                 "response_kind": "chat",
                 "message": (result or {}).get("message", "多途经点路线暂时无法生成，请调整地点后重试。"),
@@ -452,7 +695,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
         query or "",
     )
     prior_route = (context or {}).get("previous_route_state")
-    if mode_change and isinstance(prior_route, dict) and is_route_followup(query):
+    if (mode_change and isinstance(prior_route, dict) and is_route_followup(query)
+            and not isinstance((context or {}).get("place_request"), dict)):
         from agents.route_state import apply_change
         from api.routes import _replan_tool_request
 
@@ -460,7 +704,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if explicit:
             requested = apply_change(prior_route, {"travel_mode": mode})
             tool_name, args = _replan_tool_request(requested)
-            result, artifact = agent_tools.execute_tool(
+            result, artifact = execute_tool(
                 tool_name, args,
                 {"query": requested["original_query"], "uid": uid, "replan": True},
             )
@@ -470,6 +714,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 return {"response_kind": "route", "message": _build_route_message(route),
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None, "turns": 0}
+            if isinstance(result, dict) and result.get("error") in {
+                    "route_verification_failed", "route_verification_unknown"}:
+                return _route_verification_failure_response(
+                    result, message="切换出行方式后的路线未通过独立核验，没有显示路线。",
+                )
             return {"response_kind": "chat",
                     "message": (result or {}).get("message") or "这条路线暂时无法按新出行方式规划。",
                     "route": None, "route_kind": None, "candidates": None,
@@ -484,7 +733,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             from api.routes import _replan_tool_request
 
             tool_name, args = _replan_tool_request(requested)
-            result, artifact = agent_tools.execute_tool(
+            result, artifact = execute_tool(
                 tool_name, args, {"query": query, "uid": uid, "replan": True},
             )
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
@@ -494,6 +743,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None,
                         "turns": 0}
+            if isinstance(result, dict) and result.get("error") in {
+                    "route_verification_failed", "route_verification_unknown"}:
+                return _route_verification_failure_response(
+                    result, message="修改后的路线未通过独立核验，没有显示路线。",
+                )
             return {"response_kind": "chat",
                     "message": (result or {}).get("message") or "这条路线暂时无法按新要求规划。",
                     "route": None, "route_kind": None, "candidates": None,
@@ -503,14 +757,16 @@ def run_agent(query: str, context: dict = None, history: list = None,
     # structure before the LLM can accidentally use X as the start and return
     # a plausible-looking direct route that silently skips the stop.
     original_request = (context or {}).get("active_task_request") or query
-    named_via = _named_via_request(original_request)
+    named_via = (agent_tools.ordered_via_request(original_request)
+                 or _named_via_request(original_request))
     if named_via:
+        via_names = named_via["via"] if isinstance(named_via["via"], list) else [named_via["via"]]
         revised_start = _continuation_start(query) if original_request != query else ""
         start_name = revised_start or named_via["start"]
         if start_name in {"我这", "我这里", "我的位置", "当前位置"}:
             start_name = ""
         if not start_name and not coord_start:
-            question = f"从哪里出发？我会经过{named_via['via']}，再到{named_via['end']}。"
+            question = f"从哪里出发？我会经过{'、'.join(via_names)}，再到{named_via['end']}。"
             return {"response_kind": "clarify", "message": question, "route": None,
                     "route_kind": None, "candidates": None,
                     "clarify": {"question": question, "options": []},
@@ -530,14 +786,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
             constraints.pop("avoid_steps", None)
         mode = travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"
         for text in (original_request, query):
-            if re.search(r"开车|驾车", text): mode = "drive"
-            elif re.search(r"骑车|骑行", text): mode = "bike"
-            elif "步行" in text: mode = "walk"
+            detected_mode, explicit_mode = detect_travel_mode(text)
+            if explicit_mode:
+                mode = detected_mode
         args = {"start": start_ref, "end": {"name": named_via["end"], "type": "poi"},
-                "via_points": [{"name": named_via["via"], "type": "poi"}], "mode": mode}
+                "via_points": [{"name": name, "type": "poi"} for name in via_names], "mode": mode}
         if constraints:
             args["constraints"] = constraints
-        result, artifact = agent_tools.execute_tool(
+        result, artifact = execute_tool(
             "plan_via_route", args, {"query": full_request, "uid": uid}
         )
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
@@ -546,6 +802,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
             return {"response_kind": "route", "message": _build_route_message(route),
                     "route": route, "route_kind": "via", "candidates": None,
                     "clarify": None, "suggestions": None, "turns": 0}
+        if isinstance(result, dict) and result.get("error") in {
+                "route_verification_failed", "route_verification_unknown"}:
+            # Preserve the user's explicit stop order; fail closed rather than
+            # asking the LLM to rewrite a deterministic named-via request.
+            return _route_verification_failure_response(
+                result, message="按你指定的途经顺序规划的路线未通过独立核验，没有显示路线。",
+            )
         question = (result or {}).get("message") or "途经点或终点暂时无法确认，请换个地点名称。"
         return {"response_kind": "clarify", "message": question, "route": None,
                 "route_kind": None, "candidates": None,
@@ -554,7 +817,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     # Activity choices and candidate IDs resume the same durable POI request.
     place_request = (context or {}).get("place_request") if isinstance(context, dict) else None
-    place_request = dict(place_request) if isinstance(place_request, dict) else None
+    place_request = (_apply_place_request_correction(place_request, query)
+                     if isinstance(place_request, dict) else None)
     selected_poi_id = ((context or {}).get("selected_poi_id")
                        or (place_request or {}).get("selected_poi_id")) if isinstance(context, dict) else None
     recommendation_query = original_request
@@ -582,6 +846,127 @@ def run_agent(query: str, context: dict = None, history: list = None,
             return {"ambiguous_name": name, "alternatives": alternatives[:5]}
         return {"type": "poi", "name": name}
 
+    def with_next_place_stage(route_response: dict, destination: dict,
+                              saved_request: dict | None, followups: list[dict]) -> dict:
+        completed_legs = list((saved_request or {}).get("completed_legs") or [])
+        completed_legs.append(deepcopy(route_response["route"]))
+        if len(completed_legs) > 1:
+            join_issue = _place_route_join_issue(completed_legs)
+            if join_issue:
+                pending = _place_request_state(
+                    "重新规划全程", pending_slot="follow_up", previous=saved_request,
+                )
+                pending["completed_legs"] = completed_legs
+                route_response["needs_input"] = True
+                route_response["place_request"] = pending
+                question = (f"第二段已单独规划，但{join_issue}，无法确认全程连通。"
+                            "请重新提交完整需求，按当前路况规划全程。")
+                route_response["message"] = question
+                route_response["clarify"] = {"question": question, "options": []}
+                return route_response
+            route_response["route"] = _combined_place_route(completed_legs)
+            route_response["route_kind"] = (
+                "multimodal" if len({leg.get("mode") for leg in completed_legs}) > 1
+                else "via"
+            )
+            route_response["message"] = _build_route_message(route_response["route"])
+            if route_response["route"].get("route_state_unavailable"):
+                route_response["message"] += "各段方式或约束不同，请在分段路线查看详情；全程暂不支持一键切换策略。"
+        if not followups:
+            return route_response
+        next_request = followups[0]
+        next_query = str(next_request.get("query") or "").strip()
+        next_activities = list(next_request.get("activities") or [])
+        next_categories = list(next_request.get("subcategories") or [])
+        destination_name = str(destination.get("name") or "").strip()
+        next_start = {"type": "poi", "name": destination_name}
+        previous = {**(saved_request or {}), "original_query": next_query or "下一站",
+                    "selected_poi_id": None, "candidate_poi_ids": []}
+        pending = _place_request_state(
+            next_query or "下一站", activities=next_activities,
+            subcategories=next_categories, pending_slot="follow_up",
+            start=next_start, follow_up_requests=followups[1:],
+            previous=previous,
+            mode=(saved_request or {}).get("mode") or route_response["route"].get("mode") or "walk",
+            constraints=(saved_request or {}).get("constraints") or {},
+            candidate_poi_ids=[],
+        )
+        pending["completed_legs"] = completed_legs
+        route_response["needs_input"] = True
+        route_response["place_request"] = pending
+        if not next_query or not (next_activities or next_categories):
+            pending["pending_slot"] = "destination"
+            question = ("已规划到当前地点。你要回哪栋宿舍？请说具体楼栋名称。"
+                        if re.search(r"宿舍|寝室", next_query) else
+                        "已规划到当前地点。下一站要去哪里？请说具体地点名称。")
+            route_response["clarify"] = {"question": question, "options": []}
+            return route_response
+        lookup_args = {
+            "subcategories": next_categories, "activities": next_activities,
+            "mode": pending["mode"], "limit": 4, "start": next_start,
+            "max_distance_m": 10000,
+        }
+        lookup_constraints = {}
+        if pending["constraints"].get("avoid_steps"):
+            lookup_constraints["avoid_steps"] = True
+        if pending["constraints"].get("avoid_slope"):
+            lookup_constraints["slope"] = "avoid"
+        if lookup_constraints:
+            lookup_args["constraints"] = lookup_constraints
+        lookup, artifact = execute_tool(
+            "search_poi_candidates", lookup_args,
+            {"query": next_query, "uid": uid},
+        )
+        candidates = ((artifact or {}).get("candidates")
+                      if isinstance(artifact, dict) else None) or []
+        if isinstance(lookup, dict) and lookup.get("error"):
+            question = "第一段路线已生成。下一站的地点暂时查不到，请稍后重试或说明另一个地点。"
+        elif not candidates:
+            question = "第一段路线已生成。校园地点库暂未找到下一站的合适地点，请换个地点需求。"
+        else:
+            for candidate in candidates:
+                candidate["place_id"] = candidate.get("poi_id")
+                candidate["recommendation_start_name"] = destination_name
+            pending["pending_slot"] = "selection"
+            pending["candidate_poi_ids"] = [
+                item["poi_id"] for item in candidates if item.get("poi_id")
+            ]
+            route_response["candidates"] = candidates
+            question = f"下一步从{destination_name}出发找{next_query}，请选择地点。"
+        route_response["clarify"] = {
+            "question": question,
+            "options": [] if candidates else ["重试查找"],
+        }
+        return route_response
+
+    if place_request and place_request.get("pending_slot") == "destination" and not selected_poi_id:
+        destination, alternatives = agent_tools.find_poi_ambiguous(query.strip())
+        if destination and not alternatives:
+            selected_poi_id = destination.get("id")
+        elif alternatives:
+            candidates = [{"poi_id": poi.get("id"), "place_id": poi.get("id"),
+                           "name": poi.get("name"), "campus": poi.get("campus"),
+                           "subcategory": poi.get("subcategory")}
+                          for poi in alternatives[:5] if poi.get("id")]
+            pending = _place_request_state(
+                place_request.get("original_query") or query,
+                pending_slot="selection", previous=place_request,
+                candidate_poi_ids=[item["poi_id"] for item in candidates],
+            )
+            question = "找到了几个相近地点，请选择具体的终点。"
+            return {"response_kind": "candidates", "message": question,
+                    "route": None, "route_kind": None, "candidates": candidates,
+                    "clarify": None, "place_request": pending,
+                    "suggestions": None, "turns": 0}
+        if not selected_poi_id:
+            question = ("已更新出行条件。你要回哪栋宿舍？请说具体楼栋名称。"
+                        if mode_change or re.search(r"台阶|楼梯|避坡|陡坡", query) else
+                        "还没找到这个楼栋。请说宿舍的完整名称，例如“桂园6舍”。")
+            return {"response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question, "options": []},
+                    "place_request": place_request, "suggestions": None, "turns": 0}
+
     if selected_poi_id:
         if (place_request and place_request.get("candidate_poi_ids")
                 and selected_poi_id not in place_request["candidate_poi_ids"]):
@@ -594,7 +979,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
             return {"response_kind": "chat", "message": "这个地点已不在当前主数据中，请重新搜索。",
                     "route": None, "route_kind": None, "candidates": None,
                     "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
-        start_ref = (place_request or {}).get("start") or explicit_place_start(query) or current_coordinate_start()
+        start_ref = ((place_request or {}).get("start")
+                     if (place_request or {}).get("pending_slot") == "destination" else
+                     explicit_place_start(query) or (place_request or {}).get("start")
+                     or current_coordinate_start())
         if isinstance(start_ref, dict) and start_ref.get("ambiguous_name"):
             choices = [f"{poi.get('name')}（{poi.get('campus') or '校内'}）"
                        for poi in start_ref["alternatives"]]
@@ -626,7 +1014,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route_constraints["slope"] = "avoid"
         if route_constraints:
             route_args["constraints"] = route_constraints
-        result, artifact = agent_tools.execute_tool("plan_route", route_args,
+        result, artifact = execute_tool("plan_route", route_args,
                                                      {"query": query, "uid": uid})
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
         if route:
@@ -637,21 +1025,33 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 next_request = follow_up_requests[0]
                 follow_query = str(next_request.get("query") or "").strip()
                 if follow_query:
+                    continuation = f"从{selected_poi.get('name', '当前地点')}出发找{follow_query}"
+                    current_mode = route_args["mode"]
+                    if current_mode in {"bike", "drive"}:
+                        continuation += "，" + {"bike": "骑行", "drive": "驾车"}[current_mode]
+                    if saved_constraints.get("avoid_steps"):
+                        continuation += "，不走台阶"
+                    if saved_constraints.get("avoid_slope"):
+                        continuation += "，避开陡坡"
                     suggestions.append({
                         "label": "下一步：找餐饮" if any(
                             value in (next_request.get("activities") or [])
                             for value in ("meal", "canteen_meal", "restaurant_meal", "fast_food")
                         ) else "继续下一步",
-                        "query": f"从{selected_poi.get('name', '当前地点')}出发找{follow_query}",
+                        "query": continuation,
                     })
-            return {"response_kind": "route", "message": _build_route_message(route),
-                    "route": route, "route_kind": "direct", "candidates": None,
-                    "clarify": None, "place_request": None,
-                    "suggestions": suggestions, "turns": 0}
+            response = {"response_kind": "route", "message": _build_route_message(route),
+                        "route": route, "route_kind": "direct", "candidates": None,
+                        "clarify": None, "place_request": None,
+                        "suggestions": suggestions, "turns": 0}
+            return with_next_place_stage(response, selected_poi, place_request,
+                                         follow_up_requests)
         return {"response_kind": "chat", "message": (result or {}).get("message") or "这条路线暂时无法生成。",
                 "route": None, "route_kind": None, "candidates": None,
                 "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
 
+    if place_request and place_request.get("pending_slot") == "follow_up":
+        original_request = place_request.get("original_query") or original_request
     activity_sequence = agent_tools.resolve_activity_sequence(original_request)
     sequence_followups = [
         {"query": item["query"],
@@ -789,9 +1189,22 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     (travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"),
             "limit": 20 if recommendation_is_catalog else 4,
         }
+        request_constraints = (place_request or {}).get("constraints") or {}
+        constraint_query = str(recommendation_query) + " " + str(query)
+        tool_constraints = {}
+        if request_constraints.get("avoid_steps") or re.search(
+            r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", constraint_query
+        ):
+            tool_constraints["avoid_steps"] = True
+        if request_constraints.get("avoid_slope") or re.search(
+            r"避坡|少爬坡|不想爬坡|避开陡坡", constraint_query
+        ):
+            tool_constraints["slope"] = "avoid"
+        if tool_constraints:
+            recommendation_args["constraints"] = tool_constraints
         if start_ref and not recommendation_is_catalog:
             recommendation_args.update({"start": start_ref, "max_distance_m": 10000})
-        result, artifact = agent_tools.execute_tool(
+        result, artifact = execute_tool(
             "search_poi_candidates", recommendation_args,
             {"query": recommendation_query, "uid": uid},
         )
@@ -815,7 +1228,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if recommendation_is_catalog:
             for candidate in candidates:
                 candidate["recommendation_start_name"] = ""
-            summary = f"校园地点主数据中找到 {len(candidates)} 个匹配地点，已按学部列出。开放和使用规则以现场或校方信息为准。"
+            total_count = result.get("total_count")
+            if isinstance(total_count, int) and total_count > len(candidates):
+                summary = (
+                    f"校园地点主数据中共有 {total_count} 个匹配地点，当前先列出 {len(candidates)} 个。"
+                    "可按学部或细分类别缩小范围；开放和使用规则以现场或校方信息为准。"
+                )
+            else:
+                summary = f"校园地点主数据中找到 {len(candidates)} 个匹配地点，已列出候选。开放和使用规则以现场或校方信息为准。"
             pending = _place_request_state(
                 recommendation_query, activities=recommendation_activities,
                 subcategories=recommendation_categories, pending_slot="selection",
@@ -839,23 +1259,32 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "end": selected_endpoint,
                 "mode": recommendation_args["mode"],
             }
+            if tool_constraints:
+                route_args["constraints"] = dict(tool_constraints)
             if re.search(r"平坦优先|少爬坡|少走坡|避坡|不想爬坡", route_request):
                 route_args["weights"] = {"distance": 0.2, "slope": 0.6, "scenery": 0.2}
-                route_args["constraints"] = {"slope": "avoid"}
+                route_args.setdefault("constraints", {})["slope"] = "avoid"
             elif re.search(r"风景优先|景观优先|赏樱|看风景|风景好", route_request):
                 route_args["weights"] = {"distance": 0.15, "slope": 0.15, "scenery": 0.7}
             if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", route_request):
                 route_args["constraints"] = {**route_args.get("constraints", {}), "avoid_steps": True}
-            route_result, route_artifact = agent_tools.execute_tool(
+            route_result, route_artifact = execute_tool(
                 "plan_route", route_args, {"query": route_request, "uid": uid},
             )
             route = ((route_artifact or {}).get("route")
                      if isinstance(route_artifact, dict) else None)
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route", "message": _build_route_message(route),
-                        "route": route, "route_kind": "direct", "candidates": None,
-                        "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                response = {"response_kind": "route", "message": _build_route_message(route),
+                            "route": route, "route_kind": "direct", "candidates": None,
+                            "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                saved_request = {**(place_request or {}), "mode": route_args["mode"],
+                                 "constraints": {
+                                     "avoid_steps": bool(route_args.get("constraints", {}).get("avoid_steps")),
+                                     "avoid_slope": route_args.get("constraints", {}).get("slope") == "avoid",
+                                 }}
+                return with_next_place_stage(response, selected_candidate, saved_request,
+                                             follow_up_requests)
             if route_result.get("error"):
                 return {"response_kind": "chat",
                         "message": route_result.get("message") or "找到附近地点，但当前无法生成可靠路线。",
@@ -909,10 +1338,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     artifact_route, route_kind = None, None
     artifact_candidates, artifact_clarify = None, None
+    artifact_route_comparison = None
     artifact_suggestions = None
     final_message = ""
     turns = 0
     agent_elapsed_ms = 0.0
+    verification_repair_attempts = 0
+    verification_failure = None
+    verification_retry_exhausted = False
     active_task_request = (context or {}).get("active_task_request")
     if not isinstance(active_task_request, str):
         active_task_request = ""
@@ -955,6 +1388,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
             agent_elapsed_ms += (time.perf_counter() - llm_started) * 1000
         except Exception as e:
             agent_elapsed_ms += (time.perf_counter() - llm_started) * 1000
+            if verification_failure is not None:
+                return _route_verification_failure_response(
+                    verification_failure,
+                    message="路线未通过独立核验，定向修正请求失败，没有显示路线。",
+                    turns=turns,
+                )
             raise PlannerError(f"LLM 调用失败: {type(e).__name__}: {e}") from e
 
         msg = response.choices[0].message
@@ -967,8 +1406,46 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
         messages.append(msg.model_dump(exclude_none=True))
 
-        for tc in tool_calls:
+        add_verification_repair_instruction = False
+        for call_index, tc in enumerate(tool_calls):
             name = tc.function.name
+            is_verification_repair = False
+            if name in route_tools and verification_failure is not None:
+                if verification_repair_attempts >= 1:
+                    verification_retry_exhausted = True
+                    result = {
+                        "error": "route_verification_retry_exhausted",
+                        "message": "一次定向修正机会已用完，本次路线调用未执行。",
+                    }
+                    artifact = None
+                    messages.append({
+                        "role": "tool", "tool_call_id": tc.id,
+                        "content": agent_tools.result_to_json(result),
+                    })
+                    if tool_trace_callback:
+                        tool_trace_callback({
+                            "tool_name": name, "argument_keys": [],
+                            "outcome": "skipped_after_route_verification_retry",
+                            "artifact_kind": None,
+                        })
+                    for skipped_call in tool_calls[call_index + 1:]:
+                        messages.append({
+                            "role": "tool", "tool_call_id": skipped_call.id,
+                            "content": agent_tools.result_to_json({
+                                "error": "not_executed_after_route_verification_failure",
+                                "message": "路线修正机会已用完，本轮后续工具调用未执行。",
+                            }),
+                        })
+                        if tool_trace_callback:
+                            tool_trace_callback({
+                                "tool_name": skipped_call.function.name,
+                                "argument_keys": [],
+                                "outcome": "skipped_after_route_verification_retry",
+                                "artifact_kind": None,
+                            })
+                    break
+                verification_repair_attempts += 1
+                is_verification_repair = True
             manual_start = _manual_map_start_ref(coord_start)
             # A new explicit origin in this turn supersedes the original task;
             # otherwise keep the original named origin through clarifications.
@@ -982,6 +1459,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
             except json.JSONDecodeError:
                 result = {"error": "invalid_args", "message": "参数不是合法 JSON，请修正后重试"}
                 artifact = None
+                if tool_trace_callback:
+                    tool_trace_callback({
+                        "tool_name": name, "argument_keys": [],
+                        "outcome": "invalid_args", "artifact_kind": None,
+                    })
             else:
                 if (name == "ask_user" and manual_start_applies and isinstance(args, dict)
                         and _asks_for_origin(args.get("question", ""))):
@@ -1013,10 +1495,36 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         if avoid_steps:
                             args["constraints"] = {**(args.get("constraints") or {}),
                                                    "avoid_steps": True}
-                    result, artifact = agent_tools.execute_tool(
-                        name, args, {"query": constraint_query if name in route_tools else query,
-                                     "uid": uid}
+                    try:
+                        result, artifact = execute_tool(
+                            name, args, {"query": constraint_query if name in route_tools else query,
+                                         "uid": uid},
+                            record_trace=False,
+                        )
+                    except Exception:
+                        if tool_trace_callback:
+                            tool_trace_callback({
+                                "tool_name": name, "argument_keys": sorted(args),
+                                "outcome": "exception", "artifact_kind": None,
+                            })
+                        raise
+                if tool_trace_callback:
+                    artifact_kind = next(
+                        (kind for key, kind in (("route", "route"),
+                                                ("candidates", "candidates"),
+                                                ("clarify", "clarify"),
+                                                ("suggestions", "suggestions"),
+                                                ("route_comparison", "route_comparison"))
+                         if isinstance(artifact, dict) and key in artifact),
+                        None,
                     )
+                    tool_trace_callback({
+                        "tool_name": name,
+                        "argument_keys": sorted(args) if isinstance(args, dict) else [],
+                        "outcome": "tool_error" if isinstance(result, dict) and result.get("error")
+                                  else "success",
+                        "artifact_kind": artifact_kind,
+                    })
 
             if artifact:
                 if "route" in artifact:
@@ -1028,6 +1536,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     artifact_clarify = artifact["clarify"]
                 if "suggestions" in artifact:
                     artifact_suggestions = artifact["suggestions"]
+                if "route_comparison" in artifact:
+                    artifact_route_comparison = artifact["route_comparison"]
 
             messages.append({
                 "role": "tool",
@@ -1035,7 +1545,75 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "content": agent_tools.result_to_json(result),
             })
 
+            if (name in route_tools and isinstance(result, dict)
+                    and result.get("error") in {
+                        "route_verification_failed", "route_verification_unknown",
+                    }):
+                artifact_route, route_kind = None, None
+                artifact_clarify = None
+                verification_failure = result
+                if verification_repair_attempts >= 1:
+                    verification_retry_exhausted = True
+                else:
+                    add_verification_repair_instruction = True
+                # Tool calls from one assistant response are a single batch. Once a
+                # route fails verification, do not execute a later route from that
+                # same response before the model has seen the failure. Complete the
+                # tool-call protocol with explicit skipped results, then request one
+                # targeted correction on the next model turn.
+                for skipped_call in tool_calls[call_index + 1:]:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": skipped_call.id,
+                        "content": agent_tools.result_to_json({
+                            "error": "not_executed_after_route_verification_failure",
+                            "message": "前一条路线未通过独立核验，本轮其余工具调用未执行。",
+                        }),
+                    })
+                    if tool_trace_callback:
+                        tool_trace_callback({
+                            "tool_name": skipped_call.function.name,
+                            "argument_keys": [],
+                            "outcome": "skipped_after_route_verification_failure",
+                            "artifact_kind": None,
+                        })
+                break
+
+            if is_verification_repair:
+                if not artifact_route and not artifact_clarify:
+                    verification_retry_exhausted = True
+                # A single correction call is the entire retry budget. Do not
+                # let another route call in this model batch replace its result.
+                for skipped_call in tool_calls[call_index + 1:]:
+                    messages.append({
+                        "role": "tool", "tool_call_id": skipped_call.id,
+                        "content": agent_tools.result_to_json({
+                            "error": "not_executed_after_route_verification_retry",
+                            "message": "路线修正调用已完成，本轮后续工具调用未执行。",
+                        }),
+                    })
+                    if tool_trace_callback:
+                        tool_trace_callback({
+                            "tool_name": skipped_call.function.name,
+                            "argument_keys": [],
+                            "outcome": "skipped_after_route_verification_retry",
+                            "artifact_kind": None,
+                        })
+                break
+
+        if add_verification_repair_instruction:
+            messages.append({
+                "role": "system",
+                "content": (
+                    "路径工具的结果未通过独立核验。你最多还有一次修正机会："
+                    "只依据工具返回的 route_verification 违规项或未知项修正参数并重新规划；"
+                    "若无法修正，不得声称路线已生成，也不要省略硬约束。"
+                ),
+            })
+
         # 终止型工具：澄清提问立即结束
+        if verification_retry_exhausted:
+            break
         if artifact_clarify:
             break
 
@@ -1043,8 +1621,17 @@ def run_agent(query: str, context: dict = None, history: list = None,
         # （DeepSeek 在历史含 tool_call 时会把内部 DSML 工具调用格式当纯文本吐出）
         if artifact_route:
             break
+        if artifact_route_comparison:
+            break
 
     # ---- 收尾：组装响应 ----
+    if verification_retry_exhausted:
+        return _route_verification_failure_response(
+            verification_failure,
+            message="路线经过一次定向修正后仍未通过独立核验，没有展示路线。",
+            turns=turns,
+        )
+
     if artifact_route:
         artifact_route["timings_ms"] = normalize_timings(
             artifact_route.get("timings_ms"), agent=agent_elapsed_ms
@@ -1057,8 +1644,31 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "candidates": artifact_candidates,
             "clarify": artifact_clarify,
             "suggestions": artifact_suggestions,
+            "route_verification": (verification_failure or {}).get("route_verification"),
             "turns": turns,
         }
+
+    if artifact_route_comparison:
+        return {
+            "response_kind": "route_comparison",
+            "message": _build_route_comparison_message(artifact_route_comparison),
+            "route": None,
+            "route_kind": None,
+            "route_comparison": artifact_route_comparison,
+            "candidates": None,
+            "clarify": None,
+            "suggestions": None,
+            "turns": turns,
+        }
+
+    # A verification failure on the final available turn must not fall through
+    # to the API's legacy parser fallback, which does not carry this proof report.
+    if verification_failure is not None and artifact_route is None:
+        return _route_verification_failure_response(
+            verification_failure,
+            message="路线未通过独立核验，本轮无法完成修正，没有展示路线。",
+            turns=turns,
+        )
 
     # 防御：LLM 直出文本里若混入 DSML 标记，剥掉
     final_message = _sanitize_message(final_message)

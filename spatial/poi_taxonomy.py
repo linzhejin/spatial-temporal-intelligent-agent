@@ -10,10 +10,10 @@ ACTIVITY_SUBCATEGORIES = {
     # These are the existing master-data categories. The separate activity
     # field narrows the result without rewriting stable type/subcategory values.
     "basketball": ("field", "sports_field", "court"),
-    "badminton": ("field", "sports_field", "court"),
-    "table_tennis": ("court", "sports_centre"),
+    "badminton": ("field", "sports_field", "court", "gym"),
+    "table_tennis": ("court", "sports_centre", "gym"),
     "football": ("field", "sports_field"),
-    "volleyball": ("field", "sports_field", "court"),
+    "volleyball": ("field", "sports_field", "court", "gym"),
     "tennis": ("field", "sports_field", "court"),
     "running": ("field", "sports_field"),
     "fitness": ("gym", "sports_centre", "sports_other"),
@@ -87,12 +87,12 @@ def resolve_activity_query(query: str) -> dict | None:
     sport_rules = (
         ("basketball", ("打篮球", "篮球场", "篮球馆", "篮球")),
         ("badminton", ("打羽毛球", "羽毛球")),
-        ("table_tennis", ("打乒乓球", "乒乓球")),
+        ("table_tennis", ("打乒乓球", "乒乓球", "打乒乓", "乒乓")),
         ("football", ("踢足球", "足球场", "踢球")),
         ("volleyball", ("打排球", "排球")),
         ("tennis", ("打网球", "网球场", "网球")),
         ("swimming", ("游泳", "游个泳")),
-        ("running", ("跑步", "慢跑", "跑个步")),
+        ("running", ("跑步", "慢跑", "跑个步", "晨跑", "夜跑", "跑操")),
         ("fitness", ("健身", "力量训练", "练器械")),
     )
     for activity, terms in sport_rules:
@@ -108,16 +108,21 @@ def resolve_activity_query(query: str) -> dict | None:
         return {"status": "needs_clarification", "question": "想做哪种运动？",
                 "options": list(_SPORT_OPTIONS)}
 
-    if any(term in text for term in ("图书馆", "自习", "看书", "复习", "备考", "写作业")):
+    if any(term in text for term in (
+            "图书馆", "自习", "看书", "复习", "备考", "写作业",
+            "学习的地方", "找地方学习", "学习场所", "想学习", "安静的地方")):
         return {"status": "resolved", "activities": ["study"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["study"])}
-    if any(term in text for term in ("超市", "便利店", "买东西", "零食", "文具", "购物")):
+    if any(term in text for term in (
+            "超市", "便利店", "买东西", "买水", "买瓶水", "买饮料", "买瓶饮料",
+            "购买饮用水", "零食", "文具", "购物")):
         return {"status": "resolved", "activities": ["shopping"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["shopping"])}
     if any(term in text for term in ("医院", "看病", "看医生", "买药")):
         return {"status": "resolved", "activities": ["medical"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["medical"])}
-    if any(term in text for term in ("取快递", "寄快递", "快递站", "快递服务")):
+    if any(term in text for term in (
+            "取快递", "寄快递", "取件", "快递站", "快递点", "快递柜", "快递服务")):
         return {"status": "resolved", "activities": ["package_pickup"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["package_pickup"])}
     if any(term in text for term in ("邮局", "邮政")):
@@ -134,13 +139,19 @@ def resolve_activity_query(query: str) -> dict | None:
 
 def resolve_activity_sequence(query: str) -> list[dict]:
     """Keep explicit ordered place needs in requests such as ``打球再吃饭``."""
-    parts = re.split(r"(?:然后|接着|随后|之后|再去|再)", str(query or ""))
+    parts = re.split(r"(?:然后|接着|随后|之后|最后|再去|再)", str(query or ""))
     resolved = []
     for part in parts:
         text = str(part or "").strip(" ，,。；;、")
         intent = resolve_activity_query(text)
         if intent:
             resolved.append({"query": text, "intent": intent})
+        elif re.search(r"(?:宿舍|寝室)", text):
+            # A return-to-dorm stage is a real destination requirement, but
+            # the user's particular dorm is not inferable from the POI type.
+            resolved.append({"query": text, "intent": {
+                "status": "needs_destination", "activities": [], "subcategories": [],
+            }})
     return resolved if len(resolved) > 1 else []
 
 
@@ -171,14 +182,34 @@ _SOURCE_REVIEWED_SPORTS = {
     "poi_083": ("basketball", "poi name and OSM reviewed sports feature identify basketball"),
     "poi_084": ("tennis", "poi name and OSM reviewed sports feature identify tennis"),
     "poi_085": ("football", "poi name and aliases identify the football ground"),
-    "poi_086": ("fitness", "indoor wind-and-rain sports hall; no ball sport is claimed"),
-    "poi_204": ("fitness", "sports hall subcategory; no ball sport is claimed"),
+    "poi_086": (
+        ["fitness", "badminton", "table_tennis"],
+        "武汉大学学生资助管理中心《生活在珞珈丨第7期：运动场地大盘点——文理学部》"
+        "（2024-04-24）记载风雨体育馆设羽毛球、乒乓球场地；场馆当前开放和预约情况未核实；"
+        "https://zzgl.whu.edu.cn/info/1017/1028.htm",
+    ),
+    "poi_204": (
+        ["fitness", "badminton", "table_tennis", "volleyball"],
+        "武汉大学学生资助管理中心《生活在珞珈丨第8期：运动场地大盘点——工学部》"
+        "（2024-04-24）记载工学部体育馆设羽毛球、乒乓球和排球场地；场馆当前开放和预约情况未核实；"
+        "https://zzgl.whu.edu.cn/info/1017/1029.htm",
+    ),
     "poi_205": ("running", "aliases identify the athletics ground"),
     "poi_206": ("basketball", "poi name identifies basketball court"),
-    "poi_257": ("fitness", "sports hall subcategory; no ball sport is claimed"),
+    "poi_257": (
+        ["fitness", "badminton"],
+        "武汉大学学生资助管理中心《生活在珞珈丨第9期：运动场地大盘点——信息学部》"
+        "（2024-04-25）明确记载星湖体育馆内设羽毛球场；实时开放和预约安排未核实；"
+        "https://zzgl.whu.edu.cn/info/1017/1030.htm",
+    ),
     "poi_258": (None, "sports field has no supported specific activity tag"),
     "poi_259": ("fitness", "sports hall subcategory; no ball sport is claimed"),
-    "poi_260": ("running", "poi name identifies an athletic ground"),
+    "poi_260": (
+        ["running", "football", "volleyball"],
+        "武汉大学学生资助管理中心《生活在珞珈丨第9期：运动场地大盘点——信息学部》"
+        "（2024-04-25）记载：信息学部田径场又称竹园操场/信操，场区包含足球场和排球场；"
+        "https://zzgl.whu.edu.cn/info/1017/1030.htm",
+    ),
     "poi_261": ("swimming", "poi name and OSM source identify swimming pool"),
     "poi_262": ("basketball", "poi name identifies basketball court"),
     "poi_418": ("fitness", "sports hall subcategory; no ball sport is claimed"),
@@ -219,7 +250,7 @@ def audit_poi_activities(pois: list[dict]) -> list[dict]:
                 raise ValueError(f"sports POI has no reviewed activity disposition: {poi_id}")
             activity, basis = activity_entry
             if activity:
-                activities = [activity]
+                activities = [activity] if isinstance(activity, str) else list(activity)
             else:
                 basis = "reviewed: " + basis
         else:

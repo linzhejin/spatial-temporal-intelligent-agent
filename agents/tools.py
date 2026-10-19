@@ -15,20 +15,23 @@ import networkx as nx
 import re
 import time
 
-import config
 from agents import route_state as route_state_module
+from agents import route_reuse as route_reuse_module
 from spatial.poi import (
-    find_poi_ambiguous, search_by_category, search_pois, list_all_pois,
+    find_poi_ambiguous, search_by_category, search_pois,
     load_pois, importance_score, _flatten_poi,
 )
 from spatial.poi_taxonomy import (
     ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi,
-    matches_activities, resolve_activity_query, resolve_activity_sequence,
+    matches_activities, resolve_activity_query,
+    resolve_activity_sequence,  # noqa: F401 - planner imports this module-level helper.
 )
 from spatial.network import get_network, load_or_download_network, get_nearest_node, get_node_coords
 from spatial.routing import (
+    BudgetSearchIncomplete,
     compute_route, compute_via_route, compute_tour_route,
-    rank_via_candidates, resolve_weights,
+    compute_budgeted_ordered_route, compute_budgeted_multimodal_route,
+    rank_via_candidates,
     estimate_duration_min, MODE_SPEEDS_KMH, build_turn_by_turn,
 )
 from spatial.routing_index import get_routing_index
@@ -37,6 +40,11 @@ from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, CONDITION_LABELS, apply_conditions_to_graph,
     RoadConditionsUnavailableError,
+)
+from spatial.route_constraints import positive_budget
+from spatial.result_verifier import (
+    verify_display_geometry, verify_ordered_route_result, verify_route_result,
+    verify_segmented_route_result,
 )
 from spatial import weather as weather_mod
 from agents.routing_policy import select_route_strategy
@@ -59,13 +67,57 @@ _ALONG_ROUTE_MIN_IMPORTANCE = 8.0
 _TOUR_DEFAULT_MAX_POIS = 6
 _TOUR_MAX_TOTAL_M = 6000.0
 _MAX_VIA_POINTS = 10
-_REACHABILITY_MAX_ACCESS_SNAP_M = 60.0
+_MAX_CLARIFY_OPTIONS = 5
 _MAX_ENDPOINT_ACCESS_SNAP_M = 80.0
+_REACHABILITY_MAX_ACCESS_SNAP_M = _MAX_ENDPOINT_ACCESS_SNAP_M
 _COMPARISON_STRATEGIES = (
     ("shortest", "最短路径"),
     ("scenery", "风景优先"),
     ("flat", "平坦优先"),
 )
+
+
+def ordered_via_request(query: str) -> dict | None:
+    """Recognize a bounded ordered trip, without assuming a timed visit or loop."""
+    text = (query or "").strip().rstrip("。.!！")
+    # These requests need itinerary/model handling; do not drop a real budget,
+    # dwell, return leg, or a second task while recognizing place names.
+    if re.search(
+        r"行程|游览|停留|休息|逛|返回|回到|回起点|回原地|回程|环线|分钟|小时|一刻钟|"
+        r"\d+\s*(?:分|秒)|天气|无障碍|轮椅|距离|公里|千米|不超过|最多|以内", text,
+    ):
+        return None
+    match = re.fullmatch(
+        r"(?:请|请帮我|帮我|带我)?\s*(?:从|由)(?P<start>[^，,。；;]+?)"
+        r"(?:出发)?\s*[，,]?\s*(?P<order>先(?:去|到)|依次(?:去|到|经过|途经))(?P<sequence>.+)", text,
+    )
+    if not match:
+        return None
+    parts = re.split(
+        r"[，,；;]\s*(?=步行|走路|骑行|骑车|开车|驾车|避开|不走|不要走|绕开|避坡|平坦优先|风景优先|最短)",
+        match.group("sequence"), maxsplit=1,
+    )
+    # Only consume suffixes whose meaning this existing route path preserves.
+    # Unknown requirements must reach the model, never become another place
+    # or disappear after a recognized mode/constraint prefix.
+    if len(parts) > 1 and not re.fullmatch(
+        r"(?:(?:步行|走路|骑行|骑车|开车|驾车|避坡|避开陡坡|"
+        r"(?:避开|不走|不要走|绕开)(?:台阶|楼梯)|平坦优先|风景优先|最短(?:路径)?)"
+        r"\s*(?:[，,；;]\s*)?)+", parts[1],
+    ):
+        return None
+    sequence = parts[0]
+    separator = (r"\s*(?:、|[，,；;]\s*(?:再|然后|接着|最后)(?:去|到|前往)?\s*)"
+                 if match.group("order").startswith("依次") else
+                 r"\s*(?:[，,；;]\s*(?:再|然后|接着|最后)(?:去|到|前往)?"
+                 r"|(?:再|然后|接着|最后)(?:去|到|前往))\s*")
+    points = re.split(separator, sequence)
+    points = [point.strip() for point in points]
+    if (not 2 <= len(points) <= _MAX_VIA_POINTS + 1
+            or any(not point or len(point) > 40 or re.search(r"[，,。；;？?]|帮我|导航|路线", point)
+                   for point in points)):
+        return None
+    return {"start": match.group("start").strip(), "via": points[:-1], "end": points[-1]}
 
 
 def _data_version_for_graph(graph) -> str:
@@ -97,12 +149,20 @@ _ENDPOINT_SCHEMA = {
 _PREFERENCE_SCHEMA = {
     "constraints": {
             "type": "object",
-            "description": "硬约束。仅在用户明确说'避开/不要'时设置",
+            "description": "用户明确提出的通行、距离或时间硬约束；没有证据时不能声称已满足",
             "properties": {
                 "distance": {"type": "string", "enum": ["short", "medium", "long"]},
                 "slope": {"type": "string", "enum": ["avoid", "normal", "prefer"]},
                 "avoid_steps": {"type": "boolean", "description": "用户明确要求不走台阶时设为 true；仅过滤已标注台阶的路段，未知通行属性不能视为已核实"},
                 "scenery": {"type": "string", "enum": ["high", "normal"]},
+                "max_distance_m": {"type": "number", "exclusiveMinimum": 0,
+                                   "description": "整条路网边序列的最大长度（米）；不含未核实的末端直线接驳，接驳距离另行提示"},
+                "max_duration_s": {"type": "number", "exclusiveMinimum": 0,
+                                  "description": "整条路网边序列的最大估算通行时间（秒）；不含未核实的末端直线接驳；plan_itinerary 另计各站停留时间"},
+                "excluded_edge_ids": {"type": "array", "items": {"type": "string"},
+                                      "description": "已知路段的精确有向 (u,v,key) JSON 三元组；不能凭道路名称猜 ID"},
+                "require_verified_accessibility": {"type": "boolean",
+                    "description": "要求已核实的全程无障碍证据；缺证据时必须说明无法保证"},
             },
     },
     "weights": {
@@ -174,6 +234,7 @@ TOOL_SCHEMAS = [
                     "season": {"type": "string", "enum": ["spring", "summer", "autumn", "winter"]},
                     "near_poi": {"type": "string", "description": "兼容旧调用的起点 POI 名；推荐优先传 start"},
                     "mode": {"type": "string", "enum": ["walk", "bike", "drive"], "default": "walk"},
+                    "constraints": _PREFERENCE_SCHEMA["constraints"],
                     "include_minor": {"type": "boolean",
                                       "description": "是否包含小店铺（连锁奶茶/咖啡档口），默认 true"},
                     "limit": {"type": "integer", "minimum": 1, "maximum": 20,
@@ -192,6 +253,8 @@ TOOL_SCHEMAS = [
                 "properties": {
                     "start": _ENDPOINT_SCHEMA,
                     "subcategory": {"type": "string", "description": "地点细分类，如 canteen、coffee、gym、library"},
+                    "subcategories": {"type": "array", "items": {"type": "string"},
+                                      "description": "可同时查询多个地点细分类"},
                     "activities": {
                         "type": "array", "items": {"type": "string", "enum": sorted(ACTIVITY_LABELS)},
                         "description": "按地点支持的用途精确筛选，如 basketball、running、meal",
@@ -223,13 +286,7 @@ TOOL_SCHEMAS = [
                     "start": _ENDPOINT_SCHEMA,
                     "end": _ENDPOINT_SCHEMA,
                     "mode": {"type": "string", "enum": ["walk", "bike", "drive"], "default": "walk"},
-                    "constraints": {
-                        "type": "object",
-                        "properties": {
-                            "slope": {"type": "string", "enum": ["avoid", "normal", "prefer"]},
-                            "avoid_steps": {"type": "boolean", "description": "用户明确要求不走台阶时设为 true；只过滤已标记台阶的边"},
-                        },
-                    },
+                    "constraints": _PREFERENCE_SCHEMA["constraints"],
                 },
                 "required": ["start", "end"],
             },
@@ -256,7 +313,8 @@ TOOL_SCHEMAS = [
         "function": {
             "name": "plan_via_route",
             "description": "规划带途经点的路径：如'去上课路上顺便买个笔记本'。via 可以指名具体地点，"
-                         "也可以只给类别（自动从该类别里挑最顺路的），也可以用坐标设途经点。",
+                         "也可以只给类别（自动从该类别里挑最顺路的），也可以用坐标设途经点。"
+                         "先到某处、再到某处、最后到终点属于本工具，使用有序 via_points；不得臆造时间预算、停留或返程。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -292,7 +350,7 @@ TOOL_SCHEMAS = [
         "type": "function",
         "function": {
             "name": "plan_itinerary",
-            "description": "按用户给出的地点顺序规划有时间预算的行程。计算路网步行时间估算与每站停留时间；超预算时只返回差额和可行性，不把路线作为已满足要求的结果提交。",
+            "description": "仅在用户明确给出时间预算的行程中使用，不得自行编造预算。单纯先到、再到、最后到的多点路线用 plan_via_route。计算路网步行时间估算与每站停留时间；超预算时只返回差额和可行性，不把路线作为已满足要求的结果提交。",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -306,10 +364,7 @@ TOOL_SCHEMAS = [
                     "stop_duration_min": {"type": "number", "minimum": 0, "maximum": 240,
                                           "default": 15, "description": "每个地点的停留估算分钟数，默认 15"},
                     "mode": {"type": "string", "enum": ["walk", "bike", "drive"], "default": "walk"},
-                    "constraints": {"type": "object", "properties": {
-                        "slope": {"type": "string", "enum": ["avoid", "normal", "prefer"]},
-                        "avoid_steps": {"type": "boolean"},
-                    }},
+                    "constraints": _PREFERENCE_SCHEMA["constraints"],
                     "weights": _PREFERENCE_SCHEMA["weights"],
                 },
                 "required": ["start", "stops", "time_budget_min"],
@@ -409,7 +464,8 @@ TOOL_SCHEMAS = [
                 "properties": {
                     "question": {"type": "string", "description": "给用户的问题，口语化、简短"},
                     "options": {"type": "array", "items": {"type": "string"},
-                                "description": "可选回答，最多 4 个"},
+                                "maxItems": _MAX_CLARIFY_OPTIONS,
+                                "description": "可选回答，最多 5 个"},
                 },
                 "required": ["question"],
             },
@@ -994,6 +1050,8 @@ def _route_payload(G, route_result, start_name, end_name, mode):
         "scenery_avg_recommended": route_result.get("scenery_avg_recommended"),
         "degraded": route_result["degraded"],
         "length_capped": route_result["length_capped"],
+        "hard_budget_fallback": route_result.get("hard_budget_fallback", False),
+        "shortest_baseline_feasible": route_result.get("shortest_baseline_feasible", True),
         "mode": route_result["mode"],
         "speed_kmh": route_result.get("speed_kmh", MODE_SPEEDS_KMH.get(mode, 4.5)),
     }
@@ -1004,6 +1062,94 @@ def _route_payload(G, route_result, start_name, end_name, mode):
     )
     payload["timings_ms"] = normalize_timings(timings)
     return payload
+
+
+def _apply_ordered_budget_fallback(route_results, fallback, *, detour_cap):
+    """Replace per-leg recommendations with one globally feasible edge chain."""
+    selected_legs = fallback.get("legs") if isinstance(fallback, dict) else None
+    if not isinstance(selected_legs, list) or len(selected_legs) != len(route_results):
+        raise ValueError("整程预算搜索返回的路段数量与途经顺序不一致")
+    for route_result, selected in zip(route_results, selected_legs):
+        nodes = selected["nodes"]
+        edges = selected["edges"]
+        shortest_edges = route_result.get("shortest_edges") or []
+        denominator = max(len(edges), len(shortest_edges))
+        route_result.update({
+            "recommended": nodes,
+            "recommended_edges": edges,
+            "recommended_length_m": selected["recommended_length_m"],
+            "duration_min": selected["duration_min"],
+            "overlap_rate": (len(set(edges) & set(shortest_edges)) / denominator
+                             if denominator else 1.0),
+            "slope_avg_recommended": selected["slope_avg_recommended"],
+            "scenery_avg_recommended": selected["scenery_avg_recommended"],
+            "degraded": selected["degraded"],
+            "hard_budget_fallback": True,
+            "length_capped": (
+                selected["recommended_length_m"]
+                > float(route_result.get("shortest_length_m") or 0)
+                * max(1.0, float(detour_cap)) + 0.15
+            ),
+        })
+
+
+def _apply_multimodal_budget_fallback(graph, segments, fallback, *, detour_cap):
+    selected_legs = fallback.get("legs") if isinstance(fallback, dict) else None
+    if not isinstance(selected_legs, list) or len(selected_legs) != len(segments):
+        raise ValueError("多方式整程预算搜索返回的路段数量与实际行程不一致")
+    for segment, selected in zip(segments, selected_legs):
+        route = segment["route"]
+        mode = segment["mode"]
+        nodes = selected["nodes"]
+        edges = selected["edges"]
+        shortest_edges = route.get("shortest_edge_ids") or []
+        denominator = max(len(edges), len(shortest_edges))
+        route.update({
+            "recommended": _coords_wgs_to_gcj(_path_to_coords(graph, nodes, edges)),
+            "recommended_edge_ids": edges,
+            "recommended_length_m": selected["distance_m"],
+            "distance_m": selected["distance_m"],
+            "duration_min": selected["duration_min"],
+            "steps": _build_steps_gcj(
+                graph, nodes, mode, end_name=route.get("end_name", ""),
+                route_edges=edges,
+            ),
+            "pois": _pois_along_route(graph, nodes),
+            "overlap_rate": (len(set(edges) & set(shortest_edges)) / denominator
+                             if denominator else 1.0),
+            "slope_avg_recommended": selected["slope_avg_recommended"],
+            "scenery_avg_recommended": selected["scenery_avg_recommended"],
+            "degraded": selected["degraded"],
+            "hard_budget_fallback": True,
+            "length_capped": (
+                selected["distance_m"]
+                > float(route.get("shortest_length_m") or 0)
+                * max(1.0, float(detour_cap)) + 0.15
+            ),
+        })
+
+
+def _refresh_multimodal_composites(legs_payload):
+    for composite in legs_payload:
+        sublegs = composite.get("legs")
+        if not isinstance(sublegs, list):
+            continue
+        composite["recommended"] = [
+            coordinate for subleg in sublegs for coordinate in subleg["recommended"]
+        ]
+        composite["recommended_edge_ids"] = [
+            edge for subleg in sublegs for edge in subleg["recommended_edge_ids"]
+        ]
+        composite["steps"] = _merge_leg_steps(sublegs)
+        composite["recommended_length_m"] = round(sum(
+            subleg["recommended_length_m"] for subleg in sublegs
+        ), 1)
+        composite["distance_m"] = composite["recommended_length_m"]
+        composite["duration_min"] = round(sum(
+            subleg["duration_min"] for subleg in sublegs
+        ), 1)
+        composite["pois"] = [poi for subleg in sublegs for poi in subleg.get("pois", [])]
+        composite["budget_fallback"] = True
 
 
 # ===========================================================================
@@ -1042,7 +1188,9 @@ def _tool_search_poi_candidates(args, ctx):
         return {"question": question, "options": activity_request["options"]}, {
             "clarify": {"question": question, "options": activity_request["options"]}
         }
-    if activity_request and activity_request.get("status") == "resolved" and not is_catalog:
+    # A structured activity from the active task takes precedence over a
+    # composite query whose first textual match may describe a later stop.
+    if activity_request and activity_request.get("status") == "resolved" and not activities:
         subcategories = list(activity_request.get("subcategories") or subcategories)
         activities = list(activity_request.get("activities") or activities)
     elif activities and not subcategories:
@@ -1051,7 +1199,7 @@ def _tool_search_poi_candidates(args, ctx):
             for category in ACTIVITY_SUBCATEGORIES.get(activity, ())
         ))
     inferred = infer_recommendation_subcategories(query)
-    if inferred and not is_catalog:
+    if inferred and not activities:
         subcategories = inferred
     poi_type = args.get("poi_type")
     keyword = (args.get("keyword") or "").strip()
@@ -1085,6 +1233,7 @@ def _tool_search_poi_candidates(args, ctx):
             "season": season,
             "include_minor": include_minor,
             "mode": args.get("mode") or "walk",
+            "constraints": args.get("constraints") or {},
             "max_distance_m": args.get("max_distance_m") or 10000,
             "limit": limit,
         }
@@ -1108,12 +1257,18 @@ def _tool_search_poi_candidates(args, ctx):
         subcategories or None, poi_type, keyword, season, include_minor, activities=activities,
     )
     results.sort(key=importance_score, reverse=True)
+    total_count = len(results)
     results = results[:limit]
     if not results:
         return {"candidates": [], "message": "校内暂无匹配的地点，可换个类别或关键词试试"}, None
 
     candidates = [_poi_public(p, with_provenance=True) for p in results]
-    return {"candidates": candidates, "count": len(candidates)}, {"candidates": candidates}
+    return {
+        "candidates": candidates,
+        "count": len(candidates),
+        "total_count": total_count,
+        "has_more": total_count > len(candidates),
+    }, {"candidates": candidates}
 
 
 def _tool_find_reachable_places(args, ctx):
@@ -1217,7 +1372,7 @@ def _tool_find_reachable_places(args, ctx):
                      if isinstance(raw_subcategories, list) else [])
     if not subcategories and subcategory:
         subcategories = [subcategory]
-    if not subcategories:
+    if not subcategories and not args.get("activities"):
         subcategories = infer_recommendation_subcategories(
             (ctx or {}).get("query", "") if isinstance(ctx, dict) else ""
         ) or []
@@ -1230,7 +1385,7 @@ def _tool_find_reachable_places(args, ctx):
         return {"question": question, "options": activity_request["options"]}, {
             "clarify": {"question": question, "options": activity_request["options"]}
         }
-    if activity_request and activity_request.get("status") == "resolved" and not is_poi_catalog_query(query):
+    if activity_request and activity_request.get("status") == "resolved" and not activities:
         activities = list(activity_request.get("activities") or activities)
         subcategories = list(activity_request.get("subcategories") or subcategories)
     elif activities and not subcategories:
@@ -1284,12 +1439,15 @@ def _tool_find_reachable_places(args, ctx):
         reachable.append(public)
 
     reachable.sort(key=lambda place: (place["network_distance_m"], place["name"]))
+    total_count = len(reachable)
     limit = max(1, min(int(args.get("limit", 8) or 8), 20))
     reachable = reachable[:limit]
     result = {
         "start_name": start_name,
         "mode": mode,
         "count": len(reachable),
+        "total_count": total_count,
+        "has_more": total_count > len(reachable),
         "candidates": reachable,
         "reachability_basis": "network_path_plus_unverified_straight_line_access_estimate",
         "start_access": start_access,
@@ -1309,7 +1467,7 @@ def _tool_find_reachable_places(args, ctx):
         "road_condition_version": current_road_condition_version(active_conditions),
         "data_source": "校园 POI 主数据与当前交通方式可用的已标记路网",
         "geometry_crs": "GCJ-02",
-        "access_link_note": "起点和地点到最近路网节点的末端接驳只按直线距离估算，未核实是否存在实际步行通道；地点接驳距离超过 60 米的不列为候选。候选地点应再用路线工具核查。",
+        "access_link_note": "起点和地点到最近路网节点的末端接驳只按直线距离估算，未核实是否存在实际步行通道；地点接驳距离超过 80 米的不列为候选。候选地点应再用路线工具核查。",
         "estimate_note": "距离由起点接驳、路网路径和地点接驳组成；两端接驳均为未核实的直线估算。时间按该出行方式平均速度估算，不等同导航实时 ETA。",
     }
     if not reachable:
@@ -1361,13 +1519,6 @@ def _tool_compare_routes(args, ctx):
             "weights": route.get("applied_weights"),
         })
 
-    if not alternatives:
-        return {
-            "error": "route_comparison_unavailable",
-            "message": "三种路线都无法生成，请检查起终点、出行方式和硬约束。",
-            "unavailable": unavailable,
-        }, None
-
     shortest = next((item["distance_m"] for item in alternatives
                      if item["strategy"] == "shortest"), None)
     for item in alternatives:
@@ -1375,8 +1526,13 @@ def _tool_compare_routes(args, ctx):
         item["distance_delta_from_shortest_m"] = delta
         item["detour_ratio"] = round(item["distance_m"] / shortest, 3) if shortest else None
 
-    return {
-        "status": "complete" if not unavailable else "partial",
+    start_arg = args.get("start") if isinstance(args.get("start"), dict) else {}
+    end_arg = args.get("end") if isinstance(args.get("end"), dict) else {}
+    start_name = start_name or start_arg.get("name") or "起点"
+    end_name = end_name or end_arg.get("name") or "终点"
+    result = {
+        "status": ("unavailable" if not alternatives else
+                   "complete" if not unavailable else "partial"),
         "start_name": start_name,
         "end_name": end_name,
         "mode": args.get("mode") or "walk",
@@ -1393,7 +1549,13 @@ def _tool_compare_routes(args, ctx):
         },
         "comparison_basis": "相同起终点、出行方式、硬约束、路网/路况与天气快照；距离按所选路网边计算，时间为估算值。",
         "selection_note": "此结果仅供比较，没有改变当前地图路线；用户选定策略后再单独规划。",
-    }, None
+    }
+    if not alternatives:
+        result.update({
+            "error": "route_comparison_unavailable",
+            "message": "三种路线都无法生成，请检查起终点、出行方式和硬约束。",
+        })
+    return result, {"route_comparison": result}
 
 
 def _tool_get_place_details(args, ctx):
@@ -1524,6 +1686,215 @@ def _attach_route_state(
     return payload
 
 
+def _route_variant(payload: dict, path_name: str) -> dict:
+    if path_name == "recommended":
+        return payload
+    variant = dict(payload)
+    variant["recommended_edge_ids"] = payload.get("shortest_edge_ids")
+    variant["recommended_length_m"] = payload.get("shortest_length_m")
+    variant["recommended"] = payload.get("shortest")
+    variant["duration_min"] = payload.get("shortest_duration_min")
+    if isinstance(payload.get("legs"), list):
+        variant["legs"] = [_route_variant(leg, path_name) if isinstance(leg, dict) else leg
+                           for leg in payload["legs"]]
+    return variant
+
+
+def _verification_failure_message(report, fallback):
+    issues = {issue.split(":", 1)[-1] for issue in report.get("issues", [])}
+    if issues & {"distance_budget_exceeded", "duration_budget_exceeded"}:
+        return "整条路线超过你设定的距离或时间上限，本次不将其作为符合要求的路线展示。"
+    if "accessibility_unverified" in issues:
+        return "当前道路或末端接驳缺少已核实的无障碍证据，无法保证满足要求。"
+    return fallback
+
+
+def _merge_display_geometry_check(report, geometry_error=None):
+    checks = report.setdefault("checks", {})
+    if geometry_error is None:
+        checks["display_geometry"] = {"status": "pass", "issues": []}
+        return
+
+    status = geometry_error.get("status") if isinstance(geometry_error, dict) else "unknown"
+    issues = list(geometry_error.get("issues") or []) if isinstance(geometry_error, dict) else []
+    checks["display_geometry"] = {"status": status, "issues": issues}
+    report_issues = report.setdefault("issues", [])
+    for issue in issues:
+        if issue not in report_issues:
+            report_issues.append(issue)
+    report["unknowns"] = list(report.get("unknowns") or [])
+    report["violations"] = list(report.get("violations") or [])
+    destination = report["unknowns"] if status == "unknown" else report["violations"]
+    for issue in issues:
+        if issue not in destination:
+            destination.append(issue)
+    if status != "pass":
+        report["status"] = (
+            "unknown" if status == "unknown" and not report["violations"] else "fail"
+        )
+        report["valid"] = False
+
+
+def _duration_snapshot(context):
+    snapshot = context.get("_route_weather_snapshot") if isinstance(context, dict) else None
+    if not isinstance(context, dict) or "_route_weather_snapshot" not in context:
+        return False, None
+    return True, snapshot.get("live") if isinstance(snapshot, dict) else None
+
+
+def _audit_tool_route(graph, payload: dict, context: dict, ordered_nodes: list, kind: str):
+    reports = {}
+    duration_context_available, weather_info = _duration_snapshot(context)
+    for path_name in ("recommended", "shortest"):
+        variant = _route_variant(payload, path_name)
+        enforce_budgets = (path_name == "recommended"
+                           or payload.get("shortest_baseline_feasible") is not False)
+        if kind == "direct":
+            report = verify_route_result(
+                graph, variant, road_conditions=context.get("_route_conditions_snapshot"),
+                expected_start_node=ordered_nodes[0], expected_end_node=ordered_nodes[-1],
+                enforce_budgets=enforce_budgets,
+                duration_context_available=duration_context_available,
+                weather_info=weather_info,
+                task_revision=context.get("task_revision"),
+            )
+        else:
+            report = verify_ordered_route_result(
+                graph, variant, road_conditions=context.get("_route_conditions_snapshot"),
+                expected_nodes=ordered_nodes,
+                enforce_budgets=enforce_budgets,
+                duration_context_available=duration_context_available,
+                weather_info=weather_info,
+                task_revision=context.get("task_revision"),
+            )
+        reports[path_name] = report
+        if report["status"] != "pass":
+            return {
+                "error": ("route_verification_unknown" if report["status"] == "unknown"
+                          else "route_verification_failed"),
+                "message": _verification_failure_message(
+                    report, "路线结果与当前路网、路况或通行约束无法核对，本次不展示路线。",
+                ),
+                "route_verification": {**report, "path": path_name},
+            }
+        for leg_index, leg in enumerate(variant.get("legs") or [variant], start=1):
+            geometry = verify_display_geometry(
+                graph, leg.get("recommended_edge_ids"), leg.get("recommended"),
+            )
+            if geometry["status"] != "pass":
+                issue_prefix = f"leg_{leg_index}:" if kind != "direct" else ""
+                geometry_error = {
+                    "status": geometry["status"],
+                    "issues": [issue_prefix + issue for issue in geometry["issues"]],
+                }
+                _merge_display_geometry_check(report, geometry_error)
+                return {
+                    "error": "route_verification_unknown" if geometry["status"] == "unknown"
+                             else "route_verification_failed",
+                    "message": "路线画线与实际选用道路不一致，本次不展示路线。",
+                    "route_verification": {**report, "path": path_name},
+                }
+        _merge_display_geometry_check(report)
+    payload["route_verification"] = {
+        "status": "pass", "scope": "internal_graph_and_event_snapshot",
+        "data_version_scope": "graph_and_local_file_content", "field_truth_verified": False,
+        "event_version": reports["recommended"].get("event_version"),
+        "task_revision": context.get("task_revision"),
+        "checks": {
+            "recommended_route": {"status": reports["recommended"]["status"], "issues": []},
+            "shortest_reference": {"status": reports["shortest"]["status"], "issues": []},
+            "display_geometry": {"status": "pass", "issues": []},
+        },
+        "violations": [], "unknowns": [],
+        "paths": reports,
+    }
+    return None
+
+
+def _audit_segment_geometry(graph, segments):
+    for index, segment in enumerate(segments, start=1):
+        route = segment["route"]
+        geometry = verify_display_geometry(
+            graph, route.get("recommended_edge_ids"), route.get("recommended"),
+        )
+        if geometry["status"] != "pass":
+            return {
+                "status": geometry["status"],
+                "issues": [f"leg_{index}:{issue}" for issue in geometry["issues"]],
+                "field_truth_verified": False,
+            }
+    return None
+
+
+def _audit_tool_tour(graph, payload, context, planned, poi_nodes, start_node, mode):
+    def fail(issue):
+        return {"error": "route_verification_failed",
+                "message": "游览路线的景点顺序或实际道路无法核对，本次不展示路线。",
+                "route_verification": {"status": "fail", "issues": [issue],
+                                       "field_truth_verified": False}}
+
+    node_by_identity = {}
+    for poi, node in poi_nodes:
+        identity = ("id", str(poi["id"])) if poi.get("id") else ("name", poi.get("name"))
+        if identity in node_by_identity and node_by_identity[identity] != node:
+            return fail("ambiguous_stop_identity")
+        node_by_identity[identity] = node
+    ordered_nodes = [start_node] if start_node is not None else []
+    for poi in planned.get("ordered_pois") or []:
+        identity = ("id", str(poi["id"])) if poi.get("id") else ("name", poi.get("name"))
+        if identity not in node_by_identity:
+            return fail("unknown_ordered_stop")
+        ordered_nodes.append(node_by_identity[identity])
+    if ordered_nodes != planned.get("ordered_nodes") or len(ordered_nodes) < 2:
+        return fail("ordered_stop_mismatch")
+    sequence = ordered_nodes + ([ordered_nodes[0]] if planned.get("loop") else [])
+    legs = (payload.get("tour") or {}).get("legs")
+    if not isinstance(legs, list) or len(legs) != len(sequence) - 1:
+        return fail("leg_count_mismatch")
+    if (payload.get("tour") or {}).get("total_length_m") != payload.get("recommended_length_m"):
+        return fail("tour_length_mismatch")
+    segments = [
+        {"route": leg, "start_node": sequence[index],
+         "end_node": sequence[index + 1], "mode": mode}
+        for index, leg in enumerate(legs)
+    ]
+    report = verify_segmented_route_result(
+        graph, payload, road_conditions=context.get("_route_conditions_snapshot"),
+        expected_kind="tour", segments=segments,
+        duration_context_available=_duration_snapshot(context)[0],
+        weather_info=_duration_snapshot(context)[1],
+        task_revision=context.get("task_revision"),
+    )
+    if report["status"] != "pass":
+        return {"error": "route_verification_unknown" if report["status"] == "unknown"
+                else "route_verification_failed",
+                "message": _verification_failure_message(
+                    report, "游览路线的景点顺序或实际道路无法核对，本次不展示路线。",
+                ),
+                "route_verification": report}
+    geometry_error = _audit_segment_geometry(graph, segments)
+    if geometry_error:
+        _merge_display_geometry_check(report, geometry_error)
+        return {"error": "route_verification_unknown" if geometry_error["status"] == "unknown"
+                else "route_verification_failed",
+                "message": "游览路线画线与实际选用道路不一致，本次不展示路线。",
+                "route_verification": report}
+    _merge_display_geometry_check(report)
+    payload["route_verification"] = report
+    return None
+
+
+def _unverified_transfer_gap_m(graph, first_end_node, second_start_node):
+    if first_end_node == second_start_node:
+        return 0.0
+    try:
+        first_lon, first_lat = get_node_coords(graph, first_end_node)
+        second_lon, second_lat = get_node_coords(graph, second_start_node)
+        return _haversine(first_lat, first_lon, second_lat, second_lon)
+    except (KeyError, TypeError, ValueError):
+        return float("inf")
+
+
 def _tool_plan_route(args, ctx):
     graph_started = time.perf_counter()
     context, snapshot_error = _prepare_route_context(ctx)
@@ -1545,6 +1916,32 @@ def _tool_plan_route(args, ctx):
     poi_resolution_ms = (time.perf_counter() - poi_started) * 1000
     decision = _strategy_for_args(args, ctx, end_poi=end_poi)
 
+    reuse_assessment = None
+    reuse_state = context.get("_reuse_route_state")
+    expected_reuse_state = context.get("_reuse_expected_state")
+    if isinstance(reuse_state, dict):
+        call_matches_state = (
+            reuse_state.get("route_kind") == "direct"
+            and reuse_state.get("start") == args.get("start")
+            and reuse_state.get("end") == args.get("end")
+            and reuse_state.get("travel_mode") == mode
+            and reuse_state.get("hard_constraints") == (args.get("constraints") or {})
+            and reuse_state.get("strategy", {}).get("name") == decision.name
+            and expected_reuse_state is not None
+        )
+        reuse_assessment = (
+            route_reuse_module.assess_shortest_path_reuse(
+                reuse_state,
+                G,
+                context["_route_conditions_snapshot"],
+                expected_state=expected_reuse_state,
+                proof_identity=context.get("_route_proof_identity"),
+            )
+            if call_matches_state else {
+                "reuse_path": False, "reason": "route_call_mismatch", "edge_ids": None,
+            }
+        )
+
     try:
         result = compute_route(
             G=G, start_node=start_node, end_node=end_node,
@@ -1552,7 +1949,13 @@ def _tool_plan_route(args, ctx):
             weights=decision.weights, mode=mode, weather_info=weather_info,
             strategy_name=decision.name, detour_cap=decision.detour_cap,
             road_conditions=context["_route_conditions_snapshot"],
+            reuse_exact_shortest_edges=(
+                reuse_assessment.get("edge_ids")
+                if reuse_assessment and reuse_assessment.get("reuse_path") else None
+            ),
         )
+    except BudgetSearchIncomplete as e:
+        return {"error": "route_search_incomplete", "message": str(e)}, None
     except ValueError as e:
         return {"error": "route_not_found", "message": str(e)}, None
 
@@ -1572,6 +1975,34 @@ def _tool_plan_route(args, ctx):
         payload, "direct", args, context, G, decision,
         args["start"], args["end"], travel_mode=mode,
     )
+    verification_error = _audit_tool_route(
+        G, payload, context, [start_node, end_node], "direct",
+    )
+    if verification_error:
+        return verification_error, None
+    if reuse_assessment is not None:
+        payload["execution_optimization"] = {
+            "method": ("certified_exact_shortest_path_reuse"
+                       if reuse_assessment.get("reuse_path") else "full_shortest_search"),
+            "path_reused": bool(reuse_assessment.get("reuse_path")),
+            "reason": reuse_assessment.get("reason"),
+            "edge_change_set": reuse_assessment.get("change_set"),
+            "event_change_set": reuse_assessment.get("event_change_set"),
+            "dijkstra_runs": result.get("dijkstra_runs"),
+            "reverified": True,
+        }
+    if isinstance(payload.get("route_state"), dict):
+        proof_identity = context.get("_route_proof_identity")
+        if reuse_assessment and reuse_assessment.get("reuse_path"):
+            proof_identity = reuse_assessment["proof_identity"]
+        elif isinstance(reuse_state, dict) and (reuse_state.get("reuse_certificate") or {}).get("task_id"):
+            # A rejected task handle must not silently become an unbound proof.
+            proof_identity = None
+        payload["route_state"] = route_reuse_module.issue_shortest_path_reuse_certificate(
+            payload["route_state"], payload, G,
+            context["_route_conditions_snapshot"], verified=True,
+            proof_identity=proof_identity,
+        )
     return payload, {"route": payload}
 
 
@@ -1689,12 +2120,28 @@ def _tool_plan_via_route(args, ctx):
         if not cands:
             return {"error": "no_via_candidates",
                     "message": f"校园主数据中没有找到「{ACTIVITY_LABELS.get(via_activity, via_sub)}」途经地点"}, None
+        # Candidate snapping and detour ranking must see the same closures and
+        # hard constraints as the route computed below. The raw graph could
+        # otherwise nominate a closed or steps-only shortcut.
+        constraints = args.get("constraints") or {}
+        if not isinstance(constraints, dict):
+            return {"error": "invalid_constraints", "message": "通行约束格式不正确"}, None
+        try:
+            via_graph, _, _, _ = apply_conditions_to_graph(
+                G_mode, context["_route_conditions_snapshot"], mode, strict=True,
+            )
+        except RoadConditionsUnavailableError:
+            logger.exception("路况事件无法匹配当前路网，拒绝选择途经地点")
+            return {"error": "road_conditions_unavailable",
+                    "message": "当前管制信息无法与路网对应，途经地点暂不可核实。"}, None
+        from spatial.routing import _filter_by_constraints
+        via_graph, _, _ = _filter_by_constraints(via_graph, constraints)
         poi_nodes = []
         for p in cands:
             try:
                 lng_wgs, lat_wgs = gcj02_to_wgs84(p["lon"], p["lat"])
                 node, access, snap_error = _snap_wgs_to_network(
-                    lng_wgs, lat_wgs, G_mode, p.get("name", "途经地点"),
+                    lng_wgs, lat_wgs, via_graph, p.get("name", "途经地点"),
                 )
                 if not snap_error:
                     enriched = dict(p)
@@ -1702,7 +2149,9 @@ def _tool_plan_via_route(args, ctx):
                     poi_nodes.append((enriched, node))
             except Exception:
                 continue
-        on_the_way, off_the_way = rank_via_candidates(G, start_node, end_node, poi_nodes, mode=mode)
+        on_the_way, off_the_way = rank_via_candidates(
+            via_graph, start_node, end_node, poi_nodes, mode=mode,
+        )
         if not on_the_way:
             return {
                 "error": "no_on_the_way_via",
@@ -1743,6 +2192,31 @@ def _tool_plan_via_route(args, ctx):
             for i in range(len(ordered_nodes) - 1)
         ]
         direct = compute_route(G, start_node, end_node, **route_kwargs)
+        constraints = route_kwargs["constraints"]
+        max_distance_m = positive_budget(constraints, "max_distance_m")
+        max_duration_s = positive_budget(constraints, "max_duration_s")
+        composite_distance = sum(item["recommended_length_m"] for item in leg_results)
+        composite_duration = round(sum(item["duration_min"] for item in leg_results), 1)
+        budget_exceeded = (
+            (max_distance_m is not None and composite_distance > max_distance_m + 0.15)
+            or (max_duration_s is not None and composite_duration * 60 > max_duration_s + 3)
+        )
+        if budget_exceeded:
+            fallback = compute_budgeted_ordered_route(
+                G, ordered_nodes, constraints=constraints, weights=decision.weights,
+                mode=mode, road_conditions=context["_route_conditions_snapshot"],
+                weather_info=weather_info, strategy_name=decision.name,
+            )
+            if fallback is None:
+                return {
+                    "error": "route_budget_infeasible",
+                    "message": "按当前途经顺序，找不到同时满足整程距离或时间上限的路线。请放宽上限或调整途经点。",
+                }, None
+            _apply_ordered_budget_fallback(
+                leg_results, fallback, detour_cap=decision.detour_cap,
+            )
+    except BudgetSearchIncomplete as e:
+        return {"error": "route_search_incomplete", "message": str(e)}, None
     except ValueError as e:
         return {"error": "route_not_found", "message": str(e)}, None
 
@@ -1755,6 +2229,14 @@ def _tool_plan_via_route(args, ctx):
     direct_length = direct["recommended_length_m"] or direct["shortest_length_m"]
     total_length = sum(result["recommended_length_m"] for result in leg_results)
     total_shortest = sum(result["shortest_length_m"] for result in leg_results)
+    shortest_duration = round(sum(leg["shortest_duration_min"] for leg in legs), 1)
+    constraints = route_kwargs["constraints"]
+    max_distance_m = positive_budget(constraints, "max_distance_m")
+    max_duration_s = positive_budget(constraints, "max_duration_s")
+    shortest_baseline_feasible = (
+        (max_distance_m is None or total_shortest <= max_distance_m + 0.15)
+        and (max_duration_s is None or shortest_duration * 60 <= max_duration_s + 3)
+    )
     detour_ratio = total_length / direct_length if direct_length > 0 else float("inf")
 
     def join_path(field):
@@ -1787,8 +2269,9 @@ def _tool_plan_via_route(args, ctx):
         "distance_m": round(total_length, 1),
         "detour_ratio": round(detour_ratio, 3),
         "detour_ratio_shortest": round(shortest_detour, 3),
-        "duration_min": round(estimate_duration_min(total_length, mode), 1),
-        "shortest_duration_min": round(estimate_duration_min(total_shortest, mode), 1),
+        "duration_min": round(sum(leg["duration_min"] for leg in legs), 1),
+        "shortest_duration_min": shortest_duration,
+        "shortest_baseline_feasible": shortest_baseline_feasible,
         "mode": mode,
         "strategy": decision.as_dict(),
         "pois": [poi for leg in legs for poi in leg.get("pois", [])],
@@ -1821,11 +2304,36 @@ def _tool_plan_via_route(args, ctx):
         payload, "via", args, context, G, decision,
         args["start"], args["end"], via=via_ref, travel_mode=mode,
     )
+    verification_error = _audit_tool_route(
+        G, payload, context, ordered_nodes, "via",
+    )
+    if verification_error:
+        return verification_error, None
     return payload, {"route": payload, "route_kind": "via"}
 
 
 def _tool_plan_itinerary(args, ctx):
     """Plan an ordered stop list and enforce the stated total-time budget."""
+    ordered = ordered_via_request((ctx or {}).get("query", ""))
+    if ordered:
+        # Tool choice and itinerary arguments are model output. Reconstruct a
+        # bare ordered trip from the actual request before any default loop,
+        # dwell or invented budget can constrain it.
+        query = ctx["query"]
+        from agents.parser import detect_travel_mode
+
+        mode, _explicit_mode = detect_travel_mode(query)
+        constraints = {}
+        if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+            constraints["avoid_steps"] = True
+        if re.search(r"避坡|避开陡坡|少爬坡", query):
+            constraints["slope"] = "avoid"
+        return _tool_plan_via_route({
+            "start": {"name": ordered["start"], "type": "poi"},
+            "end": {"name": ordered["end"], "type": "poi"},
+            "via_points": [{"name": name, "type": "poi"} for name in ordered["via"]],
+            "mode": mode, "constraints": constraints,
+        }, ctx)
     stops = args.get("stops")
     if not isinstance(stops, list) or not 1 <= len(stops) <= _MAX_VIA_POINTS:
         return {"error": "invalid_itinerary", "message": "行程至少需要 1 个、最多 10 个途经地点。"}, None
@@ -1861,18 +2369,56 @@ def _tool_plan_itinerary(args, ctx):
         return route if isinstance(route, dict) else {
             "error": "itinerary_route_invalid", "message": "路线计算未返回可用结果。"
         }, None
+    verification = route.get("route_verification")
+    verified_path = (verification.get("paths") or {}).get("recommended") if isinstance(verification, dict) else None
+    measured = (verified_path or verification or {}).get("measured_length_m") if isinstance(verification, dict) else None
+    if (not isinstance(verification, dict) or verification.get("status") != "pass"
+            or not isinstance(route.get("route_state"), dict)
+            or route["route_state"].get("route_kind") != "via"):
+        return {"error": "itinerary_verification_failed",
+                "message": "行程所用路线尚未通过道路与途经点核验，不能据此判断时间预算。"}, None
     try:
         travel = float(route.get("duration_min"))
         distance = float(route.get("recommended_length_m", route.get("distance_m")))
+        measured = float(measured)
         if (not math.isfinite(travel) or travel < 0
-                or not math.isfinite(distance) or distance < 0):
+                or not math.isfinite(distance) or distance < 0
+                or not math.isfinite(measured) or measured < 0):
             raise ValueError
     except (TypeError, ValueError):
         return {"error": "itinerary_estimate_missing", "message": "路线缺少有效的路网距离或时间估算，暂时不能判断是否满足预算。"}, None
+    route_legs = route.get("legs")
+    if not isinstance(route_legs, list) or not route_legs:
+        return {"error": "itinerary_verification_failed",
+                "message": "行程缺少逐段时间，无法核对总时间预算。"}, None
+    try:
+        leg_times = [float(leg["duration_min"]) for leg in route_legs]
+        if any(not math.isfinite(value) or value < 0 for value in leg_times):
+            raise ValueError
+    except (KeyError, TypeError, ValueError):
+        return {"error": "itinerary_verification_failed",
+                "message": "行程逐段时间无效，无法核对总时间预算。"}, None
+    leg_count = len(route_legs)
+    mode = route_args["mode"]
+    minimum_travel = estimate_duration_min(measured, mode)
+    duration_tolerance = 0.1 * leg_count + 0.05
+    if (not math.isclose(distance, measured, abs_tol=max(0.15, 0.15 * leg_count))
+            or not math.isclose(travel, sum(leg_times), abs_tol=duration_tolerance)
+            or travel + duration_tolerance < minimum_travel):
+        return {"error": "itinerary_verification_failed",
+                "message": "行程的路网距离或通行时间与已核验路线不一致，不能据此判断时间预算。"}, None
 
     dwell_total = dwell * len(stops)
     total = travel + dwell_total
-    over_by = max(0.0, total - budget)
+    try:
+        hard_max_duration_s = positive_budget(route_args["constraints"], "max_duration_s")
+    except ValueError:
+        return {"error": "invalid_constraints",
+                "message": "最大行程时间须为有效的正数秒数。"}, None
+    effective_budget = min(
+        budget, hard_max_duration_s / 60 if hard_max_duration_s is not None else budget,
+    )
+    over_by = max(0.0, total - effective_budget)
     summary = {
         "status": "feasible" if over_by <= 0.05 else "over_budget",
         "start_name": route.get("start_name"),
@@ -1889,6 +2435,8 @@ def _tool_plan_itinerary(args, ctx):
         "opening_hours": "unknown",
         "estimate_note": "路上时间按当前路网和出行方式的速度模型估算；未计入排队、实际停留差异和地点开放状态。",
     }
+    if hard_max_duration_s is not None:
+        summary["hard_max_duration_min"] = round(hard_max_duration_s / 60, 1)
     if summary["status"] != "feasible":
         summary["next_step"] = "说明超出预算的分钟数，并询问用户是否增加时间或删减途经点；不要把这条路线作为满足预算的路线展示。"
         return summary, None
@@ -1905,6 +2453,16 @@ def _tool_plan_itinerary(args, ctx):
             "time_budget_min": round(budget, 1),
             "stop_duration_min": round(dwell, 1),
         }
+    route["route_verification"] = {
+        **verification,
+        "itinerary_budget": {
+            "status": "pass", "verified_distance_m": round(measured, 1),
+            "minimum_travel_min": minimum_travel,
+            "reported_travel_min": round(travel, 1),
+            "total_duration_min": round(total, 1),
+            "time_budget_min": round(budget, 1),
+        },
+    }
     route_artifact = dict(artifact) if isinstance(artifact, dict) else {}
     route_artifact["route"] = route
     route_artifact["route_kind"] = "itinerary"
@@ -1952,6 +2510,7 @@ def _tool_plan_multimodal_route(args, ctx):
     cumulative_dur = 0.0
     recommended_all = []
     pois_all = []
+    verification_segments = []
 
     for idx, leg in enumerate(legs_in):
         mode = leg.get("mode") or "walk"
@@ -1969,6 +2528,7 @@ def _tool_plan_multimodal_route(args, ctx):
             return err, None
         end_access = _endpoint_access_evidence(end_ref, end_node, G_mode, mode)
         leg_start_access = start_access if idx == 0 else None
+        incoming_node = prev_node
         # 起点也要重新吸附到本段 G_mode（前一段终点是 walk-only 时可能不在本段图里）
         if prev_node not in G_mode:
             # 用前一终点坐标重新吸附，并限制/披露模式转换接驳距离。
@@ -1989,6 +2549,12 @@ def _tool_plan_multimodal_route(args, ctx):
             leg_start_access = _snap_evidence_for_wgs(
                 prev_lng, prev_lat, f"第 {idx + 1} 段换乘起点", prev_node, G_mode,
             )
+
+        transfer_gap_m = _unverified_transfer_gap_m(G, incoming_node, prev_node)
+        if idx > 0 and transfer_gap_m > 3:
+            return {"error": "transfer_unverified",
+                    "message": f"第 {idx + 1} 段换乘点相隔约 {transfer_gap_m:.0f} 米，缺少可核对的接驳道路；请调整换乘点。",
+                    "transfer_gap_m": round(transfer_gap_m, 1)}, None
 
         if prev_node == end_node:
             return {"error": "same_poi",
@@ -2024,10 +2590,16 @@ def _tool_plan_multimodal_route(args, ctx):
                     "steps": _merge_leg_steps([leg1, leg2]),
                     "recommended_length_m": result["total_length_m"],
                     "distance_m": result["total_length_m"],
-                    "duration_min": round(estimate_duration_min(result["total_length_m"], mode), 1),
+                    "duration_min": round(leg1["duration_min"] + leg2["duration_min"], 1),
                     "mode": mode,
                     "pois": leg1["pois"] + leg2["pois"],
                 }
+                verification_segments.extend([
+                    {"route": leg1, "start_node": prev_node,
+                     "end_node": via_node, "mode": mode},
+                    {"route": leg2, "start_node": via_node,
+                     "end_node": end_node, "mode": mode},
+                ])
             else:
                 result = compute_route(
                     G=G, start_node=prev_node, end_node=end_node,
@@ -2038,6 +2610,13 @@ def _tool_plan_multimodal_route(args, ctx):
                     strategy_name=decision.name, detour_cap=decision.detour_cap,
                 )
                 leg_payload = _route_payload(G, result, prev_name, end_name, mode)
+                verification_segments.append({
+                    "route": leg_payload, "start_node": prev_node,
+                    "end_node": end_node, "mode": mode,
+                })
+        except BudgetSearchIncomplete as e:
+            return {"error": "route_search_incomplete",
+                    "message": f"第 {idx + 1} 段预算搜索尚未完成：{e}"}, None
         except ValueError as e:
             return {"error": "route_not_found",
                     "message": f"第 {idx + 1} 段（{mode}：{prev_name}→{end_name}）不可达：{e}"}, None
@@ -2057,6 +2636,64 @@ def _tool_plan_multimodal_route(args, ctx):
         prev_node = end_node
         prev_name = end_name
 
+    route_constraints = args.get("constraints") or {}
+    try:
+        multimodal_max_distance = positive_budget(route_constraints, "max_distance_m")
+        multimodal_max_duration = positive_budget(route_constraints, "max_duration_s")
+    except ValueError:
+        return {"error": "invalid_constraints",
+                "message": "多方式行程的距离或时间上限无效。"}, None
+    current_total_distance = round(sum(
+        segment["route"].get("recommended_length_m", 0)
+        for segment in verification_segments
+    ), 1)
+    current_total_duration = round(sum(
+        segment["route"].get("duration_min", 0)
+        for segment in verification_segments
+    ), 1)
+    budget_fallback = False
+    budget_search_ms = None
+    exceeds_trip_budget = (
+        (multimodal_max_distance is not None
+         and current_total_distance > multimodal_max_distance + 0.15)
+        or (multimodal_max_duration is not None
+            and current_total_duration * 60 > multimodal_max_duration + 3)
+    )
+    if exceeds_trip_budget:
+        try:
+            fallback = compute_budgeted_multimodal_route(
+                G, verification_segments, constraints=route_constraints,
+                weights=decision.weights, road_conditions=conditions,
+                weather_info=weather_info, strategy_name=decision.name,
+            )
+        except BudgetSearchIncomplete as exc:
+            return {"error": "route_search_incomplete",
+                    "message": f"多方式整程预算搜索尚未完成：{exc}"}, None
+        if fallback is None:
+            return {
+                "error": "route_budget_infeasible",
+                "message": "各段分别可达，但找不到同时满足整程距离或时间上限的换乘路线。请放宽上限或调整换乘点。",
+            }, None
+        try:
+            _apply_multimodal_budget_fallback(
+                G, verification_segments, fallback,
+                detour_cap=decision.detour_cap,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            return {"error": "route_search_incomplete",
+                    "message": f"多方式预算路线无法安全转换为展示路线：{exc}"}, None
+        _refresh_multimodal_composites(legs_payload)
+        cumulative_len = sum(
+            leg["recommended_length_m"] for leg in legs_payload
+        )
+        cumulative_dur = sum(leg["duration_min"] for leg in legs_payload)
+        recommended_all = [
+            coordinate for leg in legs_payload for coordinate in leg["recommended"]
+        ]
+        pois_all = [poi for leg in legs_payload for poi in leg.get("pois", [])]
+        budget_fallback = True
+        budget_search_ms = fallback.get("search_ms")
+
     # 合并多段 steps（_merge_leg_steps 已处理跨段 arrive→via 转换）
     merged_steps = _merge_leg_steps(legs_payload)
 
@@ -2072,6 +2709,8 @@ def _tool_plan_multimodal_route(args, ctx):
         "recommended_length_m": round(cumulative_len, 1),
         "distance_m": round(cumulative_len, 1),
         "duration_min": round(cumulative_dur, 1),
+        "budget_fallback": budget_fallback,
+        "budget_search_ms": budget_search_ms,
         # 整体 mode 用第一段（前端默认渲染色），每段 mode 在 legs[].mode 里
         "mode": legs_payload[0]["mode"],
         "strategy": decision.as_dict(),
@@ -2096,6 +2735,29 @@ def _tool_plan_multimodal_route(args, ctx):
         args["start"], legs_in[-1]["end"], legs=state_legs,
         travel_mode=legs_payload[0]["mode"],
     )
+    report = verify_segmented_route_result(
+        G, payload, road_conditions=context.get("_route_conditions_snapshot"),
+        expected_kind="multimodal", segments=verification_segments,
+        duration_context_available=_duration_snapshot(context)[0],
+        weather_info=_duration_snapshot(context)[1],
+        task_revision=context.get("task_revision"),
+    )
+    if report["status"] != "pass":
+        return {"error": "route_verification_unknown" if report["status"] == "unknown"
+                else "route_verification_failed",
+                "message": _verification_failure_message(
+                    report, "换乘路线的实际道路、出行方式或显示线无法核对，本次不展示路线。",
+                ),
+                "route_verification": report}, None
+    geometry_error = _audit_segment_geometry(G, verification_segments)
+    if geometry_error:
+        _merge_display_geometry_check(report, geometry_error)
+        return {"error": "route_verification_unknown" if geometry_error["status"] == "unknown"
+                else "route_verification_failed",
+                "message": "换乘路线画线与实际选用道路不一致，本次不展示路线。",
+                "route_verification": report}, None
+    _merge_display_geometry_check(report)
+    payload["route_verification"] = report
     return payload, {"route": payload, "route_kind": "multimodal"}
 
 
@@ -2302,13 +2964,58 @@ def _tool_plan_tour(args, ctx):
 
     loop = bool(args.get("loop", True)) if start_node is None else bool(args.get("loop", True))
     decision = _strategy_for_args(args, ctx)
-    result = compute_tour_route(
-        G, poi_nodes, start_node=start_node, loop=loop,
-        constraints=args.get("constraints") or {}, weights=decision.weights,
-        mode=mode, max_total_m=_TOUR_MAX_TOTAL_M, weather_info=weather_info,
-        road_conditions=context["_route_conditions_snapshot"],
-        strategy_name=decision.name, detour_cap=decision.detour_cap,
+    try:
+        result = compute_tour_route(
+            G, poi_nodes, start_node=start_node, loop=loop,
+            constraints=args.get("constraints") or {}, weights=decision.weights,
+            mode=mode, max_total_m=_TOUR_MAX_TOTAL_M, weather_info=weather_info,
+            road_conditions=context["_route_conditions_snapshot"],
+            strategy_name=decision.name, detour_cap=decision.detour_cap,
+        )
+    except BudgetSearchIncomplete as e:
+        return {"error": "route_search_incomplete", "message": str(e)}, None
+    tour_constraints = args.get("constraints") or {}
+    try:
+        tour_max_distance = positive_budget(tour_constraints, "max_distance_m")
+        tour_max_duration = positive_budget(tour_constraints, "max_duration_s")
+    except ValueError:
+        return {"error": "invalid_constraints",
+                "message": "游览行程的距离或时间上限无效。"}, None
+    selected_legs = result.get("legs") or []
+    current_tour_distance = sum(leg.get("recommended_length_m", 0) for leg in selected_legs)
+    current_tour_duration = round(sum(leg.get("duration_min", 0) for leg in selected_legs), 1)
+    tour_budget_exceeded = (
+        (tour_max_distance is not None and current_tour_distance > tour_max_distance + 0.15)
+        or (tour_max_duration is not None and current_tour_duration * 60 > tour_max_duration + 3)
     )
+    if tour_budget_exceeded and selected_legs:
+        sequence = list(result.get("ordered_nodes") or [])
+        if result.get("loop") and sequence:
+            sequence.append(sequence[0])
+        try:
+            fallback = compute_budgeted_ordered_route(
+                G, sequence, constraints=tour_constraints, weights=decision.weights,
+                mode=mode, road_conditions=context["_route_conditions_snapshot"],
+                weather_info=weather_info, strategy_name=decision.name,
+            )
+        except BudgetSearchIncomplete as exc:
+            return {"error": "route_search_incomplete", "message": str(exc)}, None
+        if fallback is None:
+            return {
+                "error": "tour_budget_infeasible",
+                "message": "按当前景点顺序，找不到同时满足整程距离或时间上限的游览路线。请放宽上限或减少景点。",
+            }, None
+        try:
+            _apply_ordered_budget_fallback(
+                selected_legs, fallback, detour_cap=decision.detour_cap,
+            )
+        except ValueError as exc:
+            return {"error": "route_search_incomplete", "message": str(exc)}, None
+        result["total_length_m"] = round(sum(
+            leg["recommended_length_m"] for leg in selected_legs
+        ), 1)
+        result["budget_fallback"] = True
+        result["budget_search_ms"] = fallback.get("search_ms")
     if requested_names:
         required_names = {poi.get("name") for poi in pois}
         routed_names = {poi.get("name") for poi in result.get("ordered_pois", [])}
@@ -2341,7 +3048,7 @@ def _tool_plan_tour(args, ctx):
             "loop": result["loop"],
             "legs": legs_payload,
             "total_length_m": result["total_length_m"],
-            "duration_min": round(estimate_duration_min(result["total_length_m"], mode), 1),
+            "duration_min": round(sum(leg["duration_min"] for leg in legs_payload), 1),
             "dropped": [p.get("name", "") for p in result["dropped"]],
             "mode": mode,
         },
@@ -2354,6 +3061,8 @@ def _tool_plan_tour(args, ctx):
         "steps": _merge_leg_steps(legs_payload),
         "recommended_length_m": result["total_length_m"],
         "distance_m": result["total_length_m"],
+        "budget_fallback": bool(result.get("budget_fallback")),
+        "budget_search_ms": result.get("budget_search_ms"),
         "strategy": decision.as_dict(),
         "endpoint_access": {
             "start": start_access,
@@ -2370,6 +3079,11 @@ def _tool_plan_tour(args, ctx):
         tour={"theme": theme, "pois": state_pois, "loop": result["loop"]},
         travel_mode=mode,
     )
+    verification_error = _audit_tool_tour(
+        G, payload, context, result, poi_nodes, start_node, mode,
+    )
+    if verification_error:
+        return verification_error, None
     return payload, {"route": payload, "route_kind": "tour"}
 
 
@@ -2447,7 +3161,7 @@ def _tool_list_road_conditions(args, ctx):
 
 def _tool_ask_user(args, ctx):
     question = (args.get("question") or "").strip() or "能再说得具体一点吗？"
-    options = [str(o)[:30] for o in (args.get("options") or [])][:4]
+    options = [str(o)[:30] for o in (args.get("options") or [])][:_MAX_CLARIFY_OPTIONS]
     return {"question": question, "options": options}, {"clarify": {"question": question, "options": options}}
 
 

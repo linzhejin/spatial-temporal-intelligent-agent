@@ -1,5 +1,7 @@
+import inspect
 import pytest
 import networkx as nx
+import random
 
 import spatial.routing as routing_module
 from spatial.routing import (
@@ -7,6 +9,9 @@ from spatial.routing import (
     _normalize_lengths,
     _compute_edge_cost,
     _filter_by_constraints,
+    _budgeted_ordered_path,
+    compute_budgeted_multimodal_route,
+    compute_budgeted_ordered_route,
     compute_route,
 )
 
@@ -99,6 +104,281 @@ def test_weighted_strategy_never_returns_route_beyond_cap(detour_graph, monkeypa
     assert result["length_capped"] is True
 
 
+def test_hard_distance_budget_uses_feasible_shortest_when_scenic_detour_exceeds_it(
+    detour_graph, monkeypatch,
+):
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+    result = compute_route(
+        detour_graph, 1, 4,
+        constraints={"max_distance_m": 120},
+        weights={"distance": 0.3, "slope": 0.1, "scenery": 0.6},
+        strategy_name="scenery", detour_cap=2.0, road_conditions=[],
+    )
+
+    assert result["shortest_length_m"] == 100.0
+    assert result["recommended_length_m"] == 100.0
+    assert result["recommended_edges"] == result["shortest_edges"]
+    assert result["hard_budget_fallback"] is True
+
+
+def test_time_budget_does_not_offer_slower_shortest_path_as_compliant(
+    detour_graph, monkeypatch,
+):
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+    result = compute_route(
+        detour_graph, 1, 4,
+        constraints={"max_duration_s": 150},
+        weights={"distance": 0.3, "slope": 0.1, "scenery": 0.6},
+        strategy_name="scenery", detour_cap=2.0, road_conditions=[],
+    )
+
+    assert result["recommended_length_m"] == 160.0
+    assert result["duration_min"] * 60 <= 153
+    assert result["shortest_duration_min"] * 60 > 153
+    assert result["shortest_baseline_feasible"] is False
+
+
+def test_budget_search_finds_third_route_when_preferred_and_shortest_both_fail(
+    detour_graph, monkeypatch,
+):
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+    detour_graph.add_node(3, x=114.360, y=30.535)
+    detour_graph.add_edge(1, 3, length=65.0, slope_level=2, scenery_level=1)
+    detour_graph.add_edge(3, 4, length=65.0, slope_level=2, scenery_level=1)
+
+    result = compute_route(
+        detour_graph, 1, 4,
+        constraints={"max_distance_m": 150, "max_duration_s": 120},
+        weights={"distance": 0.3, "slope": 0.1, "scenery": 0.6},
+        strategy_name="scenery", detour_cap=2.0, road_conditions=[],
+    )
+
+    assert result["recommended"] == [1, 3, 4]
+    assert result["recommended_length_m"] == 130.0
+    assert result["duration_min"] * 60 <= 123
+    assert result["hard_budget_fallback"] is True
+
+
+def test_ordered_budget_search_applies_time_budget_to_whole_waypoint_chain():
+    graph = nx.MultiDiGraph()
+    for node in range(5):
+        graph.add_node(node, x=114.360, y=30.535)
+    graph.add_edge(0, 1, length=100.0, slope_level=1, highway="steps")
+    graph.add_edge(0, 2, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(2, 1, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(1, 3, length=100.0, slope_level=1, highway="path")
+
+    result = _budgeted_ordered_path(
+        graph, [0, 1, 3], mode="walk", edge_weight=routing_module._length_weight,
+        duration_penalty_map={}, max_distance_m=350.0, max_duration_s=270.0,
+    )
+
+    assert result is not None
+    assert [leg["nodes"] for leg in result["legs"]] == [[0, 2, 1], [1, 3]]
+    assert result["distance_m"] == 340.0
+    assert result["duration_min"] * 60 <= 288.0
+
+
+def test_ordered_budget_search_returns_none_only_when_global_budgets_are_infeasible():
+    graph = nx.MultiDiGraph()
+    for node in range(4):
+        graph.add_node(node, x=114.360, y=30.535)
+    graph.add_edge(0, 1, length=100.0, slope_level=1, highway="steps")
+    graph.add_edge(0, 2, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(2, 1, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(1, 3, length=100.0, slope_level=1, highway="path")
+
+    result = _budgeted_ordered_path(
+        graph, [0, 1, 3], mode="walk", edge_weight=routing_module._length_weight,
+        duration_penalty_map={}, max_distance_m=300.0, max_duration_s=100.0,
+    )
+
+    assert result is None
+
+
+def test_ordered_budget_route_uses_filtered_graph_and_shared_eta_rules(monkeypatch):
+    graph = nx.MultiDiGraph()
+    for node in range(4):
+        graph.add_node(node, x=114.360, y=30.535)
+    graph.add_edge(0, 1, length=100.0, slope_level=1, highway="steps")
+    graph.add_edge(0, 2, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(2, 1, length=120.0, slope_level=1, highway="path")
+    graph.add_edge(1, 3, length=100.0, slope_level=1, highway="path")
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+
+    result = compute_budgeted_ordered_route(
+        graph, [0, 1, 3], strategy_name="shortest", mode="walk",
+        constraints={"max_distance_m": 350, "max_duration_s": 270},
+        road_conditions=[], weather_info=None,
+    )
+
+    assert result is not None
+    assert [leg["nodes"] for leg in result["legs"]] == [[0, 2, 1], [1, 3]]
+    assert result["distance_m"] == 340.0
+    assert result["duration_min"] == 4.5
+    assert result["legs"][0]["slope_avg_recommended"] == 1.0
+    assert result["legs"][0]["degraded"] is True
+
+
+def test_multimodal_budget_search_optimizes_all_modes_under_whole_trip_time():
+    graph = nx.MultiDiGraph()
+    for node in range(4):
+        graph.add_node(node, x=114.360 + node * 0.0001, y=30.535)
+    graph.add_edge(0, 1, key=0, length=100.0, highway="steps", slope_level=1)
+    graph.add_edge(0, 2, key=0, length=70.0, highway="path", slope_level=1)
+    graph.add_edge(2, 1, key=0, length=70.0, highway="path", slope_level=1)
+    graph.add_edge(1, 3, key=0, length=100.0, highway="residential", slope_level=5)
+
+    result = compute_budgeted_multimodal_route(
+        graph,
+        [{"mode": "walk", "start_node": 0, "end_node": 1},
+         {"mode": "bike", "start_node": 1, "end_node": 3}],
+        constraints={"max_distance_m": 250.0, "max_duration_s": 240.0},
+        strategy_name="shortest", road_conditions=[],
+    )
+
+    assert result is not None
+    assert [leg["nodes"] for leg in result["legs"]] == [[0, 2, 1], [1, 3]]
+    assert sum(leg["distance_m"] for leg in result["legs"]) == 240.0
+    assert sum(leg["duration_min"] for leg in result["legs"]) * 60 <= 243.0
+
+
+def test_multimodal_budget_search_returns_none_when_combined_distance_is_impossible():
+    graph = nx.MultiDiGraph()
+    for node in range(3):
+        graph.add_node(node, x=114.360 + node * 0.0001, y=30.535)
+    graph.add_edge(0, 1, key=0, length=100.0, highway="path", slope_level=1)
+    graph.add_edge(1, 2, key=0, length=100.0, highway="residential", slope_level=1)
+
+    result = compute_budgeted_multimodal_route(
+        graph,
+        [{"mode": "walk", "start_node": 0, "end_node": 1},
+         {"mode": "bike", "start_node": 1, "end_node": 2}],
+        constraints={"max_distance_m": 150.0},
+        strategy_name="shortest", road_conditions=[],
+    )
+
+    assert result is None
+
+
+def test_budget_search_retains_exact_parallel_edge_for_fastest_feasible_choice(monkeypatch):
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.360, y=30.535)
+    graph.add_node(2, x=114.361, y=30.535)
+    graph.add_edge(1, 2, key=0, length=100.0, slope_level=5, scenery_level=1)
+    graph.add_edge(1, 2, key=1, length=130.0, slope_level=2, scenery_level=1)
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+
+    result = compute_route(
+        graph, 1, 2, strategy_name="shortest",
+        constraints={"max_duration_s": 120}, road_conditions=[],
+    )
+
+    assert result["shortest_edges"] == [(1, 2, 0)]
+    assert result["recommended_edges"] == [(1, 2, 1)]
+    assert result["recommended_length_m"] == 130.0
+    assert result["shortest_baseline_feasible"] is False
+
+
+def test_budget_search_matches_public_rounded_duration_at_boundary(monkeypatch):
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.360, y=30.535)
+    graph.add_node(2, x=114.361, y=30.535)
+    graph.add_edge(1, 2, key=0, length=100.0, slope_level=5, scenery_level=1)
+    # 158.75 m at 4.5 km/h takes 127 s, displayed as 2.1 min (126 s).
+    graph.add_edge(1, 2, key=1, length=158.75, slope_level=2, scenery_level=1)
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+
+    result = compute_route(
+        graph, 1, 2, strategy_name="shortest",
+        constraints={"max_duration_s": 123}, road_conditions=[],
+    )
+
+    assert result["recommended_edges"] == [(1, 2, 1)]
+    assert result["duration_min"] == 2.1
+    assert result["duration_min"] * 60 <= 123 + 3
+
+
+def test_budget_search_matches_exhaustive_small_graph_oracle():
+    randomizer = random.Random(20261017)
+
+    def weight(_u, _v, edge_data):
+        return next(iter(edge_data.values()))["soft_cost"]
+
+    for _ in range(30):
+        graph = nx.MultiDiGraph()
+        graph.add_nodes_from(range(5))
+        for u in range(4):
+            for v in range(u + 1, 5):
+                if v == u + 1 or randomizer.random() < 0.6:
+                    for _key in range(1 + (randomizer.random() < 0.2)):
+                        graph.add_edge(
+                            u, v, length=randomizer.randint(20, 100),
+                            slope_level=randomizer.choice([2, 4, 5]),
+                            soft_cost=randomizer.randint(1, 15),
+                        )
+        distance_limit = randomizer.randint(100, 320)
+        duration_limit = randomizer.randint(100, 400)
+        exhaustive = []
+        for edges in nx.all_simple_edge_paths(graph, 0, 4):
+            distance = sum(graph[u][v][key]["length"] for u, v, key in edges)
+            seconds = sum(
+                routing_module._edge_duration_min(graph[u][v][key], "walk") * 60
+                for u, v, key in edges
+            )
+            if (distance <= distance_limit + 0.15
+                    and round(seconds / 60, 1) * 60 <= duration_limit + 3):
+                exhaustive.append(sum(graph[u][v][key]["soft_cost"] for u, v, key in edges))
+
+        result = routing_module._budgeted_path(
+            graph, 0, 4, mode="walk", penalty_map={}, edge_weight=weight,
+            max_distance_m=distance_limit, max_duration_s=duration_limit,
+        )
+        if not exhaustive:
+            assert result is None
+            continue
+        assert result is not None
+        _, selected_edges = result
+        selected_cost = sum(graph[u][v][key]["soft_cost"] for u, v, key in selected_edges)
+        assert selected_cost == min(exhaustive)
+
+
+@pytest.mark.parametrize(
+    ("mode", "highway", "slope", "speed_factor"),
+    [("walk", "steps", 3, 0.4), ("bike", "residential", 5, 0.4)],
+)
+def test_eta_applies_physical_mode_slowdown_once(mode, highway, slope, speed_factor, monkeypatch):
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.36, y=30.53)
+    graph.add_node(2, x=114.361, y=30.53)
+    graph.add_edge(1, 2, key=0, length=100.0, highway=highway, slope_level=slope)
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+
+    result = compute_route(graph, 1, 2, mode=mode, strategy_name="shortest", road_conditions=[])
+
+    expected = round(
+        100.0 / (routing_module.MODE_SPEEDS_KMH[mode] * 1000 / 60 * speed_factor), 1,
+    )
+    assert result["duration_min"] == expected
+    assert result["shortest_duration_min"] == expected
+
+
+def test_budget_search_limit_is_unknown_not_a_false_no_route(detour_graph, monkeypatch):
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+    monkeypatch.setattr(routing_module, "_MAX_CONSTRAINED_LABELS", 1)
+    detour_graph.add_node(3, x=114.360, y=30.535)
+    detour_graph.add_edge(1, 3, length=65.0, slope_level=2, scenery_level=1)
+    detour_graph.add_edge(3, 4, length=65.0, slope_level=2, scenery_level=1)
+
+    with pytest.raises(routing_module.BudgetSearchIncomplete):
+        compute_route(
+            detour_graph, 1, 4,
+            constraints={"max_distance_m": 150, "max_duration_s": 120},
+            weights={"distance": 0.3, "slope": 0.1, "scenery": 0.6},
+            strategy_name="scenery", detour_cap=2.0, road_conditions=[],
+        )
+
+
 def test_shortest_still_obeys_hard_closure(detour_graph):
     result = compute_route(
         detour_graph,
@@ -110,6 +390,49 @@ def test_shortest_still_obeys_hard_closure(detour_graph):
     )
 
     assert (1, 4, 0) not in result["recommended_edges"]
+
+
+def test_certified_exact_shortest_path_reuse_skips_dijkstra_but_rebuilds_route_metrics(
+    monkeypatch,
+):
+    assert "reuse_exact_shortest_edges" in inspect.signature(compute_route).parameters
+    graph = nx.MultiDiGraph()
+    for node, x in ((1, 114.360), (2, 114.361), (3, 114.362)):
+        graph.add_node(node, x=x, y=30.530)
+    graph.add_edge(1, 2, key=0, length=10.0, highway="footway", slope_level=2)
+    graph.add_edge(2, 3, key=0, length=12.0, highway="footway", slope_level=3)
+
+    def unexpected_search(*_args, **_kwargs):
+        raise AssertionError("certified path reuse should skip Dijkstra")
+
+    monkeypatch.setattr(routing_module, "_run_path", unexpected_search)
+    monkeypatch.setattr(routing_module, "_should_degrade_annotations", lambda: None)
+
+    result = compute_route(
+        graph, 1, 3, strategy_name="shortest", road_conditions=[],
+        reuse_exact_shortest_edges=[(1, 2, 0), (2, 3, 0)],
+    )
+
+    assert result["recommended_edges"] == [(1, 2, 0), (2, 3, 0)]
+    assert result["shortest_edges"] == [(1, 2, 0), (2, 3, 0)]
+    assert result["recommended_length_m"] == 22.0
+    assert result["dijkstra_runs"] == 0
+    assert result["duration_min"] > 0
+
+
+def test_exact_edge_exclusion_uses_other_parallel_key():
+    graph = nx.MultiDiGraph()
+    for node in (1, 2):
+        graph.add_node(node, x=114.36, y=30.535)
+    graph.add_edge(1, 2, key=0, length=50, highway="footway")
+    graph.add_edge(1, 2, key=1, length=80, highway="footway")
+
+    result = compute_route(
+        graph, 1, 2, strategy_name="shortest", road_conditions=[],
+        constraints={"excluded_edge_ids": ["[1,2,0]"]},
+    )
+
+    assert result["recommended_edges"] == [(1, 2, 1)]
 
 
 class TestNormalizeWeights:
@@ -429,6 +752,26 @@ class TestComputeRouteModes:
         "max_len", "_annotation_degraded",
     )
 
+    def test_shortest_time_includes_slowdown_on_its_selected_edges(self, monkeypatch):
+        graph = nx.MultiDiGraph()
+        graph.add_nodes_from((1, 2))
+        _set_campus_coords(graph)
+        graph.add_edge(1, 2, key=0, length=100.0, highway="footway",
+                       slope_level=3, scenery_level=3)
+        monkeypatch.setattr(
+            "spatial.road_conditions.apply_conditions_to_graph",
+            lambda candidate, events, mode, strict: (
+                candidate, {(1, 2, 0): 2.0}, set(), 1,
+            ),
+        )
+
+        result = compute_route(
+            graph, 1, 2, mode="walk", strategy_name="shortest",
+            road_conditions=[{"id": "slowdown"}],
+        )
+        assert result["duration_min"] == 2.7
+        assert result["shortest_duration_min"] == 2.7
+
     def test_bike_route(self, mode_graph):
         result = compute_route(mode_graph, 0, 7, mode="bike")
         assert result["mode"] == "bike"
@@ -558,7 +901,7 @@ class TestTourRoute:
         assert len(result["legs"]) == 3
         assert result["dropped"] == []
         assert result["total_length_m"] == pytest.approx(
-            sum(l["recommended_length_m"] for l in result["legs"]), abs=0.1
+            sum(leg["recommended_length_m"] for leg in result["legs"]), abs=0.1
         )
 
     def test_tour_loop_returns_to_start(self, mock_graph):

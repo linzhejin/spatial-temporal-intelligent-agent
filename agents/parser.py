@@ -242,6 +242,7 @@ def parse_query(query: str, context: Optional[dict] = None, use_few_shot: bool =
     client = OpenAI(
         api_key=DEEPSEEK_API_KEY,
         base_url=OPENAI_BASE_URL,
+        default_headers={"Accept-Encoding": "gzip, deflate"},
         # read 25s：DeepSeek 常见响应 10~25s，10s 会频繁超时导致"无返回"；
         # 2 次重试最坏 ~52s，仍在 gunicorn --timeout 60 之内。
         timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0),

@@ -4,13 +4,16 @@
 注册 API 蓝图、配置 CORS、统一错误处理、dev/prod 模式切换。
 """
 import json
+import ipaddress
 import logging
 import mimetypes
 import os
+import re
 import threading
 import time
-from flask import Flask, send_from_directory, jsonify, Response, request
+from flask import Flask, abort, send_from_directory, jsonify, Response, request
 from flask_cors import CORS
+from psycopg.conninfo import conninfo_to_dict
 
 # 部分系统（含 Linux 生产机）的 mimetypes 表不识别 .apk，浏览器下载时会变成未知文件
 mimetypes.add_type("application/vnd.android.package-archive", ".apk")
@@ -113,12 +116,53 @@ def create_app() -> Flask:
             "timestamp": int(time.time()),
         })
 
+    @app.route("/api/research/replay-readiness")
+    def research_replay_readiness():
+        """Opt-in local proof that research replay writes target a test database."""
+        if (os.getenv("FLASK_ENV", "development") == "production"
+                or os.getenv("AGENT_REPLAY_ENABLE_LOCAL") != "1"):
+            abort(404)
+        try:
+            remote = ipaddress.ip_address(request.remote_addr or "")
+        except ValueError:
+            abort(404)
+        if not remote.is_loopback:
+            abort(404)
+
+        database_url = app.config.get("DATABASE_URL")
+        try:
+            info = conninfo_to_dict(database_url or "")
+            configured_name = info.get("dbname") or ""
+            configured_host = info.get("host") or ""
+            if (not re.search(r"(?:^|_)test(?:_|$)", configured_name, re.IGNORECASE)
+                    or configured_host.casefold() not in {"localhost", "127.0.0.1", "::1"}):
+                raise ValueError("database is not a local test target")
+
+            from storage.database import connect
+
+            with connect(database_url) as conn:
+                actual = conn.execute(
+                    "SELECT current_database() AS name, inet_server_addr()::text AS address"
+                ).fetchone()
+            server_address = ipaddress.ip_interface(actual["address"] or "").ip
+            if (actual["name"].casefold() != configured_name.casefold()
+                    or not server_address.is_loopback):
+                raise ValueError("database target does not match the local test database")
+        except Exception:
+            return jsonify({"status": "blocked", "database_isolated": False}), 503
+
+        return jsonify({
+            "status": "ready", "service": "local_development",
+            "database_isolated": True,
+        })
+
     @app.after_request
     def _add_cache_headers(resp):
         path = request.path
         if (path == "/api/conversations" or path.startswith("/api/conversations/")
                 or path.startswith("/api/runs/") or path.startswith("/api/admin/")
                 or path == "/api/admin" or path.startswith("/api/manager/")
+                or path.startswith("/api/research/")
                 or path == "/api/manager" or path.startswith("/api/road-conditions")):
             resp.headers["Cache-Control"] = "private, no-store"
             resp.headers["Vary"] = "Cookie"

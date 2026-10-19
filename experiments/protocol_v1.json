@@ -1,0 +1,55 @@
+{
+  "protocol_version": "scenario-v1",
+  "scope": "Full multi-turn task evaluation scaffold for E1; historical experiments/runner.py E1/E2 parse-only and C1 30/20 are development material, not a formal blind test.",
+  "planned_design": {
+    "development_scenarios": 60,
+    "test_scenarios": 300,
+    "test_categories": 6,
+    "test_scenarios_per_category": 50,
+    "repeats_per_scenario": 3,
+    "random_seed": 20261016,
+    "primary_metric": "complete_task_success_rate_scenario_mean"
+  },
+  "categories": [
+    "place_recommendation",
+    "mode_access",
+    "multi_via_itinerary",
+    "compound_tools",
+    "multi_turn_revision",
+    "event_infeasible"
+  ],
+  "gold_contract": {
+    "one_expected_turn_per_user_message": true,
+    "required_case_fields": ["id", "category", "template_group", "od_group", "snapshot_id", "messages", "expected_turns", "adjudication"],
+    "required_turn_fields": ["status", "kind", "feasibility", "start_poi_id", "end_poi_id", "via_poi_ids", "travel_mode", "strategy", "hard_constraints", "required_outputs", "candidate_poi_ids", "clarification_slot", "allowed_unknowns"],
+    "adjudicated_turn_fields": ["intent_label", "expected_tools"],
+    "intent_labels": ["place_recommendation", "activity_recommendation", "route_planning", "route_revision", "route_comparison", "information_lookup", "clarification", "compound_request", "other"],
+    "available_tools": ["resolve_poi", "get_place_details", "search_poi_candidates", "find_reachable_places", "compare_routes", "plan_route", "plan_via_route", "plan_itinerary", "plan_tour", "plan_multimodal_route", "get_weather", "list_road_conditions", "ask_user", "suggest_followup"],
+    "expected_tools": "A nonempty JSON array of acceptable tool-name sequences; each sequence is an ordered array and may be empty to adjudicate that no tool call is appropriate. Tool names must exist in agents.tools.TOOL_NAMES. Null is allowed only in unadjudicated drafts.",
+    "poi_comparison": "Stable POI IDs; ordered via and candidate lists are compared exactly. Null means no entity expected.",
+    "adjudication": "Formal test gold requires an independent human reviewer, manual_independent method, and cited evidence. Adjudicated turns also require a controlled intent_label and one or more acceptable expected_tools sequences. Draft cases cannot be formal runs."
+  },
+  "observation_contract": {
+    "format": "JSONL, one object per scenario_id and one-based attempt; input_messages must exactly echo the preregistered user messages and snapshot_id must match the gold case",
+    "turns": "Each observation has turns in the same order as gold messages. Each turn projects status, kind, stable POI IDs, ordered vias/candidates, travel mode, strategy, hard constraints, outputs, clarification slot, explicit unknowns, and actual route_edge_ids if any. When opt-in LLM planner tracing is enabled, tool_trace records only tool_name, argument_keys, outcome, and artifact_kind; raw argument values and tool results are never saved. Optional top-level latency_s, tool_calls, input_tokens, output_tokens provide cost metrics; tool_calls must equal the sum of complete projected tool_trace records when every turn has a trace. Unprojected fields are rejected before saving.",
+    "independent_review": "For spatial output supply source=independent_reviewer, reviewer, evidence references, route=pass|fail|unknown, hard_constraints verdicts, and non-route output verdicts. Product verifier/self-reported completion is not ground truth.",
+    "tool_trace_semantics": "Tool-use scoring compares the ordered tool names against human-adjudicated expected_tools. A missing trace means unknown, not an empty sequence. Raw tool arguments and results are never stored. Tool-use findings are a separate diagnostic and do not change task_success.",
+    "route_edge_id": "Stable (u,v,key) reference from the frozen graph; a separate reviewer must inspect connectivity, event snapshot, mode, budget, ordered vias, and applicable hard constraints."
+  },
+  "scoring": {
+    "complete_task_success_denominator": "All planned scenario attempts; missing observations fail. Scenario mean averages each scenario's attempt success fraction, so repeats are not independent cases.",
+    "hard_constraint_violation_denominator": "Spatial outputs with a documented independent route verdict and all applicable hard-constraint verdicts decisive; report spatial output coverage, unknowns and refusal counts separately.",
+    "unknown_policy": "Unknown independent evidence never counts as complete task success. Allowed task-data unknowns must be preregistered in gold; unlisted unknowns fail. Tool selection is reported separately: exact accepted call-sequence match is pass, mismatch is fail, missing opt-in trace is unknown, and missing human gold is unadjudicated. Tool selection does not alter complete task success.",
+    "tool_selection_metric": "Report pass/fail accuracy over decisive adjudicated turns only, plus unknown and unadjudicated counts; do not treat absent trace as zero calls or product failure.",
+    "failure_categories": ["missing_observation", "missing_turn", "transport_error", "input_mismatch", "snapshot_mismatch", "turn_count_mismatch", "wrong_status", "false_refusal", "infeasible_missed", "wrong_kind", "wrong_poi", "wrong_poi_order", "wrong_candidate_order", "wrong_travel_mode", "wrong_strategy", "wrong_clarification", "dropped_constraint", "unexpected_constraint", "partial_completion", "unexpected_unknown", "route_invalid", "hard_constraint_violation", "output_invalid"],
+    "unknown_categories": ["snapshot_not_frozen", "route_evidence_missing", "route_review_missing", "route_review_unknown", "hard_constraint_unknown:<name>", "output_review_missing", "output_unknown:<name>"]
+  },
+  "run_rules": {
+    "replay_is_offline": true,
+    "new_run_directory_required": true,
+    "input_hashes_recorded": ["dataset_sha256", "protocol_sha256", "replay_sha256", "snapshot_manifest_sha256", "development_dataset_sha256"],
+    "formal_requires": ["test split", "manually adjudicated gold", "leakage-free audit against a separate development split", "Agent gate ready frozen snapshot manifest with every required input digest", "case snapshot_id equals versions.effective_inputs_sha256", "matching Git commit", "clean tracked worktree"],
+    "freeze_policy": "If a test error is inspected and used to repair code or data, mark that batch seen and reserve new unseen cases for an independent test."
+  },
+  "status": "offline scorer, local development replay adapter, split leakage audit, tool-selection diagnostic, human review workbook, and formal runner gate implemented; 60 development cases remain unadjudicated, the blind test split is empty, external formal gates are unverified, and no formal comparison has been performed"
+}

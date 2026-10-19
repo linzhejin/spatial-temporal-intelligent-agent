@@ -15,12 +15,17 @@
 """
 
 import ast
+import heapq
+import itertools
 import logging
+import math
 import os
 import time
 from typing import Optional
 
 import networkx as nx
+
+from spatial.route_constraints import positive_budget
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +34,11 @@ WEIGHT_BOUNDS = {"min": 0.05, "max": 0.90}
 
 _PATH_LENGTH_CAP_MULTIPLIER = 3.0
 _PATH_LENGTH_CAP_MAX = 2000.0
+_MAX_CONSTRAINED_LABELS = 50000
+
+
+class BudgetSearchIncomplete(ValueError):
+    """The bounded search could not establish whether a budgeted path exists."""
 
 _EDGE_ATTR_DEFAULTS = {
     "slope_level": 3,
@@ -426,7 +436,6 @@ def _estimate_route_duration_min(G, route_nodes, mode, penalty_map=None,
     mode = normalize_mode(mode)
     if not route_nodes or len(route_nodes) < 2:
         return 0.0
-    base_m_per_min = MODE_SPEEDS_KMH[mode] * 1000.0 / 60.0
     penalty_map = penalty_map or {}
     total_min = 0.0
     for i in range(len(route_nodes) - 1):
@@ -440,42 +449,37 @@ def _estimate_route_duration_min(G, route_nodes, mode, penalty_map=None,
         else:
             edge_key = min(edge_data, key=lambda k: edge_data[k].get("length", float("inf")))
             d = edge_data[edge_key]
-        try:
-            length_m = float(d.get("length", 0) or 0)
-        except (TypeError, ValueError):
-            length_m = 0.0
-        if length_m <= 0:
-            continue
-
-        # 速度折扣因子（越大越快），1.0 为基线
-        factor = 1.0
-        if mode == "walk":
-            tags = _edge_highway_tags(d)
-            if "steps" in tags:
-                factor *= 0.4  # 台阶速度减半多
-            lvl = d.get("slope_level")
-            if lvl == 5:
-                factor *= 0.5
-            elif lvl == 4:
-                factor *= 0.7
-        elif mode == "bike":
-            lvl = d.get("slope_level")
-            if lvl == 5:
-                factor *= 0.4
-            elif lvl == 4:
-                factor *= 0.6
-        # drive 不受小坡影响
-
-        # 路况惩罚：penalty F → 速度 ÷ F
-        f = penalty_map.get((u, v, edge_key))
-        if f and f > 1.0:
-            factor /= f
-
-        # 边通行速度（米/分）= base × factor；时长 = length / speed
-        edge_speed = base_m_per_min * max(factor, 0.05)  # 防 0
-        total_min += length_m / edge_speed
+        total_min += _edge_duration_min(d, mode, penalty_map.get((u, v, edge_key)))
 
     return round(total_min, 1)
+
+
+def _edge_duration_min(data, mode, road_factor=None) -> float:
+    """Unrounded contribution of one exact edge to the public duration estimate."""
+    try:
+        length_m = float(data.get("length", 0) or 0)
+    except (TypeError, ValueError):
+        return 0.0
+    if length_m <= 0:
+        return 0.0
+    factor = 1.0
+    level = data.get("slope_level")
+    if mode == "walk":
+        if "steps" in _edge_highway_tags(data):
+            factor *= 0.4
+        if level == 5:
+            factor *= 0.5
+        elif level == 4:
+            factor *= 0.7
+    elif mode == "bike":
+        if level == 5:
+            factor *= 0.4
+        elif level == 4:
+            factor *= 0.6
+    if road_factor and road_factor > 1.0:
+        factor /= road_factor
+    meters_per_min = MODE_SPEEDS_KMH[mode] * 1000.0 / 60.0
+    return length_m / (meters_per_min * max(factor, 0.05))
 
 
 # ---------------------------------------------------------------------------
@@ -791,13 +795,16 @@ def _filter_by_constraints(G: nx.MultiDiGraph, constraints: dict) -> tuple:
         - filter_status: 状态标记 ("filtered" | "no_filter")
         - penalty_map: {(u, v, k): penalty_multiplier} 用于成本调整
     """
+    from spatial.route_constraints import excluded_edge_ids
+
+    excluded = excluded_edge_ids(constraints)
     slope_constraint = constraints.get("slope", "normal")
     avoid_steps = bool(constraints.get("avoid_steps", False))
 
-    if slope_constraint != "avoid" and not avoid_steps:
+    if slope_constraint != "avoid" and not avoid_steps and not excluded:
         return G, "no_filter", {}
 
-    edges_to_remove = []
+    edges_to_remove = list(excluded)
     penalty_map = {}
 
     for u, v, k, data in G.edges(keys=True, data=True):
@@ -823,6 +830,8 @@ def _filter_by_constraints(G: nx.MultiDiGraph, constraints: dict) -> tuple:
     if avoid_steps:
         status_parts.append("steps_avoid")
         status_parts.append("steps_unverified")
+    if excluded:
+        status_parts.append("excluded_edges")
 
     return G_filtered, "+".join(status_parts) or "no_filter", penalty_map
 
@@ -922,6 +931,528 @@ def _run_path(G: nx.MultiDiGraph, start_node: int, end_node: int, weight):
     nodes = nx.dijkstra_path(G, start_node, end_node, weight=weight)
     edges = _select_path_edges(G, nodes, weight)
     return nodes, edges
+
+
+def _budgeted_path(G, start_node, end_node, *, mode, penalty_map, edge_weight,
+                   max_distance_m, max_duration_s, duration_penalty_map=None,
+                   return_frontier=False, max_labels=None):
+    """Find minimum soft-cost path under additive distance and time budgets.
+
+    Pareto labels retain the exact directed edge key. A bounded search returns
+    an explicit unknown state on resource exhaustion, never a false no-route.
+    """
+    labels = [{"node": start_node, "cost": 0.0, "distance": 0.0,
+               "seconds": 0.0, "previous": None, "edge": None, "active": True}]
+    at_node = {start_node: [0]}
+    sequence = itertools.count()
+    queue = [(0.0, next(sequence), 0)]
+    duration_penalty_map = (penalty_map if duration_penalty_map is None
+                            else duration_penalty_map)
+    label_limit = max(1, int(max_labels or _MAX_CONSTRAINED_LABELS))
+
+    def reconstruct(label_index):
+        edges = []
+        nodes = [labels[label_index]["node"]]
+        while label_index:
+            label = labels[label_index]
+            edges.append(label["edge"])
+            label_index = label["previous"]
+            nodes.append(labels[label_index]["node"])
+        return list(reversed(nodes)), list(reversed(edges))
+
+    while queue:
+        _, _, label_index = heapq.heappop(queue)
+        current = labels[label_index]
+        if not current["active"]:
+            continue
+        u = current["node"]
+        if u == end_node:
+            if max_duration_s is None or round(current["seconds"] / 60.0, 1) * 60 <= max_duration_s + 3:
+                if not return_frontier:
+                    return reconstruct(label_index)
+            continue
+
+        for _, v, key, data in G.out_edges(u, keys=True, data=True):
+            try:
+                length = float(data.get("length", 0) or 0)
+                cost = float(edge_weight(u, v, {key: data}))
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise BudgetSearchIncomplete("路网含有无法计算的边，预算路线尚不能确认。") from exc
+            if not math.isfinite(length) or length < 0 or not math.isfinite(cost) or cost < 0:
+                raise BudgetSearchIncomplete("路网含有无效距离或代价，预算路线尚不能确认。")
+            edge = (u, v, key)
+            seconds = _edge_duration_min(data, mode, duration_penalty_map.get(edge)) * 60.0
+            if not math.isfinite(seconds) or seconds < 0:
+                raise BudgetSearchIncomplete("路网含有无效通行时间，预算路线尚不能确认。")
+            distance = current["distance"] + length
+            elapsed = current["seconds"] + seconds
+            if max_distance_m is not None and distance > max_distance_m + 0.15:
+                continue
+            # Public ETA rounds the whole route to 0.1 min (6 s). A raw
+            # duration slightly above max + 3 can still round down into the
+            # accepted displayed duration, so use a safe bound here and check
+            # the exact public rule when the destination label is popped.
+            if max_duration_s is not None and elapsed > max_duration_s + 6:
+                continue
+            next_cost = current["cost"] + cost
+            others = at_node.get(v, [])
+            if any(labels[i]["cost"] <= next_cost
+                   and labels[i]["distance"] <= distance
+                   and labels[i]["seconds"] <= elapsed for i in others):
+                continue
+            remaining = []
+            for i in others:
+                old = labels[i]
+                if next_cost <= old["cost"] and distance <= old["distance"] and elapsed <= old["seconds"]:
+                    old["active"] = False
+                else:
+                    remaining.append(i)
+            if len(labels) >= label_limit:
+                raise BudgetSearchIncomplete("预算路线搜索超过计算上限，暂时无法确认是否有可行路线。")
+            next_index = len(labels)
+            labels.append({"node": v, "cost": next_cost, "distance": distance,
+                           "seconds": elapsed, "previous": label_index,
+                           "edge": edge, "active": True})
+            remaining.append(next_index)
+            at_node[v] = remaining
+            heapq.heappush(queue, (next_cost, next(sequence), next_index))
+    if return_frontier:
+        frontier = []
+        for label_index in at_node.get(end_node, []):
+            label = labels[label_index]
+            if not label["active"]:
+                continue
+            duration_min = round(label["seconds"] / 60.0, 1)
+            if (max_duration_s is not None
+                    and duration_min * 60.0 > max_duration_s + 3.0):
+                continue
+            nodes, edges = reconstruct(label_index)
+            frontier.append({
+                "nodes": nodes, "edges": edges, "cost": label["cost"],
+                "distance_m": round(label["distance"], 1),
+                "duration_min": duration_min,
+            })
+        return frontier
+    return None
+
+
+def _budgeted_ordered_path(G, waypoints, *, mode, edge_weight,
+                           duration_penalty_map=None, max_distance_m=None,
+                           max_duration_s=None):
+    """Find a minimum-cost path through ordered waypoints under whole-trip budgets.
+
+    Labels retain the next waypoint index, so distance and time budgets are
+    cumulative across the entire itinerary rather than independently reused
+    for each leg. ``G`` must already have mode, closure, and hard-constraint
+    filtering applied. Exact directed edge keys are returned for each leg.
+    """
+    if not isinstance(waypoints, (list, tuple)) or len(waypoints) < 2:
+        raise ValueError("ordered route needs at least two waypoints")
+    waypoints = list(waypoints)
+    if any(left == right for left, right in zip(waypoints, waypoints[1:])):
+        raise ValueError("adjacent ordered waypoints must differ")
+    if any(node not in G for node in waypoints):
+        return None
+    mode = normalize_mode(mode)
+    duration_penalty_map = duration_penalty_map or {}
+
+    # A label's stage is the index of the next waypoint to reach. Multiple
+    # labels at the same (node, stage) are kept only when they are Pareto
+    # incomparable in cost, distance, and elapsed time.
+    labels = [{
+        "node": waypoints[0], "stage": 1, "cost": 0.0, "distance": 0.0,
+        "seconds": 0.0, "previous": None, "edge": None,
+        "segment_index": None, "active": True,
+    }]
+    at_state = {(waypoints[0], 1): [0]}
+    sequence = itertools.count()
+    queue = [(0.0, next(sequence), 0)]
+
+    def build_result(label_index):
+        chain = []
+        while label_index:
+            label = labels[label_index]
+            chain.append(label)
+            label_index = label["previous"]
+        chain.reverse()
+        nodes = [waypoints[0]] + [label["node"] for label in chain]
+        leg_count = len(waypoints) - 1
+        leg_nodes = [[waypoints[index]] for index in range(leg_count)]
+        leg_edges = [[] for _ in range(leg_count)]
+        leg_seconds = [0.0] * leg_count
+        leg_distances = [0.0] * leg_count
+        for edge_index, label in enumerate(chain):
+            segment = label["segment_index"]
+            edge = label["edge"]
+            if segment is None or not 0 <= segment < leg_count:
+                raise BudgetSearchIncomplete("有序预算路线的阶段记录无效。")
+            leg_edges[segment].append(edge)
+            leg_nodes[segment].append(nodes[edge_index + 1])
+            u, v, key = edge
+            attrs = G[u][v][key]
+            leg_distances[segment] += float(attrs.get("length", 0) or 0)
+            leg_seconds[segment] += _edge_duration_min(
+                attrs, mode, duration_penalty_map.get(edge),
+            ) * 60.0
+        legs = [
+            {
+                "nodes": leg_nodes[index],
+                "edges": leg_edges[index],
+                "distance_m": round(leg_distances[index], 1),
+                "duration_min": round(leg_seconds[index] / 60.0, 1),
+            }
+            for index in range(leg_count)
+        ]
+        return {
+            "legs": legs,
+            "distance_m": round(sum(leg_distances), 1),
+            # Match the composite payload, which sums independently rounded
+            # per-leg estimates before exposing the total.
+            "duration_min": round(sum(leg["duration_min"] for leg in legs), 1),
+        }
+
+    while queue:
+        _, _, label_index = heapq.heappop(queue)
+        current = labels[label_index]
+        if not current["active"]:
+            continue
+        if current["stage"] == len(waypoints):
+            result = build_result(label_index)
+            if (max_distance_m is None or result["distance_m"] <= max_distance_m + 0.15) and (
+                max_duration_s is None
+                or result["duration_min"] * 60.0 <= max_duration_s + 3.0
+            ):
+                return result
+            continue
+
+        u, stage = current["node"], current["stage"]
+        for _, v, key, attrs in G.out_edges(u, keys=True, data=True):
+            edge = (u, v, key)
+            try:
+                length = float(attrs.get("length", 0) or 0)
+                cost = float(edge_weight(u, v, {key: attrs}))
+                seconds = _edge_duration_min(
+                    attrs, mode, duration_penalty_map.get(edge),
+                ) * 60.0
+            except (TypeError, ValueError, OverflowError) as exc:
+                raise BudgetSearchIncomplete("路网含有无法计算的边，有序预算路线暂不能确认。") from exc
+            if (not math.isfinite(length) or length < 0
+                    or not math.isfinite(cost) or cost < 0
+                    or not math.isfinite(seconds) or seconds < 0):
+                raise BudgetSearchIncomplete("路网含有无效距离或代价，有序预算路线暂不能确认。")
+
+            next_stage = stage + 1 if v == waypoints[stage] else stage
+            distance = current["distance"] + length
+            elapsed = current["seconds"] + seconds
+            if max_distance_m is not None and distance > max_distance_m + 0.15:
+                continue
+            # Leave enough room for the same public one-decimal-minute rounding
+            # used by the single-route budget solver; reconstructed leg totals
+            # are checked exactly when the final label is popped.
+            if max_duration_s is not None and elapsed > max_duration_s + 6.0:
+                continue
+            next_cost = current["cost"] + cost
+            state = (v, next_stage)
+            others = at_state.get(state, [])
+            if any(labels[index]["cost"] <= next_cost
+                   and labels[index]["distance"] <= distance
+                   and labels[index]["seconds"] <= elapsed for index in others):
+                continue
+            remaining = []
+            for index in others:
+                old = labels[index]
+                if (next_cost <= old["cost"] and distance <= old["distance"]
+                        and elapsed <= old["seconds"]):
+                    old["active"] = False
+                else:
+                    remaining.append(index)
+            if len(labels) >= _MAX_CONSTRAINED_LABELS:
+                raise BudgetSearchIncomplete("有序预算路线搜索超过计算上限，暂时无法确认是否有可行路线。")
+            next_index = len(labels)
+            labels.append({
+                "node": v, "stage": next_stage, "cost": next_cost,
+                "distance": distance, "seconds": elapsed,
+                "previous": label_index, "edge": edge,
+                "segment_index": stage - 1, "active": True,
+            })
+            remaining.append(next_index)
+            at_state[state] = remaining
+            heapq.heappush(queue, (next_cost, next(sequence), next_index))
+    return None
+
+
+def compute_budgeted_ordered_route(
+    G, waypoints, *, constraints=None, weights=None, mode="walk",
+    road_conditions=None, weather_info=None, strategy_name="recommended",
+):
+    """Find per-leg paths that jointly satisfy a hard whole-trip budget.
+
+    Returns an exact edge sequence for each ordered leg, or ``None`` when no
+    feasible complete chain exists. The fallback minimizes the configured
+    route cost subject to *cumulative* distance and duration limits. It uses
+    the same mode, event, hard-constraint, weather, and ETA rules as
+    :func:`compute_route`.
+    """
+    constraints = constraints or {}
+    max_distance_m = positive_budget(constraints, "max_distance_m")
+    max_duration_s = positive_budget(constraints, "max_duration_s")
+    if max_distance_m is None and max_duration_s is None:
+        return None
+    mode = normalize_mode(mode)
+
+    from spatial.routing_index import get_routing_index
+    prepared = get_routing_index(G).for_mode(mode)
+    G_mode = prepared.graph
+    if road_conditions is None:
+        from spatial.road_conditions import list_conditions
+        road_conditions = list_conditions(strict=True)
+    road_penalty = {}
+    if road_conditions:
+        from spatial.road_conditions import apply_conditions_to_graph
+        G_mode, road_penalty, _, _ = apply_conditions_to_graph(
+            G_mode, road_conditions, mode, strict=True,
+        )
+    G_filtered, _, constraint_penalty = _filter_by_constraints(G_mode, constraints)
+
+    weather_penalty = {}
+    if weather_info:
+        try:
+            from spatial.weather import weather_slope_penalty
+            slope_penalties = weather_slope_penalty(weather_info)
+            if slope_penalties:
+                for u, v, key, attrs in G_filtered.edges(keys=True, data=True):
+                    multiplier = slope_penalties.get(attrs.get("slope_level", 3))
+                    if multiplier:
+                        weather_penalty[(u, v, key)] = multiplier
+        except Exception as exc:
+            logger.warning("有序预算路线的天气惩罚无法计算: %s", exc)
+
+    if strategy_name == "shortest":
+        resolved_weights = {"distance": 1.0, "slope": 0.0, "scenery": 0.0}
+    elif weights is None:
+        resolved_weights = dict(MODE_DEFAULT_WEIGHTS[mode])
+    else:
+        resolved_weights = resolve_weights(weights)
+    penalty_map = _merge_penalty_maps(
+        prepared.mode_penalty, road_penalty, weather_penalty, constraint_penalty,
+    )
+    annotation_degraded = _should_degrade_annotations()
+    _, norm_lengths = _normalize_lengths(G_filtered)
+    edge_weight = _edge_cost_factory(
+        G_filtered, norm_lengths, resolved_weights, penalty_map,
+        annotation_degraded,
+        outside_road_penalty=MODE_OUTSIDE_ROAD_PENALTY[mode],
+    )
+    duration_penalty_map = _merge_penalty_maps(road_penalty, weather_penalty)
+    started = time.perf_counter()
+    result = _budgeted_ordered_path(
+        G_filtered, waypoints, mode=mode, edge_weight=edge_weight,
+        duration_penalty_map=duration_penalty_map,
+        max_distance_m=max_distance_m, max_duration_s=max_duration_s,
+    )
+    if result is None:
+        return None
+
+    for leg in result["legs"]:
+        nodes, edges = leg["nodes"], leg["edges"]
+        leg["recommended_length_m"] = leg.pop("distance_m")
+        leg["duration_min"] = estimate_duration_min(
+            None, mode, G=G, route_nodes=nodes, route_edges=edges,
+            penalty_map=duration_penalty_map,
+        )
+        leg["slope_avg_recommended"] = round(
+            _weighted_avg_attr(G, nodes, "slope_level", edges), 3,
+        )
+        leg["scenery_avg_recommended"] = round(
+            _weighted_avg_attr(G, nodes, "scenery_level", edges), 3,
+        )
+        leg["degraded"] = any(
+            _get_edge_attr(G[u][v][key], "slope_level")[1]
+            or _get_edge_attr(G[u][v][key], "scenery_level")[1]
+            for u, v, key in edges
+        )
+    result["duration_min"] = round(sum(leg["duration_min"] for leg in result["legs"]), 1)
+    result["search_ms"] = round((time.perf_counter() - started) * 1000.0, 3)
+    return result
+
+
+def compute_budgeted_multimodal_route(
+    G, segments, *, constraints=None, weights=None, road_conditions=None,
+    weather_info=None, strategy_name="recommended",
+):
+    """Find exact per-mode segment paths that jointly satisfy trip budgets.
+
+    Each segment is searched on its own mode-filtered graph. The solver keeps
+    each segment's Pareto frontier (soft cost, distance, ETA), then combines
+    those frontiers under the public whole-trip rounding rules. A bounded
+    search raises :class:`BudgetSearchIncomplete` rather than claiming that no
+    compliant multimodal route exists.
+    """
+    if not isinstance(segments, (list, tuple)) or not segments:
+        raise ValueError("multimodal budget search needs at least one segment")
+    constraints = constraints or {}
+    max_distance_m = positive_budget(constraints, "max_distance_m")
+    max_duration_s = positive_budget(constraints, "max_duration_s")
+    if max_distance_m is None and max_duration_s is None:
+        return None
+    if road_conditions is None:
+        from spatial.road_conditions import list_conditions
+        road_conditions = list_conditions(strict=True)
+
+    from spatial.routing_index import get_routing_index
+
+    started = time.perf_counter()
+    # Each atomic leg gets the same bounded label allowance as a direct
+    # constrained search. Segment searches run serially, so raising the per-leg
+    # allowance does not multiply peak label memory; the combined frontier has
+    # its own global cap below.
+    per_segment_limit = _MAX_CONSTRAINED_LABELS
+    frontiers = []
+    prepared_segments = []
+    _, global_norm_lengths = _normalize_lengths(G)
+    for segment in segments:
+        if not isinstance(segment, dict):
+            raise ValueError("multimodal budget segment must be a mapping")
+        mode = normalize_mode(segment.get("mode"))
+        start_node, end_node = segment.get("start_node"), segment.get("end_node")
+        if start_node not in G or end_node not in G:
+            return None
+        prepared = get_routing_index(G).for_mode(mode)
+        G_mode = prepared.graph
+        road_penalty = {}
+        if road_conditions:
+            from spatial.road_conditions import apply_conditions_to_graph
+            G_mode, road_penalty, _, _ = apply_conditions_to_graph(
+                G_mode, road_conditions, mode, strict=True,
+            )
+        G_filtered, _, constraint_penalty = _filter_by_constraints(G_mode, constraints)
+        if start_node not in G_filtered or end_node not in G_filtered:
+            return None
+
+        weather_penalty = {}
+        if weather_info:
+            try:
+                from spatial.weather import weather_slope_penalty
+                slope_penalties = weather_slope_penalty(weather_info)
+                for u, v, key, attrs in G_filtered.edges(keys=True, data=True):
+                    multiplier = slope_penalties.get(attrs.get("slope_level", 3))
+                    if multiplier:
+                        weather_penalty[(u, v, key)] = multiplier
+            except Exception as exc:
+                logger.warning("多方式预算路线的天气惩罚无法计算: %s", exc)
+
+        if strategy_name == "shortest":
+            edge_weight = _length_weight
+        else:
+            if weights is None:
+                resolved_weights = dict(MODE_DEFAULT_WEIGHTS[mode])
+            else:
+                resolved_weights = resolve_weights(weights)
+            penalty_map = _merge_penalty_maps(
+                prepared.mode_penalty, road_penalty, weather_penalty,
+                constraint_penalty,
+            )
+            annotation_degraded = _should_degrade_annotations()
+            edge_weight = _edge_cost_factory(
+                G_filtered, global_norm_lengths, resolved_weights, penalty_map,
+                annotation_degraded,
+                outside_road_penalty=MODE_OUTSIDE_ROAD_PENALTY[mode],
+            )
+
+        duration_penalty_map = _merge_penalty_maps(road_penalty, weather_penalty)
+        frontier = _budgeted_path(
+            G_filtered, start_node, end_node, mode=mode,
+            penalty_map=duration_penalty_map, edge_weight=edge_weight,
+            max_distance_m=max_distance_m, max_duration_s=max_duration_s,
+            duration_penalty_map=duration_penalty_map, return_frontier=True,
+            max_labels=per_segment_limit,
+        )
+        if not frontier:
+            return None
+        for candidate in frontier:
+            candidate["duration_min"] = estimate_duration_min(
+                None, mode, G=G, route_nodes=candidate["nodes"],
+                route_edges=candidate["edges"], penalty_map=duration_penalty_map,
+            )
+            candidate["slope_avg_recommended"] = round(
+                _weighted_avg_attr(G, candidate["nodes"], "slope_level",
+                                   candidate["edges"]), 3,
+            )
+            candidate["scenery_avg_recommended"] = round(
+                _weighted_avg_attr(G, candidate["nodes"], "scenery_level",
+                                   candidate["edges"]), 3,
+            )
+            candidate["degraded"] = any(
+                _get_edge_attr(G[u][v][key], "slope_level")[1]
+                or _get_edge_attr(G[u][v][key], "scenery_level")[1]
+                for u, v, key in candidate["edges"]
+            )
+            candidate["mode"] = mode
+        frontiers.append(frontier)
+        prepared_segments.append({"mode": mode, "start_node": start_node,
+                                  "end_node": end_node})
+
+    partials = [{"cost": 0.0, "distance_m": 0.0, "duration_s": 0.0,
+                 "legs": []}]
+    for frontier in frontiers:
+        expanded = []
+        for partial in partials:
+            for candidate in frontier:
+                distance_m = round(partial["distance_m"] + candidate["distance_m"], 1)
+                duration_s = partial["duration_s"] + candidate["duration_min"] * 60.0
+                if (max_distance_m is not None
+                        and distance_m > max_distance_m + 0.15):
+                    continue
+                if (max_duration_s is not None
+                        and round(duration_s / 60.0, 1) * 60.0 > max_duration_s + 3.0):
+                    continue
+                expanded.append({
+                    "cost": partial["cost"] + candidate["cost"],
+                    "distance_m": distance_m,
+                    "duration_s": duration_s,
+                    "legs": partial["legs"] + [candidate],
+                })
+                if len(expanded) > _MAX_CONSTRAINED_LABELS:
+                    raise BudgetSearchIncomplete(
+                        "多方式整程预算组合超过计算上限，暂时无法确认可行路线。",
+                    )
+
+        nondominated = []
+        for candidate in sorted(
+            expanded,
+            key=lambda item: (item["cost"], item["distance_m"], item["duration_s"]),
+        ):
+            if any(
+                old["cost"] <= candidate["cost"]
+                and old["distance_m"] <= candidate["distance_m"]
+                and old["duration_s"] <= candidate["duration_s"]
+                for old in nondominated
+            ):
+                continue
+            nondominated = [
+                old for old in nondominated
+                if not (
+                    candidate["cost"] <= old["cost"]
+                    and candidate["distance_m"] <= old["distance_m"]
+                    and candidate["duration_s"] <= old["duration_s"]
+                )
+            ]
+            nondominated.append(candidate)
+        partials = nondominated
+        if not partials:
+            return None
+
+    best = min(
+        partials,
+        key=lambda item: (item["cost"], item["distance_m"], item["duration_s"]),
+    )
+    return {
+        "legs": best["legs"],
+        "distance_m": best["distance_m"],
+        "duration_min": round(best["duration_s"] / 60.0, 1),
+        "search_ms": round((time.perf_counter() - started) * 1000.0, 3),
+        "segments": prepared_segments,
+    }
 
 
 def _interpolate_to_distance(weights: dict, factor: float) -> dict:
@@ -1062,6 +1593,7 @@ def compute_route(
     strategy_name: str = "recommended",
     detour_cap: float = 1.25,
     prepared=None,
+    reuse_exact_shortest_edges=None,
 ) -> dict:
     """
     多因素路径计算主函数。
@@ -1113,6 +1645,8 @@ def compute_route(
     """
     timing_started = time.perf_counter()
     constraints = constraints or {}
+    max_distance_m = positive_budget(constraints, "max_distance_m")
+    max_duration_s = positive_budget(constraints, "max_duration_s")
     mode = normalize_mode(mode)
 
     if strategy_name == "shortest":
@@ -1195,6 +1729,10 @@ def compute_route(
     penalty_map = _merge_penalty_maps(mode_penalty, road_penalty)
     penalty_map = _merge_penalty_maps(penalty_map, weather_penalty)
     penalty_map = _merge_penalty_maps(penalty_map, constraint_penalty)
+    # Mode/constraint penalties guide path choice, while ETA separately applies
+    # physical slope/step factors. Only real slowdown conditions affect time,
+    # otherwise steps and steep-bike penalties would be counted twice.
+    duration_penalty_map = _merge_penalty_maps(road_penalty, weather_penalty)
 
     if mode == "walk":
         status_parts = [mode_status] if mode_status != "no_filter" else []
@@ -1223,16 +1761,37 @@ def compute_route(
 
     # 最短基线与推荐路线使用同一张已经完成方式、管制和硬约束过滤的图。
     # 普通通勤直接复用这一次搜索，避免再运行一遍软成本 Dijkstra。
-    try:
-        shortest, shortest_edges = _run_path(
-            G_filtered, start_node, end_node, _length_weight
-        )
-    except nx.NetworkXNoPath:
-        if constraints.get("slope") == "avoid" and not disable_hard_filter:
-            filter_status = f"{filter_status}+slope_avoid"
-        _raise_no_path(G, start_node, end_node, filter_status, G_filtered, mode=mode)
+    reusable_edges = None
+    if (strategy_name == "shortest" and max_distance_m is None and max_duration_s is None
+            and isinstance(reuse_exact_shortest_edges, (list, tuple))):
+        candidate_edges = [tuple(edge) for edge in reuse_exact_shortest_edges
+                           if isinstance(edge, (list, tuple)) and len(edge) == 3]
+        previous_node = start_node
+        if len(candidate_edges) == len(reuse_exact_shortest_edges):
+            valid_chain = True
+            for u, v, key in candidate_edges:
+                if u != previous_node or not G_filtered.has_edge(u, v, key):
+                    valid_chain = False
+                    break
+                previous_node = v
+            if valid_chain and previous_node == end_node:
+                reusable_edges = candidate_edges
 
-    dijkstra_runs = 1
+    if reusable_edges is not None:
+        shortest_edges = reusable_edges
+        shortest = [start_node, *(edge[1] for edge in shortest_edges)]
+        dijkstra_runs = 0
+    else:
+        try:
+            shortest, shortest_edges = _run_path(
+                G_filtered, start_node, end_node, _length_weight
+            )
+        except nx.NetworkXNoPath:
+            if constraints.get("slope") == "avoid" and not disable_hard_filter:
+                filter_status = f"{filter_status}+slope_avoid"
+            _raise_no_path(G, start_node, end_node, filter_status, G_filtered, mode=mode)
+        dijkstra_runs = 1
+
     if strategy_name == "shortest":
         recommended, recommended_edges = shortest, shortest_edges
     else:
@@ -1280,6 +1839,42 @@ def compute_route(
             recommended, recommended_edges = shortest, shortest_edges
             recommended_len = shortest_len
 
+    recommended_duration = estimate_duration_min(
+        None, mode, G=G, route_nodes=recommended,
+        route_edges=recommended_edges, penalty_map=duration_penalty_map,
+    )
+    shortest_duration = estimate_duration_min(
+        None, mode, G=G, route_nodes=shortest,
+        route_edges=shortest_edges, penalty_map=duration_penalty_map,
+    )
+
+    def within_budget(length_m, duration_min):
+        return ((max_distance_m is None or length_m <= max_distance_m + 0.15)
+                and (max_duration_s is None or duration_min * 60 <= max_duration_s + 3))
+
+    hard_budget_fallback = False
+    if not within_budget(recommended_len, recommended_duration):
+        feasible = _budgeted_path(
+            G_filtered, start_node, end_node, mode=mode,
+            penalty_map=penalty_map, edge_weight=edge_weight,
+            max_distance_m=max_distance_m, max_duration_s=max_duration_s,
+            duration_penalty_map=duration_penalty_map,
+        )
+        if feasible is None:
+            limit_name = ("距离和时间" if max_distance_m is not None and max_duration_s is not None
+                          else "距离" if max_distance_m is not None else "时间")
+            raise ValueError(f"当前条件下没有满足{limit_name}上限的可通行路线。")
+        recommended, recommended_edges = feasible
+        recommended_len = _path_length(G, recommended, recommended_edges)
+        recommended_duration = estimate_duration_min(
+            None, mode, G=G, route_nodes=recommended,
+            route_edges=recommended_edges, penalty_map=duration_penalty_map,
+        )
+        if not within_budget(recommended_len, recommended_duration):
+            raise BudgetSearchIncomplete("预算路线与公开估时结果不一致，暂时无法确认可行路线。")
+        hard_budget_fallback = True
+    shortest_baseline_feasible = within_budget(shortest_len, shortest_duration)
+
     path_search_ms = (time.perf_counter() - path_search_started) * 1000
     response_build_started = time.perf_counter()
 
@@ -1315,17 +1910,16 @@ def compute_route(
         "shortest_length_m": round(shortest_len, 1),
         "applied_weights": resolved_weights,
         "length_capped": length_capped,
+        "hard_budget_fallback": hard_budget_fallback,
+        "shortest_baseline_feasible": shortest_baseline_feasible,
         "strategy": strategy_name,
         "detour_cap": float(detour_cap),
         "dijkstra_runs": dijkstra_runs,
         "max_len": max_len,
         "_annotation_degraded": annotation_degraded is not None,
         "mode": mode,
-        "duration_min": estimate_duration_min(None, mode, G=G,
-                                              route_nodes=recommended,
-                                              route_edges=recommended_edges,
-                                              penalty_map=penalty_map),
-        "shortest_duration_min": estimate_duration_min(shortest_len, mode),
+        "duration_min": recommended_duration,
+        "shortest_duration_min": shortest_duration,
         "speed_kmh": MODE_SPEEDS_KMH[mode],
         "road_conditions_applied": road_conditions_applied,
         "weather_applied": weather_applied,

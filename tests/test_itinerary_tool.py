@@ -1,7 +1,7 @@
 import agents.tools as tools
 
 
-def _route_result(distance=1200, duration=15):
+def _route_result(distance=1000, duration=15):
     return {
         "start_name": "星湖园",
         "end_name": "宿舍",
@@ -10,6 +10,10 @@ def _route_result(distance=1200, duration=15):
         "duration_min": duration,
         "legs": [{"duration_min": duration}],
         "route_state": {"route_kind": "via"},
+        "route_verification": {
+            "status": "pass", "measured_length_m": distance,
+            "scope": "internal_graph_and_event_snapshot",
+        },
     }
 
 
@@ -62,6 +66,24 @@ def test_plan_itinerary_does_not_publish_route_when_budget_is_exceeded(monkeypat
     assert artifact is None
 
 
+def test_itinerary_hard_duration_limit_includes_stops(monkeypatch):
+    monkeypatch.setattr(tools, "_tool_plan_via_route",
+                        lambda *_args: (_route_result(), {"route": _route_result()}))
+
+    result, artifact = tools.execute_tool("plan_itinerary", {
+        "start": {"name": "星湖园"},
+        "stops": [{"name": "食堂"}, {"name": "图书馆"}],
+        "time_budget_min": 30,
+        "stop_duration_min": 5,
+        "constraints": {"max_duration_s": 1200},
+    })
+
+    assert result["status"] == "over_budget"
+    assert result["hard_max_duration_min"] == 20
+    assert result["total_duration_min"] == 25
+    assert artifact is None
+
+
 def test_plan_itinerary_requires_budget_and_at_least_one_stop():
     result, artifact = tools.execute_tool("plan_itinerary", {
         "start": {"name": "星湖园", "type": "poi"},
@@ -90,3 +112,45 @@ def test_plan_itinerary_schema_and_executor_are_registered():
     assert schema is not None
     assert schema["function"]["parameters"]["required"] == ["start", "stops", "time_budget_min"]
     assert "plan_itinerary" in tools._EXECUTORS
+
+
+def test_plan_itinerary_rejects_unverified_via_route(monkeypatch):
+    route = _route_result()
+    route.pop("route_verification")
+    monkeypatch.setattr(tools, "_tool_plan_via_route", lambda *_args: (route, {"route": route}))
+
+    result, artifact = tools.execute_tool("plan_itinerary", {
+        "start": {"name": "星湖园"},
+        "stops": [{"name": "图书馆"}],
+        "time_budget_min": 30,
+    })
+    assert result["error"] == "itinerary_verification_failed"
+    assert artifact is None
+
+
+def test_plan_itinerary_rejects_underreported_travel_time(monkeypatch):
+    route = _route_result(distance=1200, duration=1)
+    monkeypatch.setattr(tools, "_tool_plan_via_route", lambda *_args: (route, {"route": route}))
+
+    result, artifact = tools.execute_tool("plan_itinerary", {
+        "start": {"name": "星湖园"},
+        "stops": [{"name": "图书馆"}],
+        "time_budget_min": 30,
+    })
+    assert result["error"] == "itinerary_verification_failed"
+    assert artifact is None
+
+
+def test_plan_itinerary_rejects_travel_time_that_disagrees_with_verified_legs(monkeypatch):
+    route = _route_result(distance=900, duration=15)
+    route["legs"] = [{"duration_min": 8.0}, {"duration_min": 12.0}]
+    monkeypatch.setattr(tools, "_tool_plan_via_route", lambda *_args: (route, {"route": route}))
+
+    result, artifact = tools.execute_tool("plan_itinerary", {
+        "start": {"name": "星湖园"},
+        "stops": [{"name": "图书馆"}],
+        "time_budget_min": 30,
+        "stop_duration_min": 5,
+    })
+    assert result["error"] == "itinerary_verification_failed"
+    assert artifact is None
