@@ -44,5 +44,5 @@ class TestPlannerInjection:
 
     def test_no_injection_when_no_match(self):
         msgs = planner._build_messages("zzzz 完全无关")
-        # 只有主 system 提示词
-        assert len([m for m in msgs if m["role"] == "system"]) == 1
+        # 主 system 提示词 + 固定注入的能力说明表
+        assert len([m for m in msgs if m["role"] == "system"]) == 2

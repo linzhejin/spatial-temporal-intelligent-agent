@@ -542,28 +542,61 @@ class TestAgentLoop:
         assert len(client.calls) == 1  # 终止型工具：不再继续循环
 
     def test_second_route_verification_failure_stops_without_unverified_route(self):
+        """修正预算用尽（首轮 + 两次定向修正）后仍失败，就不展示任何未核验路线。"""
         route_call = _fake_tool_call("plan_route", {
             "start": {"name": "起点"}, "end": {"name": "终点"},
         })
         client = FakeClient([
             _fake_response(tool_calls=[route_call]),
             _fake_response(tool_calls=[route_call]),
-            _fake_response(content="不应执行到第三轮"),
+            _fake_response(tool_calls=[route_call]),
+            _fake_response(content="预算用尽后不应再执行"),
         ])
         failure = {
             "error": "route_verification_failed",
             "message": "路线边序列与约束无法核对。",
-            "route_verification": {"status": "fail", "violations": ["mode_forbidden"]},
+            "route_verification": {"status": "fail", "checks": {
+                "mode_and_constraints": {"status": "fail", "issues": ["mode_forbidden"]},
+            }},
         }
         with patch.object(planner.agent_tools, "execute_tool",
-                          side_effect=[(failure, None), (failure, None)]) as execute:
+                          side_effect=[(failure, None), (failure, None),
+                                       (failure, None)]) as execute:
             result = _run(client)
 
-        assert execute.call_count == 2
-        assert len(client.calls) == 2
+        # 首轮 1 次 + 两次定向修正，正好用满 MAX_REFLECTION_ATTEMPTS
+        assert execute.call_count == planner.MAX_REFLECTION_ATTEMPTS + 1
+        assert len(client.calls) == planner.MAX_REFLECTION_ATTEMPTS + 1
         assert result["response_kind"] == "chat"
         assert result["route"] is None
         assert "路线" in result["message"] and "核验" in result["message"]
+
+    def test_route_verification_failure_without_reflection_budget_stops_at_once(self):
+        """剩余时间不够一次 LLM 往返时，核验失败直接收尾，不再发起定向修正调用。"""
+        route_call = _fake_tool_call("plan_route", {
+            "start": {"name": "起点"}, "end": {"name": "终点"},
+        })
+        client = FakeClient([
+            _fake_response(tool_calls=[route_call]),
+            _fake_response(content="预算不足时不应被调用"),
+        ])
+        failure = {
+            "error": "route_verification_failed",
+            "message": "路线边序列与约束无法核对。",
+            "route_verification": {"status": "fail", "checks": {
+                "mode_and_constraints": {"status": "fail", "issues": ["mode_forbidden"]},
+            }},
+        }
+        with patch.object(planner, "TIME_BUDGET_S", 1.0), \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(failure, None)) as execute:
+            result = _run(client)
+
+        assert execute.call_count == 1
+        assert len(client.calls) == 1  # 没有第二次 LLM 调用
+        assert result["response_kind"] == "chat"
+        assert result["route"] is None
+        assert "核验" in result["message"]
 
     def test_one_route_verification_repair_can_succeed(self):
         route_call = _fake_tool_call("plan_route", {

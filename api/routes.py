@@ -817,6 +817,21 @@ def _weather_public(snap):
     }
 
 
+def _persist_agent_provenance(resp: dict) -> None:
+    """把 Agent 响应里的 PROV 记录落盘并从响应中剥离（不外露给普通用户）。"""
+    if not isinstance(resp, dict):
+        return
+    record = resp.pop("provenance", None)
+    if not isinstance(record, dict):
+        return
+    try:
+        from agents import provenance as provenance_mod
+        provenance_mod.persist(record)
+    except Exception:
+        # 溯源是旁路观测，绝不影响主链路响应
+        logger.warning("溯源记录持久化失败（忽略）", exc_info=True)
+
+
 def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> dict:
     """Agent 循环响应 → 前端兼容结构（P4 前端再按 response_kind 细分渲染）。
 
@@ -950,6 +965,22 @@ def admin_login():
         session.permanent = True
         return _ok({"is_admin": True, "csrf_token": session["admin_csrf_token"]})
     return _err("invalid_password", "密码错误", 401)
+
+
+@api_bp.route("/agent/provenance/<run_id>", methods=["GET"])
+def agent_provenance(run_id):
+    """GET /api/agent/provenance/<run_id> — 读取一次 Agent run 的溯源记录。
+
+    只读端点：沿用管理端双通道鉴权（网页 session / 系统对接 Token），
+    不要求写操作的 CSRF。普通用户响应体不包含 run_id，因此无法由此越权读取。
+    """
+    if _admin_identity() is None:
+        return _err("unauthorized", "需要管理员权限，请先登录", 401)
+    from agents import provenance as provenance_mod
+    record = provenance_mod.load(str(run_id or "").strip())
+    if record is None:
+        return _err("not_found", "没有找到该次执行的溯源记录", 404)
+    return _ok(record)
 
 
 @api_bp.route("/admin/logout", methods=["POST"])
@@ -1621,6 +1652,7 @@ def chat():
             travel_mode=body.get("travel_mode"),
             coord_waypoints=body.get("coord_waypoints"),
         )
+        _persist_agent_provenance(agent_resp)
         return _ok(_agent_response_to_legacy(agent_resp,
                     coord_start=body.get("coord_start"),
                     coord_end=body.get("coord_end")))

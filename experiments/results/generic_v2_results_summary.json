@@ -1,0 +1,19 @@
+{
+  "method": "generic",
+  "metrics": {
+    "n_pairs": 227,
+    "weight_n": 108,
+    "task_type_accuracy": 0.8943,
+    "constraint_macro_f1_distance": 0.0589,
+    "constraint_macro_f1_slope": 0.987,
+    "constraint_macro_f1_scenery": 0.9327,
+    "constraint_macro_f1_avg": 0.6595,
+    "weight_mae": 0.3336,
+    "weight_cosine_sim": 0.0092,
+    "poi_f1": 0.8655,
+    "parse_failure_rate": 0.1013
+  },
+  "n_queries": 200,
+  "n_conversations": 20,
+  "n_conversation_turns": 47
+}

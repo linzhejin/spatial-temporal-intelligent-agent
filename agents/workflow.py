@@ -391,6 +391,8 @@ def build_agent_workflow(
         end = _coordinate(route_spec.get("end"))
         result = _agent_response_to_legacy(state["agent_response"], start, end)
         response = state["agent_response"]
+        from agents import provenance as provenance_mod
+        provenance_mod.persist(response.get("provenance"))
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
                     "place_request", "candidates"):
             result[key] = response.get(key)

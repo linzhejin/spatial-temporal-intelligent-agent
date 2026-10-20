@@ -23,7 +23,7 @@ import httpx
 
 import config
 from agents import tools as agent_tools
-from agents import knowledge, profile
+from agents import experience, knowledge, profile, provenance, reflection, tool_skills
 from agents.preferences import route_preference_requested
 from agents.timings import normalize_timings
 from spatial.route_constraints import positive_budget
@@ -33,6 +33,11 @@ logger = logging.getLogger(__name__)
 MAX_TURNS = 6
 TIME_BUDGET_S = 40.0
 LLM_MAX_TOKENS = 800
+
+# 核验失败后的定向修正预算（反思-重规划）。次数上限之外，仍受 MAX_TURNS 与
+# TIME_BUDGET_S 双重约束：剩余轮次不足或剩余时间不够一次 LLM 往返时不再重试。
+MAX_REFLECTION_ATTEMPTS = 2
+_REFLECTION_MIN_BUDGET_S = 8.0
 
 _PROMPT_PATH = Path(__file__).parent / "prompts" / "agent_system.txt"
 _system_prompt_cache = None  # NOTE: 修改 agent_system.txt 后需清此缓存或重启进程
@@ -288,6 +293,9 @@ def _build_messages(query: str, context: dict = None, history: list = None,
                     uid: str = None, travel_mode: str = None,
                     coord_waypoints: list = None) -> list:
     messages = [{"role": "system", "content": _load_system_prompt()}]
+
+    # 能力说明表（GeoSkill 式技能规范）：固定在提示词前段，利于前缀缓存
+    messages.append({"role": "system", "content": tool_skills.build_skill_manifest()})
 
     # 任务卡知识注入（静态校园经验）
     knowledge_msg = knowledge.build_knowledge_message(query)
@@ -578,6 +586,47 @@ def _apply_place_request_correction(saved: dict, query: str) -> dict:
     return updated
 
 
+def _response_verification(response: dict) -> dict | None:
+    """取响应里的核验报告：失败响应挂在顶层，成功路线随路线包一起返回。"""
+    if not isinstance(response, dict):
+        return None
+    report = response.get("route_verification")
+    if isinstance(report, dict):
+        return report
+    route = response.get("route")
+    if isinstance(route, dict):
+        nested = route.get("route_verification")
+        if isinstance(nested, dict):
+            return nested
+    return None
+
+
+def _record_experience_sample(query: str, response: dict) -> None:
+    """把一次完成的编排沉淀为经验样本（best-effort）。
+
+    只登记实际发生过工具调用的编排。成功判定从严：
+    - 候选类结果：只要产出了候选即算成功（候选不涉及路线核验）；
+    - 路线类结果：必须路线存在且核验状态为 pass；
+    - 其余（澄清/闲聊/核验失败）：记为失败样本，蒸馏时据此拉低置信度。
+    """
+    if not isinstance(response, dict):
+        return
+    try:
+        activities = ((response.get("provenance") or {}).get("tool_activities") or [])
+        if not activities:
+            return
+        verification = _response_verification(response)
+        status = verification.get("status") if isinstance(verification, dict) else None
+        has_route = response.get("route") is not None
+        success = bool(response.get("candidates")) or (has_route and status == "pass")
+        experience.record_run(
+            query, activities, success=success, verification_status=status,
+        )
+    except Exception:
+        # 经验沉淀是旁路观测，任何失败都不得影响主链路响应
+        logger.warning("经验沉淀失败（忽略）", exc_info=True)
+
+
 def run_agent(query: str, context: dict = None, history: list = None,
               coord_start: dict = None, coord_end: dict = None,
               uid: str = None, travel_mode: str = None,
@@ -600,6 +649,35 @@ def run_agent(query: str, context: dict = None, history: list = None,
     Raises:
         PlannerError: LLM API 不可用（调用方落回旧管道）
     """
+    # 溯源记录：与 tool_trace_callback 同源，另存一份 run 级 PROV 记录。
+    # 这里是唯一的采集点，下游（PG 事件 / 管理端点）共用同一份数据。
+    _external_tool_trace = tool_trace_callback
+    _provenance = provenance.ProvenanceRecorder(
+        query,
+        uid=uid,
+        model=getattr(config, "LLM_MODEL", None),
+        temperature=0.0,
+        tool_names=agent_tools.TOOL_NAMES,
+        has_gps=isinstance(coord_start, dict) or isinstance(coord_end, dict),
+        has_waypoints=isinstance(coord_waypoints, list) and bool(coord_waypoints),
+        task_revision=(context or {}).get("task_revision")
+        if isinstance(context, dict) else None,
+    )
+
+    def tool_trace_callback(payload):
+        try:
+            payload = payload if isinstance(payload, dict) else {}
+            _provenance.add_activity(
+                payload.get("tool_name"),
+                argument_keys=payload.get("argument_keys"),
+                outcome=payload.get("outcome"),
+                artifact_kind=payload.get("artifact_kind"),
+            )
+        except Exception:
+            logger.warning("溯源活动登记失败（忽略）", exc_info=True)
+        if _external_tool_trace is not None:
+            _external_tool_trace(payload)
+
     def execute_tool(name, args, tool_context, *, record_trace=True):
         # This keyword is supplied only by trusted workflow code, separately
         # from browser context, uid and model-produced tool arguments.
@@ -1345,6 +1423,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
     agent_elapsed_ms = 0.0
     verification_repair_attempts = 0
     verification_failure = None
+    verification_diagnosis = None
     verification_retry_exhausted = False
     active_task_request = (context or {}).get("active_task_request")
     if not isinstance(active_task_request, str):
@@ -1369,6 +1448,38 @@ def run_agent(query: str, context: dict = None, history: list = None,
     if allow_preferences:
         active_weights = previous.get("weights")
     route_tools = {"plan_route", "plan_via_route", "plan_tour", "plan_multimodal_route"}
+
+    def _reflection_budget_available() -> bool:
+        """剩余轮次与时间是否还够一次定向修正（反思-重规划）。"""
+        if turns >= MAX_TURNS - 1:
+            return False
+        return (time.monotonic() - started) <= TIME_BUDGET_S - _REFLECTION_MIN_BUDGET_S
+
+    def _with_provenance(response):
+        """把 run 级 PROV 记录挂到响应内部字段（下游持久化后剥离，不外露）。"""
+        if not isinstance(response, dict):
+            return response
+        try:
+            verification = _response_verification(response)
+            response["provenance"] = _provenance.finish(
+                response_kind=response.get("response_kind"),
+                artifact_kinds=[
+                    kind for kind, present in (
+                        ("route", response.get("route")),
+                        ("candidates", response.get("candidates")),
+                        ("clarify", response.get("clarify")),
+                        ("suggestions", response.get("suggestions")),
+                        ("route_comparison", response.get("route_comparison")),
+                    ) if present
+                ],
+                verification_status=verification.get("status")
+                if isinstance(verification, dict) else None,
+                turns=response.get("turns"),
+            )
+        except Exception:
+            logger.warning("溯源记录封口失败（忽略）", exc_info=True)
+        _record_experience_sample(query, response)
+        return response
 
     for _ in range(MAX_TURNS):
         if time.monotonic() - started > TIME_BUDGET_S:
@@ -1411,11 +1522,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
             name = tc.function.name
             is_verification_repair = False
             if name in route_tools and verification_failure is not None:
-                if verification_repair_attempts >= 1:
+                if (verification_repair_attempts >= MAX_REFLECTION_ATTEMPTS
+                        or not _reflection_budget_available()):
                     verification_retry_exhausted = True
                     result = {
                         "error": "route_verification_retry_exhausted",
-                        "message": "一次定向修正机会已用完，本次路线调用未执行。",
+                        "message": "定向修正机会已用完，本次路线调用未执行。",
                     }
                     artifact = None
                     messages.append({
@@ -1552,7 +1664,15 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 artifact_route, route_kind = None, None
                 artifact_clarify = None
                 verification_failure = result
-                if verification_repair_attempts >= 1:
+                verification_diagnosis = reflection.diagnose(
+                    result.get("route_verification") or result
+                )
+                _provenance.add_influence(
+                    verification_diagnosis.get("primary_conflict")
+                )
+                if (verification_repair_attempts >= MAX_REFLECTION_ATTEMPTS
+                        or not _reflection_budget_available()
+                        or verification_diagnosis.get("should_give_up")):
                     verification_retry_exhausted = True
                 else:
                     add_verification_repair_instruction = True
@@ -1604,10 +1724,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if add_verification_repair_instruction:
             messages.append({
                 "role": "system",
-                "content": (
-                    "路径工具的结果未通过独立核验。你最多还有一次修正机会："
-                    "只依据工具返回的 route_verification 违规项或未知项修正参数并重新规划；"
-                    "若无法修正，不得声称路线已生成，也不要省略硬约束。"
+                "content": reflection.build_reflection_message(
+                    verification_diagnosis or {}, verification_repair_attempts + 1,
                 ),
             })
 
@@ -1626,18 +1744,20 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     # ---- 收尾：组装响应 ----
     if verification_retry_exhausted:
-        return _route_verification_failure_response(
+        reason = reflection.summarize(verification_diagnosis or {})
+        prefix = f"{reason}，" if reason else ""
+        return _with_provenance(_route_verification_failure_response(
             verification_failure,
-            message="路线经过一次定向修正后仍未通过独立核验，没有展示路线。",
+            message=f"{prefix}路线未通过独立核验且已无可执行的修正，没有展示路线。",
             turns=turns,
-        )
+        ))
 
     if artifact_route:
         artifact_route["timings_ms"] = normalize_timings(
             artifact_route.get("timings_ms"), agent=agent_elapsed_ms
         )
     if artifact_clarify:
-        return {
+        return _with_provenance({
             "response_kind": "clarify",
             "message": _sanitize_message(final_message) or artifact_clarify["question"],
             "route": artifact_route, "route_kind": route_kind,
@@ -1646,10 +1766,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "suggestions": artifact_suggestions,
             "route_verification": (verification_failure or {}).get("route_verification"),
             "turns": turns,
-        }
+        })
 
     if artifact_route_comparison:
-        return {
+        return _with_provenance({
             "response_kind": "route_comparison",
             "message": _build_route_comparison_message(artifact_route_comparison),
             "route": None,
@@ -1659,16 +1779,18 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "clarify": None,
             "suggestions": None,
             "turns": turns,
-        }
+        })
 
     # A verification failure on the final available turn must not fall through
     # to the API's legacy parser fallback, which does not carry this proof report.
     if verification_failure is not None and artifact_route is None:
-        return _route_verification_failure_response(
+        reason = reflection.summarize(verification_diagnosis or {})
+        prefix = f"{reason}，" if reason else ""
+        return _with_provenance(_route_verification_failure_response(
             verification_failure,
-            message="路线未通过独立核验，本轮无法完成修正，没有展示路线。",
+            message=f"{prefix}本轮无法完成修正，没有展示路线。",
             turns=turns,
-        )
+        ))
 
     # 防御：LLM 直出文本里若混入 DSML 标记，剥掉
     final_message = _sanitize_message(final_message)
@@ -1688,7 +1810,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
     elif artifact_candidates:
         response_kind = "candidates"
 
-    return {
+    return _with_provenance({
         "response_kind": response_kind,
         "message": final_message,
         "route": artifact_route,
@@ -1697,4 +1819,4 @@ def run_agent(query: str, context: dict = None, history: list = None,
         "clarify": None,
         "suggestions": artifact_suggestions,
         "turns": turns,
-    }
+    })

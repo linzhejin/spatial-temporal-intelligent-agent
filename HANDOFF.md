@@ -1,5 +1,7 @@
 # 珞珈智行项目进度与交接
 
+> **2026-10-20 OpenGA 借鉴落地：**按《时空智能体共享服务平台 OpenGA》报告（乐鹏团队）提炼的五项可迁移方法论，补厚了四处已有基础并新增一条对照基线：工具能力规范层（`agents/tool_skills.py`）、三层知识库与经验沉淀（`agents/knowledge.py`、`agents/experience.py`）、PROV 风格执行溯源（`agents/provenance.py`）、反思-重规划循环（`agents/reflection.py`）、通用 LLM 直答基线（`experiments/baselines/generic_llm_baseline.py`）。温度 0.0、`MAX_TURNS=6`、`TIME_BUDGET_S=40`、工具数 14、「核验不通过不显示路线」均未改动。本轮验收：全量 Python（隔离测试库）**1809 passed / 24 skipped / 1 xfailed**，新增 `agent_capability_layer` 与 `agent_trace_and_knowledge` 两项就绪门槛后主实验仍判通过；通用基线在 `queries_v2`（227 配对）跑出真实数字并写入 `experiments/results/generic_v2_results*`。采纳对照、指标口径与复现命令见 [OpenGA 借鉴与专用 vs 通用对照](docs/research/08_OpenGA借鉴与专用vs通用对照_20261020.md)；本地软件回归通过不等于真实模型选工具准确率或现场通行已验证。
+
 > **2026-10-16 后续方案：**已按当前 `9e1392e` 代码核对功能缺口，形成[项目完善与正式实验执行方案](docs/research/06_项目完善与正式实验执行方案_20261016.md)。先补实验隔离、复合任务与约束核验，再接入变化驱动更新；航拍与 E1—E5 实验分阶段验收。本条仅记录方案，不代表新增功能已实现或实验已完成。
 
 > **2026-10-15 版本整合：**以最新发布的航拍与管理台版本为基线，整合人工 POI 修正和 OSM 候选提取工具兼容。当前取舍、验证和同步记录见 [版本整合记录](docs/development/32_版本整合与同步记录_20261015.md)。下方各日期条目保留历史发布证据；当前代码数量以自动事实块为准。

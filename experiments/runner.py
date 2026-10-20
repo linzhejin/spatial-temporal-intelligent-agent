@@ -129,6 +129,9 @@ def _parse_once(method: str, text: str, context: Optional[dict]):
     if method == "llm":
         from agents.parser import parse_query
         return parse_query(text, context=context or None)
+    if method == "generic":
+        from experiments.baselines.generic_llm_baseline import generic_parse
+        return generic_parse(text, context=context or None)
     from experiments.baselines.rule_baseline import rule_parse
     intent = rule_parse(text)
     if context:
@@ -155,6 +158,9 @@ def _row_for(rid: str, text: str, category: str, pred: dict, gold_intent: dict) 
         "pred_mode": pred.get("mode", ""),
         "gold_mode": gold_intent.get("mode", ""),
         "task_type_match": int(pred.get("task_type") == gold_intent.get("task_type")),
+        # 通用 LLM 基线没有工具/图/核验，该字段恒为 0；专用链路为 1（可交付可核验路线）
+        "route_executable": int(bool(pred.get("route_executable")))
+        if "route_executable" in pred else 1,
     }
 
 
@@ -407,8 +413,8 @@ def main(argv: Optional[list] = None) -> int:
         description="漫步珞珈 实验评估 CLI (E1 意图解析 / E2 路径质量)",
     )
     parser.add_argument("--method", required=True,
-                        choices=["llm", "rule", "fixed", "shortest"],
-                        help="评估方法：llm/rule 走 E1，fixed/shortest 走 E2")
+                        choices=["llm", "rule", "generic", "fixed", "shortest"],
+                        help="评估方法：llm/rule/generic 走 E1，fixed/shortest 走 E2")
     parser.add_argument("--queries", required=True, help="queries JSON 路径")
     parser.add_argument("--gold", required=True, help="gold intents JSON 路径")
     parser.add_argument("--output", required=True, help="输出 CSV 路径")
@@ -420,9 +426,10 @@ def main(argv: Optional[list] = None) -> int:
     gold = load_gold(args.gold)
     print(f"加载 {len(queries)} 条 query，{len(gold)} 条 gold")
 
-    if args.method in ("llm", "rule"):
-        if args.method == "llm" and not DEEPSEEK_API_KEY:
-            print("[警告] DEEPSEEK_API_KEY 未配置，LLM 方法将走规则兜底解析（结果仍可产出）")
+    if args.method in ("llm", "rule", "generic"):
+        if args.method in ("llm", "generic") and not DEEPSEEK_API_KEY:
+            print("[警告] DEEPSEEK_API_KEY 未配置，"
+                  f"{args.method} 方法将返回未解析占位结果（结果仍可产出）")
         run_e1(args.method, queries, gold, args.output)
     else:
         run_e2(args.method, queries, gold, args.output)

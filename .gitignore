@@ -294,6 +294,10 @@ android-app/keystore-password.txt
 # ===== 运行时数据（本地产生，不入库）=====
 data/telemetry.jsonl
 data/user_profiles.json
+data/provenance.jsonl
+data/*.jsonl.lock
+data/agent_experience.jsonl
+data/experience_cards.json
 data/vision/uploads/
 data/runtime/
 data/road_conditions.json.lock

@@ -50,6 +50,14 @@ CHECKS = {
     "tool_registry": [
         sys.executable, "-m", "pytest", "tests/test_agent_tool_registry.py", "-q",
     ],
+    "agent_capability_layer": [
+        sys.executable, "-m", "pytest", "tests/test_tool_skills.py",
+        "tests/test_reflection.py", "-q",
+    ],
+    "agent_trace_and_knowledge": [
+        sys.executable, "-m", "pytest", "tests/test_provenance.py",
+        "tests/test_experience.py", "-q",
+    ],
     "frontend_state": ["npm.cmd" if sys.platform == "win32" else "npm", "run", "test:js"],
 }
 
