@@ -314,3 +314,5 @@ output/vision/
 /.superpowers/
 /output/experiments/
 /tmp/
+/.codex-tmp/
+/.codex-finalizer/
