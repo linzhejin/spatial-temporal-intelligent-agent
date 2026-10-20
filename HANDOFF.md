@@ -17,6 +17,12 @@
 - 第四步（回归与复核）：范围内回归 `python -m pytest tests/test_scenario_protocol.py tests/test_scenario_split_audit.py tests/test_scenario_draft_audit.py tests/test_scenario_adjudication_import.py tests/test_scenario_live_adapter.py -q` **89 passed**；`compileall`、三份新报告 JSON 解析与 `git diff --check` 通过；`ruff check experiments scripts/validate/check_agent_research_readiness.py` 报 4 条 F401，均落在未改动的既有文件（`baselines/rule_baseline.py`、`c1_history_ablation.py`、`evaluator.py`），非本轮引入。本轮无代码修复，未提交、未推送、未部署；发布需在正式门槛满足并另行审核后进行。
 - 三步未完成项均为人类/外部依赖，不由程序代填：人工独立裁决 60 题、真实模型回放（缺密钥）、未见盲测集与代表路线证据。
 
+## 隔离测试库恢复与数据库回归（2026-10-19）
+
+- 现象与根因：`TEST_DATABASE_URL` 指向的本机隔离 PostgreSQL（`127.0.0.1:55439`）未在监听。它是由外部 provision 的便携实例（运行时在 `C:\Users\HUAWEI\.codex\test-postgres-runtime`，集群数据目录在 `C:\Users\HUAWEI\.codex\test-postgres-data`，PostgreSQL 17，`pg_hba` 为 trust）；机器重启后服务进程消失，运行时与数据目录均完好，不需要重装或 `initdb`。
+- 恢复方式：`powershell -ExecutionPolicy Bypass -File scripts/dev/start_test_postgres.ps1`（起库 + 建本轮专用库 + 健康检查 + 输出 `TEST_DATABASE_URL`；`-Stop` 可关库）。脚本只服务本机测试，不读取 `.env`、不设置业务 `DATABASE_URL`。本轮使用专用库 `whu_agent_local_test`，未触碰既有的 `whu_agent_test` / `whu_agent_trace_test`。
+- 本轮结果：数据库专项（route-proof 集成/仓储/worker、路线 API 核验、路况实况、隔离守卫）**98 passed，零 skip**；全量 `python -m pytest tests/ -q` 在显式 `TEST_DATABASE_URL` 下 **1740 passed / 24 skipped / 1 xfailed**（此前无隔离库连接时为 1645 passed / 119 skipped / 1 xfailed），先前跳过的数据库用例均已实际执行；剩余 24 项跳过为浏览器与可选视觉模型环境用例。这是软件回归，不是正式真实模型评测或论文实验结果。
+
 ## 当前结论
 
 项目已具备校园地点检索、路线规划、多轮路线修改、用户端网页/Android 壳应用，以及 `/manager` 道路事件管理和航拍影像上传、车辆/行人分析、人工复核流程。管理端可以把候选观察区域绑定到正式路网，并保存、复用命名场景；复用仍需人工核对。事故和积水模型未达到启用条件，影像框也不能自动定位到地面道路；尚无武汉大学航拍样本，不能声称校园精度已验证。
