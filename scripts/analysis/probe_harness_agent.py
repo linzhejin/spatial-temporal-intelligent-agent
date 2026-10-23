@@ -40,6 +40,34 @@ def _write_json(path: Path, value: object) -> None:
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
+def _request_evidence(model_name: str, usage: dict, schema_sha256: str) -> dict:
+    """Keep the requested model separate from the unobserved provider response."""
+    return {
+        "kind": "request", "requested_model_id": model_name,
+        "resolved_model_id": None,
+        "tool_schema_sha256": schema_sha256,
+        "temperature": 0, "max_tokens": 800,
+        "input_tokens": usage.get("inputTokens", 0),
+        "output_tokens": usage.get("outputTokens", 0),
+        "outcome": "success",
+    }
+
+
+def _attribute_transport_models(requests: list[dict], attempts: list[dict]) -> tuple[bool, str | None]:
+    """Attribute response IDs only for a complete one-to-one HTTP observation."""
+    successful = [attempt for attempt in attempts
+                  if attempt["http_status"] == 200 and attempt["stream_complete"]]
+    complete = (bool(requests) and len(attempts) == len(requests)
+                and len(successful) == len(requests)
+                and all(attempt["response_model_id"] for attempt in successful))
+    if not complete:
+        return False, None
+    for record, attempt in zip(requests, successful):
+        record["resolved_model_id"] = attempt["response_model_id"]
+    models = {record["resolved_model_id"] for record in requests}
+    return True, next(iter(models)) if len(models) == 1 else None
+
+
 def _patch(plugin: Path) -> list[dict]:
     return [
         {"id": "persistent-bash", "disabled": True},
@@ -87,6 +115,7 @@ def main() -> int:
 
     from agents import tools as campus_tools
     from deepseek_harness import DeepSeekHarness
+    from experiments.baselines.harness_messages_audit import open_messages_audit
     from experiments.baselines.harness_tool_bridge import open_tool_bridge
     from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT
 
@@ -121,7 +150,6 @@ def main() -> int:
     model_name = args.model
     # The pinned Harness uses the official Messages transport, while the
     # ordinary Python client uses DeepSeek's OpenAI-compatible /v1 endpoint.
-    base_url = "https://api.deepseek.com/anthropic"
     tool_names = sorted(row["function"]["name"] for row in campus_tools.TOOL_SCHEMAS)
     records: list[dict] = [{
         "kind": "run", "condition": "deepseek_harness",
@@ -133,7 +161,7 @@ def main() -> int:
     }]
     turns = []
     observed_models: set[str] = set()
-    with open_tool_bridge() as bridge:
+    with open_tool_bridge() as bridge, open_messages_audit(key) as messages_audit:
         child_env = {
             "CAMPUS_TOOL_SCHEMA_PATH": str(schemas_path),
             "CAMPUS_TOOL_BRIDGE_URL": bridge.url,
@@ -149,7 +177,7 @@ def main() -> int:
                 cwd=str(run_dir), dsh_home=str(run_dir / "dsh_home"),
                 dsh_bin=str(runtime), profile="sdk-minimal",
                 patches=(str(patch_path),), env=child_env, api_key=key,
-                base_url=base_url, request_timeout_seconds=40) as harness:
+                base_url=messages_audit.url, request_timeout_seconds=40) as harness:
             session = harness.start_session("campus-development-pilot")
             for message in case["messages"]:
                 text = message["content"]
@@ -170,15 +198,8 @@ def main() -> int:
                     if event.get("type") != "assistant/message":
                         continue
                     usage = event.get("data", {}).get("usage") or {}
-                    records.append({
-                        "kind": "request", "requested_model_id": model_name,
-                        "resolved_model_id": None,  # Filled after event inspection below.
-                        "tool_schema_sha256": _digest(campus_tools.TOOL_SCHEMAS),
-                        "temperature": 0, "max_tokens": 800,
-                        "input_tokens": usage.get("inputTokens", 0),
-                        "output_tokens": usage.get("outputTokens", 0),
-                        "outcome": "success",
-                    })
+                    records.append(_request_evidence(
+                        model_name, usage, _digest(campus_tools.TOOL_SCHEMAS)))
                 records.extend({"kind": "tool", "name": row["tool_name"],
                                 "outcome": row["outcome"]} for row in trace)
                 turns.append({
@@ -191,10 +212,10 @@ def main() -> int:
                 })
     requests = [record for record in records if record["kind"] == "request"]
     observed_model = next(iter(observed_models)) if len(observed_models) == 1 else None
-    for record in requests:
-        record["resolved_model_id"] = observed_model
+    attempts = list(messages_audit.attempts)
+    complete_transport, resolved_model = _attribute_transport_models(requests, attempts)
     report = {
-        "status": "development_pilot_only_transport_identity_unverified",
+        "status": "development_pilot_only",
         "case_id": args.case_id, "condition": "deepseek_harness",
         "development_dataset_sha256": _sha256_file(args.dataset),
         "case_messages_sha256": _digest(case["messages"]),
@@ -204,7 +225,10 @@ def main() -> int:
         "plugin_sha256": _sha256_file(plugin),
         "requested_model": model_name,
         "observed_request_model_id": observed_model,
-        "resolved_model_id": None,
+        "resolved_model_id": resolved_model,
+        "provider_http_attempts": attempts,
+        "provider_http_attempt_count": len(attempts),
+        "provider_transport_complete": complete_transport,
         "tool_schema_sha256": _digest(campus_tools.TOOL_SCHEMAS),
         "data_component_sha256": {name: _sha256_file(ROOT / name) for name in (
             "data/pois.json", "data/whu_road_network.graphml",
@@ -213,7 +237,7 @@ def main() -> int:
                            "input_tokens": sum(r["input_tokens"] for r in requests),
                            "output_tokens": sum(r["output_tokens"] for r in requests)},
         "tool_calls": len(bridge.trace), "turns": turns,
-        "limitation": "local middleware fixes temperature=0 and bounds logical streams; provider response model ID and actual HTTP retry count are not yet independently matched",
+        "limitation": "transport audit captures actual HTTP attempts and message_start model without recording request content; the development case still lacks independent gold",
     }
     _write_json(evidence_path, records)
     report["run_evidence_path"] = str(evidence_path)

@@ -3092,7 +3092,13 @@ def _tool_plan_tour(args, ctx):
 
 
 def _tool_get_weather(args, ctx):
-    pub = _weather_public(_weather_snapshot())
+    if isinstance(ctx, dict):
+        if "_route_weather_snapshot" not in ctx:
+            ctx["_route_weather_snapshot"] = _weather_snapshot()
+        snapshot = ctx["_route_weather_snapshot"]
+    else:
+        snapshot = _weather_snapshot()
+    pub = _weather_public(snapshot)
     if not pub:
         return {"error": "weather_unavailable", "message": "天气暂时获取不到"}, None
     return pub, None
