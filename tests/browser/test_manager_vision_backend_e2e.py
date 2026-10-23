@@ -48,6 +48,7 @@ def test_manager_reviews_persisted_candidate_and_publishes_user_route_event(
     import config
     import api.routes as routes
     from app import create_app
+    from agents.tools import execute_tool
     from spatial import network, road_conditions
 
     database.initialize(DATABASE_URL)
@@ -344,6 +345,11 @@ def test_manager_reviews_persisted_candidate_and_publishes_user_route_event(
             assert snapshot.status_code == 200
             assert snapshot.get_json()["data"]["count"] == 1
             assert snapshot.get_json()["data"]["conditions"][0]["name"] == edit_name
+            tool_result, _ = execute_tool("list_road_conditions", {}, {})
+            assert tool_result["count"] == 1
+            assert tool_result["conditions"][0]["source_kind"] == "vision_job"
+            assert tool_result["conditions"][0]["vision_evidence"]["job_id"] == job_id
+            assert tool_result["conditions"][0]["route_effect"]["action"] == "closure"
             replanned = user.post(
                 "/api/route/replan",
                 json={
@@ -371,6 +377,8 @@ def test_manager_reviews_persisted_candidate_and_publishes_user_route_event(
             deleted_snapshot = user.get("/api/road-conditions")
             assert deleted_snapshot.status_code == 200
             assert deleted_snapshot.get_json()["data"]["count"] == 0
+            cleared_tool_result, _ = execute_tool("list_road_conditions", {}, {})
+            assert cleared_tool_result["count"] == 0
             after_delete = user.post(
                 "/api/route/replan",
                 json={

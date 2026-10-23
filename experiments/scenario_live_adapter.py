@@ -235,9 +235,11 @@ def collect_development_replay(dataset: dict[str, Any], base_url: str,
                                ) -> list[dict[str, Any]]:
     """Collect attempts; failures stay explicit and never become invented turns."""
     from experiments.scenario_evaluator import validate_dataset
+    from experiments.scenario_v2 import VERSION as V2_VERSION
+    from experiments.scenario_v2 import validate_dataset as validate_dataset_v2
 
     require_local_service(base_url)
-    validate_dataset(dataset)
+    (validate_dataset_v2 if dataset.get("protocol_version") == V2_VERSION else validate_dataset)(dataset)
     if dataset["split"] != "development":
         raise ValueError("live adapter only collects development scenarios")
     rows = []

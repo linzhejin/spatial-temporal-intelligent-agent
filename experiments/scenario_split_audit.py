@@ -10,6 +10,8 @@ from collections import Counter
 from typing import Any
 
 from experiments.scenario_evaluator import CATEGORIES, validate_dataset
+from experiments.scenario_v2 import GROUPS as V2_GROUPS, VERSION as V2_VERSION
+from experiments.scenario_v2 import validate_dataset as validate_dataset_v2
 
 _SNAPSHOT = re.compile(r"[0-9a-f]{64}\Z")
 _SOURCES = ("source_group", "source_event_id", "flight_id", "source_video_id")
@@ -62,6 +64,15 @@ def _independently_adjudicated(case: dict[str, Any]) -> bool:
             and isinstance(evidence, list) and bool(evidence))
 
 
+def _source_backed(case: dict[str, Any]) -> bool:
+    try:
+        validate_dataset_v2({"protocol_version": V2_VERSION, "split": "development",
+                             "cases": [case]})
+    except (ValueError, TypeError, KeyError, AttributeError):
+        return False
+    return (case.get("adjudication") or {}).get("status") == "adjudicated"
+
+
 def audit_scenario_splits(
     development: dict[str, Any], test: dict[str, Any], *,
     external_gates: dict[str, bool] | None = None,
@@ -69,6 +80,7 @@ def audit_scenario_splits(
     """Audit leakage and readiness. External gates default to unverified."""
     dev = development.get("cases") if isinstance(development.get("cases"), list) else []
     tst = test.get("cases") if isinstance(test.get("cases"), list) else []
+    v2 = test.get("protocol_version") == V2_VERSION
     overlaps = {
         "scenario_ids": _strings(dev, "id") & _strings(tst, "id"),
         "template_groups": _strings(dev, "template_group") & _strings(tst, "template_group"),
@@ -85,6 +97,8 @@ def audit_scenario_splits(
         block("development_split_label", "Development dataset must declare split=development.")
     if test.get("split") != "test":
         block("test_split_label", "Test dataset must declare split=test.")
+    if v2 and development.get("protocol_version") != V2_VERSION:
+        block("development_protocol_mismatch", "Both splits must use scenario-v2.")
     if not dev:
         block("development_split_empty", "The development split has no cases.")
     if not tst:
@@ -115,24 +129,29 @@ def audit_scenario_splits(
 
     if type(test.get("repeats")) is not int or test.get("repeats") != 3:
         block("test_repeats_invalid", "Formal test requires exactly three repeats per scenario.")
-    if len(tst) != 300:
-        block("test_case_count_invalid", f"Formal test requires 300 cases; found {len(tst)}.")
+    expected_count = 120 if v2 else 300
+    categories = V2_GROUPS if v2 else CATEGORIES
+    per_category = 24 if v2 else 50
+    if len(tst) != expected_count:
+        block("test_case_count_invalid", f"Formal test requires {expected_count} cases; found {len(tst)}.")
     category_counts = Counter()
     for case in tst:
         category = case.get("category") if isinstance(case, dict) else None
         if isinstance(category, str):
             category_counts[category] += 1
-    for category in sorted(CATEGORIES):
-        if category_counts[category] != 50:
-            block("test_category_quota_invalid", f"Formal test requires 50 {category} cases; found {category_counts[category]}.")
+    for category in sorted(categories):
+        if category_counts[category] != per_category:
+            block("test_category_quota_invalid", f"Formal test requires {per_category} {category} cases; found {category_counts[category]}.")
     invalid_categories = sum(not isinstance(c.get("category"), str)
-                             or c["category"] not in CATEGORIES
+                             or c["category"] not in categories
                              for c in tst if isinstance(c, dict))
     if invalid_categories:
         block("test_category_invalid", f"{invalid_categories} test cases have an unknown category.")
-    unreviewed = sum(not _independently_adjudicated(c) for c in tst if isinstance(c, dict))
+    unreviewed = sum(not _source_backed(c) if v2 else not _independently_adjudicated(c)
+                     for c in tst if isinstance(c, dict))
     if unreviewed:
-        block("test_adjudication_incomplete", f"{unreviewed} test cases lack manual independent review evidence.")
+        source = "valid source-backed gold" if v2 else "manual independent review evidence"
+        block("test_adjudication_incomplete", f"{unreviewed} test cases lack {source}.")
     invalid_snapshots = sum(not isinstance(c.get("snapshot_id"), str)
                             or not _SNAPSHOT.fullmatch(c["snapshot_id"])
                             for c in tst if isinstance(c, dict))
@@ -142,7 +161,7 @@ def audit_scenario_splits(
         block("test_snapshot_mismatch", "Test cases refer to more than one frozen input snapshot.")
 
     try:
-        validate_dataset(test, formal=True)
+        (validate_dataset_v2 if v2 else validate_dataset)(test, formal=True)
     except (ValueError, TypeError, KeyError, AttributeError) as exc:
         block("test_dataset_contract_invalid", f"Formal dataset contract failed: {exc}")
 
@@ -164,13 +183,13 @@ def audit_scenario_splits(
         status = adjudication.get("status", "missing") if isinstance(adjudication, dict) else "invalid"
         adjudication_counts[status if isinstance(status, str) else "invalid"] += 1
     return {
-        "audit_version": "scenario-split-audit-v1",
+        "audit_version": "scenario-split-audit-v2" if v2 else "scenario-split-audit-v1",
         "leakage_evaluable": leakage_evaluable,
         "leakage_free": leakage_free,
         "formal_ready": leakage_free and not blockers,
         "blockers": blockers,
         "dataset_counts": {"development": len(dev), "test": len(tst),
-                            "test_by_category": {k: category_counts[k] for k in sorted(CATEGORIES)},
+                            "test_by_category": {k: category_counts[k] for k in sorted(categories)},
                             "test_adjudication_status": dict(sorted(adjudication_counts.items()))},
         "overlap_counts": {k: len(v) for k, v in overlaps.items()},
         "external_gates": {k: external_gates.get(k) is True for k in _GATES},

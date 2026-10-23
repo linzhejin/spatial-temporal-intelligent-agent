@@ -1,0 +1,78 @@
+{
+  "format": "bfcl-v4-official-selection-v1",
+  "source_repo": "https://github.com/ShishirPatil/gorilla",
+  "source_commit": "6ea57973c7a6097fd7c5915698c54c17c5b1b6c8",
+  "seed": 20261023,
+  "scope": "O1 separate official tool-use benchmark; no campus T1-T5 score mixing",
+  "scoring": "Use upstream BFCL evaluation code and gold at source_commit; IDs alone are not scores.",
+  "categories": {
+    "multi_turn_base": {
+      "source_url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_base.json",
+      "sha256": "1a21a995d06fd6f20ba55de7bced30ef953ec35e998f502ec2ecf4d66ef1c43a",
+      "available_count": 200,
+      "selected_ids": [
+        "multi_turn_base_119",
+        "multi_turn_base_124",
+        "multi_turn_base_163",
+        "multi_turn_base_171",
+        "multi_turn_base_174",
+        "multi_turn_base_26",
+        "multi_turn_base_48",
+        "multi_turn_base_65",
+        "multi_turn_base_70",
+        "multi_turn_base_96"
+      ]
+    },
+    "multi_turn_miss_func": {
+      "source_url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_miss_func.json",
+      "sha256": "87d28ce10e37d864b72de85d5732eef2a867b241d6c1c99b4ae682c9e3ea921c",
+      "available_count": 200,
+      "selected_ids": [
+        "multi_turn_miss_func_106",
+        "multi_turn_miss_func_11",
+        "multi_turn_miss_func_110",
+        "multi_turn_miss_func_24",
+        "multi_turn_miss_func_28",
+        "multi_turn_miss_func_31",
+        "multi_turn_miss_func_33",
+        "multi_turn_miss_func_34",
+        "multi_turn_miss_func_4",
+        "multi_turn_miss_func_91"
+      ]
+    },
+    "multi_turn_miss_param": {
+      "source_url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_miss_param.json",
+      "sha256": "f0c66dda3795f5f53e3e1c0cc8ba0246b6761c8f58bdba8317203bf451ab8838",
+      "available_count": 200,
+      "selected_ids": [
+        "multi_turn_miss_param_106",
+        "multi_turn_miss_param_134",
+        "multi_turn_miss_param_151",
+        "multi_turn_miss_param_196",
+        "multi_turn_miss_param_45",
+        "multi_turn_miss_param_57",
+        "multi_turn_miss_param_62",
+        "multi_turn_miss_param_82",
+        "multi_turn_miss_param_96",
+        "multi_turn_miss_param_97"
+      ]
+    },
+    "multi_turn_long_context": {
+      "source_url": "https://raw.githubusercontent.com/ShishirPatil/gorilla/6ea57973c7a6097fd7c5915698c54c17c5b1b6c8/berkeley-function-call-leaderboard/bfcl_eval/data/BFCL_v4_multi_turn_long_context.json",
+      "sha256": "78c3268c5cc8e97c0f4ec6c811b3b9a2bba14323b1830b7a874b06d822749324",
+      "available_count": 200,
+      "selected_ids": [
+        "multi_turn_long_context_13",
+        "multi_turn_long_context_139",
+        "multi_turn_long_context_142",
+        "multi_turn_long_context_148",
+        "multi_turn_long_context_154",
+        "multi_turn_long_context_158",
+        "multi_turn_long_context_165",
+        "multi_turn_long_context_27",
+        "multi_turn_long_context_41",
+        "multi_turn_long_context_97"
+      ]
+    }
+  }
+}

@@ -353,6 +353,24 @@ class TestAgentLoop:
         assert "晴" not in json.dumps(trace, ensure_ascii=False)
         assert result["message"] == "当前天气晴。"
 
+    def test_model_trace_callback_records_request_usage_without_prompt(self):
+        response = _fake_response(content="已处理。")
+        response.model = "deepseek-flash"
+        response.usage = SimpleNamespace(prompt_tokens=12, completion_tokens=4,
+                                         prompt_cache_hit_tokens=9,
+                                         prompt_cache_miss_tokens=3)
+        trace = []
+        _run(FakeClient([response]), model_trace_callback=trace.append)
+        assert len(trace) == 1
+        assert trace[0]["requested_model_id"] == planner.config.LLM_MODEL
+        assert trace[0]["resolved_model_id"] == "deepseek-flash"
+        assert trace[0]["input_tokens"] == 12
+        assert trace[0]["output_tokens"] == 4
+        assert trace[0]["cache_hit_input_tokens"] == 9
+        assert trace[0]["outcome"] == "success"
+        assert len(trace[0]["tool_schema_sha256"]) == 64
+        assert "测试 query" not in json.dumps(trace, ensure_ascii=False)
+
     def test_manual_map_start_is_used_when_natural_language_omits_the_origin(self):
         selected_start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
         client = FakeClient([])

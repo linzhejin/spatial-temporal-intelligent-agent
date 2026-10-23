@@ -10,6 +10,7 @@ v2 全 Agent 架构的唯一入口：所有用户输入（含明确 A→B、闲�
 """
 
 import json
+import hashlib
 import logging
 import math
 import re
@@ -632,7 +633,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
               uid: str = None, travel_mode: str = None,
               coord_waypoints: list = None,
               proof_identity: dict = None,
-              tool_trace_callback: Callable[[dict], None] | None = None) -> dict:
+              tool_trace_callback: Callable[[dict], None] | None = None,
+              model_trace_callback: Callable[[dict], None] | None = None) -> dict:
     """Agent 主循环。
 
     Returns:
@@ -652,6 +654,30 @@ def run_agent(query: str, context: dict = None, history: list = None,
     # 溯源记录：与 tool_trace_callback 同源，另存一份 run 级 PROV 记录。
     # 这里是唯一的采集点，下游（PG 事件 / 管理端点）共用同一份数据。
     _external_tool_trace = tool_trace_callback
+    model_tool_schema_hash = (hashlib.sha256(json.dumps(
+        agent_tools.TOOL_SCHEMAS, ensure_ascii=False, sort_keys=True,
+        separators=(",", ":"),
+    ).encode("utf-8")).hexdigest() if model_trace_callback else None)
+
+    def record_model_request(response=None, *, outcome="success", error_type=None):
+        if model_trace_callback is None:
+            return
+        usage = getattr(response, "usage", None)
+        payload = {
+            "requested_model_id": config.LLM_MODEL,
+            "resolved_model_id": getattr(response, "model", None),
+            "tool_schema_sha256": model_tool_schema_hash,
+            "temperature": 0.0, "max_tokens": LLM_MAX_TOKENS,
+            "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+            "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+            "cache_hit_input_tokens": getattr(usage, "prompt_cache_hit_tokens", None),
+            "cache_miss_input_tokens": getattr(usage, "prompt_cache_miss_tokens", None),
+            "outcome": outcome, "error_type": error_type,
+        }
+        try:
+            model_trace_callback(payload)
+        except Exception:
+            logger.warning("模型用量记录失败（忽略）", exc_info=True)
     _provenance = provenance.ProvenanceRecorder(
         query,
         uid=uid,
@@ -1487,6 +1513,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             break
         turns += 1
 
+        response = None
         try:
             llm_started = time.perf_counter()
             response = client.chat.completions.create(
@@ -1497,8 +1524,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 max_tokens=LLM_MAX_TOKENS,
             )
             agent_elapsed_ms += (time.perf_counter() - llm_started) * 1000
+            record_model_request(response)
         except Exception as e:
             agent_elapsed_ms += (time.perf_counter() - llm_started) * 1000
+            if response is None:
+                record_model_request(outcome="model_error", error_type=type(e).__name__)
             if verification_failure is not None:
                 return _route_verification_failure_response(
                     verification_failure,

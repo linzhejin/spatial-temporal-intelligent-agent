@@ -163,7 +163,8 @@ def _tool_use_summary(verdicts: list[str]) -> dict[str, Any]:
     }
 
 
-def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None) -> dict[str, Any]:
+def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
+                      _trusted_program_review: bool = False) -> dict[str, Any]:
     """Score all turns; absence of independent route evidence remains unknown."""
     adjudication = case.get("adjudication") or {}
     if not isinstance(adjudication, dict) or adjudication.get("status") != "adjudicated":
@@ -247,7 +248,17 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None) -> 
             _append_once(failures, "wrong_strategy")
         if actual.get("via_poi_ids") != expected["via_poi_ids"]:
             _append_once(failures, "wrong_poi_order")
-        if actual.get("candidate_poi_ids") != expected["candidate_poi_ids"]:
+        program_candidate_review = (
+            _trusted_program_review
+            and isinstance(actual.get("independent_review"), dict)
+            and actual["independent_review"].get("source") == "independent_program"
+            and isinstance(actual["independent_review"].get("candidate_order"), dict)
+        )
+        computed_candidate = (adjudication.get("method") == "graph_computed"
+                              and expected["kind"] == "candidates")
+        if computed_candidate and not program_candidate_review:
+            _append_once(unknowns, "candidate_evidence_missing")
+        elif not program_candidate_review and actual.get("candidate_poi_ids") != expected["candidate_poi_ids"]:
             _append_once(failures, "wrong_candidate_order")
         if actual.get("clarification_slot") != expected["clarification_slot"]:
             _append_once(failures, "wrong_clarification")
@@ -266,7 +277,9 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None) -> 
                 _append_once(failures, "unexpected_unknown")
 
         review = actual.get("independent_review")
-        valid_review = (isinstance(review, dict) and review.get("source") == "independent_reviewer"
+        valid_review = (isinstance(review, dict)
+                        and (review.get("source") == "independent_reviewer"
+                             or (_trusted_program_review and review.get("source") == "independent_program"))
                         and bool(review.get("reviewer")) and bool(review.get("evidence")))
         for output in expected["required_outputs"]:
             if output == "route":

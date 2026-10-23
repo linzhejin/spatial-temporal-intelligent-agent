@@ -51,6 +51,21 @@ def _emit_agent_tool_trace(state, runtime, database_url, event_type, payload):
         raise RuntimeError("run lease lost or task cancelled")
 
 
+def _emit_agent_model_trace(state, runtime, database_url, payload):
+    """Store only request identity and usage; never persist prompt or response text."""
+    allowed = {"requested_model_id", "resolved_model_id", "tool_schema_sha256",
+               "temperature", "max_tokens", "input_tokens", "output_tokens",
+               "cache_hit_input_tokens", "cache_miss_input_tokens", "outcome",
+               "error_type"}
+    safe = {key: value for key, value in payload.items() if key in allowed}
+    stored = append_run_event(
+        database_url, state["run_id"], runtime.context["worker_id"],
+        "agent_model_request", safe, node_id="agent_model",
+    )
+    if stored is None:
+        raise RuntimeError("run lease lost or task cancelled")
+
+
 def _coordinate(location: dict | None) -> dict | None:
     if not isinstance(location, dict):
         return None
@@ -221,6 +236,7 @@ def build_agent_workflow(
         errors: dict[str, str] = {}
 
         record_tool_call = None
+        record_model_request = None
         if _tool_trace_enabled():
             _emit_agent_tool_trace(
                 state, runtime, database_url, "agent_tool_trace_started",
@@ -252,6 +268,10 @@ def build_agent_workflow(
                         "artifact_kind": artifact_kind,
                     },
                 )
+
+            def record_model_request(item):
+                if isinstance(item, dict):
+                    _emit_agent_model_trace(state, runtime, database_url, item)
 
         def run_weather_tool():
             try:
@@ -285,6 +305,8 @@ def build_agent_workflow(
             )
             if record_tool_call:
                 agent_kwargs["tool_trace_callback"] = record_tool_call
+            if record_model_request:
+                agent_kwargs["model_trace_callback"] = record_model_request
             return agent(data["query"], **agent_kwargs)
 
         if plan.kind == "composite":

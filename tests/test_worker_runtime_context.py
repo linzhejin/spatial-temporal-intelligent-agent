@@ -141,6 +141,44 @@ def test_opt_in_agent_tool_trace_records_safe_metadata_as_run_events(
     assert result["result"]["reply"] == "樱顶在珞珈山上。"
 
 
+def test_opt_in_model_request_trace_keeps_usage_but_not_prompt(monkeypatch):
+    from agents import workflow
+
+    monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    events = []
+
+    def append(_url, _run_id, _worker_id, event_type, payload, node_id=None):
+        events.append((event_type, payload, node_id))
+        return {"stored": True}
+
+    monkeypatch.setattr(workflow, "append_run_event", append)
+    monkeypatch.setattr(workflow, "get_run_input", lambda _url, _run: {
+        "query": "介绍樱顶", "history": [], "task": {},
+    })
+
+    def fake_agent(_query, *, model_trace_callback=None, **_kwargs):
+        assert callable(model_trace_callback)
+        model_trace_callback({
+            "requested_model_id": "deepseek-chat", "resolved_model_id": "deepseek-flash",
+            "tool_schema_sha256": "a" * 64, "temperature": 0,
+            "max_tokens": 800, "input_tokens": 12, "output_tokens": 4,
+            "cache_hit_input_tokens": 9, "cache_miss_input_tokens": 3,
+            "outcome": "success", "raw_prompt": "private location",
+        })
+        return {"response_kind": "chat", "message": "樱顶在珞珈山上。"}
+
+    workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent).invoke(
+        {"run_id": "model-trace-run"},
+        {"configurable": {"thread_id": "model-trace-run"}},
+        context={"worker_id": "model-trace-worker"},
+    )
+    model_events = [item for item in events if item[0] == "agent_model_request"]
+    assert len(model_events) == 1
+    assert model_events[0][2] == "agent_model"
+    assert model_events[0][1]["input_tokens"] == 12
+    assert "raw_prompt" not in model_events[0][1]
+
+
 def test_opt_in_agent_tool_trace_records_direct_weather_execution(monkeypatch):
     from agents import workflow
 

@@ -173,6 +173,29 @@ def test_development_replay_counts_projected_agent_tool_calls(artifact_kind):
     assert rows[0]["turns"][0]["tool_trace"][0]["tool_name"] == "search_poi_candidates"
 
 
+def test_v2_development_replay_uses_same_isolated_service_gate():
+    import json
+    from experiments import scenario_live_adapter
+
+    dataset = json.loads((scenario_live_adapter.ROOT
+                          / "experiments/datasets/scenarios_dev_v2.json")
+                         .read_text(encoding="utf-8"))
+    dataset["cases"] = dataset["cases"][:1]
+
+    class ContextSession(_Session):
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    rows = scenario_live_adapter.collect_development_replay(
+        dataset, "http://127.0.0.1:5000", _lookup(), session_factory=ContextSession,
+    )
+    assert len(rows) == dataset.get("repeats", 1)
+    assert rows[0]["scenario_id"] == dataset["cases"][0]["id"]
+
+
 def test_development_replay_refuses_service_without_isolated_database_proof():
     import copy
     import json

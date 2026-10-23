@@ -69,7 +69,7 @@ ROUTE_EVIDENCE_CODES = {
     "unreviewed_route_building_crossings",
 }
 REQUIRED_INPUTS = (
-    "poi", "network", "edge_overrides", "road_annotations", "attribute_master",
+    "poi", "network", "edge_overrides", "campus_reviews", "road_annotations", "attribute_master",
     "taxonomy", "tool_schemas", "model_config", "prompts", "task_cards", "event_state",
     "runtime_code", "requirements", "runtime_environment",
 )
@@ -344,6 +344,7 @@ def _versions():
         "network": _sha256_paths(["data/whu_road_network.graphml"]),
         "road_annotations": _sha256_paths(["data/road_annotations.json"]),
         "edge_overrides": _sha256_paths(["data/edge_overrides.json"]),
+        "campus_reviews": _sha256_paths(["data/campus_review_decisions.json"]),
         "attribute_master": _sha256_paths(["data/edge_attribute_master.json"]),
         "taxonomy": _sha256_paths(["spatial/poi_taxonomy.py"]),
         "tool_schemas": _sha256_paths(["agents/tools.py"]),

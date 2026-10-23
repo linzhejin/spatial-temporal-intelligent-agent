@@ -1,0 +1,31 @@
+{
+  "protocol_version": "scenario-v2",
+  "scope": "Full conversation evaluation with independent source-backed gold; v1 results remain historical development evidence.",
+  "planned_design": {
+    "development_cases": 60,
+    "test_cases": 120,
+    "groups": ["T1", "T2", "T3", "T4", "T5"],
+    "cases_per_group": 24,
+    "scenario_families_per_group": 8,
+    "variants_per_family": 3,
+    "repeats_per_case": 3,
+    "random_seed": 20261023,
+    "primary_metric": "complete_task_success_rate_scenario_mean"
+  },
+  "gold_sources": {
+    "graph_computed": "Frozen graph, POIs where needed, and independently specified endpoints/activity constraints; the replay runner recomputes exact route legality and full-eligible-set candidate distances. A prefilled candidate ranking in the case file is never trusted as a score.",
+    "official_reference": "Official dataset case ID and version; benchmark-specific reference must be evaluated by its own scorer or independently mapped to projected outputs.",
+    "manual_independent": "Reviewer identity and evidence for questions with genuinely ambiguous answers.",
+    "draft": "Authoring only; never counted as formal task success or failure."
+  },
+  "sampling": "Five groups, eight scenario families per group, three variants per family. A full conversation is one unit. Development and test must have disjoint template, OD, prompt and media-source groups.",
+  "scoring": "Use the v2 scorer with supplied frozen graph and replay projection. Do not trust product verifier flags or embedded reviews; missing external evidence remains unknown. Tool-call sequence is diagnostic, not the primary endpoint.",
+  "formal_gates": ["120 adjudicated cases with source evidence", "three attempts per case", "frozen graph and POI SHA-256", "independently recomputed candidate ranking with unknown access explicitly retained", "split-leakage audit", "ready snapshot manifest", "matching Git commit", "clean tracked worktree", "independent replay scoring"],
+  "separate_datasets": {
+    "O1": "40 official BFCL multi-turn cases retain official IDs and scoring; do not merge their scores into campus T1-T5.",
+    "D1": "24 synthetic road-event tasks with fixed event clock, edge IDs, modes and expiry.",
+    "V1": "Six independent source videos mapped to twelve simulated road cases; video is the independent unit.",
+    "V2": "100 labeled VisDrone images for initial detector audit, reported separately from campus data."
+  },
+  "status": "Protocol implementation in progress; no formal T1-T5 result is claimed by this file."
+}

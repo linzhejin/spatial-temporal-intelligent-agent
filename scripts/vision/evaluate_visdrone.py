@@ -59,12 +59,16 @@ def main() -> int:
     parser.add_argument("--iou", type=float, default=0.5)
     parser.add_argument("--limit", type=int, default=0,
                         help="optional first-N image smoke sample; 0 evaluates every image")
+    parser.add_argument("--selection", type=Path,
+                        help="fixed JSON manifest of image paths; preferred for reproducible V2 audit")
     parser.add_argument("--output", type=Path, help="optional UTF-8 JSON output path")
     args = parser.parse_args()
     if not args.archive.is_file() or not args.model.is_file():
         parser.error("archive and ONNX model files must exist")
     if args.limit < 0:
         parser.error("--limit must be zero or a positive image count")
+    if args.selection and args.limit:
+        parser.error("--selection and --limit are mutually exclusive")
 
     try:
         model_manifest, model_manifest_sha256 = _load_model_manifest(args.model)
@@ -94,7 +98,18 @@ def main() -> int:
         missing_annotations = [name for name in images if PurePosixPath(name).stem not in annotation_names]
         if missing_annotations:
             parser.error(f"archive is missing {len(missing_annotations)} matching annotation files")
-        selected = images[:args.limit] if args.limit else images
+        if args.selection:
+            selection = json.loads(args.selection.read_text(encoding="utf-8"))
+            if (selection.get("format") != "visdrone-v2-selection"
+                    or selection.get("archive_sha256") != _sha256(args.archive)
+                    or not isinstance(selection.get("images"), list)
+                    or len(selection["images"]) != len(set(selection["images"]))
+                    or not selection["images"]
+                    or any(name not in images for name in selection["images"])):
+                parser.error("selection is invalid or does not match this archive")
+            selected = selection["images"]
+        else:
+            selected = images[:args.limit] if args.limit else images
         for index, image_name in enumerate(selected, start=1):
             relative_name = PurePosixPath(image_name)
             encoded = np.frombuffer(archive.read(image_name), dtype=np.uint8)
@@ -131,6 +146,7 @@ def main() -> int:
         "execution_provider": "CPUExecutionProvider",
         "image_count_in_archive": len(images),
         "image_count_evaluated": len(selected) - len(decode_failures),
+        "selection_manifest_sha256": _sha256(args.selection) if args.selection else None,
         "decode_failures": decode_failures,
         "confidence_threshold": args.confidence,
         "iou_threshold": args.iou,
