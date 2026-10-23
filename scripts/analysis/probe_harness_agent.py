@@ -85,6 +85,8 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--test-database-url", required=True)
     parser.add_argument("--case-id", required=True)
+    parser.add_argument("--weather-fixture", type=Path,
+                        help="Labelled synthetic weather for isolated development replay")
     parser.add_argument("--model", default="deepseek-flash",
                         help="Concrete model ID in the pinned official Harness catalog")
     parser.add_argument("--runtime", type=Path, required=True)
@@ -104,6 +106,10 @@ def main() -> int:
     case = next((item for item in dataset["cases"] if item.get("id") == args.case_id), None)
     if case is None:
         raise SystemExit("case ID missing from development dataset")
+    weather_required = any("weather" in (turn.get("required_outputs") or [])
+                           for turn in case.get("expected_turns", []))
+    if weather_required and args.weather_fixture is None:
+        raise SystemExit("weather case requires --weather-fixture for comparable replay")
     env_file = dotenv_values(args.env_file)
     from tests.db_safety import verify_isolated_test_database
     verify_isolated_test_database(args.test_database_url,
@@ -118,6 +124,10 @@ def main() -> int:
     from experiments.baselines.harness_messages_audit import open_messages_audit
     from experiments.baselines.harness_tool_bridge import open_tool_bridge
     from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT
+    from experiments.controlled_weather import load_development_weather
+
+    weather_snapshot, weather_provenance = (load_development_weather(args.weather_fixture)
+                                            if args.weather_fixture else (None, None))
 
     upstream = args.upstream.resolve()
     expected_revision = "687f282e8625c6b8d11ff58211a90524be2e4317"
@@ -182,6 +192,8 @@ def main() -> int:
             for message in case["messages"]:
                 text = message["content"]
                 bridge.context = {"query": text}
+                if weather_provenance:
+                    bridge.context["_route_weather_snapshot"] = weather_snapshot
                 before = len(bridge.trace)
                 before_artifacts = len(bridge.artifacts)
                 started = time.monotonic()
@@ -190,6 +202,8 @@ def main() -> int:
                 artifacts = bridge.artifacts[before_artifacts:]
                 selected = next((item for item in reversed(bridge.selection_context[before:])
                                  if item), {})
+                weather_observation = next((item for item in reversed(
+                    bridge.weather_observations[before:]) if item), None)
                 for event in result.events:
                     if event.get("type") == "request/context":
                         observed = event.get("data", {}).get("model")
@@ -208,6 +222,7 @@ def main() -> int:
                     "tool_trace": trace, "artifacts": artifacts,
                     "selected_start_name": selected.get("start_name"),
                     "selected_mode": selected.get("mode"),
+                    "weather_observation": weather_observation,
                     "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
                 })
     requests = [record for record in records if record["kind"] == "request"]
@@ -229,6 +244,7 @@ def main() -> int:
         "provider_http_attempts": attempts,
         "provider_http_attempt_count": len(attempts),
         "provider_transport_complete": complete_transport,
+        "weather_fixture": weather_provenance,
         "tool_schema_sha256": _digest(campus_tools.TOOL_SCHEMAS),
         "data_component_sha256": {name: _sha256_file(ROOT / name) for name in (
             "data/pois.json", "data/whu_road_network.graphml",

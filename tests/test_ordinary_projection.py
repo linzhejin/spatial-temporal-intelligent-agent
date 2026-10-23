@@ -54,3 +54,14 @@ def test_project_ordinary_clarification_does_not_invent_missing_slot():
     assert result["kind"] == "clarify"
     assert result["status"] == "needs_input"
     assert result["clarification_slot"] is None
+
+
+def test_ordinary_weather_requires_matching_final_reply_and_tool_observation():
+    turn = {"status": "completed", "artifacts": [{"route": {
+        "start_name": "玉兰2门", "end_name": "樱顶",
+        "recommended_edge_ids": [[1, 2, 0]],
+    }}], "weather_observation": {"weather": "晴", "temperature": 22},
+            "message": "路线已规划。天气晴，22 度。"}
+    assert "weather" in project_ordinary_turn(turn, _lookup())["outputs"]
+    turn["message"] = "路线已规划。"
+    assert "weather" not in project_ordinary_turn(turn, _lookup())["outputs"]

@@ -1,0 +1,65 @@
+{
+  "status": "development_diagnostic_only_not_scored",
+  "case_id": "seed_compound_01",
+  "weather_fixture": "synthetic_development_fixture",
+  "weather_fixture_sha256": "fab71cf975d02313e09270500b50e236e6b5d4ce89daeed834bfad8eb7bc48b6",
+  "case_messages_sha256": "25990530490027fe329aa24d198fbcd35820932436bcd04017e7914a2a17a76d",
+  "development_dataset_sha256": "38f1a07330f7887e7c56ad2b8e27a414b4cd2c69ce72a492b695ca4fd5851fbd",
+  "local_ignored_reports": [
+    {
+      "file": "product_T5_weather_control_20261024.json",
+      "sha256": "94786ac8920f7630bebc8e2fd071d1479fbd0cd6d11ad97392b5982d365dd62b",
+      "purpose": "pre_fix_diagnostic"
+    },
+    {
+      "file": "product_T5_weather_control_after_fix_20261024.json",
+      "sha256": "83d326d64ac4f50489c33c35a83c626e21d83c5ba51159b5cf19286f9ced9cd2",
+      "purpose": "reply_fix_diagnostic_before_trusted_input_boundary"
+    },
+    {
+      "file": "product_T5_weather_control_trusted_input_20261024.json",
+      "sha256": "eeaaef121437d4dd9e5cf1d12f80e213e44ef3922ad91f8c251bf0ecb5ac967f",
+      "purpose": "product_development_pilot_with_trusted_fixture_input"
+    },
+    {
+      "file": "ordinary_T5_weather_control_20261024.json",
+      "sha256": "88b4104429e69435ec60e11cf5aa6d533b3229b3890ed69a3650e4a563e4e62d",
+      "purpose": "ordinary_agent_development_pilot"
+    },
+    {
+      "file": "harness_T5_weather_control_20261024.json",
+      "sha256": "57edc3a8e3b8019d69762e0621dbdd7b9ca61d45172a6c53f0341c63132d9a47",
+      "purpose": "harness_development_pilot"
+    },
+    {
+      "file": "T5_weather_control_projection_20261024.json",
+      "sha256": "94e03082a95efb3bbbfa28853181353be8b24336b92bb6064f75a06420e626db",
+      "purpose": "two_baseline_projection_not_score"
+    },
+    {
+      "file": "T5_weather_control_delivery_projection_20261024.json",
+      "sha256": "18db9c6f6380a8b0e33bda3af749f129b80a2b2ab6b52eacc69534754083e70a",
+      "purpose": "two_baseline_user_delivered_output_projection_not_score"
+    }
+  ],
+  "observations": {
+    "resolved_response_model": "deepseek-flash",
+    "same_final_route_edge_sequence": true,
+    "route_edge_count_each": 49,
+    "product_requests": 1,
+    "ordinary_requests": 3,
+    "harness_requests": 5,
+    "harness_http_attempts": 5,
+    "product_weather_and_route_in_final_reply": true,
+    "ordinary_weather_and_route_in_final_reply": false,
+    "harness_weather_and_route_in_final_reply": true,
+    "ordinary_projected_outputs": ["route"],
+    "harness_projected_outputs": ["route", "weather"]
+  },
+  "limitations": [
+    "Single visible development case with synthetic weather; not an independent holdout or formal score.",
+    "Product reply fix was applied between the first and second product runs.",
+    "Matching edge IDs proves neither real-world passage nor model superiority.",
+    "Provider transport and token accounting differ across SDKs; cost requires more samples."
+  ]
+}

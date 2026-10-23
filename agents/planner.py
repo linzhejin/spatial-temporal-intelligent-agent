@@ -634,7 +634,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
               coord_waypoints: list = None,
               proof_identity: dict = None,
               tool_trace_callback: Callable[[dict], None] | None = None,
-              model_trace_callback: Callable[[dict], None] | None = None) -> dict:
+              model_trace_callback: Callable[[dict], None] | None = None,
+              weather_snapshot: dict | None = None) -> dict:
     """Agent 主循环。
 
     Returns:
@@ -689,6 +690,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
         task_revision=(context or {}).get("task_revision")
         if isinstance(context, dict) else None,
     )
+    # Keep weather consistent between weather and routing tools in this run.
+    # Do not carry a live snapshot into a later user turn.
+    run_weather = {}
+    if isinstance(weather_snapshot, dict) and isinstance(weather_snapshot.get("live"), dict):
+        run_weather["_route_weather_snapshot"] = weather_snapshot
 
     def tool_trace_callback(payload):
         try:
@@ -708,6 +714,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         # This keyword is supplied only by trusted workflow code, separately
         # from browser context, uid and model-produced tool arguments.
         tool_context = dict(tool_context)
+        if "_route_weather_snapshot" in run_weather:
+            tool_context.setdefault("_route_weather_snapshot",
+                                    run_weather["_route_weather_snapshot"])
         if isinstance(context, dict) and isinstance(context.get("task_revision"), int):
             tool_context.setdefault("task_revision", context["task_revision"])
         if proof_identity is not None:
@@ -723,6 +732,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "artifact_kind": None,
                 })
             raise
+        if "_route_weather_snapshot" in tool_context:
+            run_weather["_route_weather_snapshot"] = tool_context["_route_weather_snapshot"]
         if record_trace and tool_trace_callback:
             artifact_kind = next(
                 (kind for key, kind in (("route", "route"),
@@ -1444,6 +1455,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
     artifact_candidates, artifact_clarify = None, None
     artifact_route_comparison = None
     artifact_suggestions = None
+    weather_result = None
+    weather_tool_failed = False
     final_message = ""
     turns = 0
     agent_elapsed_ms = 0.0
@@ -1668,6 +1681,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "artifact_kind": artifact_kind,
                     })
 
+            if name == "get_weather" and isinstance(result, dict):
+                if result.get("error"):
+                    weather_tool_failed = True
+                elif isinstance(result.get("weather"), str) and result["weather"]:
+                    weather_result = result
+
             if artifact:
                 if "route" in artifact:
                     artifact_route = artifact["route"]
@@ -1834,6 +1853,21 @@ def run_agent(query: str, context: dict = None, history: list = None,
         else:
             raise PlannerError("Agent 循环结束但没有产出任何结果")
 
+    delivered_weather = None
+    if artifact_route and re.search(r"天气|气温|现在.*(?:下雨|下雪)",
+                                    (active_task_request or "") + query):
+        if weather_result:
+            description = weather_result["weather"]
+            temperature = weather_result.get("temperature")
+            if isinstance(temperature, (int, float)):
+                description += f"、{temperature:g}°C"
+            final_message += f" 天气参考：{description}。"
+            delivered_weather = weather_result
+        elif weather_tool_failed:
+            final_message += " 天气暂时获取不到；本次路线没有依据天气调整。"
+        else:
+            final_message += " 本次未取得天气信息；路线仅依据现有道路数据。"
+
     response_kind = "chat"
     if artifact_route:
         response_kind = "route"
@@ -1844,6 +1878,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         "response_kind": response_kind,
         "message": final_message,
         "route": artifact_route,
+        "weather": delivered_weather,
         "route_kind": route_kind,
         "candidates": artifact_candidates,
         "clarify": None,

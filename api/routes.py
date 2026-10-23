@@ -873,6 +873,8 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             out["suggestions"] = resp["suggestions"]
         else:
             out.setdefault("suggestions", [])
+        if isinstance(resp.get("weather"), dict):
+            out["weather"] = resp["weather"]
         return out
 
     if kind == "candidates":

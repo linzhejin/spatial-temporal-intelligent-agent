@@ -33,6 +33,7 @@ class ToolBridge:
         # Only selected, typed result fields needed for task projection. The
         # model's arguments and full tool responses stay out of the trace.
         self.selection_context: list[dict] = []
+        self.weather_observations: list[dict | None] = []
         self._lock = threading.Lock()
         bridge = self
 
@@ -78,7 +79,10 @@ class ToolBridge:
                     self.send_error(400)
                     return
                 try:
-                    result, artifact = bridge.executor(name, args, dict(bridge.context))
+                    # One bridge belongs to one experiment run. Serialize tool
+                    # calls so all tools in the turn see the same weather snapshot.
+                    with bridge._lock:
+                        result, artifact = bridge.executor(name, args, bridge.context)
                     response = campus_tools.result_to_json(result)
                     outcome = "tool_error" if isinstance(result, dict) and result.get("error") else "success"
                     error_code = result.get("error") if isinstance(result, dict) else None
@@ -105,6 +109,13 @@ class ToolBridge:
                             if isinstance(value, str) and value:
                                 selected[field] = value
                     bridge.selection_context.append(selected)
+                    weather = (result if outcome == "success" and name == "get_weather"
+                               and isinstance(result, dict)
+                               and isinstance(result.get("weather"), str) else None)
+                    bridge.weather_observations.append({
+                        "weather": weather["weather"],
+                        "temperature": weather.get("temperature"),
+                    } if weather else None)
                     if isinstance(artifact, dict):
                         bridge.artifacts.append(artifact)
                 body = json.dumps({"result": response}, ensure_ascii=False).encode("utf-8")

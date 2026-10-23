@@ -6,6 +6,7 @@ visible; the case's expected answer is never used to fill an observed field.
 from __future__ import annotations
 
 import argparse
+from copy import deepcopy
 import hashlib
 import json
 from pathlib import Path
@@ -13,6 +14,7 @@ from pathlib import Path
 from agents import tools as campus_tools
 from experiments.baselines.ordinary_projection import project_ordinary_turn
 from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT
+from experiments.controlled_weather import load_development_weather
 from experiments.scenario_live_adapter import build_poi_lookup
 
 
@@ -39,7 +41,8 @@ def _file_hash(path: Path) -> str:
 def audit_pilot(report: dict, *, report_sha256: str, case: dict,
                 dataset_sha256: str, lookup: dict,
                 component_sha256: dict[str, str], tool_schema_sha256: str,
-                prompt_sha256: str) -> dict:
+                prompt_sha256: str, weather_snapshot: dict | None = None,
+                weather_fixture_sha256: str | None = None) -> dict:
     if report.get("case_id") != case.get("id"):
         raise ValueError("pilot case ID differs from development case")
     if not str(report.get("status", "")).startswith("development_pilot_only"):
@@ -49,6 +52,35 @@ def audit_pilot(report: dict, *, report_sha256: str, case: dict,
         raise ValueError("pilot turn count differs from development case")
     if sum(len(turn.get("tool_trace") or []) for turn in turns) != report.get("tool_calls"):
         raise ValueError("pilot trace differs from reported tool count")
+    if weather_snapshot is not None:
+        fixture = report.get("weather_fixture")
+        if (not isinstance(fixture, dict)
+                or fixture.get("sha256") != weather_fixture_sha256
+                or not weather_fixture_sha256):
+            raise ValueError("pilot weather fixture differs from supplied fixture")
+        expected = weather_snapshot.get("live")
+        if not isinstance(expected, dict):
+            raise ValueError("invalid weather fixture snapshot")
+        turns = deepcopy(turns)
+        for turn in turns:
+            weather_called = any(
+                isinstance(call, dict) and call.get("tool_name") == "get_weather"
+                and call.get("outcome") == "success"
+                for call in turn.get("tool_trace") or []
+            )
+            if not weather_called:
+                continue
+            observed = turn.get("weather_observation")
+            if observed is not None:
+                if (not isinstance(observed, dict)
+                        or observed.get("weather") != expected.get("weather")
+                        or observed.get("temperature") != expected.get("temperature")):
+                    raise ValueError("pilot weather observation differs from supplied fixture")
+            else:
+                turn["weather_observation"] = {
+                    "weather": expected["weather"],
+                    "temperature": expected["temperature"],
+                }
     projections = [project_ordinary_turn(turn, lookup) for turn in turns]
     input_bound = (report.get("development_dataset_sha256") == dataset_sha256
                    and report.get("case_messages_sha256") == _digest(case["messages"]))
@@ -81,6 +113,7 @@ def audit_pilot(report: dict, *, report_sha256: str, case: dict,
             "end_poi_id": item["end_poi_id"],
             "candidate_poi_ids": item["candidate_poi_ids"],
             "clarification_slot": item["clarification_slot"],
+            "outputs": item["outputs"],
             "route_edge_count": len(item["route_edge_ids"]),
         } for item in projections],
         "assessment": "projection_only_not_scored",
@@ -93,6 +126,8 @@ def main() -> int:
                         default=ROOT / "experiments/datasets/scenarios_dev_v2.json")
     parser.add_argument("--pois", type=Path, default=ROOT / "data/pois.json")
     parser.add_argument("--report", type=Path, action="append", required=True)
+    parser.add_argument("--weather-fixture", type=Path,
+                        help="Matching labelled synthetic fixture for historical weather output audit")
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     dataset = json.loads(args.dataset.read_text(encoding="utf-8"))
@@ -102,6 +137,10 @@ def main() -> int:
     pois = json.loads(args.pois.read_text(encoding="utf-8"))["pois"]
     lookup = build_poi_lookup(pois)
     component_sha256 = {name: _file_hash(ROOT / name) for name in COMPONENTS}
+    weather_snapshot, weather_provenance = (
+        load_development_weather(args.weather_fixture)
+        if args.weather_fixture else (None, None)
+    )
     rows = []
     for path in args.report:
         report = json.loads(path.read_text(encoding="utf-8"))
@@ -114,9 +153,12 @@ def main() -> int:
             component_sha256=component_sha256,
             tool_schema_sha256=_digest(campus_tools.TOOL_SCHEMAS),
             prompt_sha256=_digest(SYSTEM_PROMPT),
+            weather_snapshot=weather_snapshot,
+            weather_fixture_sha256=(weather_provenance or {}).get("sha256"),
         ))
     output = {"status": "development_projection_only_not_scored",
-              "dataset_sha256": _file_hash(args.dataset), "pilots": rows}
+              "dataset_sha256": _file_hash(args.dataset),
+              "weather_fixture": weather_provenance, "pilots": rows}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     if args.output.exists():
         raise FileExistsError(args.output)

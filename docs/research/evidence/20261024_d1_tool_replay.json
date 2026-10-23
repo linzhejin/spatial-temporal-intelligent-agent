@@ -1,0 +1,32 @@
+{
+  "status": "development_tool_replay_only_not_agent_or_vision_score",
+  "bank_file": "output/experiments/vision_simulation/D1_road_event_bank.json",
+  "bank_sha256": "645ace90fefe5663b445e03f5e54ff17d5b97359c7b17e2c21df8399f8e96976",
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "additional_input_sha256": {
+    "data/edge_overrides.json": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+    "data/campus_review_decisions.json": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169",
+    "data/road_annotations.json": "8be901406c32aa77f1f831ece2f365b3be51cc61bc6753f1e4eb401879e60c74",
+    "data/pois.json": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c"
+  },
+  "ignored_detailed_report": {
+    "file": "output/experiments/vision_simulation/D1_product_tool_replay_v2_20261024.json",
+    "sha256": "e5098c950b57f053f835d675a246ba104e24c8cba0a00dc8b6f538aff261fa6f"
+  },
+  "observations": {
+    "cases": 24,
+    "active_event_cases": 12,
+    "expired_event_cases": 12,
+    "product_tool_route_pass": 24,
+    "independent_graph_legality_pass": 24,
+    "active_routes_excluding_bound_edge": 12,
+    "expired_routes_restoring_direct_edge": 12,
+    "legal_detours_different_from_reference_sequence": 7
+  },
+  "limitations": [
+    "Events and campus road associations are synthetic development fixtures, not observed Wuhan conditions.",
+    "The replay calls the product routing tool directly; it does not measure language-model decisions or administrator review.",
+    "The public videos were recorded in Songdo, so this is not a vision-detection or field-routing score.",
+    "Seven active routes differ from the independent shortest-path reference but pass both route audits and exclude the closed edge."
+  ]
+}

@@ -68,6 +68,7 @@ def run_conversation(user_turns: list[str], *, client: Any, model: str,
         artifacts = []
         selected_start_name = None
         selected_mode = None
+        weather_observation = None
         final_text = ""
         status = "limit_reached"
         for _ in range(max_rounds_per_turn):
@@ -136,6 +137,11 @@ def run_conversation(user_turns: list[str], *, client: Any, model: str,
                     if outcome == "success" and isinstance(result, dict):
                         selected_start_name = result.get("start_name") or selected_start_name
                         selected_mode = result.get("mode") or selected_mode
+                        if name == "get_weather" and isinstance(result.get("weather"), str):
+                            weather_observation = {
+                                "weather": result["weather"],
+                                "temperature": result.get("temperature"),
+                            }
                 except (ValueError, json.JSONDecodeError):
                     args, artifact = {}, None
                     result, outcome = {"error": "invalid_args", "message": "工具参数不是 JSON 对象"}, "invalid_args"
@@ -160,6 +166,7 @@ def run_conversation(user_turns: list[str], *, client: Any, model: str,
                       "tool_trace": trace, "artifacts": artifacts,
                       "selected_start_name": selected_start_name,
                       "selected_mode": selected_mode,
+                      "weather_observation": weather_observation,
                       "elapsed_ms": round((time.monotonic() - turn_started) * 1000, 2)})
     return {"condition": "ordinary_tool_agent",
             "model": model, "turns": turns, "tool_calls": total_calls,

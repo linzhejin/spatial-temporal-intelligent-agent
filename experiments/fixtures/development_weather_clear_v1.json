@@ -1,0 +1,13 @@
+{
+  "fixture_id": "development_weather_clear_v1",
+  "source": "synthetic_development_fixture",
+  "observed_at": "2026-10-24T09:00:00+08:00",
+  "live": {
+    "weather": "晴",
+    "temperature": 22.0,
+    "humidity": "55",
+    "winddirection": "东北",
+    "windpower": "≤3",
+    "reporttime": "2026-10-24 09:00:00"
+  }
+}

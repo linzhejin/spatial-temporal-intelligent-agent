@@ -66,3 +66,31 @@ def test_missing_input_binding_and_trace_mismatch_fail_closed():
     report["tool_calls"] = 2
     with pytest.raises(ValueError, match="trace"):
         _audit(report)
+
+
+def test_weather_fixture_projects_only_answered_observation():
+    report = _report({"route": {"start_name": "Start", "end_name": "Food",
+                                "recommended_edge_ids": [[1, 2, 0]]}})
+    report["weather_fixture"] = {"sha256": "f" * 64}
+    report["turns"][0]["tool_trace"] = [
+        {"tool_name": "get_weather", "argument_keys": [],
+         "outcome": "success", "artifact_kind": None}]
+    weather = {"live": {"weather": "晴", "temperature": 22}, "impact": {}}
+    kwargs = {"weather_snapshot": weather, "weather_fixture_sha256": "f" * 64}
+    report["turns"][0]["message"] = "路线已规划。天气晴。"
+    assert "weather" in _audit_with_weather(report, **kwargs)["turns"][0]["outputs"]
+    report["turns"][0]["message"] = "路线已规划。"
+    assert "weather" not in _audit_with_weather(report, **kwargs)["turns"][0]["outputs"]
+    report["weather_fixture"]["sha256"] = "e" * 64
+    with pytest.raises(ValueError, match="fixture"):
+        _audit_with_weather(report, **kwargs)
+
+
+def _audit_with_weather(report, **kwargs):
+    lookup = build_poi_lookup([{"id": "poi_start", "name": "Start"},
+                               {"id": "poi_food", "name": "Food"}])
+    return audit_pilot(report, report_sha256="c" * 64, case=_case(),
+                       dataset_sha256="b" * 64, lookup=lookup,
+                       component_sha256=_components(),
+                       tool_schema_sha256="d" * 64, prompt_sha256="e" * 64,
+                       **kwargs)

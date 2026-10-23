@@ -30,6 +30,8 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--test-database-url", required=True)
     parser.add_argument("--case-id", required=True)
+    parser.add_argument("--weather-fixture", type=Path,
+                        help="Labelled synthetic weather for isolated development replay")
     parser.add_argument("--dataset", type=Path,
                         default=ROOT / "experiments/datasets/scenarios_dev_v2.json")
     parser.add_argument("--output", type=Path,
@@ -41,6 +43,10 @@ def main() -> int:
     case = next((row for row in dataset["cases"] if row.get("id") == args.case_id), None)
     if case is None:
         raise SystemExit("case_id missing from development dataset")
+    weather_required = any("weather" in (turn.get("required_outputs") or [])
+                           for turn in case.get("expected_turns", []))
+    if weather_required and args.weather_fixture is None:
+        raise SystemExit("weather case requires --weather-fixture for comparable replay")
 
     env = dotenv_values(args.env_file)
     from tests.db_safety import verify_isolated_test_database
@@ -59,12 +65,18 @@ def main() -> int:
     from openai import OpenAI
     from agents.tools import TOOL_SCHEMAS
     from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT, run_conversation
+    from experiments.controlled_weather import load_development_weather
+
+    weather_snapshot, weather_provenance = (load_development_weather(args.weather_fixture)
+                                            if args.weather_fixture else (None, None))
 
     client = OpenAI(api_key=key, base_url=os.environ["OPENAI_BASE_URL"],
                     default_headers={"Accept-Encoding": "gzip, deflate"},
                     timeout=25)
     turns = [message["content"] for message in case["messages"]]
     result = run_conversation(turns, client=client, model=os.environ["LLM_MODEL"],
+                              context=({"_route_weather_snapshot": weather_snapshot}
+                                       if weather_provenance else None),
                               max_rounds_per_turn=6, time_budget_s=40,
                               max_tokens=800)
     tool_schema_sha256 = hashlib.sha256(json.dumps(
@@ -90,6 +102,7 @@ def main() -> int:
               "tool_schema_sha256": tool_schema_sha256,
               "data_component_sha256": data_hashes,
               "event_snapshot_sha256": None,
+              "weather_fixture": weather_provenance,
               "tool_calls": result["tool_calls"],
               "measured_usage": result["measured_usage"],
               "turns": result["turns"]}

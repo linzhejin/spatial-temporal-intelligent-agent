@@ -43,6 +43,22 @@ def test_live_projection_keeps_exact_route_edges_and_stable_poi_ids():
     assert "independent_review" not in turn
 
 
+def test_weather_output_requires_observation_and_user_facing_reply():
+    route = {"start_name": "玉兰2门", "end_name": "桂园操场",
+             "recommended_edge_ids": [[101, 102, 4]]}
+    observed = {"weather": "晴", "temperature": 22}
+    response = _agent_response_to_legacy({
+        "response_kind": "route", "route": route,
+        "message": "路线已规划。天气参考：晴、22°C。", "weather": observed,
+    })
+    projected = project_live_run({"status": "completed", "result": response}, _lookup())
+    assert projected["outputs"] == ["route", "weather"]
+
+    response["explanation"] = "路线已规划。"
+    assert project_live_run({"status": "completed", "result": response}, _lookup())[
+        "outputs"] == ["route"]
+
+
 def test_ambiguous_alias_is_not_guessed_and_missing_edges_are_not_evidence():
     run = {"status": "completed", "result": {
         "response_kind": "route", "task_type": "path_planning",
@@ -247,6 +263,19 @@ def test_agent_api_preserves_edge_ids_needed_for_independent_replay():
         "response_kind": "route", "route": route, "message": "路线已生成",
     })
     assert response["recommended_edge_ids"] == [[101, 102, 4]]
+
+
+def test_agent_api_exposes_only_delivered_weather_as_structured_output():
+    route = {"start_name": "玉兰2门", "end_name": "桂园操场",
+             "recommended_edge_ids": [[101, 102, 4]]}
+    weather = {"weather": "晴", "temperature": 22}
+    response = _agent_response_to_legacy({
+        "response_kind": "route", "route": route,
+        "message": "路线已规划。天气参考：晴、22°C。", "weather": weather,
+    })
+    assert response["weather"] == weather
+    projection = project_live_run({"status": "completed", "result": response}, _lookup())
+    assert projection["outputs"] == ["route", "weather"]
 
 
 def test_agent_clarification_preserves_route_verification_report():

@@ -34,6 +34,9 @@ def project_ordinary_turn(turn: dict[str, Any], lookup: dict[str, Any]) -> dict[
         }}
         if status == "completed":
             status = "needs_input"
+    if isinstance(turn.get("weather_observation"), dict):
+        result["weather"] = turn["weather_observation"]
+        result["explanation"] = turn.get("message")
     projected = project_live_run({"status": status, "result": result}, lookup)
     trace = turn.get("tool_trace")
     if isinstance(trace, list):

@@ -86,3 +86,32 @@ def test_ordinary_baseline_records_model_failure_without_claiming_completion():
     assert result["measured_usage"]["requests"] == 1
     assert result["resolved_model_id"] is None
     assert result["run_evidence"][1]["resolved_model_id"] is None
+
+
+def test_ordinary_baseline_keeps_weather_observation_separate_from_reply():
+    class WeatherCompletions:
+        def __init__(self):
+            self.calls = 0
+
+        def create(self, **_kwargs):
+            self.calls += 1
+            if self.calls == 1:
+                call = SimpleNamespace(id="weather-1", function=SimpleNamespace(
+                    name="get_weather", arguments="{}"))
+                msg = FakeMessage(calls=[call])
+            else:
+                msg = FakeMessage("路线已规划，天气晴。")
+            return SimpleNamespace(model="deepseek-flash",
+                                   choices=[SimpleNamespace(message=msg)],
+                                   usage=SimpleNamespace(prompt_tokens=10,
+                                                         completion_tokens=3))
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=WeatherCompletions()))
+    result = run_conversation(["查天气"], client=client, model="deepseek-flash",
+                              tool_executor=lambda *_: ({"weather": "晴",
+                                                        "temperature": 22,
+                                                        "private": "not recorded"}, None))
+    assert result["turns"][0]["weather_observation"] == {
+        "weather": "晴", "temperature": 22,
+    }
+    assert "private" not in str(result["turns"][0]["weather_observation"])

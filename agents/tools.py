@@ -1634,6 +1634,8 @@ def _prepare_route_context(ctx):
         except Exception:
             logger.exception("读取天气快照失败；本次路线不应用天气成本")
             context["_route_weather_snapshot"] = None
+        if isinstance(ctx, dict):
+            ctx["_route_weather_snapshot"] = context["_route_weather_snapshot"]
     return context, None
 
 

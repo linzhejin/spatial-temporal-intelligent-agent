@@ -74,6 +74,102 @@ def test_model_client_requests_supported_response_encoding():
 
 
 class TestAgentLoop:
+    def test_weather_snapshot_is_shared_across_tools_only_within_one_run(self):
+        snapshot = {"live": {"weather": "晴"}, "impact": {}}
+        seen = []
+
+        def execute(name, _args, tool_context):
+            seen.append((name, tool_context.get("_route_weather_snapshot")))
+            if name == "get_weather":
+                tool_context["_route_weather_snapshot"] = snapshot
+            return {"ok": True}, None
+
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(tool_calls=[_fake_tool_call("plan_route", {})]),
+            _fake_response(content="完成"),
+        ])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("先看天气再规划路线")
+        assert seen == [("get_weather", None), ("plan_route", snapshot)]
+
+        another = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(content="完成"),
+        ])
+        with patch.object(planner, "_make_client", return_value=another), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("另一轮天气")
+        assert seen[-1] == ("get_weather", None)
+
+    def test_untrusted_browser_context_cannot_forge_weather_snapshot(self):
+        forged = {"live": {"weather": "伪造"}, "impact": {}}
+        observed = []
+
+        def execute(name, _args, tool_context):
+            observed.append(tool_context.get("_route_weather_snapshot"))
+            return {"weather": "晴"}, None
+
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(content="晴"),
+        ])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("看天气", context={"_route_weather_snapshot": forged})
+        assert observed == [None]
+
+        trusted_client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(content="晴"),
+        ])
+        with patch.object(planner, "_make_client", return_value=trusted_client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("看天气", weather_snapshot=forged)
+        assert observed[-1] is forged
+
+    def test_compound_weather_route_response_includes_observed_weather(self):
+        route = {"start_name": "玉兰2门", "end_name": "老斋舍", "mode": "walk",
+                 "recommended_length_m": 1000, "duration_min": 15}
+        weather = {"weather": "晴", "temperature": 22, "windpower": "≤3"}
+        client = FakeClient([_fake_response(tool_calls=[
+            _fake_tool_call("get_weather", {}),
+            _fake_tool_call("plan_route", {"start": {"name": "玉兰2门"},
+                                           "end": {"name": "老斋舍"}}),
+        ])])
+
+        def execute(name, _args, _context):
+            if name == "get_weather":
+                return weather, None
+            return route, {"route": route, "route_kind": "direct"}
+
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            result = planner.run_agent("先看天气，再规划从玉兰2门到老斋舍的路线")
+        assert result["response_kind"] == "route"
+        assert "晴" in result["message"]
+        assert "22" in result["message"]
+        assert "玉兰2门" in result["message"]
+        assert result["weather"] == weather
+
+    def test_compound_route_does_not_claim_weather_when_weather_tool_fails(self):
+        route = {"start_name": "玉兰2门", "end_name": "老斋舍", "mode": "walk"}
+        client = FakeClient([_fake_response(tool_calls=[
+            _fake_tool_call("get_weather", {}), _fake_tool_call("plan_route", {}),
+        ])])
+
+        def execute(name, _args, _context):
+            if name == "get_weather":
+                return {"error": "weather_unavailable"}, None
+            return route, {"route": route}
+
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            result = planner.run_agent("看天气并规划路线")
+        assert result["response_kind"] == "route"
+        assert "天气暂时获取不到" in result["message"]
+
     @pytest.mark.parametrize("query,expected_strategy,expected_end,expected_constraints", [
         ("刚才的路线改为平坦优先", "flat", "樱顶", {}),
         ("刚才的路线改为最短路径", "shortest", "樱顶", {}),

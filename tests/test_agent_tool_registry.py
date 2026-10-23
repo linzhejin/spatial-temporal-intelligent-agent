@@ -126,6 +126,24 @@ def test_get_weather_uses_the_same_snapshot_as_route_tools(monkeypatch):
     assert first["temperature"] == 20
 
 
+def test_route_preparation_makes_weather_available_to_later_tools(monkeypatch):
+    snapshot = {"live": {"weather": "晴", "temperature": 20, "windpower": "≤3"},
+                "impact": {"slippery": False, "hot": False,
+                           "low_visibility": False, "label": "", "advice": ""}}
+    monkeypatch.setattr(tools, "_ensure_graph", lambda: object())
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
+    monkeypatch.setattr(tools, "_weather_snapshot", lambda: snapshot)
+    caller_context = {}
+    route_context, error = tools._prepare_route_context(caller_context)
+    assert error is None
+    assert route_context["_route_weather_snapshot"] is snapshot
+    assert caller_context["_route_weather_snapshot"] is snapshot
+    monkeypatch.setattr(tools, "_weather_snapshot", lambda: (_ for _ in ()).throw(
+        AssertionError("weather fetched twice")))
+    weather, _ = tools.execute_tool("get_weather", {}, caller_context)
+    assert weather["temperature"] == 20
+
+
 def test_direct_tour_and_multimodal_route_executors_accept_their_declared_shapes(monkeypatch):
     graph = object()
     mode_graph = {1, 2, 3, 4}

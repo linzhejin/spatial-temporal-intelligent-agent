@@ -54,6 +54,36 @@ def test_bridge_keeps_only_candidate_origin_metadata() -> None:
         assert "private" not in str(bridge.selection_context)
 
 
+def test_bridge_reuses_weather_snapshot_across_tool_calls() -> None:
+    snapshot = {"live": {"weather": "晴"}, "impact": {}}
+    observed = []
+
+    def executor(name, _args, context):
+        observed.append((name, context.get("_route_weather_snapshot")))
+        if name == "get_weather":
+            context["_route_weather_snapshot"] = snapshot
+        return {"ok": True}, None
+
+    with open_tool_bridge(executor=executor) as bridge:
+        assert _post(bridge.url, bridge.token,
+                     {"name": "get_weather", "arguments": {}})[0] == 200
+        assert _post(bridge.url, bridge.token,
+                     {"name": "plan_route", "arguments": {}})[0] == 200
+        assert observed == [("get_weather", None), ("plan_route", snapshot)]
+        assert "_route_weather_snapshot" not in str(bridge.trace)
+
+
+def test_bridge_records_only_public_weather_observation() -> None:
+    def executor(_name, _args, _context):
+        return {"weather": "晴", "temperature": 22, "private": "not recorded"}, None
+
+    with open_tool_bridge(executor=executor) as bridge:
+        assert _post(bridge.url, bridge.token,
+                     {"name": "get_weather", "arguments": {}})[0] == 200
+        assert bridge.weather_observations == [{"weather": "晴", "temperature": 22}]
+        assert "private" not in str(bridge.weather_observations)
+
+
 def test_bridge_rejects_bad_token_unknown_tool_and_oversized_body() -> None:
     with open_tool_bridge(executor=lambda *_: ({"ok": True}, None)) as bridge:
         assert _post(bridge.url, "wrong", {"name": "resolve_poi", "arguments": {}})[0] == 403

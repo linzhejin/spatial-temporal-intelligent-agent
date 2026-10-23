@@ -127,7 +127,11 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
     outputs = []
     if kind == "route":
         outputs.append("route")
-    if isinstance(result.get("weather"), dict) and result["weather"].get("weather"):
+    weather = result.get("weather")
+    user_reply = result.get("explanation") or result.get("message") or result.get("reply")
+    if (isinstance(weather, dict) and isinstance(weather.get("weather"), str)
+            and weather["weather"] and isinstance(user_reply, str)
+            and weather["weather"] in user_reply):
         outputs.append("weather")
     if kind == "candidates" and isinstance(candidates, list) and candidates:
         outputs.append("candidates")
