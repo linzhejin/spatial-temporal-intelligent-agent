@@ -172,7 +172,7 @@ def main() -> int:
                         "kind": "request", "requested_model_id": model_name,
                         "resolved_model_id": None,  # Filled after event inspection below.
                         "tool_schema_sha256": _digest(campus_tools.TOOL_SCHEMAS),
-                        "temperature": None, "max_tokens": 800,
+                        "temperature": 0, "max_tokens": 800,
                         "input_tokens": usage.get("inputTokens", 0),
                         "output_tokens": usage.get("outputTokens", 0),
                         "outcome": "success",
@@ -206,7 +206,7 @@ def main() -> int:
                            "input_tokens": sum(r["input_tokens"] for r in requests),
                            "output_tokens": sum(r["output_tokens"] for r in requests)},
         "tool_calls": len(bridge.trace), "turns": turns,
-        "limitation": "local middleware bounds logical streams, but temperature, provider response model ID, and actual HTTP retry count are not yet independently matched",
+        "limitation": "local middleware fixes temperature=0 and bounds logical streams; provider response model ID and actual HTTP retry count are not yet independently matched",
     }
     _write_json(evidence_path, records)
     report["run_evidence_path"] = str(evidence_path)

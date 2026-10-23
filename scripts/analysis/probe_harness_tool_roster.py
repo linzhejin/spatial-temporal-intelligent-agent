@@ -109,6 +109,8 @@ def main() -> None:
                     request_timeout_seconds=60) as harness:
                 result = harness.run("Keyless campus tool schema probe.")
             requests = mocks["MockModelHandler"].requests
+            if any(request.get("temperature") != 0 for request in requests):
+                raise RuntimeError("Harness model wire requests did not fix temperature=0")
             if args.exercise_budget:
                 errors = [event.get("data", {}).get("reason", {}).get("error", {}).get("message")
                           for event in result.events
@@ -121,6 +123,7 @@ def main() -> None:
                         f"turn_errors={errors!r}")
                 print(json.dumps({"keyless_budget_smoke": "passed",
                                   "logical_model_requests": len(requests),
+                                  "wire_temperature": 0,
                                   "seventh_request_blocked": True,
                                   "tool_calls": len(bridge.trace)}))
                 return
@@ -162,6 +165,7 @@ def main() -> None:
                               "model_visible_schema_sha256": _digest(advertised),
                               "normalized_visible_schema_sha256": _digest(ordered_visible),
                               "request_count": len(requests),
+                              "wire_temperature": 0,
                               "event_types": [event.get("type") for event in result.events],
                               "event_fields": {event.get("type"): sorted(event)
                                                for event in result.events if event.get("type") in

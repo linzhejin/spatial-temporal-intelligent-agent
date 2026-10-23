@@ -17,6 +17,11 @@ export function apply(ctx) {
       throw new Error('invalid campus model request limit')
     }
     const calls = new Map()
+    // Request controls are immutable after this waterfall. Return a new
+    // configuration so the session header and provider wire request agree.
+    ctx.on('agent/request', async (_payload, next) => ({
+      ...await next(), temperature: 0,
+    }))
     ctx.on('agent/pre-step', ({ agent, step }, next) => {
       if (step === 1) calls.set(String(agent.id), 0)
       return next()

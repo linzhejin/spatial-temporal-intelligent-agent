@@ -13,7 +13,7 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_harness_plugin_enforces_per_turn_budget(tmp_path):
+def test_harness_plugin_enforces_budget_and_immutable_request_controls(tmp_path):
     node = shutil.which("node")
     if not node:
         pytest.skip("Node.js is required to exercise the Harness plugin")
@@ -34,6 +34,12 @@ apply({
 if (registered.join(',') !== 'resolve_poi') throw Error('tool registration changed')
 const pre = hooks.get('agent/pre-step')
 const stream = hooks.get('llm/stream')
+const configure = hooks.get('agent/request')
+const seed = Object.freeze({ provider: 'deepseek-official', model: 'deepseek-flash' })
+const config = await configure({}, () => seed)
+if (config.temperature !== 0 || seed.temperature !== undefined) {
+  throw Error('temperature config did not use a detached copy')
+}
 pre({ agent: { id: 'sid' }, step: 1 }, () => null)
 let passed = 0
 for (let index = 0; index < 6; index++) {
