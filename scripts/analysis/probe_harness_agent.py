@@ -1,8 +1,9 @@
 """Run one development case through the real pinned DeepSeek Harness SDK.
 
 The 14 campus tools execute through the same Python registry as the ordinary
-baseline. This is a development probe, not a formal matched-budget result:
-Harness has not yet been given an enforced per-turn model-round cap.
+baseline. A local middleware limits six logical model streams per turn. This
+remains development-only until the provider response identity and actual HTTP
+request budget are verified independently.
 """
 from __future__ import annotations
 
@@ -56,6 +57,8 @@ def main() -> int:
     parser.add_argument("--env-file", type=Path, required=True)
     parser.add_argument("--test-database-url", required=True)
     parser.add_argument("--case-id", required=True)
+    parser.add_argument("--model", default="deepseek-flash",
+                        help="Concrete model ID in the pinned official Harness catalog")
     parser.add_argument("--runtime", type=Path, required=True)
     parser.add_argument("--upstream", type=Path, required=True)
     parser.add_argument("--dataset", type=Path,
@@ -115,7 +118,7 @@ def main() -> int:
     _write_json(schemas_path, campus_tools.TOOL_SCHEMAS)
     plugin = ROOT / "experiments/baselines/harness_campus_tools.mjs"
     _write_json(patch_path, _patch(plugin))
-    model_name = env_file.get("LLM_MODEL") or "deepseek-chat"
+    model_name = args.model
     # The pinned Harness uses the official Messages transport, while the
     # ordinary Python client uses DeepSeek's OpenAI-compatible /v1 endpoint.
     base_url = "https://api.deepseek.com/anthropic"
@@ -125,7 +128,7 @@ def main() -> int:
         "data_snapshot_id": case.get("snapshot_id"),
         "event_snapshot_sha256": None, "event_clock_epoch": None,
         "enabled_tool_names": tool_names, "extra_tool_names": [],
-        "max_model_rounds_per_turn": None,  # Not yet enforced by the pinned SDK.
+        "max_model_rounds_per_turn": 6,
         "time_budget_s": 40.0,
     }]
     turns = []
@@ -138,6 +141,7 @@ def main() -> int:
             "DSH_SYSTEM_PROMPT": SYSTEM_PROMPT,
             "DSH_PRIMARY_RUNTIME": "",
             "DSH_TELEMETRY_DISABLED": "1",
+            "CAMPUS_MAX_MODEL_REQUESTS_PER_TURN": "6",
             "DATABASE_URL": args.test_database_url,
         }
         with DeepSeekHarness(
@@ -186,7 +190,7 @@ def main() -> int:
     for record in requests:
         record["resolved_model_id"] = observed_model
     report = {
-        "status": "development_pilot_only_unmatched_round_budget",
+        "status": "development_pilot_only_transport_identity_unverified",
         "case_id": args.case_id, "condition": "deepseek_harness",
         "upstream_revision": expected_revision,
         "runtime_sha256": _sha256_file(runtime),
@@ -202,7 +206,7 @@ def main() -> int:
                            "input_tokens": sum(r["input_tokens"] for r in requests),
                            "output_tokens": sum(r["output_tokens"] for r in requests)},
         "tool_calls": len(bridge.trace), "turns": turns,
-        "limitation": "provider response model ID, model-round cap and temperature equality are not yet independently proven",
+        "limitation": "local middleware bounds logical streams, but temperature, provider response model ID, and actual HTTP retry count are not yet independently matched",
     }
     _write_json(evidence_path, records)
     report["run_evidence_path"] = str(evidence_path)

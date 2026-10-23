@@ -109,6 +109,7 @@ def audit_scenario_splits(
             block(f"{name}_ids_invalid", f"{name.title()} case IDs must be unique, nonempty strings.")
 
     missing_groups = {}
+    missing_sources = {}
     for name, cases in (("development", dev), ("test", tst)):
         missing = sum(not isinstance(case, dict)
                       or not isinstance(case.get("template_group"), str) or not case.get("template_group", "").strip()
@@ -119,6 +120,15 @@ def audit_scenario_splits(
         if missing:
             block(f"{name}_leakage_keys_missing",
                   f"{missing} {name} cases lack template/OD groups or user prompts needed for leakage checks.")
+        if v2:
+            source_missing = sum(
+                not isinstance(case, dict) or not _source_groups([case])
+                for case in cases
+            )
+            missing_sources[name] = source_missing
+            if source_missing:
+                block(f"{name}_source_keys_missing",
+                      f"{source_missing} {name} cases lack a source group or event/flight ID; source leakage cannot be checked.")
 
     codes = {"scenario_ids": "scenario_id_overlap", "template_groups": "template_group_overlap",
              "od_groups": "od_group_overlap", "prompt_fingerprints": "prompt_overlap",
@@ -169,10 +179,11 @@ def audit_scenario_splits(
     for gate in _GATES:
         if external_gates.get(gate) is not True:
             block(f"external_gate_unverified:{gate}", f"Formal run gate '{gate}' has not been verified.")
-    leakage_evaluable = bool(dev and tst) and not any(missing_groups.values())
+    leakage_evaluable = (bool(dev and tst) and not any(missing_groups.values())
+                         and not any(missing_sources.values()))
     if not leakage_evaluable:
         block("split_comparison_unavailable",
-              "Both nonempty splits with template groups, OD groups and user prompts are required to evaluate leakage.")
+              "Both nonempty splits need template/OD groups, user prompts and (for v2) source IDs to evaluate leakage.")
     leakage_free = leakage_evaluable and not any(overlaps.values())
     adjudication_counts = Counter()
     for case in tst:

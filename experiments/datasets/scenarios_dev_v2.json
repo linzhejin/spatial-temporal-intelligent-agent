@@ -45,7 +45,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_mode_01"
+      "source_case_id": "seed_mode_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_02",
@@ -84,7 +85,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_02"
+      "source_case_id": "draft_mode_access_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_03",
@@ -125,7 +127,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_03"
+      "source_case_id": "draft_mode_access_03",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_04",
@@ -166,7 +169,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_04"
+      "source_case_id": "draft_mode_access_04",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_05",
@@ -207,7 +211,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_05"
+      "source_case_id": "draft_mode_access_05",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_06",
@@ -248,7 +253,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_06"
+      "source_case_id": "draft_mode_access_06",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_07",
@@ -289,7 +295,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_07"
+      "source_case_id": "draft_mode_access_07",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_08",
@@ -328,7 +335,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_08"
+      "source_case_id": "draft_mode_access_08",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_09",
@@ -369,7 +377,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_09"
+      "source_case_id": "draft_mode_access_09",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_mode_access_10",
@@ -411,7 +420,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_mode_access_10"
+      "source_case_id": "draft_mode_access_10",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "seed_via_01",
@@ -453,7 +463,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_via_01"
+      "source_case_id": "seed_via_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_via_itinerary_02",
@@ -494,7 +505,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_via_itinerary_02"
+      "source_case_id": "draft_multi_via_itinerary_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "seed_place_01",
@@ -533,7 +545,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_place_01"
+      "source_case_id": "seed_place_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_02",
@@ -570,7 +583,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_02"
+      "source_case_id": "draft_place_recommendation_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_03",
@@ -609,7 +623,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_03"
+      "source_case_id": "draft_place_recommendation_03",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_04",
@@ -648,7 +663,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_04"
+      "source_case_id": "draft_place_recommendation_04",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_05",
@@ -687,7 +703,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_05"
+      "source_case_id": "draft_place_recommendation_05",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_06",
@@ -726,7 +743,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_06"
+      "source_case_id": "draft_place_recommendation_06",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_07",
@@ -765,7 +783,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_07"
+      "source_case_id": "draft_place_recommendation_07",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_08",
@@ -802,7 +821,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_08"
+      "source_case_id": "draft_place_recommendation_08",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_09",
@@ -841,7 +861,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_09"
+      "source_case_id": "draft_place_recommendation_09",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_place_recommendation_10",
@@ -880,7 +901,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_place_recommendation_10"
+      "source_case_id": "draft_place_recommendation_10",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "seed_revision_01",
@@ -967,7 +989,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_revision_01"
+      "source_case_id": "seed_revision_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_02",
@@ -1031,7 +1054,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_02"
+      "source_case_id": "draft_multi_turn_revision_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_03",
@@ -1095,7 +1119,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_03"
+      "source_case_id": "draft_multi_turn_revision_03",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_04",
@@ -1159,7 +1184,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_04"
+      "source_case_id": "draft_multi_turn_revision_04",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_05",
@@ -1224,7 +1250,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_05"
+      "source_case_id": "draft_multi_turn_revision_05",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_06",
@@ -1290,7 +1317,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_06"
+      "source_case_id": "draft_multi_turn_revision_06",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_07",
@@ -1359,7 +1387,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_07"
+      "source_case_id": "draft_multi_turn_revision_07",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_08",
@@ -1423,7 +1452,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_08"
+      "source_case_id": "draft_multi_turn_revision_08",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_09",
@@ -1488,7 +1518,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_09"
+      "source_case_id": "draft_multi_turn_revision_09",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_multi_turn_revision_10",
@@ -1569,7 +1600,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_multi_turn_revision_10"
+      "source_case_id": "draft_multi_turn_revision_10",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "seed_compound_01",
@@ -1609,7 +1641,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_compound_01"
+      "source_case_id": "seed_compound_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_02",
@@ -1649,7 +1682,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_02"
+      "source_case_id": "draft_compound_tools_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_03",
@@ -1689,7 +1723,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_03"
+      "source_case_id": "draft_compound_tools_03",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_04",
@@ -1729,7 +1764,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_04"
+      "source_case_id": "draft_compound_tools_04",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_05",
@@ -1771,7 +1807,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_05"
+      "source_case_id": "draft_compound_tools_05",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_06",
@@ -1813,7 +1850,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_06"
+      "source_case_id": "draft_compound_tools_06",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_07",
@@ -1853,7 +1891,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_07"
+      "source_case_id": "draft_compound_tools_07",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_08",
@@ -1895,7 +1934,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_08"
+      "source_case_id": "draft_compound_tools_08",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_09",
@@ -1938,7 +1978,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_09"
+      "source_case_id": "draft_compound_tools_09",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_compound_tools_10",
@@ -1980,7 +2021,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_compound_tools_10"
+      "source_case_id": "draft_compound_tools_10",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "seed_event_01",
@@ -2021,7 +2063,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "seed_event_01"
+      "source_case_id": "seed_event_01",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_02",
@@ -2062,7 +2105,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_02"
+      "source_case_id": "draft_event_infeasible_02",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_03",
@@ -2103,7 +2147,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_03"
+      "source_case_id": "draft_event_infeasible_03",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_04",
@@ -2143,7 +2188,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_04"
+      "source_case_id": "draft_event_infeasible_04",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_05",
@@ -2183,7 +2229,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_05"
+      "source_case_id": "draft_event_infeasible_05",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_06",
@@ -2223,7 +2270,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_06"
+      "source_case_id": "draft_event_infeasible_06",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_07",
@@ -2264,7 +2312,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_07"
+      "source_case_id": "draft_event_infeasible_07",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_08",
@@ -2305,7 +2354,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_08"
+      "source_case_id": "draft_event_infeasible_08",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_09",
@@ -2346,7 +2396,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_09"
+      "source_case_id": "draft_event_infeasible_09",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "draft_event_infeasible_10",
@@ -2389,7 +2440,8 @@
           "allowed_unknowns": []
         }
       ],
-      "source_case_id": "draft_event_infeasible_10"
+      "source_case_id": "draft_event_infeasible_10",
+      "source_group": "scenarios_dev_v1_authoring_bank"
     },
     {
       "id": "v2_dev_clarify_01",

@@ -1,4 +1,5 @@
 import networkx as nx
+import pytest
 
 from experiments.candidate_reference import rank_nearby_activities
 
@@ -35,7 +36,26 @@ def test_reference_respects_blocked_modes_and_keeps_unreachable_explicit():
     pois = [{"id": "origin", "coordinates": {"lng": 114.0, "lat": 30.0}},
             {"id": "meal", "coordinates": {"lng": 114.001, "lat": 30.0},
              "activities": ["canteen_meal"]}]
+    with pytest.raises(ValueError, match="no walk-routable nodes"):
+        rank_nearby_activities(graph, pois, start_poi_id="origin",
+                               activities={"canteen_meal"}, coordinates="wgs84")
+
+
+def test_candidate_snaps_to_walk_routable_node_instead_of_nearer_drive_only_node():
+    graph = nx.MultiDiGraph()
+    for node, x in (("s", 114.0), ("walk", 114.001),
+                    ("drive", 114.00105), ("drive_end", 114.002)):
+        graph.add_node(node, x=x, y=30.0)
+    graph.add_edge("s", "walk", key="walk", length=100, highway="footway")
+    graph.add_edge("drive", "drive_end", key="car", length=90, highway="service",
+                   foot="no")
+    pois = [
+        {"id": "origin", "coordinates": {"lng": 114.0, "lat": 30.0}},
+        {"id": "meal", "coordinates": {"lng": 114.00105, "lat": 30.0},
+         "activities": ["canteen_meal"]},
+    ]
     result = rank_nearby_activities(graph, pois, start_poi_id="origin",
                                     activities={"canteen_meal"}, coordinates="wgs84")
-    assert result["reachable"] == []
-    assert result["unreachable"] == ["meal"]
+    assert [row["poi_id"] for row in result["reachable"]] == ["meal"]
+    assert result["unreachable"] == []
+    assert result["reachable"][0]["destination_access_m"] > 0

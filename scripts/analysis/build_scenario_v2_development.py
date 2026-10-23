@@ -65,6 +65,7 @@ def build_development_bank(source_path: Path) -> dict:
         for item in matches[:limit]:
             case = deepcopy(item)
             case["source_case_id"] = case["id"]
+            case["source_group"] = "scenarios_dev_v1_authoring_bank"
             case["category"] = "T3" if any(turn["kind"] == "clarify"
                                            for turn in case["expected_turns"]) else target
             selected.append(case)

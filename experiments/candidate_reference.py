@@ -71,17 +71,18 @@ def rank_nearby_activities(
     by_id = {poi.get("id") or poi.get("poi_id"): poi for poi in pois}
     if start_poi_id not in by_id:
         raise ValueError("start POI missing")
+    walk = _walk_graph(graph, closed_edges or set())
     node_points = [(str(node), (float(attrs["x"]), float(attrs["y"])))
-                   for node, attrs in graph.nodes(data=True)]
+                   for node, attrs in graph.nodes(data=True)
+                   if walk.degree(str(node)) > 0]
     if not node_points:
-        raise ValueError("graph has no georeferenced nodes")
+        raise ValueError("graph has no walk-routable nodes")
 
     def nearest(point: tuple[float, float]) -> tuple[str, float]:
         return min(((node, _meters(point, coords)) for node, coords in node_points),
                    key=lambda pair: pair[1])
 
     origin_node, origin_access = nearest(_point(by_id[start_poi_id], coordinates))
-    walk = _walk_graph(graph, closed_edges or set())
     distances = nx.single_source_dijkstra_path_length(walk, origin_node, weight="weight")
     reachable = []
     unreachable = []

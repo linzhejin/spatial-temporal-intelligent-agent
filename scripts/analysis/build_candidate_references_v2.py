@@ -26,6 +26,7 @@ def main() -> int:
     if draft.get("version") != "scenarios-test-v2-authoring-draft":
         raise SystemExit("only the v2 authoring draft is accepted")
     paths = {
+        "draft": args.draft,
         "pois": ROOT / "data/pois.json",
         "graph": ROOT / "data/whu_road_network.graphml",
         "overrides": ROOT / "data/edge_overrides.json",

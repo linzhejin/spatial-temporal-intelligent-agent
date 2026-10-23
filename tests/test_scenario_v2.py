@@ -295,6 +295,9 @@ def test_v2_split_audit_uses_120_source_backed_cases_and_leakage_gates():
     dev_case["template_group"] = "development-only"
     dev_case["od_group"] = "development-only"
     dev_case["messages"][0]["content"] = "独立开发样本"
+    dev_case["source_group"] = "development_prompt_source"
+    for case in test["cases"]:
+        case["source_group"] = "heldout_prompt_source"
     dev = {"protocol_version": "scenario-v2", "split": "development", "cases": [dev_case]}
     gates = {name: True for name in (
         "frozen_snapshot_manifest", "agent_readiness_gate", "matching_git_commit",
@@ -306,6 +309,21 @@ def test_v2_split_audit_uses_120_source_backed_cases_and_leakage_gates():
     assert report["dataset_counts"]["test_by_category"] == {
         group: 24 for group in ("T1", "T2", "T3", "T4", "T5")
     }
+
+
+def test_v2_split_audit_cannot_claim_leakage_free_when_source_provenance_missing():
+    dev = {"protocol_version": "scenario-v2", "split": "development", "cases": [
+        {"id": "dev", "template_group": "dev_template", "od_group": "dev_od",
+         "messages": [{"role": "user", "content": "开发题"}]}
+    ]}
+    test = {"protocol_version": "scenario-v2", "split": "test", "repeats": 3, "cases": [
+        {"id": "test", "template_group": "test_template", "od_group": "test_od",
+         "source_group": "test_author", "messages": [{"role": "user", "content": "留出题"}]}
+    ]}
+    report = audit_scenario_splits(dev, test)
+    assert report["leakage_evaluable"] is False
+    assert report["leakage_free"] is False
+    assert "development_source_keys_missing" in {row["code"] for row in report["blockers"]}
 
 
 def test_v1_quota_cannot_be_silently_relabelled_as_v2():

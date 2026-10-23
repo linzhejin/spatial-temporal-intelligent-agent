@@ -17,6 +17,11 @@ def test_v2_development_bank_keeps_60_cases_and_real_clarifications():
     assert counts["T3"] == 10
     assert all(case["adjudication"]["status"] == "draft"
                for case in dataset["cases"])
+    copied = [case for case in dataset["cases"] if case.get("source_case_id")]
+    assert len(copied) == 52
+    assert {case["source_group"] for case in copied} == {
+        "scenarios_dev_v1_authoring_bank"}
+    assert len(dataset["source_sha256"]) == 64
     clarifications = [case for case in dataset["cases"]
                       if case["category"] == "T3"]
     assert all(case["expected_turns"][-1]["kind"] == "clarify"

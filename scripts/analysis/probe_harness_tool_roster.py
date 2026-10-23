@@ -31,7 +31,11 @@ def main() -> None:
                         help="Locally built Windows SDK runtime executable")
     parser.add_argument("--exercise-tool", action="store_true",
                         help="Also call local resolve_poi through the real Python executor")
+    parser.add_argument("--exercise-budget", action="store_true",
+                        help="Force repeated keyless tool calls and check the model-stream cap")
     args = parser.parse_args()
+    if args.exercise_tool and args.exercise_budget:
+        parser.error("choose one mock exercise")
     upstream = args.upstream.resolve()
     runtime = args.runtime.resolve()
     observed_revision = subprocess.run(
@@ -69,6 +73,16 @@ def main() -> None:
         ]), encoding="utf-8")
         with open_tool_bridge() as bridge, mocks["MockModel"]() as model:
             expected_reply = mocks["EXPECTED_TEXT"]
+            if args.exercise_budget:
+                attempt = 0
+
+                def repeat_tool(_body: dict) -> list[dict]:
+                    nonlocal attempt
+                    attempt += 1
+                    return mocks["tool_call_chunks"](
+                        f"campus-budget-{attempt}", "resolve_poi", {"name": "卓尔体育馆"})
+
+                mocks["MockModelHandler"].do_POST.__globals__["completion_chunks"] = repeat_tool
             if args.exercise_tool:
                 expected_reply = "CAMPUS_BRIDGE_OK"
 
@@ -83,6 +97,7 @@ def main() -> None:
                 "CAMPUS_TOOL_SCHEMA_PATH": str(schemas),
                 "CAMPUS_TOOL_BRIDGE_URL": bridge.url,
                 "CAMPUS_TOOL_BRIDGE_TOKEN": bridge.token,
+                "CAMPUS_MAX_MODEL_REQUESTS_PER_TURN": "6",
                 "DSH_TELEMETRY_DISABLED": "1",
                 "DSH_PRIMARY_RUNTIME": "",
             }
@@ -94,8 +109,32 @@ def main() -> None:
                     request_timeout_seconds=60) as harness:
                 result = harness.run("Keyless campus tool schema probe.")
             requests = mocks["MockModelHandler"].requests
+            if args.exercise_budget:
+                errors = [event.get("data", {}).get("reason", {}).get("error", {}).get("message")
+                          for event in result.events
+                          if event.get("type") == "turn/end"]
+                if len(requests) != 6 or result.finish_reason != "error" or not any(
+                        "campus_model_request_budget_exceeded" in str(error) for error in errors):
+                    raise RuntimeError(
+                        "keyless budget boundary failed: "
+                        f"requests={len(requests)} finish_reason={result.finish_reason!r} "
+                        f"turn_errors={errors!r}")
+                print(json.dumps({"keyless_budget_smoke": "passed",
+                                  "logical_model_requests": len(requests),
+                                  "seventh_request_blocked": True,
+                                  "tool_calls": len(bridge.trace)}))
+                return
             if not requests or result.final_response != expected_reply:
-                raise RuntimeError("mock Harness request failed")
+                errors = [event.get("data", {}).get("reason", {}).get("error", {}).get("message")
+                          for event in result.events
+                          if event.get("type") == "turn/end"]
+                raise RuntimeError(
+                    "mock Harness request failed: "
+                    f"requests={len(requests)} finish_reason={result.finish_reason!r} "
+                    f"tool_calls={len(bridge.trace)} "
+                    f"event_types={[event.get('type') for event in result.events]!r} "
+                    f"turn_errors={errors!r}"
+                )
             if args.exercise_tool and (len(bridge.trace) != 1 or
                                        bridge.trace[0]["tool_name"] != "resolve_poi" or
                                        bridge.trace[0]["outcome"] != "success"):

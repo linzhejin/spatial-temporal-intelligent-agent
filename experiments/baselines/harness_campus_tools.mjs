@@ -10,6 +10,26 @@ export const name = 'campus-experiment-tools'
 export const inject = ['tools']
 
 export function apply(ctx) {
+  const rawLimit = process.env.CAMPUS_MAX_MODEL_REQUESTS_PER_TURN
+  if (rawLimit !== undefined) {
+    const limit = Number(rawLimit)
+    if (!Number.isInteger(limit) || limit < 1 || limit > 20) {
+      throw new Error('invalid campus model request limit')
+    }
+    const calls = new Map()
+    ctx.on('agent/pre-step', ({ agent, step }, next) => {
+      if (step === 1) calls.set(String(agent.id), 0)
+      return next()
+    })
+    ctx.on('llm/stream', (request, next) => {
+      if (request.sessionId === undefined || request.purpose) return next()
+      const session = String(request.sessionId)
+      const used = calls.get(session) ?? 0
+      if (used >= limit) throw new Error('campus_model_request_budget_exceeded')
+      calls.set(session, used + 1)
+      return next()
+    })
+  }
   const path = process.env.CAMPUS_TOOL_SCHEMA_PATH
   const endpoint = process.env.CAMPUS_TOOL_BRIDGE_URL
   const token = process.env.CAMPUS_TOOL_BRIDGE_TOKEN
