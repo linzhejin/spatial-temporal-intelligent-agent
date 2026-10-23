@@ -30,6 +30,9 @@ class ToolBridge:
         self.allowed = {row["function"]["name"] for row in campus_tools.TOOL_SCHEMAS}
         self.trace: list[dict] = []
         self.artifacts: list[dict] = []
+        # Only selected, typed result fields needed for task projection. The
+        # model's arguments and full tool responses stay out of the trace.
+        self.selection_context: list[dict] = []
         self._lock = threading.Lock()
         bridge = self
 
@@ -39,13 +42,30 @@ class ToolBridge:
 
             def do_POST(self) -> None:  # noqa: N802 - BaseHTTPRequestHandler API
                 if self.path != "/execute" or self.headers.get("X-Campus-Token") != bridge.token:
+                    try:
+                        rejected_size = int(self.headers.get("Content-Length", "-1"))
+                        if 0 <= rejected_size <= _MAX_BODY_BYTES:
+                            self.connection.settimeout(2)
+                            self.rfile.read(rejected_size)
+                    except (OSError, ValueError):
+                        pass
                     self.send_error(403)
                     return
                 try:
                     size = int(self.headers.get("Content-Length", "-1"))
                 except ValueError:
                     size = -1
-                if size < 0 or size > _MAX_BODY_BYTES:
+                if size < 0:
+                    self.send_error(413)
+                    return
+                if size > _MAX_BODY_BYTES:
+                    # Drain a small oversized request before responding. On
+                    # Windows, replying while the client is still writing the
+                    # body can reset the connection before it sees HTTP 413.
+                    if size <= _MAX_BODY_BYTES * 2:
+                        self.rfile.read(size)
+                    else:
+                        self.close_connection = True
                     self.send_error(413)
                     return
                 try:
@@ -70,9 +90,21 @@ class ToolBridge:
                 else:
                     error_type = None
                 with bridge._lock:
+                    artifact_kind = next((kind for kind in (
+                        "route", "candidates", "clarify", "suggestions", "route_comparison"
+                    ) if isinstance(artifact, dict) and kind in artifact), None)
                     bridge.trace.append({"tool_name": name, "argument_keys": sorted(args),
                                          "outcome": outcome, "error_code": error_code,
-                                         "error_type": error_type})
+                                         "error_type": error_type,
+                                         "artifact_kind": artifact_kind})
+                    selected = {}
+                    if outcome == "success" and artifact_kind == "candidates" \
+                            and isinstance(result, dict):
+                        for field in ("start_name", "mode"):
+                            value = result.get(field)
+                            if isinstance(value, str) and value:
+                                selected[field] = value
+                    bridge.selection_context.append(selected)
                     if isinstance(artifact, dict):
                         bridge.artifacts.append(artifact)
                 body = json.dumps({"result": response}, ensure_ascii=False).encode("utf-8")

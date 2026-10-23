@@ -160,6 +160,8 @@ def main() -> int:
                 result = session.run(text)
                 trace = bridge.trace[before:]
                 artifacts = bridge.artifacts[before_artifacts:]
+                selected = next((item for item in reversed(bridge.selection_context[before:])
+                                 if item), {})
                 for event in result.events:
                     if event.get("type") == "request/context":
                         observed = event.get("data", {}).get("model")
@@ -183,6 +185,8 @@ def main() -> int:
                     "status": result.finish_reason or "completed",
                     "message": result.final_response,
                     "tool_trace": trace, "artifacts": artifacts,
+                    "selected_start_name": selected.get("start_name"),
+                    "selected_mode": selected.get("mode"),
                     "elapsed_ms": round((time.monotonic() - started) * 1000, 2),
                 })
     requests = [record for record in records if record["kind"] == "request"]
@@ -192,6 +196,9 @@ def main() -> int:
     report = {
         "status": "development_pilot_only_transport_identity_unverified",
         "case_id": args.case_id, "condition": "deepseek_harness",
+        "development_dataset_sha256": _sha256_file(args.dataset),
+        "case_messages_sha256": _digest(case["messages"]),
+        "baseline_system_prompt_sha256": _digest(SYSTEM_PROMPT),
         "upstream_revision": expected_revision,
         "runtime_sha256": _sha256_file(runtime),
         "plugin_sha256": _sha256_file(plugin),

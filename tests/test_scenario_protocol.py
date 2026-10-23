@@ -86,6 +86,44 @@ def test_mode_mismatch_fails_the_full_task():
     assert "wrong_travel_mode" in evaluate_scenario(_adjudicated_case(), row)["failures"]
 
 
+def test_candidate_origin_missing_is_unknown_but_explicit_wrong_origin_fails():
+    case = _adjudicated_case(expected_kind="candidates")
+    case["expected_turns"][0].update(
+        end_poi_id=None, via_poi_ids=[], travel_mode=None, strategy=None,
+        hard_constraints={}, required_outputs=[], feasibility="not_applicable",
+    )
+    row = _observed()
+    row["turns"][0].update(
+        kind="candidates", start_poi_id=None, end_poi_id=None, via_poi_ids=[],
+        travel_mode=None, strategy=None, hard_constraints={}, outputs=[], route_edge_ids=[],
+    )
+    score = evaluate_scenario(case, row)
+    assert "candidate_origin_unobserved" in score["unknowns"]
+    assert "wrong_poi" not in score["failures"]
+    row["turns"][0]["start_poi_id"] = "poi_other"
+    assert "wrong_poi" in evaluate_scenario(case, row)["failures"]
+
+
+def test_clarification_slot_missing_is_unknown_but_explicit_wrong_slot_fails():
+    case = _adjudicated_case(expected_status="needs_input", expected_kind="clarify")
+    case["expected_turns"][0].update(
+        start_poi_id=None, end_poi_id=None, via_poi_ids=[], travel_mode=None,
+        strategy=None, hard_constraints={}, required_outputs=[],
+        clarification_slot="sport", feasibility="not_applicable",
+    )
+    row = _observed()
+    row["turns"][0].update(
+        status="needs_input", kind="clarify", start_poi_id=None, end_poi_id=None,
+        via_poi_ids=[], travel_mode=None, strategy=None, hard_constraints={},
+        outputs=[], route_edge_ids=[], clarification_slot=None,
+    )
+    score = evaluate_scenario(case, row)
+    assert "clarification_slot_unobserved" in score["unknowns"]
+    assert "wrong_clarification" not in score["failures"]
+    row["turns"][0]["clarification_slot"] = "start"
+    assert "wrong_clarification" in evaluate_scenario(case, row)["failures"]
+
+
 def test_replay_input_must_match_preregistered_full_history():
     row = _observed()
     row["input_messages"] = [{"role": "user", "content": "不同的问题"}]

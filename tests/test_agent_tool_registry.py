@@ -79,6 +79,20 @@ def test_non_routing_tool_executors_return_schema_shaped_results(monkeypatch):
     assert result["options"] == expected_options
     assert artifact["clarify"]["question"] == "想打什么球？"
     assert artifact["clarify"]["options"] == expected_options
+    result, artifact = tools.execute_tool("ask_user", {
+        "question": "想打什么球？", "options": ["篮球", "羽毛球"], "slot": "sport",
+    })
+    assert result["slot"] == "sport"
+    assert artifact["clarify"]["slot"] == "sport"
+    invalid, invalid_artifact = tools.execute_tool("ask_user", {
+        "question": "想打什么球？", "slot": "unsupported",
+    })
+    assert invalid["error"] == "invalid_clarification_slot"
+    assert invalid_artifact is None
+    non_string, _ = tools.execute_tool("ask_user", {
+        "question": "想打什么球？", "slot": ["sport"],
+    })
+    assert non_string["error"] == "invalid_clarification_slot"
 
     result, artifact = tools.execute_tool("suggest_followup", {"suggestions": [
         {"label": "附近食堂", "query": "附近有什么食堂"},

@@ -466,6 +466,10 @@ TOOL_SCHEMAS = [
                     "options": {"type": "array", "items": {"type": "string"},
                                 "maxItems": _MAX_CLARIFY_OPTIONS,
                                 "description": "可选回答，最多 5 个"},
+                    "slot": {"type": "string",
+                             "enum": ["start", "destination", "activity", "sport",
+                                      "selection", "follow_up", "other"],
+                             "description": "本次只追问的一项信息类型；能确定时填写，不能确定可省略"},
                 },
                 "required": ["question"],
             },
@@ -3162,7 +3166,14 @@ def _tool_list_road_conditions(args, ctx):
 def _tool_ask_user(args, ctx):
     question = (args.get("question") or "").strip() or "能再说得具体一点吗？"
     options = [str(o)[:30] for o in (args.get("options") or [])][:_MAX_CLARIFY_OPTIONS]
-    return {"question": question, "options": options}, {"clarify": {"question": question, "options": options}}
+    slot = args.get("slot")
+    allowed = {"start", "destination", "activity", "sport", "selection", "follow_up", "other"}
+    if slot is not None and (not isinstance(slot, str) or slot not in allowed):
+        return {"error": "invalid_clarification_slot", "message": "澄清类型不支持"}, None
+    result = {"question": question, "options": options}
+    if slot is not None:
+        result["slot"] = slot
+    return result, {"clarify": dict(result)}
 
 
 def _tool_suggest_followup(args, ctx):

@@ -58,7 +58,7 @@ def main() -> int:
 
     from openai import OpenAI
     from agents.tools import TOOL_SCHEMAS
-    from experiments.baselines.ordinary_tool_agent import run_conversation
+    from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT, run_conversation
 
     client = OpenAI(api_key=key, base_url=os.environ["OPENAI_BASE_URL"],
                     default_headers={"Accept-Encoding": "gzip, deflate"},
@@ -76,6 +76,15 @@ def main() -> int:
         "data/edge_overrides.json", "data/campus_review_decisions.json",
     )}
     report = {"status": "development_pilot_only", "case_id": args.case_id,
+              "development_dataset_sha256": _sha256(args.dataset),
+              "case_messages_sha256": hashlib.sha256(json.dumps(
+                  case["messages"], ensure_ascii=False, sort_keys=True,
+                  separators=(",", ":"),
+              ).encode("utf-8")).hexdigest(),
+              "baseline_system_prompt_sha256": hashlib.sha256(json.dumps(
+                  SYSTEM_PROMPT, ensure_ascii=False, sort_keys=True,
+                  separators=(",", ":"),
+              ).encode("utf-8")).hexdigest(),
               "resolved_model_id": result["resolved_model_id"],
               "requested_model": result["model"],
               "tool_schema_sha256": tool_schema_sha256,

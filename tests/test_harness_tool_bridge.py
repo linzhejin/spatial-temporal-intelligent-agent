@@ -32,8 +32,26 @@ def test_bridge_uses_real_tool_name_and_context_without_exposing_it() -> None:
         assert json.loads(body["result"])["found"] is True
         assert calls == [("resolve_poi", {"name": "卓尔体育馆"}, {"query": "去卓尔体育馆"})]
         assert bridge.trace[0]["outcome"] == "success"
+        assert bridge.trace[0]["artifact_kind"] == "candidates"
         assert bridge.artifacts == [{"candidates": [1]}]
+        assert bridge.selection_context == [{}]
         assert bridge.token not in str(bridge.trace)
+
+
+def test_bridge_keeps_only_candidate_origin_metadata() -> None:
+    def executor(_name, _args, _context):
+        return {"start_name": "玉兰2门", "mode": "walk", "private": "do not log"}, {
+            "candidates": [{"poi_id": "poi_food"}],
+        }
+
+    with open_tool_bridge(executor=executor) as bridge:
+        status, _ = _post(bridge.url, bridge.token,
+                          {"name": "search_poi_candidates",
+                           "arguments": {"start": {"name": "玉兰2门"}}})
+        assert status == 200
+        assert bridge.selection_context == [{"start_name": "玉兰2门", "mode": "walk"}]
+        assert "private" not in str(bridge.trace)
+        assert "private" not in str(bridge.selection_context)
 
 
 def test_bridge_rejects_bad_token_unknown_tool_and_oversized_body() -> None:

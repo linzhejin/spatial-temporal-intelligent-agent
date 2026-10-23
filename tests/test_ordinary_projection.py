@@ -44,3 +44,13 @@ def test_project_ordinary_text_only_is_not_spatial_proof():
     )
     assert result["kind"] == "information"
     assert result["route_edge_ids"] == []
+
+
+def test_project_ordinary_clarification_does_not_invent_missing_slot():
+    turn = {"status": "completed", "artifacts": [{"clarify": {
+        "question": "想打什么球？", "options": ["篮球", "羽毛球"],
+    }}]}
+    result = project_ordinary_turn(turn, _lookup())
+    assert result["kind"] == "clarify"
+    assert result["status"] == "needs_input"
+    assert result["clarification_slot"] is None

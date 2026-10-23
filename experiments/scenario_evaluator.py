@@ -241,7 +241,11 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
             _append_once(failures, "wrong_kind")
         for field in ("start_poi_id", "end_poi_id"):
             if actual.get(field) != expected[field]:
-                _append_once(failures, "wrong_poi")
+                if (field == "start_poi_id" and expected[field] is not None
+                        and actual.get(field) is None and actual.get("kind") == "candidates"):
+                    _append_once(unknowns, "candidate_origin_unobserved")
+                else:
+                    _append_once(failures, "wrong_poi")
         if actual.get("travel_mode") != expected["travel_mode"]:
             _append_once(failures, "wrong_travel_mode")
         if actual.get("strategy") != expected["strategy"]:
@@ -261,7 +265,12 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
         elif not program_candidate_review and actual.get("candidate_poi_ids") != expected["candidate_poi_ids"]:
             _append_once(failures, "wrong_candidate_order")
         if actual.get("clarification_slot") != expected["clarification_slot"]:
-            _append_once(failures, "wrong_clarification")
+            if (actual.get("kind") == "clarify"
+                    and expected["clarification_slot"] is not None
+                    and actual.get("clarification_slot") is None):
+                _append_once(unknowns, "clarification_slot_unobserved")
+            else:
+                _append_once(failures, "wrong_clarification")
         actual_constraints = actual.get("hard_constraints") or {}
         for key, value in expected["hard_constraints"].items():
             if actual_constraints.get(key) != value:
