@@ -230,7 +230,12 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
             tool_verdicts.append(_tool_use_verdict(expected, None))
             continue
         tool_verdicts.append(_tool_use_verdict(expected, actual))
-        if actual.get("status") != expected["status"]:
+        candidate_delivery = (
+            expected["kind"] == actual.get("kind") == "candidates"
+            and expected["status"] in {"completed", "needs_input"}
+            and actual.get("status") in {"completed", "needs_input"}
+        )
+        if actual.get("status") != expected["status"] and not candidate_delivery:
             if expected["feasibility"] == "feasible" and actual.get("status") == "infeasible":
                 _append_once(failures, "false_refusal")
             elif expected["feasibility"] == "infeasible" and actual.get("status") == "completed":

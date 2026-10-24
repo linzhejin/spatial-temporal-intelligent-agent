@@ -156,6 +156,27 @@ def test_v2_candidate_review_does_not_require_exact_tie_order():
     assert "wrong_candidate_order" not in result["failures"]
 
 
+def test_v2_candidate_delivery_accepts_selection_pending_or_completed_status():
+    case = _case()
+    case["category"] = "T2"
+    case["expected_turns"][0].update({
+        "kind": "candidates", "feasibility": "not_applicable",
+        "end_poi_id": None, "hard_constraints": {},
+        "required_outputs": ["candidates"], "candidate_poi_ids": [],
+    })
+    observed = _observation([])
+    observed["turns"][0].update({
+        "status": "needs_input", "kind": "candidates", "end_poi_id": None,
+        "hard_constraints": {}, "candidate_poi_ids": ["a", "b"],
+        "outputs": ["candidates"],
+    })
+    reference = {"distances_m": {"a": 100, "b": 200}, "max_display": 2,
+                 "rank_tolerance_m": 0, "uncertain_access_ids": []}
+    score = score_case(case, observed, candidate_reference=reference)
+    assert score["task_success"] is True
+    assert "wrong_status" not in score["failures"]
+
+
 def test_v2_replay_recomputes_candidates_from_frozen_pois_and_graph(tmp_path):
     graph = nx.MultiDiGraph()
     for node, x in (("s", 114.0), ("a", 114.001), ("b", 114.002),

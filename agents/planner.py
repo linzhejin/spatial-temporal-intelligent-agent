@@ -593,6 +593,43 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
     }
 
 
+def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str]) -> str | None:
+    """Accept a clear spoken choice only from the current candidate list."""
+    candidate_ids = set(candidate_poi_ids)
+    if not candidate_ids:
+        return None
+    choices = []
+    for poi in agent_tools.load_pois():
+        if poi.get("id") not in candidate_ids:
+            continue
+        names = [poi.get("name"), *(poi.get("aliases") or [])]
+        choices.extend((str(name).strip(), poi["id"]) for name in names
+                       if name and len(str(name).strip()) >= 3)
+    for clause in re.split(r"[，,。；;]|然后|接着|随后|最后", query or ""):
+        clause = clause.strip()
+        if not clause:
+            continue
+        # A bare name or an affirmative selection is a choice. A rejected
+        # candidate mentioned in the same sentence is not.
+        matches = set()
+        for name, poi_id in choices:
+            if name not in clause:
+                continue
+            before = clause[:clause.find(name)]
+            if re.search(r"(?:不(?:要|想)?去|别去|不是|排除)\s*$", before):
+                continue
+            affirmative = re.search(
+                r"(?:就去|还是去|改为|换成|选(?:择)?|要去|去|定)\s*$", before,
+            )
+            if clause == name or (affirmative and not clause.endswith(("吗", "？", "?"))):
+                matches.add(poi_id)
+        if len(matches) == 1:
+            return matches.pop()
+        if len(matches) > 1:
+            return None
+    return None
+
+
 def _apply_place_request_correction(saved: dict, query: str) -> dict:
     """Keep unanswered slots while applying only explicit current-turn changes."""
     from agents.parser import detect_travel_mode
@@ -1089,6 +1126,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                      if isinstance(place_request, dict) else None)
     selected_poi_id = ((context or {}).get("selected_poi_id")
                        or (place_request or {}).get("selected_poi_id")) if isinstance(context, dict) else None
+    if (not selected_poi_id and place_request
+            and place_request.get("pending_slot") == "selection"):
+        selected_poi_id = _selected_candidate_from_text(
+            query, place_request.get("candidate_poi_ids") or [],
+        )
     recommendation_query = original_request
 
     def current_coordinate_start():
@@ -1387,11 +1429,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
             resolved_final, final_alternatives = agent_tools.find_poi_ambiguous(final_name)
             if resolved_final and not final_alternatives:
                 named_final = resolved_final
+                named_followup = {
+                    "query": final_name, "destination_poi_id": resolved_final["id"],
+                    "activities": [], "subcategories": [],
+                }
                 if sequence_followups:
-                    sequence_followups[-1] = {
-                        "query": final_name, "destination_poi_id": resolved_final["id"],
-                        "activities": [], "subcategories": [],
-                    }
+                    sequence_followups[-1] = named_followup
+                elif agent_tools.resolve_activity_query(ordered_parts[0]):
+                    sequence_followups.append(named_followup)
     activity_intent = (activity_sequence[0]["intent"] if activity_sequence else
                        agent_tools.resolve_activity_query(original_request))
     if place_request and place_request.get("pending_slot") == "activity":

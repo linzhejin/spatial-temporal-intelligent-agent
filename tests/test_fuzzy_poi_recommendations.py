@@ -359,7 +359,9 @@ def test_explicit_poi_destination_is_not_rewritten_as_a_nearby_recommendation():
          patch.object(planner.config, "DEEPSEEK_API_KEY", "test-key"), \
          patch.object(planner.agent_tools, "execute_tool") as execute:
         result = planner.run_agent("带我去星湖园食堂")
-    assert result["response_kind"] == "chat"
+    assert result["response_kind"] == "clarify"
+    assert result["place_request"]["pending_slot"] == "start"
+    assert result["place_request"]["selected_poi_id"] == "poi_307"
     execute.assert_not_called()
 
 
