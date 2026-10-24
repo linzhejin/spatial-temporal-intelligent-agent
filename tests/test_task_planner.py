@@ -10,6 +10,12 @@ def test_route_and_weather_are_planned_as_independent_required_subtasks():
     assert all(not node.depends_on for node in plan.nodes)
 
 
+def test_same_task_destination_and_deictic_weather_followup_are_both_required():
+    plan = build_task_plan("带我去桂园食堂 我在武汉大学科技门，查天气后再带我过去")
+    assert plan.kind == "composite"
+    assert {item.requirement_id for item in plan.requirements} == {"route", "weather"}
+
+
 def test_via_first_route_request_keeps_route_and_weather_requirements():
     for query in (
         "经卓尔体育馆去樱顶，不走台阶，顺便查天气",

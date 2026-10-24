@@ -426,6 +426,12 @@ def _place_route_join_issue(legs: list[dict]) -> str | None:
         if not all(isinstance(leg.get("recommended_edge_ids"), list)
                    and leg["recommended_edge_ids"] for leg in (first, second)):
             return "路段缺少可核对的实际边序列"
+        last_edge = first["recommended_edge_ids"][-1]
+        first_edge = second["recommended_edge_ids"][0]
+        if (isinstance(last_edge, (list, tuple)) and len(last_edge) >= 2
+                and isinstance(first_edge, (list, tuple)) and len(first_edge) >= 2
+                and last_edge[1] != first_edge[0]):
+            return "相邻路段的路网节点没有接通"
         first_path, second_path = first.get("recommended"), second.get("recommended")
         if not first_path or not second_path:
             return "路段缺少可核对的路线几何"
@@ -473,6 +479,16 @@ def _combined_place_route(legs: list[dict]) -> dict:
         {"name": leg.get("end_name", "")} for leg in legs[:-1]
     ]}
     combined["degraded"] = any(bool(leg.get("degraded")) for leg in legs)
+    leg_proofs = [leg.get("route_verification") for leg in legs]
+    if all(isinstance(proof, dict) and proof.get("status") == "pass"
+           for proof in leg_proofs):
+        combined["route_verification"] = {
+            "status": "pass", "scope": "verified_legs_and_checked_join",
+            "field_truth_verified": False,
+            "leg_count": len(legs),
+        }
+    else:
+        combined.pop("route_verification", None)
     combined["length_capped"] = any(bool(leg.get("length_capped")) for leg in legs)
     combined["hard_budget_fallback"] = any(bool(leg.get("hard_budget_fallback")) for leg in legs)
     combined["shortest_baseline_feasible"] = all(
@@ -800,6 +816,96 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "clarify": None, "suggestions": None, "turns": 0,
             }
 
+    # Resolve a deictic continuation only within the same unfinished task.
+    # Chat history or an unrelated old route must never supply this endpoint.
+    from agents.parser import detect_travel_mode
+    active_request = ((context or {}).get("active_task_request")
+                      if isinstance(context, dict) else None)
+    if (isinstance(active_request, str)
+            and not (context or {}).get("place_request")
+            and not (agent_tools.ordered_via_request(active_request)
+                     or _named_via_request(active_request)
+                     or re.search(r"先.+(?:然后|再|接着|最后)", active_request))
+            and re.search(r"带我过去|带我去那(?:里|儿)|去那(?:里|儿)|到那(?:里|儿)", query)):
+        destination_match = re.search(
+            r"(?:目的地(?:是|为|设为|[:：])|导航到|前往|去|到)\s*([^，,。；;]+)",
+            active_request,
+        )
+        destination_name = (re.split(r"(?:不走|避开|查天气|顺便)", destination_match.group(1))[0].strip()
+                            if destination_match else "")
+        destination, alternatives = (agent_tools.find_poi_ambiguous(destination_name)
+                                     if destination_name else (None, []))
+        if destination and not alternatives:
+            start_name = _explicit_start_name(query) or _explicit_start_name(active_request)
+            start_ref = ({"type": "poi", "name": start_name} if start_name else
+                         {"type": "coord", "name": coord_start.get("name") or "我的位置",
+                          "lng": coord_start["lng"], "lat": coord_start["lat"]}
+                         if isinstance(coord_start, dict) else None)
+            if not start_ref:
+                question = "目的地已记住。请告诉我从哪里出发，或在地图上设置起点。"
+                return {"response_kind": "clarify", "message": question,
+                        "route": None, "route_kind": None, "candidates": None,
+                        "clarify": {"question": question, "options": []},
+                        "suggestions": None, "turns": 0}
+            mode = travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"
+            for text in (active_request, query):
+                detected_mode, explicit_mode = detect_travel_mode(text)
+                if explicit_mode:
+                    mode = detected_mode
+            route_args = {"start": start_ref,
+                          "end": {"type": "poi", "poi_id": destination["id"],
+                                  "name": destination["name"]}, "mode": mode}
+            full_request = active_request + " " + query
+            constraints = {}
+            if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", full_request):
+                constraints["avoid_steps"] = True
+            if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", full_request):
+                constraints["slope"] = "avoid"
+            if re.search(r"(?:可以|允许)(?:走|经过)?(?:楼梯|台阶)|不(?:用|需要)避开(?:楼梯|台阶)", query):
+                constraints.pop("avoid_steps", None)
+            if re.search(r"不(?:用|需要)(?:再)?避(?:开)?(?:陡坡|坡)|可以(?:爬|走)(?:坡|陡坡)", query):
+                constraints.pop("slope", None)
+            if constraints:
+                route_args["constraints"] = constraints
+            if re.search(r"平坦优先|少爬坡|少走坡", full_request):
+                route_args["weights"] = {"distance": 0.2, "slope": 0.6, "scenery": 0.2}
+            elif re.search(r"风景优先|景观优先|看风景|风景好", full_request):
+                route_args["weights"] = {"distance": 0.15, "slope": 0.15, "scenery": 0.7}
+            if re.search(r"最短|赶时间|赶课|不绕路", query):
+                route_args.pop("weights", None)
+            result, artifact = execute_tool("plan_route", route_args,
+                                            {"query": active_request + " " + query, "uid": uid})
+            route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
+            if route:
+                route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
+                return {"response_kind": "route", "message": _build_route_message(route),
+                        "route": route, "route_kind": "direct", "candidates": None,
+                        "clarify": None, "suggestions": None, "turns": 0}
+            return {"response_kind": "chat", "message": (result or {}).get("message")
+                    or "路线暂时无法核验，没有显示路线。", "route": None,
+                    "route_kind": None, "candidates": None, "clarify": None,
+                    "suggestions": None, "turns": 0}
+
+    if (not (context or {}).get("place_request")
+            and re.search(r"天气|气温|下雨|降雨", query)
+            and not (isinstance(active_request, str)
+                     and (agent_tools.ordered_via_request(active_request)
+                          or _named_via_request(active_request)))
+            and re.search(r"带我过去|带我去那(?:里|儿)|去那(?:里|儿)|到那(?:里|儿)", query)):
+        start_name = _explicit_start_name(query)
+        start_ref = ({"type": "poi", "name": start_name} if start_name else
+                     {"type": "coord", "name": coord_start.get("name") or "我的位置",
+                      "lng": coord_start["lng"], "lat": coord_start["lat"]}
+                     if isinstance(coord_start, dict) else None)
+        question = "你想去哪个地点？目的地明确后，我会从你说的起点规划路线。"
+        pending = _place_request_state(query, pending_slot="destination", start=start_ref,
+                                       mode=travel_mode if travel_mode in {"walk", "bike", "drive"}
+                                       else "walk")
+        return {"response_kind": "clarify", "message": question,
+                "route": None, "route_kind": None, "candidates": None,
+                "clarify": {"question": question, "options": []},
+                "place_request": pending, "suggestions": None, "turns": 0}
+
     # A mode-only correction is an edit to the saved route, even if a weather
     # or POI turn appeared in between. Rebuild from the validated route state
     # so endpoints, ordered stops, hard constraints and strategy survive.
@@ -876,7 +982,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                  or _named_via_request(original_request))
     if named_via:
         via_names = named_via["via"] if isinstance(named_via["via"], list) else [named_via["via"]]
-        revised_start = _continuation_start(query) if original_request != query else ""
+        revised_start = ((_explicit_start_name(query) or _continuation_start(query))
+                         if original_request != query else "")
         start_name = revised_start or named_via["start"]
         if start_name in {"我这", "我这里", "我的位置", "当前位置"}:
             start_name = ""
@@ -991,6 +1098,56 @@ def run_agent(query: str, context: dict = None, history: list = None,
             return route_response
         next_request = followups[0]
         next_query = str(next_request.get("query") or "").strip()
+        named_final_id = next_request.get("destination_poi_id")
+        if named_final_id:
+            if named_final_id == (destination.get("id") or destination.get("poi_id")):
+                route_response["message"] += "你选的前一地点就是指定终点，无须再走第二段。"
+                route_response["needs_input"] = False
+                route_response["place_request"] = None
+                route_response["suggestions"] = None
+                return route_response
+            final_poi = next((poi for poi in agent_tools.load_pois()
+                              if poi.get("id") == named_final_id), None)
+            if not final_poi:
+                return {**route_response, "response_kind": "chat", "route": None,
+                        "route_kind": None, "message": "指定的终点已不在校园地点库中，无法显示全程路线。",
+                        "needs_input": False, "place_request": None}
+            final_args = {
+                "start": {"type": "poi", "poi_id": destination.get("id") or destination.get("poi_id"),
+                          "name": destination.get("name", "")},
+                "end": {"type": "poi", "poi_id": named_final_id,
+                        "name": final_poi.get("name", "")},
+                "mode": (saved_request or {}).get("mode") or route_response["route"].get("mode") or "walk",
+            }
+            saved_constraints = (saved_request or {}).get("constraints") or {}
+            if saved_constraints.get("avoid_steps") or saved_constraints.get("avoid_slope"):
+                final_args["constraints"] = {}
+                if saved_constraints.get("avoid_steps"):
+                    final_args["constraints"]["avoid_steps"] = True
+                if saved_constraints.get("avoid_slope"):
+                    final_args["constraints"]["slope"] = "avoid"
+            final_result, final_artifact = execute_tool(
+                "plan_route", final_args, {"query": next_query, "uid": uid},
+            )
+            final_route = ((final_artifact or {}).get("route")
+                           if isinstance(final_artifact, dict) else None)
+            if not final_route:
+                return {**route_response, "response_kind": "chat", "route": None,
+                        "route_kind": None, "message": (final_result or {}).get("message")
+                        or "终点路段暂时无法规划，未显示不完整的全程路线。",
+                        "needs_input": False, "place_request": None}
+            full_legs = completed_legs + [final_route]
+            join_issue = _place_route_join_issue(full_legs)
+            if join_issue:
+                return {**route_response, "response_kind": "chat", "route": None,
+                        "route_kind": None,
+                        "message": f"各段路线已算出，但{join_issue}，未显示不连续的全程路线。",
+                        "needs_input": False, "place_request": None}
+            full_route = _combined_place_route(full_legs)
+            return {**route_response, "response_kind": "route", "route": full_route,
+                    "route_kind": "via", "message": _build_route_message(full_route),
+                    "needs_input": False, "place_request": None, "clarify": None,
+                    "suggestions": None}
         next_activities = list(next_request.get("activities") or [])
         next_categories = list(next_request.get("subcategories") or [])
         destination_name = str(destination.get("name") or "").strip()
@@ -1174,6 +1331,21 @@ def run_agent(query: str, context: dict = None, history: list = None,
          "subcategories": list(item["intent"].get("subcategories") or [])}
         for item in activity_sequence[1:]
     ]
+    # A concrete last stop belongs to the ordered route, not to the fuzzy
+    # recommendation for the first stop. Resolve only the final clause.
+    ordered_parts = re.split(r"(?:然后|接着|随后|之后|最后|再去|再)", str(original_request or ""))
+    named_final = None
+    if len(ordered_parts) > 1:
+        final_name = ordered_parts[-1].strip(" ，,。；;、 ")
+        if final_name:
+            resolved_final, final_alternatives = agent_tools.find_poi_ambiguous(final_name)
+            if resolved_final and not final_alternatives:
+                named_final = resolved_final
+                if sequence_followups:
+                    sequence_followups[-1] = {
+                        "query": final_name, "destination_poi_id": resolved_final["id"],
+                        "activities": [], "subcategories": [],
+                    }
     activity_intent = (activity_sequence[0]["intent"] if activity_sequence else
                        agent_tools.resolve_activity_query(original_request))
     if place_request and place_request.get("pending_slot") == "activity":
@@ -1236,7 +1408,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                                      (place_request or {}).get("activities") or [])
     follow_up_requests = (place_request or {}).get("follow_up_requests") or sequence_followups
     recommendation_is_catalog = agent_tools.is_poi_catalog_query(recommendation_query)
-    recommendation_has_target = agent_tools._query_has_explicit_poi_destination(recommendation_query)
+    recommendation_has_target = (
+        agent_tools._query_has_explicit_poi_destination(recommendation_query)
+        and named_final is None
+    )
     route_to_nearest = bool(
         agent_tools.query_requests_route(recommendation_query)
         and re.search(r"最近|离我最(?:近|方便)|距离最短", recommendation_query)

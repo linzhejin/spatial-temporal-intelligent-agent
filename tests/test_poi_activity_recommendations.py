@@ -1,5 +1,7 @@
 from unittest.mock import patch
 
+import pytest
+
 from agents import planner, tools
 from spatial.poi import _flatten_poi
 
@@ -354,6 +356,127 @@ def test_three_stage_request_preserves_unspecified_dorm_and_steps_constraint():
     ]
     assert result["place_request"]["constraints"]["avoid_steps"] is True
     assert execute.call_args.args[1]["constraints"]["avoid_steps"] is True
+
+
+def test_named_destination_after_meal_selection_returns_the_full_ordered_route(monkeypatch):
+    meal = {"poi_id": "poi_meal", "name": "测试食堂", "activities": ["canteen_meal"],
+            "subcategory": "canteen", "distance_m": 150}
+    final = {"id": "poi_070", "name": "桂园食堂", "aliases": []}
+    points = {
+        "武汉大学科技门": [114.36, 30.53],
+        "测试食堂": [114.361, 30.53],
+        "桂园食堂": [114.362, 30.53],
+    }
+    route_calls = []
+
+    def execute(name, args, _ctx):
+        if name == "search_poi_candidates":
+            return {"candidates": [meal], "start_name": "武汉大学科技门"}, {
+                "candidates": [dict(meal)],
+            }
+        assert name == "plan_route"
+        route_calls.append(args)
+        start_name = args["start"]["name"]
+        end_name = args["end"]["name"]
+        edge_id = (1, 2, 0) if end_name == "测试食堂" else (2, 3, 0)
+        route = {
+            "start_name": start_name, "end_name": end_name, "mode": "walk",
+            "recommended": [points[start_name], points[end_name]],
+            "shortest": [points[start_name], points[end_name]],
+            "recommended_edge_ids": [edge_id], "shortest_edge_ids": [edge_id],
+            "recommended_length_m": 100.0, "shortest_length_m": 100.0,
+            "duration_min": 2.0, "shortest_duration_min": 2.0,
+            "steps": [], "pois": [], "timings_ms": {},
+            "route_verification": {"status": "pass", "field_truth_verified": False},
+        }
+        return route, {"route": route}
+
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
+    monkeypatch.setattr(planner.agent_tools, "load_pois", lambda: [
+        {"id": "poi_meal", "name": "测试食堂"}, final,
+    ])
+    monkeypatch.setattr(planner.agent_tools, "find_poi_ambiguous", lambda name:
+                        (final, []) if name == "桂园食堂" else (None, []))
+
+    first = planner.run_agent("从武汉大学科技门先找个附近能吃饭的地方，再去桂园食堂。")
+    assert first["response_kind"] == "candidates"
+    assert first["candidates"][0]["poi_id"] == "poi_meal"
+    completed = planner.run_agent("去这个地点", context={
+        "place_request": first["place_request"], "selected_poi_id": "poi_meal",
+    })
+
+    assert completed["response_kind"] == "route"
+    assert completed["route_kind"] == "via"
+    assert completed["route"]["start_name"] == "武汉大学科技门"
+    assert completed["route"]["end_name"] == "桂园食堂"
+    assert completed["route"]["recommended_edge_ids"] == [(1, 2, 0), (2, 3, 0)]
+    assert completed["route"]["route_verification"]["scope"] == "verified_legs_and_checked_join"
+    assert [leg["end_name"] for leg in completed["route"]["legs"]] == ["测试食堂", "桂园食堂"]
+    assert [call["end"]["name"] for call in route_calls] == ["测试食堂", "桂园食堂"]
+
+
+@pytest.mark.parametrize("origin,final_name", [
+    ("武汉大学科技门", "桂园食堂"),
+    ("武汉大学茶港门", "武汉大学田园食堂"),
+    ("玉兰2门", "星湖园食堂"),
+])
+def test_three_reviewed_food_then_named_destination_cases_keep_final_id(
+    monkeypatch, origin, final_name,
+):
+    candidate = {"poi_id": "poi_meal", "name": "测试食堂",
+                 "activities": ["meal"], "distance_m": 100}
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda *_args:
+                        ({"candidates": [dict(candidate)], "start_name": origin},
+                         {"candidates": [dict(candidate)]}))
+    response = planner.run_agent(
+        f"从{origin}先找个附近能吃饭的地方，再去{final_name}。",
+    )
+    expected, alternatives = planner.agent_tools.find_poi_ambiguous(final_name)
+    assert expected and not alternatives
+    assert response["response_kind"] == "candidates"
+    assert response["place_request"]["follow_up_requests"][-1]["destination_poi_id"] == expected["id"]
+
+
+def test_selected_first_stop_equal_to_named_final_does_not_plan_empty_second_leg(monkeypatch):
+    poi = {"id": "poi_070", "name": "桂园食堂"}
+    route = {"start_name": "武汉大学科技门", "end_name": "桂园食堂",
+             "mode": "walk", "recommended": [[114.36, 30.53], [114.37, 30.53]],
+             "recommended_edge_ids": [(1, 2, 0)],
+             "route_verification": {"status": "pass"}}
+    calls = []
+
+    def execute(name, args, _context):
+        calls.append((name, args))
+        return route, {"route": route}
+
+    monkeypatch.setattr(planner.agent_tools, "load_pois", lambda: [poi])
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
+    response = planner.run_agent("去这个地点", context={
+        "selected_poi_id": "poi_070",
+        "place_request": {
+            "pending_slot": "selection", "start": {"type": "poi", "name": "武汉大学科技门"},
+            "candidate_poi_ids": ["poi_070"],
+            "follow_up_requests": [{"query": "桂园食堂", "destination_poi_id": "poi_070"}],
+        },
+    })
+    assert response["response_kind"] == "route"
+    assert response["needs_input"] is False
+    assert len(calls) == 1
+
+
+def test_map_overview_ball_then_food_clarification_reaches_real_candidates():
+    with patch.object(planner, "_make_client", side_effect=AssertionError("unexpected LLM call")):
+        first = planner.run_agent("我在总图，先找一个球场然后去吃饭")
+        selected = planner.run_agent("篮球", context={
+            "active_task_request": "我在总图，先找一个球场然后去吃饭",
+            "place_request": first["place_request"],
+        })
+    assert first["response_kind"] == "clarify"
+    assert first["place_request"]["pending_slot"] == "activity"
+    assert selected["response_kind"] == "candidates"
+    assert selected["candidates"]
+    assert all("basketball" in item.get("activities", []) for item in selected["candidates"])
+    assert selected["place_request"]["follow_up_requests"][0]["activities"]
 
 
 def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):

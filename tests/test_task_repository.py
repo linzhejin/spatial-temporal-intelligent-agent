@@ -210,6 +210,21 @@ def test_deadline_expiry_closes_run_and_task_instead_of_leaving_it_queued():
     assert run["events"][-1]["event_type"] == "run_completed"
 
 
+def test_poll_closes_expired_run_even_without_an_available_worker():
+    owner, _, conversation_id = create_conversation(DATABASE_URL)
+    queued = create_task_run(
+        DATABASE_URL, owner, conversation_id, "等待中的任务", "poll-deadline-expired",
+        datetime.now(timezone.utc) - timedelta(seconds=1),
+    )
+
+    polled = get_run(DATABASE_URL, owner, queued["run_id"])
+
+    assert polled["status"] == "failed"
+    assert polled["error"]["code"] == "deadline_exceeded"
+    assert polled["events"][-1]["event_type"] == "run_completed"
+    assert get_task(DATABASE_URL, owner, queued["task_id"])["status"] == "failed"
+
+
 def test_cancel_is_owner_scoped_and_idempotent():
     owner, _, conversation_id = create_conversation(DATABASE_URL)
     task_id = create_task(DATABASE_URL, owner, conversation_id, task_payload(conversation_id, "路线"))

@@ -226,9 +226,15 @@ def build_agent_workflow(
         context["task_revision"] = data.get("task_revision")
         route_state = task.get("route_spec") or {}
         from agents.task_planner import build_task_plan
+        plan_text = (data["query"] if context.get("place_request")
+                     else context.get("active_task_request") or data["query"])
+        if context.get("active_task_request") and not context.get("place_request"):
+            # The continuation can add an independent requirement, such as
+            # weather, while the original task still supplies the destination.
+            plan_text += " " + data["query"]
         plan = build_task_plan(
-            context.get("active_task_request") or data["query"],
-            has_route_context=bool(start or end or waypoints),
+            plan_text,
+            has_route_context=bool(start or end or waypoints or context.get("place_request")),
         )
         response = None
         weather = None
