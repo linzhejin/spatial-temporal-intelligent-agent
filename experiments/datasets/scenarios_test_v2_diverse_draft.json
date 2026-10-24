@@ -650,6 +650,7 @@
       "source_group": "campus_poi_diverse_authoring_v2",
       "source_poi_ids": [
         "poi_432",
+        "poi_202",
         "poi_016",
         "poi_201"
       ],
@@ -657,7 +658,7 @@
       "messages": [
         {
           "role": "user",
-          "content": "从工学部排球场骑车到武汉大学图书馆工学分馆。"
+          "content": "从工学部排球场骑车到工学部一食堂。"
         }
       ],
       "expected_turns": [
@@ -666,7 +667,7 @@
           "kind": "route",
           "feasibility": "unknown",
           "start_poi_id": "poi_432",
-          "end_poi_id": "poi_016",
+          "end_poi_id": "poi_202",
           "via_poi_ids": [],
           "travel_mode": "bike",
           "strategy": "shortest",
@@ -1885,6 +1886,7 @@
       "source_group": "campus_poi_diverse_authoring_v2",
       "source_poi_ids": [
         "poi_432",
+        "poi_202",
         "poi_016",
         "poi_201"
       ],
@@ -3078,6 +3080,7 @@
       "source_group": "campus_poi_diverse_authoring_v2",
       "source_poi_ids": [
         "poi_432",
+        "poi_202",
         "poi_016",
         "poi_201"
       ],
@@ -4564,6 +4567,7 @@
       "source_group": "campus_poi_diverse_authoring_v2",
       "source_poi_ids": [
         "poi_432",
+        "poi_202",
         "poi_016",
         "poi_201"
       ],
@@ -4571,7 +4575,7 @@
       "messages": [
         {
           "role": "user",
-          "content": "从工学部排球场到武汉大学图书馆工学分馆，步行。"
+          "content": "从工学部排球场到工学部一食堂，步行。"
         },
         {
           "role": "user",
@@ -4584,7 +4588,7 @@
           "kind": "route",
           "feasibility": "unknown",
           "start_poi_id": "poi_432",
-          "end_poi_id": "poi_016",
+          "end_poi_id": "poi_202",
           "via_poi_ids": [],
           "travel_mode": "walk",
           "strategy": "shortest",
@@ -4603,7 +4607,7 @@
           "kind": "route",
           "feasibility": "unknown",
           "start_poi_id": "poi_016",
-          "end_poi_id": "poi_016",
+          "end_poi_id": "poi_202",
           "via_poi_ids": [],
           "travel_mode": "walk",
           "strategy": "shortest",
@@ -6199,6 +6203,7 @@
       "source_group": "campus_poi_diverse_authoring_v2",
       "source_poi_ids": [
         "poi_432",
+        "poi_202",
         "poi_016",
         "poi_201",
         "poi_083",

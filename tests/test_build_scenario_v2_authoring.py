@@ -64,6 +64,15 @@ def test_diverse_authoring_bank_spreads_actual_spatial_anchors():
     assert all(case["adjudication"]["status"] == "draft" for case in bank["cases"])
 
 
+def test_diverse_authoring_routes_have_distinct_endpoints():
+    bank = build_authoring_bank(ROOT / "data/pois.json", diverse_anchors=True)
+    collapsed = [(case["id"], index) for case in bank["cases"]
+                 for index, turn in enumerate(case["expected_turns"])
+                 if turn["kind"] == "route"
+                 and turn["start_poi_id"] == turn["end_poi_id"]]
+    assert collapsed == []
+
+
 def test_t5_venue_selection_continues_to_ordered_full_route():
     bank = build_authoring_bank(ROOT / "data/pois.json", diverse_anchors=True)
     pois = {row["id"]: row for row in json.loads((ROOT / "data/pois.json").read_text(
