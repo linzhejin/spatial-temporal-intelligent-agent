@@ -170,6 +170,22 @@ class TestAgentLoop:
         assert result["response_kind"] == "route"
         assert "天气暂时获取不到" in result["message"]
 
+    @pytest.mark.parametrize("applied,expected", [
+        (1, "纳入 1 条适用于步行的生效路况记录"),
+        (0, "未应用生效路况记录"),
+    ])
+    def test_route_feedback_answers_road_condition_question_from_route_snapshot(
+            self, applied, expected):
+        route = {"start_name": "玉兰2门", "end_name": "老斋舍", "mode": "walk",
+                 "road_conditions_applied": applied}
+        client = FakeClient([_fake_response(tool_calls=[_fake_tool_call("plan_route", {})])])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route})):
+            result = planner.run_agent("从玉兰2门到老斋舍，当前有无道路管制？")
+        assert result["response_kind"] == "route"
+        assert expected in result["message"]
+
     @pytest.mark.parametrize("query,expected_strategy,expected_end,expected_constraints", [
         ("刚才的路线改为平坦优先", "flat", "樱顶", {}),
         ("刚才的路线改为最短路径", "shortest", "樱顶", {}),

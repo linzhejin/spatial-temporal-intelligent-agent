@@ -1,0 +1,39 @@
+{
+  "status": "development_agent_pilot_only_not_vision_or_field_score",
+  "source_link_id": "V1-01-1",
+  "bank_sha256": "645ace90fefe5663b445e03f5e54ff17d5b97359c7b17e2c21df8399f8e96976",
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "local_ignored_reports": [
+    {
+      "file": "output/experiments/vision_simulation/D1_product_agent_pilot_V1-01-1_20261024.json",
+      "sha256": "5a89242610b6c3f655b57f84719d44b1e4869b0720fc53d27c178601e8946c84",
+      "purpose": "pre_feedback_fix_diagnostic"
+    },
+    {
+      "file": "output/experiments/vision_simulation/D1_product_agent_pilot_V1-01-1_feedback_20261024.json",
+      "sha256": "506b062f2ea67b681cbe42442be4d3921083de63980effd4200686ea7066b473",
+      "purpose": "feedback_fix_diagnostic"
+    },
+    {
+      "file": "output/experiments/vision_simulation/D1_product_agent_pilot_V1-01-1_verified_20261024.json",
+      "sha256": "c936d0af632299c5e2ff80381addd236520d5e8129f9a07e7405a4cbf0833de6",
+      "purpose": "final_development_pilot"
+    }
+  ],
+  "final_observations": {
+    "model_response_id": "deepseek-flash",
+    "runs": 2,
+    "active_event_route_edge_count": 8,
+    "expired_event_route_edge_count": 1,
+    "route_verification_pass": 2,
+    "active_road_conditions_applied": 1,
+    "expired_road_conditions_applied": 0,
+    "final_replies_grounded_in_route_condition_count": 2
+  },
+  "limitations": [
+    "One visible source-link pair was run once per phase; no repeated or holdout estimate is available.",
+    "The road event was injected into an isolated test process, not detected in the Songdo video or published by a manager.",
+    "The campus association is hypothetical and does not establish real Wuhan road conditions.",
+    "The first run exposed a missing condition explanation; the later code change and replay are recorded separately."
+  ]
+}

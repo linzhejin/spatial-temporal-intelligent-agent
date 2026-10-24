@@ -1058,6 +1058,7 @@ def _route_payload(G, route_result, start_name, end_name, mode):
         "shortest_baseline_feasible": route_result.get("shortest_baseline_feasible", True),
         "mode": route_result["mode"],
         "speed_kmh": route_result.get("speed_kmh", MODE_SPEEDS_KMH.get(mode, 4.5)),
+        "road_conditions_applied": route_result.get("road_conditions_applied"),
     }
     timings = normalize_timings(route_result.get("timings_ms"))
     timings["response_build"] = round(

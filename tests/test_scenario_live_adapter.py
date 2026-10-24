@@ -278,6 +278,16 @@ def test_agent_api_exposes_only_delivered_weather_as_structured_output():
     assert projection["outputs"] == ["route", "weather"]
 
 
+def test_agent_api_preserves_road_condition_count_used_in_route_computation():
+    response = _agent_response_to_legacy({
+        "response_kind": "route", "message": "路线已按路况计算",
+        "route": {"start_name": "玉兰2门", "end_name": "桂园操场",
+                  "recommended_edge_ids": [[101, 102, 4]],
+                  "road_conditions_applied": 1},
+    })
+    assert response["road_conditions_applied"] == 1
+
+
 def test_agent_clarification_preserves_route_verification_report():
     report = {"status": "fail", "issues": ["length_mismatch"]}
     response = _agent_response_to_legacy({

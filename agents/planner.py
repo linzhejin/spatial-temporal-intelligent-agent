@@ -1868,6 +1868,17 @@ def run_agent(query: str, context: dict = None, history: list = None,
         else:
             final_message += " 本次未取得天气信息；路线仅依据现有道路数据。"
 
+    if artifact_route and re.search(r"路况|管制|封路|封闭|禁行|为何绕行|为什么绕路",
+                                    (active_task_request or "") + query):
+        applied = artifact_route.get("road_conditions_applied")
+        if type(applied) is int:
+            if applied:
+                mode_label = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
+                    artifact_route.get("mode"), "本次出行方式")
+                final_message += f" 本次算路纳入 {applied} 条适用于{mode_label}的生效路况记录。"
+            else:
+                final_message += " 本次算路未应用生效路况记录；未覆盖路段仍需现场确认。"
+
     response_kind = "chat"
     if artifact_route:
         response_kind = "route"
