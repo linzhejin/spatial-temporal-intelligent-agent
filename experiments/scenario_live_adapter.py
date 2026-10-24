@@ -111,6 +111,9 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         status = "failed"
     start = state.get("start") or result.get("start") or request.get("start")
     end = state.get("end") or result.get("end")
+    if (end is None and kind == "clarify" and request.get("pending_slot") == "start"
+            and isinstance(request.get("selected_poi_id"), str)):
+        end = {"poi_id": request["selected_poi_id"]}
     vias = _via_refs(state.get("via") or result.get("via"))
     candidates = result.get("candidates") or []
     strategy = state.get("strategy") or result.get("strategy") or {}

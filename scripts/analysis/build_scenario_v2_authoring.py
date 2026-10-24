@@ -173,7 +173,7 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False,
                         messages = [f"带我去{names['end']}，起点等我补充。", prompt]
                         turns = [
                             _turn(end=end_id, kind="clarify", status="needs_input",
-                                  mode="walk", strategy="shortest", outputs=[], slot="start"),
+                                  mode="walk", strategy=None, outputs=[], slot="start"),
                             _turn(start=start_id, end=end_id, outputs=["route", "weather"]),
                         ]
                     else:

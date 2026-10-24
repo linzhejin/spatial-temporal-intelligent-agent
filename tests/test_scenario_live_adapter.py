@@ -69,6 +69,19 @@ def test_weather_only_followup_projects_information_without_new_route():
     assert turn["route_edge_ids"] == []
 
 
+def test_pending_origin_keeps_selected_destination_as_a_stable_poi():
+    turn = project_live_run({"status": "needs_input", "result": {
+        "response_kind": "clarify", "task_type": "unknown",
+        "clarify": {"question": "你从哪里出发？"},
+        "place_request": {"pending_slot": "start", "selected_poi_id": "poi_002",
+                          "mode": "walk"},
+    }}, _lookup())
+    assert turn["kind"] == "clarify"
+    assert turn["start_poi_id"] is None
+    assert turn["end_poi_id"] == "poi_002"
+    assert turn["clarification_slot"] == "start"
+
+
 def test_ambiguous_alias_is_not_guessed_and_missing_edges_are_not_evidence():
     run = {"status": "completed", "result": {
         "response_kind": "route", "task_type": "path_planning",
