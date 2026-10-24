@@ -497,3 +497,95 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
 
         context.close()
         browser.close()
+
+
+def test_ordered_multi_stop_route_remains_visible_after_weather_followup(static_site):
+    """The browser must display the full ordered line and retain it for a side question."""
+    submitted = []
+    stops = ["玉兰2门", "桂园操场", "工学部集贸市场", "卓尔体育馆"]
+    geometry = [
+        {"lng": 114.3500, "lat": 30.5350},
+        {"lng": 114.3540, "lat": 30.5370},
+        {"lng": 114.3590, "lat": 30.5390},
+        {"lng": 114.3650, "lat": 30.5420},
+    ]
+    route_result = {
+        "task_type": "path_planning", "response_kind": "route", "route_kind": "via",
+        "recommended": geometry, "shortest": [], "recommended_length_m": 2100.0,
+        "duration_min": 29.0, "mode": "walk",
+        "start": {"name": stops[0]}, "end": {"name": stops[-1]},
+        "via": {"type": "multi", "points": [{"name": name} for name in stops[1:-1]]},
+        "strategy": {"name": "shortest", "weights": {"distance": 1, "slope": 0, "scenery": 0}},
+        "route_state": {
+            "schema_version": 1, "route_id": "local-ordered-route", "route_kind": "via",
+            "start": {"name": stops[0]},
+            "via": {"type": "multi", "points": [{"name": name} for name in stops[1:-1]]},
+            "end": {"name": stops[-1]}, "travel_mode": "walk",
+            "hard_constraints": {}, "strategy": {"name": "shortest"},
+        },
+        "route_verification": {"status": "pass", "field_truth_verified": False},
+        "explanation": "依照所给次序经过两个地点，终点为卓尔体育馆。",
+    }
+
+    def respond(route, payload, status=200):
+        route.fulfill(status=status, content_type="application/json; charset=utf-8",
+                      body=json.dumps(payload, ensure_ascii=False))
+
+    def handle_request(route):
+        request = route.request
+        parsed = urlsplit(request.url)
+        if parsed.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+        elif parsed.path == "/api/conversations" and request.method == "POST":
+            respond(route, {"data": {"conversation_id": "local-ordered-conversation"}})
+        elif parsed.path.endswith("/messages") and request.method == "POST":
+            submitted.append(request.post_data_json)
+            respond(route, {"data": {"run_id": f"local-ordered-{len(submitted)}"}})
+        elif parsed.path.startswith("/api/runs/local-ordered-"):
+            run_number = int(parsed.path.rsplit("-", 1)[-1])
+            result = route_result if run_number == 1 else {
+                "task_type": "chat", "reply": "今天晴，22°C；原路线保留。",
+            }
+            respond(route, {"data": {
+                "run_id": f"local-ordered-{run_number}",
+                "task_id": "local-ordered-task", "current_task_revision": run_number,
+                "status": "completed", "events": [], "result": result,
+            }})
+        elif parsed.path == "/api/weather":
+            respond(route, {"data": {"weather": "晴", "temperature": 22}})
+        elif parsed.path == "/api/road-conditions":
+            respond(route, {"data": {"count": 0, "conditions": []}})
+        elif parsed.path.startswith("/api/"):
+            respond(route, {"data": {}})
+        else:
+            route.continue_()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        context = browser.new_context(viewport={"width": 1440, "height": 1000})
+        context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page = context.new_page()
+        page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
+        page.route("**/*", handle_request)
+        try:
+            page.goto(static_site, wait_until="domcontentloaded")
+            input_box = page.locator("#nl-input")
+            input_box.fill("从玉兰2门先到桂园操场，再到工学部集贸市场，最后卓尔体育馆")
+            page.locator("#submit-btn").click()
+            expect(page.locator("#results-section")).to_be_visible(timeout=10000)
+            expect(page.locator("#chat-content")).to_contain_text("包含 2 个途经点")
+            line = page.locator(".leaflet-overlay-pane path.leaflet-interactive").first
+            expect(line).to_be_visible()
+            drawn_path = line.get_attribute("d")
+            assert drawn_path and drawn_path.count("L") >= 3, drawn_path
+
+            input_box.fill("再告诉我天气，不要改路线")
+            page.locator("#submit-btn").click()
+            expect(page.locator("#chat-content")).to_contain_text("原路线保留", timeout=10000)
+            expect(page.locator("#results-section")).to_be_visible()
+            assert line.get_attribute("d") == drawn_path
+            assert len(submitted) == 2
+            assert submitted[1]["query"] == "再告诉我天气，不要改路线"
+        finally:
+            context.close()
+            browser.close()
