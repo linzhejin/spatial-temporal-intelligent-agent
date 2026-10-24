@@ -2,6 +2,8 @@
 
 本记录推进 P1 的候选地点来源审查，不产生正式 Agent 成功率。输入为已见的 24 道 T2 编题、现有 443 个 POI、静态路网及 2026-09-24 命名的湖北 OSM 快照。图内排序报告仍是开发参考，实地入口没有独立验明。
 
+**版本说明：**下表保留发现问题时的原始输入与哈希。`poi_387`、`poi_388` 的学部标签及 `poi_415` 的描述已在随后版本修正；当前主数据和重算结果见 `20261025_t2_market_campus_correction.md`。旧报告仅用于追溯问题，不能当作当前 POI 版本的参考。
+
 ## 复核方法与来源
 
 从既有 `hubei-260924.osm.pbf` 的 libosmium 完整面要素提取 4 个与 T2 相关的场地轮廓，保存为 `experiments/source/osm_t2_area_evidence_20260924.geojson`（含 OSM ID、来源哈希及 ODbL 署名）。用 WGS-84 面轮廓与可步行路网节点投影到 UTM 50N 后计算距离；POI 原坐标只在计算边界由 GCJ-02 转换一次。脚本 `scripts/analysis/audit_t2_access_geometry.py` 严格核对 T2 不确定性报告、POI 和路网的来源哈希。
