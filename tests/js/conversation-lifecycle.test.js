@@ -747,6 +747,19 @@ test('free-form location answer continues the original pending task', async () =
     assert.equal(sent.continuation_task_id, 'pending-route');
     assert.equal(sent.base_revision, 3);
 });
+test('origin plus weather and anaphoric destination continues the pending route task', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'pending-route';
+    h.state.pendingServerTaskRevision = 3;
+    h.state.pendingServerQuestion = '你想从哪里出发？';
+    let sent;
+    h.setApi(async (_url, body) => { sent = body; return routeResult('continued'); });
+
+    await h.submit('我在武汉大学科技门，查天气后再带我过去');
+
+    assert.equal(sent.continuation_task_id, 'pending-route');
+    assert.equal(sent.base_revision, 3);
+});
 test('free-form ball type answer continues the pending activity task', async () => {
     const h = harness();
     h.state.pendingServerTaskId = 'sports-task';

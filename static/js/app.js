@@ -3585,6 +3585,11 @@
         if (!state.pendingServerTaskId || !Number.isInteger(state.pendingServerTaskRevision)) return false;
         var text = String(query || '').trim();
         if (!text) return false;
+        // An origin plus "take me there" answers the pending origin question;
+        // an added weather request must not detach it from the saved destination.
+        if (/(起点|出发|从哪里|在哪儿|在哪里)/.test(state.pendingServerQuestion || '')
+                && /^(?:现在)?我在|^从|^起点/.test(text)
+                && /带我过去|带我去那(?:里|儿)|去那(?:里|儿)|到那(?:里|儿)/.test(text)) return true;
         // Questions and independent search intents must not be consumed as
         // route-slot answers merely because they are short.
         if (/(天气|温度|下雨|风力|能见度|活动|有哪些|介绍|是什么|什么|哪里|哪儿|怎么|为什么|谁|何时|几点|多少|帮我|想要|给我|请问|能否|是否|查询|查一下|找一下|搜索|推荐|附近|哪家|有没有|路线|规划|导航)/.test(text)) return false;
