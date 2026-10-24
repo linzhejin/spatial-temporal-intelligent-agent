@@ -19,6 +19,8 @@
 | 开发／草稿拆分审计 | 60／120；指定字段无直接重合；`formal_ready=false`，7 项阻碍 | 草稿是未见题或独立金标准 |
 | 新草稿图内参考 | T1 24／24 连通；T2 11／24 保留接驳或名次疑问；T5 选点与全程图内审计 9／9 | 现场道路通行和地点入口均已核验 |
 
+T2 进一步用独立审计脚本核对前四名：24 题中 15 题在当前图和容差内可判，9 题因末端接驳缺乏独立证据仍为 `unknown`。原先 11 个编题预警里有 2 题在此次图内规则下可判；这不会把其余 9 题自动改成通过，更不能证明地点实地入口。
+
 运行命令：
 
 ```text
@@ -28,6 +30,7 @@ python -m experiments.scenario_split_audit --development experiments/datasets/sc
 python -m scripts.analysis.build_route_references_v2 --draft experiments/datasets/scenarios_test_v2_diverse_draft.json --output output/experiments/T1_route_reference_live_chain_20261025.json
 python -m scripts.analysis.build_candidate_references_v2 --draft experiments/datasets/scenarios_test_v2_diverse_draft.json --output output/experiments/T2_candidate_reference_live_chain_20261025.json
 python -m scripts.analysis.build_t5_composite_references_v2 --draft experiments/datasets/scenarios_test_v2_diverse_draft.json --output output/experiments/T5_composite_reference_live_chain_20261025.json
+python -m scripts.analysis.audit_t2_candidate_uncertainty --reference output/experiments/T2_candidate_reference_live_chain_20261025.json --output output/experiments/T2_uncertainty_live_chain_20261025.json
 ```
 
 SHA-256：
@@ -39,6 +42,7 @@ scenario_split_live_chain_20261025.json a35fd1469ce914f4b7ad03f27a7c4537625f0c18
 T1_route_reference_live_chain_20261025.json af6654b8c31ed45db75c3571b7f18e29499ff48dc1ed5924bbfc9efab9dcd2f9
 T2_candidate_reference_live_chain_20261025.json 0ad833d59143aee2cdeeafb5e9dbda3bf018a27a78a30f3968feeac0df5b03ec
 T5_composite_reference_live_chain_20261025.json f0afe31e5f32e7aee32349c333de62ce67bac02dbdd2c7ee96d2b3227f7e2ebd
+T2_uncertainty_live_chain_20261025.json d2ee119534e18e43019ad67f079bc0fe6b9963491cb41e8d347f9d39328ea214
 p1_live_chain_broad_20261025.xml b4abccbf4a131ed464d3c754a0684f4ef47a907615e0ae8ed1b1d0234bf19792
 ```
 
