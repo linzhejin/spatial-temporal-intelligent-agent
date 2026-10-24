@@ -826,6 +826,41 @@ def run_agent(query: str, context: dict = None, history: list = None,
     # Resolve a deictic continuation only within the same unfinished task.
     # Chat history or an unrelated old route must never supply this endpoint.
     from agents.parser import detect_travel_mode
+    if (not isinstance(coord_start, dict) and not _explicit_start_name(query)
+            and not isinstance((context or {}).get("place_request"), dict)
+            and not agent_tools.ordered_via_request(query)
+            and not _named_via_request(query)
+            and not re.search(r"先.+(?:然后|再|接着|最后)", query)):
+        destination_match = re.match(
+            r"^(?:我想|我要|请|帮我|麻烦)?\s*(?:带我去|导航到|前往|去|到)\s*([^，,。；;]+)",
+            query.strip(),
+        )
+        destination_name = (re.split(r"(?=不走|避开|不要走|查天气|顺便|同时|起点)",
+                                     destination_match.group(1), maxsplit=1)[0].strip()
+                            if destination_match else "")
+        destination, alternatives = (agent_tools.find_poi_ambiguous(destination_name)
+                                     if destination_name else (None, []))
+        if destination and not alternatives:
+            mode = travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"
+            detected_mode, explicit_mode = detect_travel_mode(query)
+            if explicit_mode:
+                mode = detected_mode
+            constraints = {}
+            if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+                constraints["avoid_steps"] = True
+            if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", query):
+                constraints["avoid_slope"] = True
+            pending = _place_request_state(
+                query, pending_slot="start", selected_poi_id=destination["id"],
+                constraints=constraints, mode=mode,
+            )
+            question = "你从哪里出发？可以点地图起点，或告诉我所在地点。"
+            return {"response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question,
+                                "options": ["地图上选起点", "告诉我所在地点"]},
+                    "place_request": pending, "suggestions": None, "turns": 0}
+
     active_request = ((context or {}).get("active_task_request")
                       if isinstance(context, dict) else None)
     if (isinstance(active_request, str)

@@ -16,6 +16,7 @@ def _lookup():
         {"id": "poi_001", "name": "玉兰2门", "aliases": ["玉兰二门"]},
         {"id": "poi_002", "name": "桂园操场", "aliases": ["桂操", "操场"]},
         {"id": "poi_003", "name": "梅园操场", "aliases": ["梅操", "操场"]},
+        {"id": "poi_015", "name": "武汉大学图书馆(总馆)"},
     ])
 
 
@@ -80,6 +81,33 @@ def test_pending_origin_keeps_selected_destination_as_a_stable_poi():
     assert turn["start_poi_id"] is None
     assert turn["end_poi_id"] == "poi_002"
     assert turn["clarification_slot"] == "start"
+
+
+def test_route_projection_uses_canonical_result_when_state_name_is_not_an_alias():
+    turn = project_live_run({"status": "completed", "result": {
+        "response_kind": "route", "route_state": {
+            "start": {"name": "玉兰二门"},
+            "end": {"name": "武汉大学图书馆总馆"},
+            "travel_mode": "walk", "strategy": {"name": "shortest"},
+        },
+        "start": {"name": "玉兰2门"},
+        "end": {"name": "武汉大学图书馆(总馆)"},
+        "recommended_edge_ids": [[1, 2, 0]],
+    }}, _lookup())
+    assert turn["end_poi_id"] == "poi_015"
+    assert "poi_identity_unresolved" not in turn["unknowns"]
+
+
+def test_route_projection_does_not_hide_conflicting_endpoint_identities():
+    turn = project_live_run({"status": "completed", "result": {
+        "response_kind": "route", "route_state": {
+            "start": {"name": "玉兰二门"}, "end": {"name": "桂操"},
+        },
+        "end": {"name": "梅操"},
+        "recommended_edge_ids": [[1, 2, 0]],
+    }}, _lookup())
+    assert turn["end_poi_id"] is None
+    assert "route_end_identity_conflict" in turn["unknowns"]
 
 
 def test_ambiguous_alias_is_not_guessed_and_missing_edges_are_not_evidence():

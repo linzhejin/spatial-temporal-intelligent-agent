@@ -51,6 +51,19 @@ def _poi_id(ref: Any, lookup: dict[str, Any]) -> str | None:
     return lookup["names"].get(name.strip()) if isinstance(name, str) else None
 
 
+def _route_endpoint_ref(primary: Any, fallback: Any,
+                        lookup: dict[str, Any]) -> tuple[Any, bool]:
+    """Prefer a known canonical result, but expose contradictory POI identities."""
+    primary_id = _poi_id(primary, lookup)
+    fallback_id = _poi_id(fallback, lookup)
+    if primary_id and fallback_id and primary_id != fallback_id:
+        return {}, True
+    if (primary_id is None and fallback_id
+            and not (isinstance(primary, dict) and primary.get("coordinates"))):
+        return fallback, False
+    return primary or fallback, False
+
+
 def _via_refs(ref: Any) -> list[dict[str, Any]]:
     if not isinstance(ref, dict):
         return []
@@ -109,8 +122,18 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         status = "failed"
     elif status != "completed":
         status = "failed"
-    start = state.get("start") or result.get("start") or request.get("start")
-    end = state.get("end") or result.get("end")
+    if kind == "route":
+        start, start_conflict = _route_endpoint_ref(
+            state.get("start"), result.get("start"), lookup,
+        )
+        end, end_conflict = _route_endpoint_ref(
+            state.get("end"), result.get("end"), lookup,
+        )
+        start = start or ({} if start_conflict else request.get("start"))
+    else:
+        start = state.get("start") or result.get("start") or request.get("start")
+        end = state.get("end") or result.get("end")
+        start_conflict = end_conflict = False
     if (end is None and kind == "clarify" and request.get("pending_slot") == "start"
             and isinstance(request.get("selected_poi_id"), str)):
         end = {"poi_id": request["selected_poi_id"]}
@@ -122,6 +145,10 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
     constraints = state.get("hard_constraints") or request.get("constraints") or {}
     edges = result.get("recommended_edge_ids")
     unknowns = []
+    if start_conflict:
+        unknowns.append("route_start_identity_conflict")
+    if end_conflict:
+        unknowns.append("route_end_identity_conflict")
     refs = [ref for ref in (start, end, *vias) if isinstance(ref, dict)]
     if any(_poi_id(ref, lookup) is None and not ref.get("coordinates") for ref in refs):
         unknowns.append("poi_identity_unresolved")

@@ -371,6 +371,20 @@ class TestAgentLoop:
             assert execute.call_args.args[1]["end"]["poi_id"] == "poi_070"
             client.assert_not_called()
 
+    def test_named_destination_waiting_for_origin_is_structured_task(self):
+        destination = {"id": "poi_141", "name": "凌波门东湖观景点"}
+        client = FakeClient([_fake_response(content="你从哪里出发？")])
+        with patch.object(planner.agent_tools, "find_poi_ambiguous",
+                          return_value=(destination, [])), \
+             patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool") as execute:
+            result = planner.run_agent("带我去凌波门东湖观景点，起点等我补充。")
+        assert result["response_kind"] == "clarify"
+        assert result["place_request"]["pending_slot"] == "start"
+        assert result["place_request"]["selected_poi_id"] == "poi_141"
+        assert not client.calls
+        execute.assert_not_called()
+
     def test_deictic_weather_request_without_same_task_destination_asks_once(self):
         with patch.object(planner, "_make_client") as client:
             first = planner.run_agent("我在武汉大学科技门，查天气后再带我过去")
