@@ -72,9 +72,14 @@ def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
                or not isinstance(msg.get("content"), str) or not msg["content"].strip()
                for msg in messages):
             raise ValueError(f"{case_id}: invalid user message")
-        for turn in turns:
+        for turn_index, turn in enumerate(turns):
             if not isinstance(turn, dict) or REQUIRED_GOLD - turn.keys():
                 raise ValueError(f"{case_id}: incomplete expected turn")
+            preserve_from = turn.get("preserve_route_from_turn")
+            if "preserve_route_from_turn" in turn and (
+                    type(preserve_from) is not int or not 0 <= preserve_from < turn_index
+                    or turns[preserve_from].get("kind") != "route"):
+                raise ValueError(f"{case_id}: invalid route preservation reference")
             if formal and turn["kind"] == "candidates" and "candidates" not in turn["required_outputs"]:
                 raise ValueError(f"{case_id}: candidate output must be scored")
             if (turn["kind"] in {"route", "no_route"} and formal
@@ -456,6 +461,8 @@ def score_case(case: dict[str, Any], observed: dict[str, Any] | None, *, graph=N
                         "candidate_order": audit,
                         "outputs": {"candidates": audit["verdict"]},
                     }
-            elif method != "graph_computed" and independent_reviews and index < len(independent_reviews):
+            elif (independent_reviews and index < len(independent_reviews)
+                  and (method != "graph_computed"
+                       or expected.get("kind") not in {"route", "candidates"})):
                 actual["independent_review"] = deepcopy(independent_reviews[index])
     return evaluate_scenario(case, sanitized, _trusted_program_review=True)

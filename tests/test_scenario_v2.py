@@ -76,6 +76,39 @@ def test_v2_route_review_accepts_connected_allowed_path():
     assert result["task_success"] is True
 
 
+def test_v2_graph_route_and_manual_weather_preservation_can_be_reviewed_together():
+    case = _case()
+    case["messages"].append({"role": "user", "content": "再告诉我天气，不要改路线。"})
+    case["expected_turns"].append({**_turn(), "kind": "information",
+                                   "feasibility": "not_applicable", "start_poi_id": None,
+                                   "end_poi_id": None, "via_poi_ids": [],
+                                   "travel_mode": None, "strategy": None,
+                                   "hard_constraints": {}, "required_outputs": ["weather"],
+                                   "preserve_route_from_turn": 0})
+    observed = _observation(["1|4|0", "4|3|0"])
+    observed["input_messages"] = case["messages"]
+    observed["turns"].append({
+        "status": "completed", "kind": "information", "start_poi_id": None,
+        "end_poi_id": None, "via_poi_ids": [], "travel_mode": None,
+        "strategy": None, "hard_constraints": {}, "candidate_poi_ids": [],
+        "clarification_slot": None, "outputs": ["weather"], "route_edge_ids": [],
+    })
+    review = {"source": "independent_reviewer", "reviewer": "ui-1",
+              "evidence": ["client-route-state-hash-before-after"],
+              "outputs": {"weather": "pass", "route_preservation": "pass"}}
+    score = score_case(case, observed, graph=_graph(), independent_reviews=[{}, review])
+    assert score["task_success"] is True
+
+
+def test_v2_rejects_route_preservation_reference_to_nonroute_turn():
+    case = _case()
+    case["expected_turns"][0]["preserve_route_from_turn"] = 0
+    dataset = {"protocol_version": "scenario-v2", "split": "development",
+               "cases": [case]}
+    with pytest.raises(ValueError, match="invalid route preservation reference"):
+        validate_dataset(dataset)
+
+
 def test_v2_route_review_fails_closed_when_graph_missing():
     result = score_case(_case(), _observation(["1|4|0", "4|3|0"]), graph=None)
     assert result["task_success"] is False

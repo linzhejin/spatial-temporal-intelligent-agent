@@ -690,6 +690,20 @@ test('new weather query does not silently discard an independent route result', 
     b.resolve({task_type:'chat',reply:'晴'}); await pb; a.resolve(routeResult('A')); await pa;
     assert.equal(h.rendered.length,1); assert.equal(h.bubbles[1].text,'晴');
 });
+
+test('weather follow-up keeps the committed route displayed', async () => {
+    const h = harness();
+    const committed = existingRoute();
+    h.state.routeStore.replace(committed);
+    h.setApi(async () => ({ task_type: 'chat', response_kind: 'information',
+        reply: '当前天气：晴' }));
+
+    await h.submit('再告诉我天气，不要改路线。');
+
+    assert.deepEqual(h.state.routeStore.current(), committed);
+    assert.equal(h.clearCount(), 0);
+    assert.match(h.bubbles.at(-1).text, /天气/);
+});
 test('start clarification retries GPS once in the same request without duplicate bubbles', async () => {
     const h=harness(); h.state.productMode='navigation'; let count=0;
     h.setApi(async()=> { if (++count>3) throw Error('recursion'); return { response_kind:'clarify', clarify:{question:'起点在哪？',options:[]} }; });

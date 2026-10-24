@@ -33,6 +33,16 @@ def test_weather_only_task_does_not_require_an_llm_route_agent():
     assert [node.node_id for node in plan.nodes] == ["weather"]
 
 
+def test_weather_followup_that_forbids_route_change_does_not_replan():
+    for query in ("再告诉我天气，不要改路线。", "查天气，但别重算路线"):
+        plan = build_task_plan(query)
+        assert plan.kind == "weather", query
+        assert [node.node_id for node in plan.nodes] == ["weather"]
+        assert build_task_plan(query, has_route_context=True).kind == "weather"
+    plan = build_task_plan("不要改刚才的路线，再查天气并从珞珈门去樱顶")
+    assert plan.kind == "composite"
+
+
 def test_non_weather_route_does_not_spawn_an_unrequested_weather_tool():
     plan = build_task_plan("从珞珈门到樱顶，走最短路径")
     assert plan.kind == "route"

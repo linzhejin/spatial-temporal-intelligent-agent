@@ -167,22 +167,36 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False,
                                    outputs=["candidates"])]
                 elif group == "T3":
                     constraints = {"avoid_steps": True} if family_name == "ball_steps" else {}
-                    turns = [_turn(start=start_id, kind="clarify", status="needs_input",
-                                   mode="bike" if family_name == "ball_bike" else None,
-                                   strategy=None, constraints=constraints, outputs=[], slot=family[2])]
+                    if family_name == "destination_weather":
+                        # The destination belongs to the same unfinished task;
+                        # the second message supplies only its missing origin.
+                        messages = [f"带我去{names['end']}，起点等我补充。", prompt]
+                        turns = [
+                            _turn(end=end_id, kind="clarify", status="needs_input",
+                                  mode="walk", strategy="shortest", outputs=[], slot="start"),
+                            _turn(start=start_id, end=end_id, outputs=["route", "weather"]),
+                        ]
+                    else:
+                        turns = [_turn(start=start_id, kind="clarify", status="needs_input",
+                                       mode="bike" if family_name == "ball_bike" else None,
+                                       strategy=None, constraints=constraints, outputs=[], slot=family[2])]
                 elif group == "T4":
                     first_via = [library_id] if family_name == "remove_via" else []
                     first_prompt = (f"从{names['start']}先去{names['library']}，再到{names['end']}。"
                                     if first_via else f"从{names['start']}到{names['end']}，步行。")
                     messages = [first_prompt, prompt]
                     first = _turn(start=start_id, end=end_id, via=first_via)
-                    updated = _turn(start=library_id if family_name == "change_start" else start_id,
-                                    end=library_id if family_name == "change_end" else end_id,
-                                    via=[library_id] if family_name == "add_via" else [],
-                                    mode="bike" if family_name == "change_mode" else "walk",
-                                    strategy="scenic" if family_name == "change_strategy" else "shortest",
-                                    constraints={"avoid_steps": True} if family_name == "add_constraint" else {},
-                                    outputs=["route", "weather"] if family_name == "weather_after" else None)
+                    if family_name == "weather_after":
+                        updated = _turn(kind="information", mode=None, strategy=None,
+                                        outputs=["weather"])
+                        updated["preserve_route_from_turn"] = 0
+                    else:
+                        updated = _turn(start=library_id if family_name == "change_start" else start_id,
+                                        end=library_id if family_name == "change_end" else end_id,
+                                        via=[library_id] if family_name == "add_via" else [],
+                                        mode="bike" if family_name == "change_mode" else "walk",
+                                        strategy="scenic" if family_name == "change_strategy" else "shortest",
+                                        constraints={"avoid_steps": True} if family_name == "add_constraint" else {})
                     turns = [first, updated]
                 else:
                     via = ([library_id, other_id] if family_name == "two_vias_weather" else [])

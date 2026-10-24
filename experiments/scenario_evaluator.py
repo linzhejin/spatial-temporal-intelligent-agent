@@ -224,7 +224,7 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
     if not isinstance(turns, list) or len(turns) != len(case["expected_turns"]):
         _append_once(failures, "turn_count_mismatch")
         turns = turns if isinstance(turns, list) else []
-    for expected, actual in zip(case["expected_turns"], turns):
+    for turn_index, (expected, actual) in enumerate(zip(case["expected_turns"], turns)):
         if not isinstance(actual, dict):
             _append_once(failures, "missing_turn")
             tool_verdicts.append(_tool_use_verdict(expected, None))
@@ -301,6 +301,25 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
                 _append_once(failures, "output_invalid")
             elif verdict != "pass":
                 _append_once(unknowns, f"output_unknown:{output}")
+
+        if "preserve_route_from_turn" in expected:
+            previous_index = expected["preserve_route_from_turn"]
+            previous = turns[previous_index] if (type(previous_index) is int
+                                                 and 0 <= previous_index < turn_index
+                                                 and isinstance(turns[previous_index], dict)) else {}
+            previous_edges = previous.get("route_edge_ids") or []
+            current_edges = actual.get("route_edge_ids") or []
+            if current_edges and current_edges != previous_edges:
+                _append_once(failures, "route_changed")
+            # The server-only replay cannot observe the route still displayed
+            # in the client. Require separate independent UI evidence.
+            preservation = ((review.get("outputs") or {}).get("route_preservation")
+                            if valid_review and review.get("source") == "independent_reviewer"
+                            else None)
+            if preservation == "fail":
+                _append_once(failures, "route_changed")
+            elif preservation != "pass" or not previous_edges:
+                _append_once(unknowns, "route_preservation_unverified")
 
         has_route = bool(actual.get("route_edge_ids"))
         spatial_output |= has_route

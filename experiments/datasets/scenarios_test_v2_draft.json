@@ -3452,6 +3452,10 @@
       "messages": [
         {
           "role": "user",
+          "content": "带我去桂园食堂，起点等我补充。"
+        },
+        {
+          "role": "user",
           "content": "我在武汉大学科技门，查天气后再带我过去。"
         }
       ],
@@ -3460,15 +3464,35 @@
           "status": "needs_input",
           "kind": "clarify",
           "feasibility": "not_applicable",
-          "start_poi_id": "poi_139",
-          "end_poi_id": null,
+          "start_poi_id": null,
+          "end_poi_id": "poi_070",
           "via_poi_ids": [],
-          "travel_mode": null,
-          "strategy": null,
+          "travel_mode": "walk",
+          "strategy": "shortest",
           "hard_constraints": {},
           "required_outputs": [],
           "candidate_poi_ids": [],
-          "clarification_slot": "destination",
+          "clarification_slot": "start",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
           "expected_tools": null
@@ -3497,6 +3521,10 @@
       "messages": [
         {
           "role": "user",
+          "content": "带我去武汉大学田园食堂，起点等我补充。"
+        },
+        {
+          "role": "user",
           "content": "我在武汉大学茶港门，查天气后再带我过去。"
         }
       ],
@@ -3505,15 +3533,35 @@
           "status": "needs_input",
           "kind": "clarify",
           "feasibility": "not_applicable",
-          "start_poi_id": "poi_226",
-          "end_poi_id": null,
+          "start_poi_id": null,
+          "end_poi_id": "poi_075",
           "via_poi_ids": [],
-          "travel_mode": null,
-          "strategy": null,
+          "travel_mode": "walk",
+          "strategy": "shortest",
           "hard_constraints": {},
           "required_outputs": [],
           "candidate_poi_ids": [],
-          "clarification_slot": "destination",
+          "clarification_slot": "start",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
           "expected_tools": null
@@ -3542,6 +3590,10 @@
       "messages": [
         {
           "role": "user",
+          "content": "带我去星湖园食堂，起点等我补充。"
+        },
+        {
+          "role": "user",
           "content": "我在玉兰2门，查天气后再带我过去。"
         }
       ],
@@ -3550,15 +3602,35 @@
           "status": "needs_input",
           "kind": "clarify",
           "feasibility": "not_applicable",
-          "start_poi_id": "poi_449",
-          "end_poi_id": null,
+          "start_poi_id": null,
+          "end_poi_id": "poi_307",
           "via_poi_ids": [],
-          "travel_mode": null,
-          "strategy": null,
+          "travel_mode": "walk",
+          "strategy": "shortest",
           "hard_constraints": {},
           "required_outputs": [],
           "candidate_poi_ids": [],
-          "clarification_slot": "destination",
+          "clarification_slot": "start",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
           "expected_tools": null
@@ -5104,23 +5176,23 @@
         },
         {
           "status": "completed",
-          "kind": "route",
-          "feasibility": "unknown",
-          "start_poi_id": "poi_139",
-          "end_poi_id": "poi_070",
+          "kind": "information",
+          "feasibility": "not_applicable",
+          "start_poi_id": null,
+          "end_poi_id": null,
           "via_poi_ids": [],
-          "travel_mode": "walk",
-          "strategy": "shortest",
+          "travel_mode": null,
+          "strategy": null,
           "hard_constraints": {},
           "required_outputs": [
-            "route",
             "weather"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
-          "expected_tools": null
+          "expected_tools": null,
+          "preserve_route_from_turn": 0
         }
       ],
       "adjudication": {
@@ -5175,23 +5247,23 @@
         },
         {
           "status": "completed",
-          "kind": "route",
-          "feasibility": "unknown",
-          "start_poi_id": "poi_226",
-          "end_poi_id": "poi_075",
+          "kind": "information",
+          "feasibility": "not_applicable",
+          "start_poi_id": null,
+          "end_poi_id": null,
           "via_poi_ids": [],
-          "travel_mode": "walk",
-          "strategy": "shortest",
+          "travel_mode": null,
+          "strategy": null,
           "hard_constraints": {},
           "required_outputs": [
-            "route",
             "weather"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
-          "expected_tools": null
+          "expected_tools": null,
+          "preserve_route_from_turn": 0
         }
       ],
       "adjudication": {
@@ -5246,23 +5318,23 @@
         },
         {
           "status": "completed",
-          "kind": "route",
-          "feasibility": "unknown",
-          "start_poi_id": "poi_449",
-          "end_poi_id": "poi_307",
+          "kind": "information",
+          "feasibility": "not_applicable",
+          "start_poi_id": null,
+          "end_poi_id": null,
           "via_poi_ids": [],
-          "travel_mode": "walk",
-          "strategy": "shortest",
+          "travel_mode": null,
+          "strategy": null,
           "hard_constraints": {},
           "required_outputs": [
-            "route",
             "weather"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
           "allowed_unknowns": [],
           "intent_label": null,
-          "expected_tools": null
+          "expected_tools": null,
+          "preserve_route_from_turn": 0
         }
       ],
       "adjudication": {

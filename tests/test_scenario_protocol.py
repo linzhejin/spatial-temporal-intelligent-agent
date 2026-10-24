@@ -162,6 +162,46 @@ def test_nonspatial_output_needs_independent_review():
     assert "output_review_missing" in score["unknowns"]
 
 
+def test_weather_followup_needs_separate_route_preservation_evidence():
+    case = _adjudicated_case()
+    first = case["expected_turns"][0]
+    first.update(required_outputs=["route"], hard_constraints={})
+    second = {**first, "kind": "information", "feasibility": "not_applicable",
+              "start_poi_id": None, "end_poi_id": None, "via_poi_ids": [],
+              "travel_mode": None, "strategy": None,
+              "required_outputs": ["weather"], "preserve_route_from_turn": 0}
+    case["expected_turns"].append(second)
+    case["messages"].append({"role": "user", "content": "再告诉我天气，不要改路线。"})
+    row = _observed(checks={"source": "independent_reviewer", "reviewer": "human-1",
+                            "evidence": ["edge-audit-1"], "route": "pass",
+                            "hard_constraints": {}, "outputs": {}})
+    row["input_messages"] = case["messages"]
+    row["turns"][0]["outputs"] = ["route"]
+    row["turns"][0]["hard_constraints"] = {}
+    row["turns"].append({
+        "status": "completed", "kind": "information", "start_poi_id": None,
+        "end_poi_id": None, "via_poi_ids": [], "travel_mode": None,
+        "strategy": None, "hard_constraints": {}, "candidate_poi_ids": [],
+        "clarification_slot": None, "outputs": ["weather"], "route_edge_ids": [],
+        "independent_review": {"source": "independent_reviewer", "reviewer": "human-2",
+                               "evidence": ["weather-ui-review-1"],
+                               "outputs": {"weather": "pass"}},
+    })
+    missing = evaluate_scenario(case, row)
+    assert "route_preservation_unverified" in missing["unknowns"]
+    row["turns"][1]["independent_review"]["outputs"]["route_preservation"] = "fail"
+    changed = evaluate_scenario(case, row)
+    assert "route_changed" in changed["failures"]
+    row["turns"][1]["independent_review"]["outputs"]["route_preservation"] = "pass"
+    kept = evaluate_scenario(case, row)
+    assert kept["task_success"] is True
+    row["turns"][1]["independent_review"]["source"] = "independent_program"
+    assert "route_preservation_unverified" in evaluate_scenario(case, row)["unknowns"]
+    row["turns"][1]["independent_review"]["source"] = "independent_reviewer"
+    row["turns"][1]["route_edge_ids"] = ["other-edge"]
+    assert "route_changed" in evaluate_scenario(case, row)["failures"]
+
+
 def test_route_detects_violation_even_when_product_claims_completion():
     checks = {"source": "independent_reviewer", "reviewer": "human-1",
               "evidence": ["edge-audit-1"], "route": "pass",

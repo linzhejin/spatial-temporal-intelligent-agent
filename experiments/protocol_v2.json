@@ -20,6 +20,7 @@
   },
   "sampling": "Five groups, eight scenario families per group, three variants per family. A full conversation is one unit. Development and test must have disjoint template, OD, prompt and media-source groups.",
   "scoring": "Use the v2 scorer with supplied frozen graph and replay projection. Do not trust product verifier flags or embedded reviews; missing external evidence remains unknown. Tool-call sequence is diagnostic, not the primary endpoint.",
+  "route_preservation": "A weather-only follow-up with preserve_route_from_turn requires independent client-state evidence that the prior displayed route remains unchanged. A server-only replay cannot establish this; absent independent review is unknown, not success.",
   "formal_gates": ["120 adjudicated cases with source evidence", "three attempts per case", "frozen graph and POI SHA-256", "independently recomputed candidate ranking with unknown access explicitly retained", "split-leakage audit", "ready snapshot manifest", "matching Git commit", "clean tracked worktree", "independent replay scoring"],
   "separate_datasets": {
     "O1": "40 official BFCL multi-turn cases retain official IDs and scoring; do not merge their scores into campus T1-T5.",

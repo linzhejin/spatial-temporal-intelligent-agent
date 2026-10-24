@@ -55,7 +55,8 @@ def test_diverse_authoring_bank_spreads_actual_spatial_anchors():
     assert bank["version"] == "scenarios-test-v2-diverse-authoring-draft"
     for group in ("T1", "T2", "T3", "T4", "T5"):
         cases = [case for case in bank["cases"] if case["category"] == group]
-        assert len({case["expected_turns"][0]["start_poi_id"] for case in cases}) == 24
+        assert len({next((turn["start_poi_id"] for turn in case["expected_turns"]
+                          if turn["start_poi_id"]), None) for case in cases}) == 24
         if group in {"T1", "T4"}:
             assert len({(case["expected_turns"][0]["start_poi_id"],
                          case["expected_turns"][0]["end_poi_id"])
@@ -95,3 +96,23 @@ def test_t5_venue_selection_continues_to_ordered_full_route():
                         ("overrides", "data/edge_overrides.json"),
                         ("reviews", "data/campus_review_decisions.json")):
         assert bank[f"source_{label}_sha256"] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
+
+
+def test_t3_contextual_destination_and_t4_weather_only_followup_are_authored():
+    bank = build_authoring_bank(ROOT / "data/pois.json", diverse_anchors=True)
+    contextual = [case for case in bank["cases"]
+                  if "T3_destination_weather_" in case["id"]]
+    weather = [case for case in bank["cases"] if "T4_weather_after_" in case["id"]]
+    assert len(contextual) == len(weather) == 3
+    for case in contextual:
+        assert len(case["messages"]) == len(case["expected_turns"]) == 2
+        first, second = case["expected_turns"]
+        assert first["kind"] == "clarify" and first["clarification_slot"] == "start"
+        assert first["end_poi_id"] == second["end_poi_id"]
+        assert second["kind"] == "route" and second["required_outputs"] == ["route", "weather"]
+    for case in weather:
+        first, second = case["expected_turns"]
+        assert first["kind"] == "route"
+        assert second["kind"] == "information"
+        assert second["required_outputs"] == ["weather"]
+        assert second["preserve_route_from_turn"] == 0

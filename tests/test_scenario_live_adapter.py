@@ -59,6 +59,16 @@ def test_weather_output_requires_observation_and_user_facing_reply():
         "outputs"] == ["route"]
 
 
+def test_weather_only_followup_projects_information_without_new_route():
+    turn = project_live_run({"status": "completed", "result": {
+        "response_kind": "chat", "task_type": "chat",
+        "reply": "当前天气：晴，22°C。", "weather": {"weather": "晴", "temperature": 22},
+    }}, _lookup())
+    assert turn["kind"] == "information"
+    assert turn["outputs"] == ["weather"]
+    assert turn["route_edge_ids"] == []
+
+
 def test_ambiguous_alias_is_not_guessed_and_missing_edges_are_not_evidence():
     run = {"status": "completed", "result": {
         "response_kind": "route", "task_type": "path_planning",
