@@ -26,6 +26,25 @@ def test_project_ordinary_route_from_actual_tool_artifact():
     assert result["tool_trace"][0]["tool_name"] == "plan_route"
 
 
+def test_route_projection_uses_canonical_tool_endpoint_without_hiding_conflict():
+    turn = {"status": "completed", "artifacts": [{"route": {
+        "route_state": {"start": {"name": "玉兰2门"},
+                        "end": {"name": "武汉大学图书馆总馆"}},
+        "start_name": "玉兰2门", "end_name": "武汉大学图书馆(总馆)",
+        "recommended_edge_ids": [[1, 2, 0]],
+    }}]}
+    lookup = build_poi_lookup([
+        {"id": "poi_start", "name": "玉兰2门"},
+        {"id": "poi_library", "name": "武汉大学图书馆(总馆)"},
+        {"id": "poi_other", "name": "樱顶"},
+    ])
+    assert project_ordinary_turn(turn, lookup)["end_poi_id"] == "poi_library"
+    turn["artifacts"][0]["route"]["route_state"]["end"] = {"name": "樱顶"}
+    conflicted = project_ordinary_turn(turn, lookup)
+    assert conflicted["end_poi_id"] is None
+    assert "route_end_identity_conflict" in conflicted["unknowns"]
+
+
 def test_project_ordinary_candidates_keeps_tool_selected_origin():
     turn = {"status": "completed", "selected_start_name": "玉兰2门",
             "selected_mode": "walk", "artifacts": [{"candidates": [

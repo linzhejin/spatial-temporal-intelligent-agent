@@ -55,8 +55,11 @@ def _load_system_prompt() -> str:
     return _system_prompt_cache
 
 
-def _make_client():
+def _make_client(*, http_client=None):
     from openai import OpenAI
+    options = {}
+    if http_client is not None:
+        options["http_client"] = http_client
     return OpenAI(
         api_key=config.DEEPSEEK_API_KEY,
         base_url=config.OPENAI_BASE_URL,
@@ -64,6 +67,7 @@ def _make_client():
         default_headers={"Accept-Encoding": "gzip, deflate"},
         # 循环内每次调用给 25s read；总时长由 TIME_BUDGET_S 兜底
         timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0),
+        **options,
     )
 
 

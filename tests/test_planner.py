@@ -74,6 +74,12 @@ def test_model_client_requests_supported_response_encoding():
 
 
 class TestAgentLoop:
+    def test_client_factory_accepts_internal_http_audit_client(self):
+        audit_client = object()
+        with patch("openai.OpenAI") as constructor:
+            planner._make_client(http_client=audit_client)
+        assert constructor.call_args.kwargs["http_client"] is audit_client
+
     def test_weather_snapshot_is_shared_across_tools_only_within_one_run(self):
         snapshot = {"live": {"weather": "晴"}, "impact": {}}
         seen = []

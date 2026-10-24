@@ -12,6 +12,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+from unittest.mock import patch
 from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
@@ -29,6 +30,18 @@ def _file_hash(path: Path) -> str:
 def _digest(value: object) -> str:
     return hashlib.sha256(json.dumps(value, ensure_ascii=False, sort_keys=True,
                                      separators=(",", ":")).encode("utf-8")).hexdigest()
+
+
+def _make_audited_planner_factory(audit, clients, original_factory):
+    """Keep production model settings while observing only HTTP status codes."""
+    import httpx2
+
+    def factory():
+        http_client = httpx2.Client(event_hooks=audit.event_hooks, timeout=25)
+        clients.append(http_client)
+        return original_factory(http_client=http_client)
+
+    return factory
 
 
 class _Response:
@@ -140,10 +153,12 @@ def main() -> int:
         workflow._run_weather_tool = lambda: dict(weather_snapshot["live"])
 
     from agents.workflow import build_agent_workflow
+    from agents import planner
     from agents.tools import TOOL_SCHEMAS
     from app import create_app
     from langgraph.checkpoint.postgres import PostgresSaver
     from storage import database
+    from experiments.baselines.openai_transport_audit import OpenAITransportAudit
 
     database.initialize(args.test_database_url)
     app = create_app()
@@ -151,12 +166,25 @@ def main() -> int:
                       DATABASE_URL=args.test_database_url)
     lookup = build_poi_lookup(json.loads((ROOT / "data/pois.json").read_text(
         encoding="utf-8"))["pois"])
+    transport_audit = OpenAITransportAudit()
+    http_clients = []
+    audited_factory = _make_audited_planner_factory(
+        transport_audit, http_clients, planner._make_client,
+    )
     with PostgresSaver.from_conn_string(args.test_database_url) as saver:
         saver.setup()
         graph = build_agent_workflow(saver, database_url=args.test_database_url)
         session = _LocalSession(app.test_client(), graph, args.test_database_url)
-        turns, elapsed_s = run_case(case, session, "http://127.0.0.1:55440",
-                                    lookup, poll_interval_s=0)
+        try:
+            with patch.object(planner, "_make_client", audited_factory):
+                turns, elapsed_s = run_case(case, session, "http://127.0.0.1:55440",
+                                            lookup, poll_interval_s=0)
+        finally:
+            for http_client in http_clients:
+                http_client.close()
+
+    logical_requests = sum(len(row["model_requests"])
+                           for row in session.terminal_runs.values())
 
     report = {
         "status": "development_pilot_only", "condition": "campus_agent",
@@ -171,6 +199,7 @@ def main() -> int:
         "elapsed_s": round(elapsed_s, 3),
         "turns": turns,
         "run_evidence": list(session.terminal_runs.values()),
+        **transport_audit.summary(logical_requests=logical_requests),
         "limitations": ["visible development task", "not formal gold",
                         "graph verification is not field truth"],
     }
@@ -180,8 +209,8 @@ def main() -> int:
     print(json.dumps({"case_id": case["id"],
                       "turn_statuses": [turn["status"] for turn in turns],
                       "turn_kinds": [turn["kind"] for turn in turns],
-                      "model_requests": sum(len(row["model_requests"])
-                                            for row in session.terminal_runs.values())},
+                      "model_requests": logical_requests,
+                      "provider_http_attempt_count": report["provider_http_attempt_count"]},
                      ensure_ascii=False))
     return 0
 

@@ -19,6 +19,10 @@ def project_ordinary_turn(turn: dict[str, Any], lookup: dict[str, Any]) -> dict[
     status = turn.get("status")
     if chosen is not None and isinstance(chosen.get("route"), dict):
         result = {**chosen["route"], "response_kind": "route"}
+        for endpoint in ("start", "end"):
+            name = chosen["route"].get(f"{endpoint}_name")
+            if not isinstance(result.get(endpoint), dict) and isinstance(name, str):
+                result[endpoint] = {"name": name}
     elif chosen is not None and isinstance(chosen.get("candidates"), list):
         result = {"response_kind": "candidates", "candidates": chosen["candidates"]}
         start_name = turn.get("selected_start_name")

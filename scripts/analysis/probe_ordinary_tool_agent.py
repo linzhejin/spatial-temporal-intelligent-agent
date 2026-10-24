@@ -17,6 +17,18 @@ from dotenv import dotenv_values
 ROOT = Path(__file__).resolve().parents[2]
 
 
+def _make_audited_client(*, key, base_url, audit, transport=None):
+    import httpx2
+    from openai import OpenAI
+
+    http_client = httpx2.Client(event_hooks=audit.event_hooks, timeout=25,
+                                transport=transport)
+    client = OpenAI(api_key=key, base_url=base_url,
+                    default_headers={"Accept-Encoding": "gzip, deflate"},
+                    http_client=http_client, timeout=25)
+    return client, http_client
+
+
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -62,23 +74,27 @@ def main() -> int:
     os.environ["OPENAI_BASE_URL"] = env.get("OPENAI_BASE_URL") or "https://api.deepseek.com/v1"
     os.environ["LLM_MODEL"] = env.get("LLM_MODEL") or "deepseek-chat"
 
-    from openai import OpenAI
     from agents.tools import TOOL_SCHEMAS
+    from experiments.baselines.openai_transport_audit import OpenAITransportAudit
     from experiments.baselines.ordinary_tool_agent import SYSTEM_PROMPT, run_conversation
     from experiments.controlled_weather import load_development_weather
 
     weather_snapshot, weather_provenance = (load_development_weather(args.weather_fixture)
                                             if args.weather_fixture else (None, None))
 
-    client = OpenAI(api_key=key, base_url=os.environ["OPENAI_BASE_URL"],
-                    default_headers={"Accept-Encoding": "gzip, deflate"},
-                    timeout=25)
+    transport_audit = OpenAITransportAudit()
+    client, http_client = _make_audited_client(
+        key=key, base_url=os.environ["OPENAI_BASE_URL"], audit=transport_audit,
+    )
     turns = [message["content"] for message in case["messages"]]
-    result = run_conversation(turns, client=client, model=os.environ["LLM_MODEL"],
-                              context=({"_route_weather_snapshot": weather_snapshot}
-                                       if weather_provenance else None),
-                              max_rounds_per_turn=6, time_budget_s=40,
-                              max_tokens=800)
+    try:
+        result = run_conversation(turns, client=client, model=os.environ["LLM_MODEL"],
+                                  context=({"_route_weather_snapshot": weather_snapshot}
+                                           if weather_provenance else None),
+                                  max_rounds_per_turn=6, time_budget_s=40,
+                                  max_tokens=800)
+    finally:
+        http_client.close()
     tool_schema_sha256 = hashlib.sha256(json.dumps(
         TOOL_SCHEMAS, ensure_ascii=False, sort_keys=True,
         separators=(",", ":"),
@@ -105,6 +121,7 @@ def main() -> int:
               "weather_fixture": weather_provenance,
               "tool_calls": result["tool_calls"],
               "measured_usage": result["measured_usage"],
+              **transport_audit.summary(logical_requests=result["measured_usage"]["requests"]),
               "turns": result["turns"]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     evidence_path = args.output.with_name(args.output.stem + "_run_evidence.json")
