@@ -517,55 +517,63 @@ def enqueue_run(
             "status": "queued", "deadline_at": deadline_at, "created": True}
 
 
+def _expire_due_runs(conn, run_id: str | None = None) -> None:
+    """Close overdue runs even when no worker is available to claim a new one."""
+    from agents.state_models import TaskState, utc_now
+
+    expired = conn.execute(
+        "SELECT r.run_id, r.task_id, r.task_revision, r.event_seq,"
+        " t.revision AS current_revision, t.state, t.conversation_id"
+        " FROM run r JOIN task t USING (task_id)"
+        " WHERE r.status IN ('queued','running') AND r.deadline_at <= now()"
+        + (" AND r.run_id=%s" if run_id is not None else "")
+        + " FOR UPDATE OF r, t SKIP LOCKED",
+        (run_id,) if run_id is not None else (),
+    ).fetchall()
+    for row in expired:
+        actual_status = "failed" if row["current_revision"] == row["task_revision"] else "superseded"
+        error = {"code": "deadline_exceeded", "message": "任务超过执行时限。"}
+        conn.execute(
+            "UPDATE run SET status=%s, error=%s, lease_until=NULL, updated_at=now() WHERE run_id=%s",
+            (actual_status, Jsonb(error), row["run_id"]),
+        )
+        if actual_status == "failed":
+            current = TaskState.model_validate(row["state"])
+            serialized = current.model_copy(update={
+                "status": "failed", "revision": current.revision + 1, "updated_at": utc_now(),
+            }).model_dump(mode="json")
+            conn.execute(
+                "UPDATE task SET revision=%s, status='failed', state=%s, updated_at=now() WHERE task_id=%s",
+                (serialized["revision"], Jsonb(serialized), row["task_id"]),
+            )
+            conn.execute(
+                "INSERT INTO task_history(task_id, revision, state) VALUES (%s, %s, %s)",
+                (row["task_id"], serialized["revision"], Jsonb(serialized)),
+            )
+            conversation = conn.execute(
+                "UPDATE conversation SET revision=revision+1, updated_at=now()"
+                " WHERE conversation_id=%s RETURNING revision", (row["conversation_id"],),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO conversation_message(conversation_id, seq, message_id, task_id, role, content, metadata)"
+                " VALUES (%s, %s, %s, %s, 'assistant', %s, %s)",
+                (row["conversation_id"], conversation["revision"], str(uuid.uuid4()),
+                 row["task_id"], error["message"], Jsonb({"status": "failed", "error": error})),
+            )
+        event_seq = row["event_seq"] + 1
+        conn.execute("UPDATE run SET event_seq=%s WHERE run_id=%s", (event_seq, row["run_id"]))
+        conn.execute(
+            "INSERT INTO run_event(run_id, seq, event_type, payload) VALUES (%s, %s, 'run_completed', %s)",
+            (row["run_id"], event_seq, Jsonb({"status": actual_status, "error": error})),
+        )
+
+
 def claim_next_run(url: str | None, worker_id: str, lease_seconds: int = 30) -> dict | None:
     if not worker_id or not 1 <= lease_seconds <= 300:
         raise ValueError("worker_id and a 1-300 second lease are required")
-    from agents.state_models import TaskState, utc_now
 
     with database.connect(url) as conn:
-        expired = conn.execute(
-            "SELECT r.run_id, r.task_id, r.task_revision, r.event_seq,"
-            " t.revision AS current_revision, t.state, t.conversation_id"
-            " FROM run r JOIN task t USING (task_id)"
-            " WHERE r.status IN ('queued','running') AND r.deadline_at <= now()"
-            " FOR UPDATE OF r, t SKIP LOCKED"
-        ).fetchall()
-        for row in expired:
-            actual_status = "failed" if row["current_revision"] == row["task_revision"] else "superseded"
-            error = {"code": "deadline_exceeded", "message": "任务超过执行时限。"}
-            conn.execute(
-                "UPDATE run SET status=%s, error=%s, lease_until=NULL, updated_at=now() WHERE run_id=%s",
-                (actual_status, Jsonb(error), row["run_id"]),
-            )
-            if actual_status == "failed":
-                current = TaskState.model_validate(row["state"])
-                serialized = current.model_copy(update={
-                    "status": "failed", "revision": current.revision + 1, "updated_at": utc_now(),
-                }).model_dump(mode="json")
-                conn.execute(
-                    "UPDATE task SET revision=%s, status='failed', state=%s, updated_at=now() WHERE task_id=%s",
-                    (serialized["revision"], Jsonb(serialized), row["task_id"]),
-                )
-                conn.execute(
-                    "INSERT INTO task_history(task_id, revision, state) VALUES (%s, %s, %s)",
-                    (row["task_id"], serialized["revision"], Jsonb(serialized)),
-                )
-                conversation = conn.execute(
-                    "UPDATE conversation SET revision=revision+1, updated_at=now()"
-                    " WHERE conversation_id=%s RETURNING revision", (row["conversation_id"],),
-                ).fetchone()
-                conn.execute(
-                    "INSERT INTO conversation_message(conversation_id, seq, message_id, task_id, role, content, metadata)"
-                    " VALUES (%s, %s, %s, %s, 'assistant', %s, %s)",
-                    (row["conversation_id"], conversation["revision"], str(uuid.uuid4()),
-                     row["task_id"], error["message"], Jsonb({"status": "failed", "error": error})),
-                )
-            event_seq = row["event_seq"] + 1
-            conn.execute("UPDATE run SET event_seq=%s WHERE run_id=%s", (event_seq, row["run_id"]))
-            conn.execute(
-                "INSERT INTO run_event(run_id, seq, event_type, payload) VALUES (%s, %s, 'run_completed', %s)",
-                (row["run_id"], event_seq, Jsonb({"status": actual_status, "error": error})),
-            )
+        _expire_due_runs(conn)
         row = conn.execute(
             "WITH candidate AS ("
             " SELECT run_id FROM run"
@@ -870,16 +878,19 @@ def cancel_run(url: str | None, owner_id: str, run_id: str) -> dict | None:
 
 def get_run(url: str | None, owner_id: str, run_id: str, after_seq: int = 0) -> dict | None:
     with database.connect(url) as conn:
-        run = conn.execute(
+        query = (
             "SELECT r.run_id, r.task_id, r.task_revision, t.revision AS current_task_revision,"
             " r.status, r.deadline_at, r.lease_until,"
             " r.attempt, r.cancel_requested, r.result, r.error FROM run r"
             " JOIN task t USING (task_id) JOIN conversation c USING (conversation_id)"
-            " WHERE c.owner_id=%s AND r.run_id=%s",
-            (owner_id, run_id),
-        ).fetchone()
+            " WHERE c.owner_id=%s AND r.run_id=%s"
+        )
+        run = conn.execute(query, (owner_id, run_id)).fetchone()
         if not run:
             return None
+        if run["status"] in {"queued", "running"}:
+            _expire_due_runs(conn, run_id)
+            run = conn.execute(query, (owner_id, run_id)).fetchone()
         events = conn.execute(
             "SELECT seq, event_type, node_id, payload, created_at FROM run_event"
             " WHERE run_id=%s AND seq>%s ORDER BY seq",

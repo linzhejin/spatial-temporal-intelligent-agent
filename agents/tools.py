@@ -743,7 +743,7 @@ def recommendation_origin_from_text(query: str) -> str | None:
         r"(?:从|由)\s*([^，,。；;]+)",
         r"起点(?:设为|是|为|在|[:：])\s*([^，,。；;]+)",
     )
-    stop_words = r"(?:附近|周边|旁边|周围|一带|这边|出发|开始|想|准备|打算|帮我|请|推荐|找|吃|喝|运动|锻炼|学习|逛|游玩|去|到).*$"
+    stop_words = r"(?:附近|周边|旁边|周围|一带|这边|出发|开始|先|想|准备|打算|帮我|请|推荐|找|吃|喝|运动|锻炼|学习|逛|游玩|去|到).*$"
     for pattern in patterns:
         match = re.search(pattern, text)
         if not match:

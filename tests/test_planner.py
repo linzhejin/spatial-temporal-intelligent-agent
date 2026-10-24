@@ -239,6 +239,61 @@ class TestAgentLoop:
         client.assert_not_called()
         execute.assert_not_called()
 
+    def test_same_task_named_destination_is_used_for_deictic_weather_followup(self):
+        destination = {"id": "poi_070", "name": "桂园食堂"}
+        route = {"recommended": [[114.36, 30.53], [114.37, 30.53]],
+                 "start_name": "武汉大学科技门", "end_name": "桂园食堂", "mode": "walk"}
+        for origin in ("武汉大学科技门", "武汉大学茶港门", "玉兰2门"):
+            with patch.object(planner.agent_tools, "find_poi_ambiguous",
+                              return_value=(destination, [])), \
+                 patch.object(planner.agent_tools, "execute_tool",
+                              return_value=(route, {"route": route})) as execute, \
+                 patch.object(planner, "_make_client") as client:
+                result = planner.run_agent(
+                    f"我在{origin}，查天气后再带我过去",
+                    context={"active_task_request": "带我去桂园食堂"},
+                )
+            assert result["response_kind"] == "route"
+            assert execute.call_args.args[0] == "plan_route"
+            assert execute.call_args.args[1]["start"]["name"] == origin
+            assert execute.call_args.args[1]["end"]["poi_id"] == "poi_070"
+            client.assert_not_called()
+
+    def test_deictic_weather_request_without_same_task_destination_asks_once(self):
+        with patch.object(planner, "_make_client") as client:
+            first = planner.run_agent("我在武汉大学科技门，查天气后再带我过去")
+        assert first["response_kind"] == "clarify"
+        assert "目的地" in first["message"]
+        assert first["place_request"]["start"]["name"] == "武汉大学科技门"
+        client.assert_not_called()
+        destination = {"id": "poi_070", "name": "桂园食堂"}
+        route = {"recommended": [[114.36, 30.53], [114.37, 30.53]],
+                 "start_name": "武汉大学科技门", "end_name": "桂园食堂", "mode": "walk"}
+        with patch.object(planner.agent_tools, "find_poi_ambiguous",
+                          return_value=(destination, [])), \
+             patch.object(planner.agent_tools, "load_pois", return_value=[destination]), \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route})) as execute:
+            resumed = planner.run_agent("桂园食堂", context={"place_request": first["place_request"]})
+        assert resumed["response_kind"] == "route"
+        assert execute.call_args.args[1]["start"]["name"] == "武汉大学科技门"
+
+    def test_deictic_weather_followup_does_not_drop_an_original_named_stop(self):
+        route = {"recommended": [[114.36, 30.53], [114.37, 30.53]],
+                 "start_name": "玉兰2门", "end_name": "樱顶", "mode": "walk"}
+        with patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route})) as execute, \
+             patch.object(planner, "_make_client") as client:
+            result = planner.run_agent(
+                "我在玉兰2门，查天气后再带我过去",
+                context={"active_task_request": "从科技门经卓尔体育馆到樱顶"},
+            )
+        assert result["response_kind"] == "route", result
+        assert result["route_kind"] == "via"
+        assert execute.call_args.args[0] == "plan_via_route"
+        assert execute.call_args.args[1]["via_points"][0]["name"] == "卓尔体育馆"
+        client.assert_not_called()
+
     def test_via_first_clarification_plans_original_stop_and_constraints(self):
         original = "经卓尔体育馆去樱顶，不走台阶，顺便查天气"
         route = {"recommended": [[1, 2]], "start_name": "玉兰2门",
