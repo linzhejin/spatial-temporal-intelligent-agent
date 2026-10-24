@@ -9,6 +9,9 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_POIS = ROOT / "data/pois.json"
+DEFAULT_GRAPH = ROOT / "data/whu_road_network.graphml"
+DEFAULT_OVERRIDES = ROOT / "data/edge_overrides.json"
+DEFAULT_REVIEWS = ROOT / "data/campus_review_decisions.json"
 DEFAULT_OUTPUT = ROOT / "experiments/datasets/scenarios_test_v2_draft.json"
 
 _ANCHORS = (
@@ -107,9 +110,28 @@ def _turn(*, start=None, end=None, via=None, kind="route", status="completed",
     }
 
 
-def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> dict:
+def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False,
+                         graph_path: Path = DEFAULT_GRAPH,
+                         overrides_path: Path = DEFAULT_OVERRIDES,
+                         reviews_path: Path = DEFAULT_REVIEWS) -> dict:
     poi_bytes = poi_path.read_bytes()
-    pois = {row["id"]: row for row in json.loads(poi_bytes)["pois"]}
+    poi_rows = json.loads(poi_bytes)["pois"]
+    pois = {row["id"]: row for row in poi_rows}
+    graph = None
+
+    def select_nearby(start_poi_id: str, activities: set[str]) -> dict:
+        nonlocal graph
+        if graph is None:
+            from experiments.scenario_v2 import load_frozen_graph
+            graph = load_frozen_graph(graph_path, overrides_path, reviews_path)
+        from experiments.candidate_reference import rank_nearby_activities
+
+        ranked = rank_nearby_activities(graph, poi_rows, start_poi_id=start_poi_id,
+                                        activities=activities)["reachable"]
+        if not ranked:
+            raise ValueError(f"no source-backed venue for {sorted(activities)}")
+        return next((row for row in ranked[:4] if not row["access_over_30m"]), ranked[0])
+
     cases = []
     for group in ("T1", "T2", "T3", "T4", "T5"):
         templates = {"T1": _T1, "T2": _T2, "T3": _T3, "T4": _T4, "T5": _T5}[group]
@@ -130,6 +152,7 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> di
                 prompt = family[1].format(**names)
                 messages = [prompt]
                 turns = []
+                extra_source_ids = []
                 if group == "T1":
                     via = [library_id] if family_name == "one_via" else (
                         [library_id, other_id] if family_name == "two_via" else [])
@@ -173,6 +196,24 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> di
                                        end=None if family_name == "sport_then_food" else end_id,
                                        kind="candidates", status="needs_input",
                                        outputs=["candidates"])]
+                        activity = set(_T5_CANDIDATE_ACTIVITIES[family_name])
+                        venue_id = select_nearby(start_id, activity)["poi_id"]
+                        extra_source_ids.append(venue_id)
+                        if family_name == "sport_then_food":
+                            food_id = select_nearby(venue_id, set(_T2_ACTIVITIES["meal"]))["poi_id"]
+                            if food_id == venue_id:
+                                raise ValueError("sport venue and food venue must differ")
+                            extra_source_ids.append(food_id)
+                            messages.append(
+                                f"就去{pois[venue_id]['name']}打篮球，吃饭选{pois[food_id]['name']}；"
+                                "请从刚才的起点出发，按顺序给出全程步行路线。")
+                            final_end = food_id
+                        else:
+                            messages.append(
+                                f"就去{pois[venue_id]['name']}，然后到刚才说的终点；"
+                                "请从出发地按顺序给出全程步行路线。")
+                            final_end = end_id
+                        turns.append(_turn(start=start_id, end=final_end, via=[venue_id]))
                     else:
                         turns = [_turn(start=start_id, end=end_id, via=via,
                                        constraints={"avoid_steps": True} if family_name == "no_route_then_option" else {},
@@ -184,7 +225,8 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> di
                     "od_group": f"{prefix}_{group}_{family_name}_{campus}",
                     "source_group": ("campus_poi_diverse_authoring_v2"
                                      if diverse_anchors else "campus_poi_authoring_v2"),
-                    "source_poi_ids": selected, "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+                    "source_poi_ids": list(dict.fromkeys([*selected, *extra_source_ids])),
+                    "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
                     "messages": [{"role": "user", "content": text} for text in messages],
                     "expected_turns": turns,
                     "adjudication": {"status": "draft", "method": None,
@@ -206,6 +248,9 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> di
         "split": "test", "repeats": 3,
         "authoring_status": "UNADJUDICATED CANDIDATES. No frozen graph, independent gold or blind test result.",
         "source_poi_sha256": hashlib.sha256(poi_bytes).hexdigest(),
+        "source_graph_sha256": hashlib.sha256(graph_path.read_bytes()).hexdigest(),
+        "source_overrides_sha256": hashlib.sha256(overrides_path.read_bytes()).hexdigest(),
+        "source_reviews_sha256": hashlib.sha256(reviews_path.read_bytes()).hexdigest(),
         "poi_sha256": hashlib.sha256(poi_bytes).hexdigest(),
         "cases": cases,
     }
@@ -214,13 +259,18 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> di
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pois", type=Path, default=DEFAULT_POIS)
+    parser.add_argument("--graph", type=Path, default=DEFAULT_GRAPH)
+    parser.add_argument("--overrides", type=Path, default=DEFAULT_OVERRIDES)
+    parser.add_argument("--reviews", type=Path, default=DEFAULT_REVIEWS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
     parser.add_argument("--diverse-anchors", action="store_true",
                         help="Use 24 distinct first-turn campus anchors per task group")
     args = parser.parse_args()
     from experiments.scenario_v2 import validate_dataset
 
-    bank = build_authoring_bank(args.pois, diverse_anchors=args.diverse_anchors)
+    bank = build_authoring_bank(args.pois, diverse_anchors=args.diverse_anchors,
+                                graph_path=args.graph, overrides_path=args.overrides,
+                                reviews_path=args.reviews)
     validate_dataset(bank)
     args.output.write_text(json.dumps(bank, ensure_ascii=False, indent=2) + "\n",
                            encoding="utf-8")

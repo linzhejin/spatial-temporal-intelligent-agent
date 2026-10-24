@@ -5,6 +5,9 @@
   "repeats": 3,
   "authoring_status": "UNADJUDICATED CANDIDATES. No frozen graph, independent gold or blind test result.",
   "source_poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
+  "source_graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "source_overrides_sha256": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+  "source_reviews_sha256": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169",
   "poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
   "cases": [
     {
@@ -5567,13 +5570,18 @@
         "poi_139",
         "poi_070",
         "poi_015",
-        "poi_068"
+        "poi_068",
+        "poi_308"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从武汉大学科技门先找个附近能吃饭的地方，再去桂园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去佳乐粉面馆(信息学部)，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5589,6 +5597,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [
+            "poi_308"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5624,13 +5653,18 @@
         "poi_226",
         "poi_075",
         "poi_016",
-        "poi_201"
+        "poi_201",
+        "poi_392"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从武汉大学茶港门先找个附近能吃饭的地方，再去武汉大学田园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去蔡明纬(工学部店)，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5646,6 +5680,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [
+            "poi_392"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5681,13 +5736,18 @@
         "poi_449",
         "poi_307",
         "poi_240",
-        "poi_253"
+        "poi_253",
+        "poi_308"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从玉兰2门先找个附近能吃饭的地方，再去星湖园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去佳乐粉面馆(信息学部)，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5703,6 +5763,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [
+            "poi_308"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5745,6 +5826,10 @@
         {
           "role": "user",
           "content": "我从武汉大学科技门出发，先找能自习的地方，再去桂园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学图书馆(总馆)，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5760,6 +5845,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5793,13 +5899,18 @@
         "poi_226",
         "poi_075",
         "poi_016",
-        "poi_201"
+        "poi_201",
+        "poi_034"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "我从武汉大学茶港门出发，先找能自习的地方，再去武汉大学田园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学早期建筑图书馆，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5815,6 +5926,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [
+            "poi_034"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5855,6 +5987,10 @@
         {
           "role": "user",
           "content": "我从玉兰2门出发，先找能自习的地方，再去星湖园食堂。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学信息学部图书馆，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5870,6 +6006,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [
+            "poi_240"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5903,13 +6060,19 @@
         "poi_139",
         "poi_070",
         "poi_015",
-        "poi_068"
+        "poi_068",
+        "poi_262",
+        "poi_321"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从武汉大学科技门先去打篮球，再找附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学信息学部篮球场打篮球，吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5925,6 +6088,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_321",
+          "via_poi_ids": [
+            "poi_262"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -5958,13 +6142,19 @@
         "poi_226",
         "poi_075",
         "poi_016",
-        "poi_201"
+        "poi_201",
+        "poi_083",
+        "poi_351"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从武汉大学茶港门先去打篮球，再找附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学篮球场(文体路)打篮球，吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -5980,6 +6170,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_351",
+          "via_poi_ids": [
+            "poi_083"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,
@@ -6013,13 +6224,19 @@
         "poi_449",
         "poi_307",
         "poi_240",
-        "poi_253"
+        "poi_253",
+        "poi_262",
+        "poi_321"
       ],
       "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
       "messages": [
         {
           "role": "user",
           "content": "从玉兰2门先去打篮球，再找附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "就去武汉大学信息学部篮球场打篮球，吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，按顺序给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6035,6 +6252,27 @@
           "hard_constraints": {},
           "required_outputs": [
             "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_321",
+          "via_poi_ids": [
+            "poi_262"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
           ],
           "candidate_poi_ids": [],
           "clarification_slot": null,

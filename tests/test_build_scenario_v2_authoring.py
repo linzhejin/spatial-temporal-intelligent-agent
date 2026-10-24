@@ -1,4 +1,6 @@
 from collections import Counter
+import hashlib
+import json
 from pathlib import Path
 
 from experiments.scenario_split_audit import audit_scenario_splits
@@ -59,3 +61,37 @@ def test_diverse_authoring_bank_spreads_actual_spatial_anchors():
                          case["expected_turns"][0]["end_poi_id"])
                         for case in cases}) == 24
     assert all(case["adjudication"]["status"] == "draft" for case in bank["cases"])
+
+
+def test_t5_venue_selection_continues_to_ordered_full_route():
+    bank = build_authoring_bank(ROOT / "data/pois.json", diverse_anchors=True)
+    pois = {row["id"]: row for row in json.loads((ROOT / "data/pois.json").read_text(
+        encoding="utf-8"))["pois"]}
+    families = {"food_before_route": {"canteen_meal", "restaurant_meal", "fast_food"},
+                "study_before_route": {"study"},
+                "sport_then_food": {"basketball"}}
+    affected = [case for case in bank["cases"] if case["category"] == "T5"
+                and case["template_group"].split("T5_")[1] in families]
+    assert len(affected) == 9
+    for case in affected:
+        family = case["template_group"].split("T5_")[1]
+        assert len(case["messages"]) == len(case["expected_turns"]) == 2
+        first, final = case["expected_turns"]
+        assert first["kind"] == "candidates" and first["status"] == "needs_input"
+        assert final["kind"] == "route" and final["status"] == "completed"
+        assert final["start_poi_id"] == first["start_poi_id"]
+        assert len(final["via_poi_ids"]) == 1
+        venue_id = final["via_poi_ids"][0]
+        assert set(pois[venue_id]["activities"]) & families[family]
+        assert venue_id in case["source_poi_ids"]
+        assert final["end_poi_id"] != venue_id
+        if family == "sport_then_food":
+            assert set(pois[final["end_poi_id"]]["activities"]) & {
+                "canteen_meal", "restaurant_meal", "fast_food"}
+            assert final["end_poi_id"] in case["source_poi_ids"]
+        else:
+            assert final["end_poi_id"] == first["end_poi_id"]
+    for label, path in (("graph", "data/whu_road_network.graphml"),
+                        ("overrides", "data/edge_overrides.json"),
+                        ("reviews", "data/campus_review_decisions.json")):
+        assert bank[f"source_{label}_sha256"] == hashlib.sha256((ROOT / path).read_bytes()).hexdigest()
