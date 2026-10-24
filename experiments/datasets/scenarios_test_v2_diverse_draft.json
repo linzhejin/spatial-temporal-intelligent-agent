@@ -6135,7 +6135,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学篮球场(文体路)打篮球，吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学篮球场(文体路)打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6144,6 +6148,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_086",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_083",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6186,13 +6209,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {
@@ -6217,7 +6252,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学篮球场(文体路)打篮球，吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学篮球场(文体路)打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6226,6 +6265,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_432",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_083",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6268,13 +6326,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {
@@ -6299,7 +6369,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学信息学部篮球场打篮球，吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学信息学部篮球场打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6308,6 +6382,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_261",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_262",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6350,13 +6443,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {

@@ -21,11 +21,15 @@ def test_t5_authoring_reference_covers_selection_and_both_route_legs():
     report = audit_composites(draft, graph, pois)
     assert report["status"] == "development_reference_only_not_agent_score"
     assert report["case_count"] == 9
+    assert report["meal_selected_in_first_four_count"] == 3
     for case in report["cases"]:
         assert case["selected_in_first_four"] is True
         assert case["route_reference"]["graph_feasible"] is True
         assert len(case["route_reference"]["segments_m"]) == 2
         assert case["route_reference"]["access_uncertain"] is False
+        if "sport_then_food" in case["case_id"]:
+            assert case["meal_selected_in_first_four"] is True
+            assert case["meal_named_in_final_followup"] is True
 
 
 def test_t5_audit_rejects_first_turn_without_final_route():

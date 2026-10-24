@@ -27,6 +27,7 @@ from experiments.scenario_v2 import validate_dataset as validate_dataset_v2
 from experiments.scenario_v2 import load_frozen_graph
 from experiments.scenario_v2 import closed_edges_at
 from experiments.scenario_v2 import verify_route_reference_sources
+from experiments.scenario_v2 import candidate_spec_for_turn
 from experiments.candidate_reference import build_candidate_reference
 
 
@@ -272,7 +273,8 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
                      for attempt in range(1, dataset.get("repeats", 1) + 1)}
     if not set(observations) <= expected_keys:
         raise ValueError("replay contains unknown scenario or attempt")
-    candidate_references: dict[str, dict[str, Any]] = {}
+    candidate_references: dict[str, dict[str, dict[str, Any]]] = {}
+    recomputed_candidate_turns = 0
     verified_route_turns = 0
     pois = None
     if (candidate_cases or graph_route_cases) and pois_bytes is not None:
@@ -287,20 +289,23 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
         raise ValueError("formal route scoring requires frozen graph and POIs")
     if candidate_cases and graph is not None and pois is not None:
         for case in candidate_cases:
-            spec = case.get("candidate_spec")
-            if not isinstance(spec, dict):
-                if formal:
-                    raise ValueError(f"{case['id']}: candidate spec missing")
-                continue
-            expected = next(turn for turn in case["expected_turns"]
-                            if turn["kind"] == "candidates")
-            clock = case.get("as_of_epoch", as_of_epoch)
-            closures = (closed_edges_at(graph, conditions, "walk", float(clock))
-                        if conditions is not None and clock is not None else set())
-            candidate_references[case["id"]] = build_candidate_reference(
-                graph, pois, start_poi_id=expected["start_poi_id"],
-                spec=spec, closed_edges=closures,
-            )
+            for index, expected in enumerate(case["expected_turns"]):
+                if expected["kind"] != "candidates":
+                    continue
+                spec = candidate_spec_for_turn(case, index)
+                if not isinstance(spec, dict):
+                    if formal:
+                        raise ValueError(f"{case['id']} turn {index}: candidate spec missing")
+                    continue
+                clock = case.get("as_of_epoch", as_of_epoch)
+                closures = (closed_edges_at(graph, conditions, "walk", float(clock))
+                            if conditions is not None and clock is not None else set())
+                candidate_references.setdefault(case["id"], {})[str(index)] = (
+                    build_candidate_reference(
+                        graph, pois, start_poi_id=expected["start_poi_id"],
+                        spec=spec, closed_edges=closures,
+                    ))
+                recomputed_candidate_turns += 1
     elif formal and candidate_cases:
         raise ValueError("formal candidate scoring requires frozen graph and POIs")
     records = []
@@ -318,7 +323,7 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
                                               for turn in case["expected_turns"]],
                             "observation": recorded_observation,
                             "score": score_case_v2(case, observation, graph=graph,
-                                                    candidate_reference=candidate_references.get(case["id"]),
+                                                    candidate_references=candidate_references.get(case["id"]),
                                                     conditions=conditions,
                                                     as_of_epoch=as_of_epoch) if v2
                             else evaluate_scenario(case, observation)})
@@ -337,6 +342,7 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
         if formal else "unverified_draft_or_development",
         "dataset_sha256": _sha(dataset_bytes), "protocol_sha256": _sha(protocol_bytes),
         "route_reference_turns_verified_against_sources": verified_route_turns,
+        "candidate_reference_turns_recomputed": recomputed_candidate_turns,
         "replay_sha256": _sha(replay_bytes),
         "snapshot_manifest_sha256": _sha(snapshot_bytes) if snapshot_bytes is not None else None,
         "snapshot_effective_inputs_sha256": snapshot_fingerprint,

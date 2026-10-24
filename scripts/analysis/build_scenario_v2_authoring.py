@@ -219,8 +219,12 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False,
                                 raise ValueError("sport venue and food venue must differ")
                             extra_source_ids.append(food_id)
                             messages.append(
-                                f"就去{pois[venue_id]['name']}打篮球，吃饭选{pois[food_id]['name']}；"
-                                "请从刚才的起点出发，按顺序给出全程步行路线。")
+                                f"就去{pois[venue_id]['name']}打篮球，接着找这个球场附近能吃饭的地方。")
+                            turns.append(_turn(start=venue_id, kind="candidates",
+                                               status="needs_input", outputs=["candidates"]))
+                            messages.append(
+                                f"吃饭选{pois[food_id]['name']}；请从刚才的起点出发，"
+                                "先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。")
                             final_end = food_id
                         else:
                             messages.append(
@@ -250,10 +254,17 @@ def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False,
                               _T5_CANDIDATE_ACTIVITIES.get(family_name) if group == "T5"
                               else None)
                 if activities:
-                    case["candidate_spec"] = {
+                    first_spec = {
                         "activities": activities, "coordinates": "gcj02",
                         "max_display": 4, "rank_tolerance_m": 30,
                     }
+                    if family_name == "sport_then_food":
+                        case["candidate_specs"] = {
+                            "0": first_spec,
+                            "1": {**first_spec, "activities": _T2_ACTIVITIES["meal"]},
+                        }
+                    else:
+                        case["candidate_spec"] = first_spec
                 cases.append(case)
     return {
         "protocol_version": "scenario-v2",

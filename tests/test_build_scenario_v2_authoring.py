@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 from experiments.scenario_split_audit import audit_scenario_splits
-from experiments.scenario_v2 import validate_dataset
+from experiments.scenario_v2 import candidate_spec_for_turn, validate_dataset
 from scripts.analysis.build_scenario_v2_authoring import build_authoring_bank
 
 
@@ -28,9 +28,10 @@ def test_authoring_bank_has_120_source_linked_drafts():
     assert all(case["adjudication"]["status"] == "draft" for case in bank["cases"])
     assert "graph_sha256" not in bank
     assert len(bank["poi_sha256"]) == 64
-    assert all(case.get("candidate_spec", {}).get("activities")
+    assert all(candidate_spec_for_turn(case, index)["activities"]
                for case in bank["cases"]
-               if any(turn["kind"] == "candidates" for turn in case["expected_turns"]))
+               for index, turn in enumerate(case["expected_turns"])
+               if turn["kind"] == "candidates")
     unresolved = {"food_before_route", "study_before_route", "sport_then_food"}
     for case in bank["cases"]:
         if case["category"] == "T5" and case["template_group"].split("v2_T5_")[1] in unresolved:
@@ -85,8 +86,9 @@ def test_t5_venue_selection_continues_to_ordered_full_route():
     assert len(affected) == 9
     for case in affected:
         family = case["template_group"].split("T5_")[1]
-        assert len(case["messages"]) == len(case["expected_turns"]) == 2
-        first, final = case["expected_turns"]
+        assert len(case["messages"]) == len(case["expected_turns"]) == (
+            3 if family == "sport_then_food" else 2)
+        first, final = case["expected_turns"][0], case["expected_turns"][-1]
         assert first["kind"] == "candidates" and first["status"] == "needs_input"
         assert final["kind"] == "route" and final["status"] == "completed"
         assert final["start_poi_id"] == first["start_poi_id"]
@@ -96,6 +98,14 @@ def test_t5_venue_selection_continues_to_ordered_full_route():
         assert venue_id in case["source_poi_ids"]
         assert final["end_poi_id"] != venue_id
         if family == "sport_then_food":
+            meal = case["expected_turns"][1]
+            assert meal["kind"] == "candidates" and meal["status"] == "needs_input"
+            assert meal["start_poi_id"] == venue_id
+            assert candidate_spec_for_turn(case, 0)["activities"] == ["basketball"]
+            assert set(candidate_spec_for_turn(case, 1)["activities"]) == {
+                "canteen_meal", "restaurant_meal", "fast_food"}
+            assert pois[venue_id]["name"] in case["messages"][1]["content"]
+            assert pois[final["end_poi_id"]]["name"] in case["messages"][2]["content"]
             assert set(pois[final["end_poi_id"]]["activities"]) & {
                 "canteen_meal", "restaurant_meal", "fast_food"}
             assert final["end_poi_id"] in case["source_poi_ids"]

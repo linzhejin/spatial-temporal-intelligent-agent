@@ -283,6 +283,57 @@ def test_v2_candidate_delivery_accepts_selection_pending_or_completed_status():
     assert "wrong_status" not in score["failures"]
 
 
+def test_v2_two_candidate_turns_use_distinct_location_references():
+    case = _case()
+    case["category"] = "T5"
+    case["messages"] = [{"role": "user", "content": "先找篮球场"},
+                        {"role": "user", "content": "选球场甲，再找附近吃饭处"}]
+    first = {**_turn(), "status": "needs_input", "kind": "candidates",
+             "feasibility": "not_applicable", "end_poi_id": None,
+             "required_outputs": ["candidates"], "hard_constraints": {}}
+    second = {**first, "start_poi_id": "court"}
+    case["expected_turns"] = [first, second]
+    observed = _observation([])
+    observed["input_messages"] = case["messages"]
+    observed["turns"] = [{**observed["turns"][0], "status": "needs_input",
+                          "kind": "candidates", "end_poi_id": None,
+                          "hard_constraints": {}, "outputs": ["candidates"],
+                          "candidate_poi_ids": ["court"]},
+                         {**observed["turns"][0], "status": "needs_input",
+                          "kind": "candidates", "start_poi_id": "court",
+                          "end_poi_id": None, "hard_constraints": {},
+                          "outputs": ["candidates"],
+                          "candidate_poi_ids": ["food"]}]
+    references = {
+        "0": {"distances_m": {"court": 100}, "max_display": 4,
+              "rank_tolerance_m": 0, "uncertain_access_ids": []},
+        "1": {"distances_m": {"food": 50}, "max_display": 4,
+              "rank_tolerance_m": 0, "uncertain_access_ids": []},
+    }
+    assert score_case(case, observed, candidate_references=references)["task_success"] is True
+    observed["turns"][1]["candidate_poi_ids"] = ["court"]
+    failed = score_case(case, observed, candidate_references=references)
+    assert failed["task_success"] is False
+    assert "output_invalid" in failed["failures"]
+
+
+def test_v2_formal_multiturn_candidate_gold_requires_each_turn_spec():
+    dataset = _formal_dataset()
+    case = next(row for row in dataset["cases"] if row["category"] == "T2")
+    candidate = {**_turn(), "kind": "candidates", "status": "needs_input",
+                 "feasibility": "not_applicable", "end_poi_id": None,
+                 "required_outputs": ["candidates"], "hard_constraints": {}}
+    case["expected_turns"] = [candidate, {**candidate, "start_poi_id": "court"}]
+    case["messages"].append({"role": "user", "content": "选球场甲，再找食堂"})
+    spec = {"activities": ["basketball"], "coordinates": "wgs84",
+            "max_display": 4, "rank_tolerance_m": 5}
+    case["candidate_specs"] = {"0": spec}
+    with pytest.raises(ValueError, match="per-turn candidate specs"):
+        validate_dataset(dataset, formal=True)
+    case["candidate_specs"]["1"] = {**spec, "activities": ["canteen_meal"]}
+    validate_dataset(dataset, formal=True)
+
+
 def test_v2_replay_recomputes_candidates_from_frozen_pois_and_graph(tmp_path):
     graph = nx.MultiDiGraph()
     for node, x in (("s", 114.0), ("a", 114.001), ("b", 114.002),
@@ -333,6 +384,77 @@ def test_v2_replay_recomputes_candidates_from_frozen_pois_and_graph(tmp_path):
     assert "independent_review" not in record["observation"]["turns"][0]
     assert len(json.loads((run / "manifest.json").read_text(encoding="utf-8"))
                ["poi_sha256"]) == 64
+
+
+def test_v2_replay_recomputes_two_candidate_origins_then_a_full_ordered_route(tmp_path):
+    graph = nx.MultiDiGraph()
+    for node, x in (("origin", 114.0), ("court", 114.001), ("food", 114.002)):
+        graph.add_node(node, x=x, y=30.0)
+    graph.add_edge("origin", "court", key=0, length=100, highway="footway")
+    graph.add_edge("court", "food", key=0, length=100, highway="footway")
+    graph_path = tmp_path / "graph.graphml"
+    nx.write_graphml(graph, graph_path)
+    pois_path = tmp_path / "pois.json"
+    pois_path.write_text(json.dumps({"pois": [
+        {"id": poi_id, "coordinates": {"lng": x, "lat": 30.0},
+         "activities": activities}
+        for poi_id, x, activities in (("origin", 114.0, []),
+                                      ("court", 114.001, ["basketball"]),
+                                      ("food", 114.002, ["canteen_meal"]))
+    ]}), encoding="utf-8")
+    case = _case()
+    case["category"] = "T5"
+    case["messages"] = [{"role": "user", "content": "从起点找球场"},
+                        {"role": "user", "content": "选球场，再找吃饭处"},
+                        {"role": "user", "content": "选食堂，从原起点经球场走完全程"}]
+    first = {**_turn(), "kind": "candidates", "status": "needs_input",
+             "feasibility": "not_applicable", "start_poi_id": "origin",
+             "end_poi_id": None, "hard_constraints": {},
+             "required_outputs": ["candidates"]}
+    final = {**_turn(), "start_poi_id": "origin", "end_poi_id": "food",
+             "via_poi_ids": ["court"], "hard_constraints": {}}
+    case["expected_turns"] = [first, {**first, "start_poi_id": "court"}, final]
+    case["route_references"] = {
+        "2": {"start_node": "origin", "via_nodes": ["court"],
+              "end_node": "food"},
+    }
+    case.pop("route_reference")
+    case["route_coordinates"] = "wgs84"
+    case["candidate_specs"] = {
+        "0": {"activities": ["basketball"], "coordinates": "wgs84",
+              "max_display": 4, "rank_tolerance_m": 0},
+        "1": {"activities": ["canteen_meal"], "coordinates": "wgs84",
+              "max_display": 4, "rank_tolerance_m": 0},
+    }
+    dataset_path = tmp_path / "dataset.json"
+    dataset_path.write_text(json.dumps({"protocol_version": "scenario-v2",
+                                        "split": "development", "cases": [case]}),
+                            encoding="utf-8")
+    observed = _observation([])
+    observed["attempt"] = 1
+    observed["input_messages"] = case["messages"]
+    actual = {**observed["turns"][0], "kind": "candidates", "status": "needs_input",
+              "start_poi_id": "origin", "end_poi_id": None,
+              "hard_constraints": {}, "outputs": ["candidates"],
+              "candidate_poi_ids": ["court"]}
+    observed["turns"] = [actual, {**actual, "start_poi_id": "court",
+                                 "candidate_poi_ids": ["food"]},
+                         {**actual, "status": "completed", "kind": "route",
+                          "start_poi_id": "origin", "end_poi_id": "food",
+                          "via_poi_ids": ["court"], "candidate_poi_ids": [],
+                          "outputs": ["route"],
+                          "route_edge_ids": ["origin|court|0", "court|food|0"]}]
+    replay_path = tmp_path / "replay.jsonl"
+    replay_path.write_text(json.dumps(observed) + "\n", encoding="utf-8")
+    protocol_path = tmp_path / "protocol.json"
+    protocol_path.write_text('{"protocol_version":"scenario-v2"}', encoding="utf-8")
+    run = run_replay(dataset_path, replay_path, protocol_path, tmp_path / "results",
+                     "two-candidate-origins", graph_path=graph_path, pois_path=pois_path)
+    record = json.loads((run / "records.jsonl").read_text(encoding="utf-8"))
+    manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    assert record["score"]["task_success"] is True
+    assert manifest["candidate_reference_turns_recomputed"] == 2
+    assert manifest["route_reference_turns_verified_against_sources"] == 1
 
 
 def test_v2_replay_rejects_route_gold_with_poisoned_poi_anchor(tmp_path):

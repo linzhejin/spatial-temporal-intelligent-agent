@@ -30,6 +30,15 @@ def _route_reference_for_turn(case: dict[str, Any], index: int) -> dict[str, Any
     return None
 
 
+def candidate_spec_for_turn(case: dict[str, Any], index: int) -> dict[str, Any] | None:
+    specs = case.get("candidate_specs")
+    if isinstance(specs, dict):
+        return specs.get(str(index))
+    if sum(turn.get("kind") == "candidates" for turn in case["expected_turns"]) == 1:
+        return case.get("candidate_spec")
+    return None
+
+
 def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
     """Require 120 source-backed cases for a formal T1–T5 comparison."""
     if dataset.get("protocol_version") != VERSION:
@@ -127,25 +136,32 @@ def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
                             or not isinstance(ref.get("via_nodes"), list)
                             or len(ref["via_nodes"]) != len(turns[index]["via_poi_ids"])):
                         raise ValueError(f"{case_id}: per-turn route reference is incomplete")
-            if formal and any(t["kind"] == "candidates" for t in turns):
-                if method == "graph_computed":
-                    spec = case.get("candidate_spec")
-                    candidate_turns = [turn for turn in turns if turn["kind"] == "candidates"]
-                    if (len(candidate_turns) != 1 or not isinstance(spec, dict)
-                            or not isinstance(spec.get("activities"), list)
-                            or not spec["activities"]
-                            or any(not isinstance(tag, str) or not tag for tag in spec["activities"])
-                            or len(set(spec["activities"])) != len(spec["activities"])
-                            or spec.get("coordinates") not in {"gcj02", "wgs84"}
-                            or type(spec.get("max_display")) is not int
-                            or not 3 <= spec["max_display"] <= 4
-                            or type(spec.get("rank_tolerance_m")) not in {int, float}
-                            or not math.isfinite(spec["rank_tolerance_m"])
-                            or not 0 <= spec["rank_tolerance_m"] <= 30
-                            or not candidate_turns[0].get("start_poi_id")):
-                        raise ValueError(f"{case_id}: reproducible candidate spec is missing")
-                elif any(not t["candidate_poi_ids"] for t in turns if t["kind"] == "candidates"):
-                    raise ValueError(f"{case_id}: candidate gold IDs are missing")
+            candidate_indices = [index for index, turn in enumerate(turns)
+                                 if turn["kind"] == "candidates"]
+            if method == "graph_computed" and candidate_indices:
+                specs = case.get("candidate_specs")
+                if (specs is not None and (not isinstance(specs, dict)
+                        or set(specs) != {str(i) for i in candidate_indices})
+                        or len(candidate_indices) > 1 and specs is None):
+                    raise ValueError(f"{case_id}: complete per-turn candidate specs required")
+                if formal:
+                    for index in candidate_indices:
+                        spec = candidate_spec_for_turn(case, index)
+                        if (not isinstance(spec, dict)
+                                or not isinstance(spec.get("activities"), list)
+                                or not spec["activities"]
+                                or any(not isinstance(tag, str) or not tag for tag in spec["activities"])
+                                or len(set(spec["activities"])) != len(spec["activities"])
+                                or spec.get("coordinates") not in {"gcj02", "wgs84"}
+                                or type(spec.get("max_display")) is not int
+                                or not 3 <= spec["max_display"] <= 4
+                                or type(spec.get("rank_tolerance_m")) not in {int, float}
+                                or not math.isfinite(spec["rank_tolerance_m"])
+                                or not 0 <= spec["rank_tolerance_m"] <= 30
+                                or not turns[index].get("start_poi_id")):
+                            raise ValueError(f"{case_id}: reproducible candidate spec is missing")
+            elif formal and any(not turns[i]["candidate_poi_ids"] for i in candidate_indices):
+                raise ValueError(f"{case_id}: candidate gold IDs are missing")
     if formal:
         counts = Counter(c["category"] for c in cases)
         if any(counts[g] != 24 for g in GROUPS):
@@ -470,6 +486,7 @@ def audit_route_edges(graph, edge_ids: list[Any], start_node: Any, end_node: Any
 
 def score_case(case: dict[str, Any], observed: dict[str, Any] | None, *, graph=None,
                candidate_reference: dict[str, Any] | None = None,
+               candidate_references: dict[str, dict[str, Any]] | None = None,
                closed_edges: set[str] | None = None,
                conditions: list[dict[str, Any]] | None = None,
                as_of_epoch: float | None = None,
@@ -508,7 +525,10 @@ def score_case(case: dict[str, Any], observed: dict[str, Any] | None, *, graph=N
                     "outputs": {},
                 }
             elif method == "graph_computed" and expected.get("kind") == "candidates":
-                ref = candidate_reference
+                ref = (candidate_references.get(str(index))
+                       if isinstance(candidate_references, dict) else
+                       candidate_reference if sum(t.get("kind") == "candidates"
+                                                  for t in case["expected_turns"]) == 1 else None)
                 if isinstance(ref, dict):
                     audit = audit_candidate_order(actual.get("candidate_poi_ids"), ref)
                     actual["independent_review"] = {
