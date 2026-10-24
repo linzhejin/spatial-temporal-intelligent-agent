@@ -246,6 +246,8 @@ def _formal_dataset():
             case["category"] = group
             case["template_group"] = f"family-{group}-{index // 3}"
             case["od_group"] = f"od-{group}-{index // 3}"
+            case["expected_turns"][0]["start_poi_id"] = f"start-{group}-{index}"
+            case["expected_turns"][0]["end_poi_id"] = f"end-{group}-{index}"
             case["messages"][0]["content"] += f" {group} {index}"
             if group == "T3":
                 case["adjudication"] = {

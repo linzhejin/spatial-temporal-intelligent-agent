@@ -126,3 +126,25 @@ def test_split_audit_reports_malformed_fields_without_crashing():
     assert report["formal_ready"] is False
     assert report["leakage_free"] is False
     assert "test_category_invalid" in {item["code"] for item in report["blockers"]}
+
+
+def test_v2_audit_does_not_count_template_prefixed_od_as_new_spatial_pair():
+    cases = []
+    for index in range(24):
+        cases.append({
+            "id": f"t1-{index}", "category": "T1",
+            "template_group": f"family-{index // 3}",
+            "od_group": f"family-{index // 3}-region-{index % 3}",
+            "source_group": "draft", "snapshot_id": "pending",
+            "messages": [{"role": "user", "content": f"route {index}"}],
+            "expected_turns": [{"start_poi_id": f"poi_{index % 3}",
+                                "end_poi_id": f"end_{index % 3}"}],
+            "adjudication": {"status": "draft"},
+        })
+    development = {"protocol_version": "scenario-v2", "split": "development",
+                   "cases": [{**cases[0], "id": "dev", "source_group": "other"}]}
+    test = {"protocol_version": "scenario-v2", "split": "test",
+            "repeats": 3, "cases": cases}
+    report = audit_scenario_splits(development, test)
+    assert report["test_spatial_diversity"]["T1"]["distinct_first_turn_od_pairs"] == 3
+    assert "test_spatial_diversity_low" in {item["code"] for item in report["blockers"]}

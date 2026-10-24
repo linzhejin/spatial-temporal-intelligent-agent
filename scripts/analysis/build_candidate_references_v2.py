@@ -23,8 +23,9 @@ def main() -> int:
                         default=ROOT / "output/experiments/T2_candidate_reference_draft.json")
     args = parser.parse_args()
     draft = json.loads(args.draft.read_text(encoding="utf-8"))
-    if draft.get("version") != "scenarios-test-v2-authoring-draft":
-        raise SystemExit("only the v2 authoring draft is accepted")
+    if draft.get("version") not in {"scenarios-test-v2-authoring-draft",
+                                    "scenarios-test-v2-diverse-authoring-draft"}:
+        raise SystemExit("only visible v2 authoring drafts are accepted")
     paths = {
         "draft": args.draft,
         "pois": ROOT / "data/pois.json",
@@ -39,7 +40,7 @@ def main() -> int:
     for case in draft["cases"]:
         if case.get("category") != "T2":
             continue
-        family = case["template_group"].removeprefix("v2_T2_")
+        family = case["template_group"].removeprefix("v2_T2_").removeprefix("v2h_T2_")
         start_poi_id = case["expected_turns"][0]["start_poi_id"]
         spec = case["candidate_spec"]
         result = rank_nearby_activities(graph, pois, start_poi_id=start_poi_id,

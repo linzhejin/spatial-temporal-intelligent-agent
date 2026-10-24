@@ -9,7 +9,7 @@ from scripts.analysis.build_scenario_v2_authoring import build_authoring_bank
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def test_authoring_bank_has_120_diverse_source_linked_drafts():
+def test_authoring_bank_has_120_source_linked_drafts():
     bank = build_authoring_bank(ROOT / "data/pois.json")
     validate_dataset(bank)
     assert len(bank["cases"]) == 120
@@ -45,3 +45,17 @@ def test_authoring_bank_does_not_pass_formal_leakage_or_gold_gates():
     report = audit_scenario_splits(dev, bank)
     assert report["formal_ready"] is False
     assert "test_adjudication_incomplete" in {item["code"] for item in report["blockers"]}
+
+
+def test_diverse_authoring_bank_spreads_actual_spatial_anchors():
+    bank = build_authoring_bank(ROOT / "data/pois.json", diverse_anchors=True)
+    validate_dataset(bank)
+    assert bank["version"] == "scenarios-test-v2-diverse-authoring-draft"
+    for group in ("T1", "T2", "T3", "T4", "T5"):
+        cases = [case for case in bank["cases"] if case["category"] == group]
+        assert len({case["expected_turns"][0]["start_poi_id"] for case in cases}) == 24
+        if group in {"T1", "T4"}:
+            assert len({(case["expected_turns"][0]["start_poi_id"],
+                         case["expected_turns"][0]["end_poi_id"])
+                        for case in cases}) == 24
+    assert all(case["adjudication"]["status"] == "draft" for case in bank["cases"])

@@ -1,0 +1,26 @@
+{
+  "status": "visible_diverse_authoring_draft_not_formal",
+  "draft": "experiments/datasets/scenarios_test_v2_diverse_draft.json",
+  "draft_sha256": "700e9020a8c751c4a4c371ccc9886a31f63a4da9de91da2e6abf8fe928072620",
+  "local_ignored_reports": [
+    {"path": "output/experiments/scenario_split_diverse_draft_v2_20261024.json", "sha256": "ed4cb86dc1ceebb15e9bea5583e748833467362f451abc942ea9a39e6ecba14e"},
+    {"path": "output/experiments/T1_diverse_route_reference_v3_20261024.json", "sha256": "a33393967f35fb04a282efdd412491a371642e759f4c6142f05c710d7b388eec"},
+    {"path": "output/experiments/T2_diverse_candidate_reference_v3_20261024.json", "sha256": "0b12f7f974b60d95dfd3947dbc000ea90bc09885340767ca9d0af0b250b11648"}
+  ],
+  "observations": {
+    "cases": 120,
+    "distinct_starts_per_group": 24,
+    "T1_distinct_first_turn_od_pairs": 24,
+    "T4_distinct_first_turn_od_pairs": 24,
+    "T5_distinct_first_turn_od_pairs": 21,
+    "T1_graph_feasible": 24,
+    "T1_access_over_30m": 0,
+    "T2_review_needed": 11,
+    "formal_ready": false
+  },
+  "limits": [
+    "Question authoring uses already visible POI and task templates; no blind independence is claimed.",
+    "Graph connectivity and nearest-node access do not verify real-world passage or entrance access.",
+    "Uncertain T2 candidate ordering remains unknown until independent evidence resolves it."
+  ]
+}

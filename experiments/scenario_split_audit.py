@@ -52,6 +52,15 @@ def _source_groups(cases: list[dict[str, Any]]) -> set[str]:
             for key in _SOURCES if isinstance((value := case.get(key)), str) and value.strip()}
 
 
+def _first_spatial_key(case: dict[str, Any]) -> tuple[str, str | None] | None:
+    """Use actual gold endpoints; a template-prefixed OD label can hide reuse."""
+    turns = case.get("expected_turns")
+    if not isinstance(turns, list) or not turns or not isinstance(turns[0], dict):
+        return None
+    start, end = turns[0].get("start_poi_id"), turns[0].get("end_poi_id")
+    return (start, end if isinstance(end, str) and end else None) if isinstance(start, str) and start else None
+
+
 def _independently_adjudicated(case: dict[str, Any]) -> bool:
     adjudication = case.get("adjudication") or {}
     if not isinstance(adjudication, dict):
@@ -152,6 +161,22 @@ def audit_scenario_splits(
     for category in sorted(categories):
         if category_counts[category] != per_category:
             block("test_category_quota_invalid", f"Formal test requires {per_category} {category} cases; found {category_counts[category]}.")
+    spatial_diversity = {}
+    if v2:
+        for category in sorted(V2_GROUPS):
+            group_cases = [case for case in tst if isinstance(case, dict)
+                           and case.get("category") == category]
+            anchors = {_first_spatial_key(case) for case in group_cases}
+            anchors.discard(None)
+            distinct_starts = len({start for start, _ in anchors})
+            distinct_od = len({(start, end) for start, end in anchors if end is not None})
+            spatial_diversity[category] = {"distinct_start_pois": distinct_starts,
+                                           "distinct_first_turn_od_pairs": distinct_od}
+            if len(group_cases) == 24 and (distinct_starts < 8 if category in {"T2", "T3"}
+                                           else distinct_od < 8):
+                block("test_spatial_diversity_low",
+                      f"{category} repeats too few actual starts or endpoint pairs across 24 cases; "
+                      "template-specific OD labels do not establish spatial diversity.")
     invalid_categories = sum(not isinstance(c.get("category"), str)
                              or c["category"] not in categories
                              for c in tst if isinstance(c, dict))
@@ -203,6 +228,7 @@ def audit_scenario_splits(
                             "test_by_category": {k: category_counts[k] for k in sorted(categories)},
                             "test_adjudication_status": dict(sorted(adjudication_counts.items()))},
         "overlap_counts": {k: len(v) for k, v in overlaps.items()},
+        "test_spatial_diversity": spatial_diversity,
         "external_gates": {k: external_gates.get(k) is True for k in _GATES},
         "privacy": "Prompt overlaps are reported as counts only; prompt text and fingerprints are not emitted.",
     }

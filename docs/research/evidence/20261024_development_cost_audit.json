@@ -1,0 +1,18 @@
+{
+  "status": "development_cost_audit_only",
+  "formal_budget_ready": false,
+  "cost_report": "output/experiments/development_cost_audit_v2_20261024.json",
+  "cost_report_sha256": "136117212b3e69d8ef235de3a32d4cae7016426a917fb3a3f4b2a265379d57b9",
+  "report_catalog": "experiments/fixtures/development_cost_inputs_20261024.json",
+  "report_catalog_sha256": "4e6f1c681887151bdd62ed6d8c2fdbc74184e6815d383956e19f649d92e2e8e7",
+  "pricing_snapshot": "experiments/fixtures/deepseek_flash_pricing_20261024.json",
+  "pricing_snapshot_sha256": "c96e28d90680e3f4d3ed98c423da0d7f21151b79fbb9aee27a7805acc4860647",
+  "official_price_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+  "observed_date": "2026-10-24",
+  "limits": [
+    "Eight selected visible development reports, not a random sample or formal result.",
+    "Only T5 has the three conditions on the same visible case and synthetic weather fixture.",
+    "Harness aggregate usage does not expose cache hit/miss tokens; exact provider bill is not claimed.",
+    "Single-case scaling is an illustration and not an upper bound or approval for paid formal experiments."
+  ]
+}

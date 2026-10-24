@@ -17,6 +17,20 @@ _ANCHORS = (
     ("信息学部", "poi_449", "poi_307", "poi_240", "poi_253"),
 )
 
+# One source-backed start/end pair per family and campus. This is an authoring
+# alternative, not adjudicated gold or a claim about real-world access.
+_DIVERSE_ANCHORS = (
+    ("文理学部", "poi_015", "poi_068",
+     ("poi_139", "poi_031", "poi_030", "poi_137", "poi_086", "poi_025", "poi_068", "poi_152"),
+     ("poi_070", "poi_069", "poi_082", "poi_153", "poi_079", "poi_074", "poi_067", "poi_141")),
+    ("工学部", "poi_016", "poi_201",
+     ("poi_226", "poi_181", "poi_182", "poi_227", "poi_432", "poi_040", "poi_201", "poi_230"),
+     ("poi_075", "poi_202", "poi_447", "poi_160", "poi_016", "poi_295", "poi_226", "poi_227")),
+    ("信息学部", "poi_240", "poi_253",
+     ("poi_449", "poi_258", "poi_238", "poi_296", "poi_261", "poi_245", "poi_307", "poi_424"),
+     ("poi_307", "poi_254", "poi_446", "poi_297", "poi_237", "poi_261", "poi_449", "poi_296")),
+)
+
 _T1 = (
     ("explicit", "从{start}到{end}怎么走？"),
     ("avoid_steps", "从{start}步行到{end}，别走台阶。"),
@@ -93,18 +107,23 @@ def _turn(*, start=None, end=None, via=None, kind="route", status="completed",
     }
 
 
-def build_authoring_bank(poi_path: Path) -> dict:
+def build_authoring_bank(poi_path: Path, *, diverse_anchors: bool = False) -> dict:
     poi_bytes = poi_path.read_bytes()
     pois = {row["id"]: row for row in json.loads(poi_bytes)["pois"]}
     cases = []
     for group in ("T1", "T2", "T3", "T4", "T5"):
         templates = {"T1": _T1, "T2": _T2, "T3": _T3, "T4": _T4, "T5": _T5}[group]
-        for family in templates:
+        for family_index, family in enumerate(templates):
             family_name = family[0]
-            for variant, (campus, start_id, end_id, library_id, other_id) in enumerate(_ANCHORS, 1):
+            anchors = ([(campus, starts[family_index], ends[family_index], library_id, other_id)
+                        for campus, library_id, other_id, starts, ends in _DIVERSE_ANCHORS]
+                       if diverse_anchors else _ANCHORS)
+            for variant, (campus, start_id, end_id, library_id, other_id) in enumerate(anchors, 1):
                 selected = [start_id, end_id, library_id, other_id]
                 if any(poi_id not in pois for poi_id in selected):
                     raise ValueError("anchor POI disappeared; reselect source-backed tasks")
+                if len({start_id, end_id, library_id, other_id}) < 3:
+                    raise ValueError("anchor selection collapses distinct task roles")
                 names = {"start": pois[start_id]["name"], "end": pois[end_id]["name"],
                          "library": pois[library_id]["name"],
                          "other_food": pois[other_id]["name"]}
@@ -158,11 +177,13 @@ def build_authoring_bank(poi_path: Path) -> dict:
                         turns = [_turn(start=start_id, end=end_id, via=via,
                                        constraints={"avoid_steps": True} if family_name == "no_route_then_option" else {},
                                        outputs=outputs)]
+                prefix = "v2h" if diverse_anchors else "v2"
                 case = {
-                    "id": f"v2_{group}_{family_name}_{variant}", "category": group,
-                    "template_group": f"v2_{group}_{family_name}",
-                    "od_group": f"v2_{group}_{family_name}_{campus}",
-                    "source_group": "campus_poi_authoring_v2",
+                    "id": f"{prefix}_{group}_{family_name}_{variant}", "category": group,
+                    "template_group": f"{prefix}_{group}_{family_name}",
+                    "od_group": f"{prefix}_{group}_{family_name}_{campus}",
+                    "source_group": ("campus_poi_diverse_authoring_v2"
+                                     if diverse_anchors else "campus_poi_authoring_v2"),
                     "source_poi_ids": selected, "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
                     "messages": [{"role": "user", "content": text} for text in messages],
                     "expected_turns": turns,
@@ -179,7 +200,9 @@ def build_authoring_bank(poi_path: Path) -> dict:
                     }
                 cases.append(case)
     return {
-        "protocol_version": "scenario-v2", "version": "scenarios-test-v2-authoring-draft",
+        "protocol_version": "scenario-v2",
+        "version": ("scenarios-test-v2-diverse-authoring-draft" if diverse_anchors
+                    else "scenarios-test-v2-authoring-draft"),
         "split": "test", "repeats": 3,
         "authoring_status": "UNADJUDICATED CANDIDATES. No frozen graph, independent gold or blind test result.",
         "source_poi_sha256": hashlib.sha256(poi_bytes).hexdigest(),
@@ -192,10 +215,12 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--pois", type=Path, default=DEFAULT_POIS)
     parser.add_argument("--output", type=Path, default=DEFAULT_OUTPUT)
+    parser.add_argument("--diverse-anchors", action="store_true",
+                        help="Use 24 distinct first-turn campus anchors per task group")
     args = parser.parse_args()
     from experiments.scenario_v2 import validate_dataset
 
-    bank = build_authoring_bank(args.pois)
+    bank = build_authoring_bank(args.pois, diverse_anchors=args.diverse_anchors)
     validate_dataset(bank)
     args.output.write_text(json.dumps(bank, ensure_ascii=False, indent=2) + "\n",
                            encoding="utf-8")

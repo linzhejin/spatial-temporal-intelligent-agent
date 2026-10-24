@@ -1,0 +1,13 @@
+{
+  "status": "visible_development_pilots_not_formal_budget",
+  "reports": [
+    {"cohort": "harness_group_coverage", "group": "T1", "condition": "deepseek_harness", "path": "output/experiments/harness_agent_pilot_route_transport_v1_20261024.json", "sha256": "0f528295fe9e95472cd27721b9cc689003514d507c910e8d549a65fda60f0082"},
+    {"cohort": "harness_group_coverage", "group": "T2", "condition": "deepseek_harness", "path": "output/experiments/harness_agent_pilot_place_transport_v1_20261024.json", "sha256": "a3288358b307916f0cd17608e2f4831d32e9ef3385f76271bb0c94a16d2bdf07"},
+    {"cohort": "harness_group_coverage", "group": "T3", "condition": "deepseek_harness", "path": "output/experiments/harness_agent_pilot_clarify_transport_v5_20261024.json", "sha256": "f2f4cc098720b3e7e80cb16d977707df3fb5751d52484f1a8649759d8bb2f44f"},
+    {"cohort": "harness_group_coverage", "group": "T4", "condition": "deepseek_harness", "path": "output/experiments/harness_agent_pilot_multiturn_transport_v1_20261024.json", "sha256": "82b3cbee379a06e0c21cf19d526b0ef991cd1c0dc8727d67a295918f6301c469"},
+    {"cohort": "harness_group_coverage", "group": "T5", "condition": "deepseek_harness", "path": "output/experiments/harness_agent_pilot_compound_transport_v1_20261024.json", "sha256": "f70f1cadc27ce32fdb48cb63b4bebfb34189737893bd421052ac3bc0f2fd79bf"},
+    {"cohort": "matched_T5_weather", "group": "T5", "condition": "luojia", "path": "output/experiments/product_T5_weather_control_trusted_input_20261024.json", "sha256": "eeaaef121437d4dd9e5cf1d12f80e213e44ef3922ad91f8c251bf0ecb5ac967f"},
+    {"cohort": "matched_T5_weather", "group": "T5", "condition": "ordinary_tool_agent", "path": "output/experiments/ordinary_T5_weather_control_20261024.json", "sha256": "88b4104429e69435ec60e11cf5aa6d533b3229b3890ed69a3650e4a563e4e62d"},
+    {"cohort": "matched_T5_weather", "group": "T5", "condition": "deepseek_harness", "path": "output/experiments/harness_T5_weather_control_20261024.json", "sha256": "57edc3a8e3b8019d69762e0621dbdd7b9ca61d45172a6c53f0341c63132d9a47"}
+  ]
+}

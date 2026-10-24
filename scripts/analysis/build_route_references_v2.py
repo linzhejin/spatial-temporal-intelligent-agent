@@ -29,8 +29,9 @@ def main() -> int:
                         default=ROOT / "output/experiments/T1_route_reference_draft_routable_snap.json")
     args = parser.parse_args()
     draft = json.loads(args.draft.read_text(encoding="utf-8"))
-    if draft.get("version") != "scenarios-test-v2-authoring-draft":
-        raise SystemExit("only the visible v2 authoring draft is accepted")
+    if draft.get("version") not in {"scenarios-test-v2-authoring-draft",
+                                    "scenarios-test-v2-diverse-authoring-draft"}:
+        raise SystemExit("only visible v2 authoring drafts are accepted")
     paths = {
         "draft": args.draft,
         "pois": ROOT / "data/pois.json",

@@ -1,0 +1,9 @@
+{
+  "model": "deepseek-flash",
+  "unit": "USD_per_1M_tokens",
+  "source_url": "https://api-docs.deepseek.com/quick_start/pricing/",
+  "observed_date": "2026-10-24",
+  "off_peak": {"input_cache_hit": 0.003, "input_cache_miss": 0.15, "output": 0.6},
+  "peak": {"input_cache_hit": 0.006, "input_cache_miss": 0.3, "output": 1.2},
+  "scope": "Development planning only; recheck current official price before a formal batch. Search and Fetch fees, taxes and future price changes are excluded."
+}

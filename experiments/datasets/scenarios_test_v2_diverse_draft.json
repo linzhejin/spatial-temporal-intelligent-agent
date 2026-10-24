@@ -1,0 +1,6503 @@
+{
+  "protocol_version": "scenario-v2",
+  "version": "scenarios-test-v2-diverse-authoring-draft",
+  "split": "test",
+  "repeats": 3,
+  "authoring_status": "UNADJUDICATED CANDIDATES. No frozen graph, independent gold or blind test result.",
+  "source_poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
+  "poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
+  "cases": [
+    {
+      "id": "v2h_T1_explicit_1",
+      "category": "T1",
+      "template_group": "v2h_T1_explicit",
+      "od_group": "v2h_T1_explicit_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学科技门到桂园食堂怎么走？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_explicit_2",
+      "category": "T1",
+      "template_group": "v2h_T1_explicit",
+      "od_group": "v2h_T1_explicit_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_226",
+        "poi_075",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学茶港门到武汉大学田园食堂怎么走？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_explicit_3",
+      "category": "T1",
+      "template_group": "v2h_T1_explicit",
+      "od_group": "v2h_T1_explicit_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_449",
+        "poi_307",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门到星湖园食堂怎么走？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_avoid_steps_1",
+      "category": "T1",
+      "template_group": "v2h_T1_avoid_steps",
+      "od_group": "v2h_T1_avoid_steps_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_031",
+        "poi_069",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部第4教学楼步行到桂园二食堂，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_031",
+          "end_poi_id": "poi_069",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_avoid_steps_2",
+      "category": "T1",
+      "template_group": "v2h_T1_avoid_steps",
+      "od_group": "v2h_T1_avoid_steps_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_181",
+        "poi_202",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部10教学楼步行到工学部一食堂，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_181",
+          "end_poi_id": "poi_202",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_avoid_steps_3",
+      "category": "T1",
+      "template_group": "v2h_T1_avoid_steps",
+      "od_group": "v2h_T1_avoid_steps_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_258",
+        "poi_254",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部体育场步行到武汉大学信息学部学生一食堂，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_258",
+          "end_poi_id": "poi_254",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_one_via_1",
+      "category": "T1",
+      "template_group": "v2h_T1_one_via",
+      "od_group": "v2h_T1_one_via_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_030",
+        "poi_082",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部教3楼先去武汉大学图书馆(总馆)，再去武汉大学梅园操场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_030",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_one_via_2",
+      "category": "T1",
+      "template_group": "v2h_T1_one_via",
+      "od_group": "v2h_T1_one_via_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_182",
+        "poi_447",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部11教学楼先去武汉大学图书馆工学分馆，再去露天羽毛球场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_182",
+          "end_poi_id": "poi_447",
+          "via_poi_ids": [
+            "poi_016"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_one_via_3",
+      "category": "T1",
+      "template_group": "v2h_T1_one_via",
+      "od_group": "v2h_T1_one_via_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_238",
+        "poi_446",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部1号教学楼先去武汉大学信息学部图书馆，再去竹园网球场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_238",
+          "end_poi_id": "poi_446",
+          "via_poi_ids": [
+            "poi_240"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_two_via_1",
+      "category": "T1",
+      "template_group": "v2h_T1_two_via",
+      "od_group": "v2h_T1_two_via_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_137",
+        "poi_153",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从凌波门经过武汉大学图书馆(总馆)和桂园一食堂，最后到武汉大学樱花大道。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_137",
+          "end_poi_id": "poi_153",
+          "via_poi_ids": [
+            "poi_015",
+            "poi_068"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_two_via_2",
+      "category": "T1",
+      "template_group": "v2h_T1_two_via",
+      "od_group": "v2h_T1_two_via_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_227",
+        "poi_160",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从洪波门经过武汉大学图书馆工学分馆和工学部三食堂，最后到武汉大学电力广场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_227",
+          "end_poi_id": "poi_160",
+          "via_poi_ids": [
+            "poi_016",
+            "poi_201"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_two_via_3",
+      "category": "T1",
+      "template_group": "v2h_T1_two_via",
+      "od_group": "v2h_T1_two_via_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_296",
+        "poi_297",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞瑜二门经过武汉大学信息学部图书馆和信息学部清真食堂，最后到珞瑜门。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_296",
+          "end_poi_id": "poi_297",
+          "via_poi_ids": [
+            "poi_240",
+            "poi_253"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_bike_1",
+      "category": "T1",
+      "template_group": "v2h_T1_bike",
+      "od_group": "v2h_T1_bike_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_086",
+        "poi_079",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学风雨操场骑车到梅园羽毛球场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_086",
+          "end_poi_id": "poi_079",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_bike_2",
+      "category": "T1",
+      "template_group": "v2h_T1_bike",
+      "od_group": "v2h_T1_bike_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_432",
+        "poi_016",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部排球场骑车到武汉大学图书馆工学分馆。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_432",
+          "end_poi_id": "poi_016",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_bike_3",
+      "category": "T1",
+      "template_group": "v2h_T1_bike",
+      "od_group": "v2h_T1_bike_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_261",
+        "poi_237",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部游泳池骑车到星湖综合实验大楼。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_261",
+          "end_poi_id": "poi_237",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_drive_1",
+      "category": "T1",
+      "template_group": "v2h_T1_drive",
+      "od_group": "v2h_T1_drive_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_025",
+        "poi_074",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学教1楼驾车到武汉大学湖滨风味食堂，不可通行就明确告诉我。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_025",
+          "end_poi_id": "poi_074",
+          "via_poi_ids": [],
+          "travel_mode": "drive",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_drive_2",
+      "category": "T1",
+      "template_group": "v2h_T1_drive",
+      "od_group": "v2h_T1_drive_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_040",
+        "poi_295",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学桃园教8楼驾车到武汉大学文澜门，不可通行就明确告诉我。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_040",
+          "end_poi_id": "poi_295",
+          "via_poi_ids": [],
+          "travel_mode": "drive",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_drive_3",
+      "category": "T1",
+      "template_group": "v2h_T1_drive",
+      "od_group": "v2h_T1_drive_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_245",
+        "poi_261",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部西区B4教学楼驾车到武汉大学信息学部游泳池，不可通行就明确告诉我。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_245",
+          "end_poi_id": "poi_261",
+          "via_poi_ids": [],
+          "travel_mode": "drive",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_scenic_1",
+      "category": "T1",
+      "template_group": "v2h_T1_scenic",
+      "od_group": "v2h_T1_scenic_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_068",
+        "poi_067",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从桂园一食堂到枫园风味食堂，优先看风景。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_068",
+          "end_poi_id": "poi_067",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_scenic_2",
+      "category": "T1",
+      "template_group": "v2h_T1_scenic",
+      "od_group": "v2h_T1_scenic_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_201",
+        "poi_226",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部三食堂到武汉大学茶港门，优先看风景。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_201",
+          "end_poi_id": "poi_226",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_scenic_3",
+      "category": "T1",
+      "template_group": "v2h_T1_scenic",
+      "od_group": "v2h_T1_scenic_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_307",
+        "poi_449",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂到玉兰2门，优先看风景。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_flat_1",
+      "category": "T1",
+      "template_group": "v2h_T1_flat",
+      "od_group": "v2h_T1_flat_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_152",
+        "poi_141",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学樱园到凌波门东湖观景点，尽量平坦。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_152",
+          "end_poi_id": "poi_141",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "flat",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_flat_2",
+      "category": "T1",
+      "template_group": "v2h_T1_flat",
+      "od_group": "v2h_T1_flat_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_230",
+        "poi_227",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部大学生活动中心到洪波门，尽量平坦。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_230",
+          "end_poi_id": "poi_227",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "flat",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T1_flat_3",
+      "category": "T1",
+      "template_group": "v2h_T1_flat",
+      "od_group": "v2h_T1_flat_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_424",
+        "poi_296",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从信息学部快递服务中心到珞瑜二门，尽量平坦。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_296",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "flat",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T2_meal_1",
+      "category": "T2",
+      "template_group": "v2h_T2_meal",
+      "od_group": "v2h_T2_meal_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学科技门，找附近能吃正餐的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_139",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_meal_2",
+      "category": "T2",
+      "template_group": "v2h_T2_meal",
+      "od_group": "v2h_T2_meal_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_226",
+        "poi_075",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学茶港门，找附近能吃正餐的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_226",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_meal_3",
+      "category": "T2",
+      "template_group": "v2h_T2_meal",
+      "od_group": "v2h_T2_meal_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_449",
+        "poi_307",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在玉兰2门，找附近能吃正餐的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_449",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_canteen_1",
+      "category": "T2",
+      "template_group": "v2h_T2_canteen",
+      "od_group": "v2h_T2_canteen_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_031",
+        "poi_069",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学文理学部第4教学楼，找最近的食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_031",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_canteen_2",
+      "category": "T2",
+      "template_group": "v2h_T2_canteen",
+      "od_group": "v2h_T2_canteen_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_181",
+        "poi_202",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学工学部10教学楼，找最近的食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_181",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_canteen_3",
+      "category": "T2",
+      "template_group": "v2h_T2_canteen",
+      "od_group": "v2h_T2_canteen_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_258",
+        "poi_254",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部体育场，找最近的食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_258",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_coffee_1",
+      "category": "T2",
+      "template_group": "v2h_T2_coffee",
+      "od_group": "v2h_T2_coffee_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_030",
+        "poi_082",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学文理学部教3楼，附近哪里能喝咖啡？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_030",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "coffee"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_coffee_2",
+      "category": "T2",
+      "template_group": "v2h_T2_coffee",
+      "od_group": "v2h_T2_coffee_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_182",
+        "poi_447",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学工学部11教学楼，附近哪里能喝咖啡？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_182",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "coffee"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_coffee_3",
+      "category": "T2",
+      "template_group": "v2h_T2_coffee",
+      "od_group": "v2h_T2_coffee_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_238",
+        "poi_446",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部1号教学楼，附近哪里能喝咖啡？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_238",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "coffee"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_basketball_1",
+      "category": "T2",
+      "template_group": "v2h_T2_basketball",
+      "od_group": "v2h_T2_basketball_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_137",
+        "poi_153",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在凌波门，想打篮球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_137",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_basketball_2",
+      "category": "T2",
+      "template_group": "v2h_T2_basketball",
+      "od_group": "v2h_T2_basketball_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_227",
+        "poi_160",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在洪波门，想打篮球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_227",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_basketball_3",
+      "category": "T2",
+      "template_group": "v2h_T2_basketball",
+      "od_group": "v2h_T2_basketball_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_296",
+        "poi_297",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在珞瑜二门，想打篮球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_296",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_running_1",
+      "category": "T2",
+      "template_group": "v2h_T2_running",
+      "od_group": "v2h_T2_running_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_086",
+        "poi_079",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学风雨操场，找适合跑步的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_086",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "running"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_running_2",
+      "category": "T2",
+      "template_group": "v2h_T2_running",
+      "od_group": "v2h_T2_running_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_432",
+        "poi_016",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在工学部排球场，找适合跑步的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_432",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "running"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_running_3",
+      "category": "T2",
+      "template_group": "v2h_T2_running",
+      "od_group": "v2h_T2_running_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_261",
+        "poi_237",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部游泳池，找适合跑步的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_261",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "running"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_study_1",
+      "category": "T2",
+      "template_group": "v2h_T2_study",
+      "od_group": "v2h_T2_study_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_025",
+        "poi_074",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学教1楼，想找有依据能自习的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_025",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_study_2",
+      "category": "T2",
+      "template_group": "v2h_T2_study",
+      "od_group": "v2h_T2_study_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_040",
+        "poi_295",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学桃园教8楼，想找有依据能自习的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_040",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_study_3",
+      "category": "T2",
+      "template_group": "v2h_T2_study",
+      "od_group": "v2h_T2_study_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_245",
+        "poi_261",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部西区B4教学楼，想找有依据能自习的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_245",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_shopping_1",
+      "category": "T2",
+      "template_group": "v2h_T2_shopping",
+      "od_group": "v2h_T2_shopping_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_068",
+        "poi_067",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在桂园一食堂，附近能买东西吗？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_068",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "shopping"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_shopping_2",
+      "category": "T2",
+      "template_group": "v2h_T2_shopping",
+      "od_group": "v2h_T2_shopping_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_201",
+        "poi_226",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在工学部三食堂，附近能买东西吗？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_201",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "shopping"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_shopping_3",
+      "category": "T2",
+      "template_group": "v2h_T2_shopping",
+      "od_group": "v2h_T2_shopping_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_307",
+        "poi_449",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在星湖园食堂，附近能买东西吗？"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_307",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "shopping"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_pickup_1",
+      "category": "T2",
+      "template_group": "v2h_T2_pickup",
+      "od_group": "v2h_T2_pickup_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_152",
+        "poi_141",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学樱园，找能取快递的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_152",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "package_pickup"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_pickup_2",
+      "category": "T2",
+      "template_group": "v2h_T2_pickup",
+      "od_group": "v2h_T2_pickup_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_230",
+        "poi_227",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学工学部大学生活动中心，找能取快递的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_230",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "package_pickup"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T2_pickup_3",
+      "category": "T2",
+      "template_group": "v2h_T2_pickup",
+      "od_group": "v2h_T2_pickup_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_424",
+        "poi_296",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在信息学部快递服务中心，找能取快递的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_424",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "package_pickup"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T3_ball_1",
+      "category": "T3",
+      "template_group": "v2h_T3_ball",
+      "od_group": "v2h_T3_ball_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学科技门，想去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_139",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_2",
+      "category": "T3",
+      "template_group": "v2h_T3_ball",
+      "od_group": "v2h_T3_ball_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_226",
+        "poi_075",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学茶港门，想去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_226",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_3",
+      "category": "T3",
+      "template_group": "v2h_T3_ball",
+      "od_group": "v2h_T3_ball_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_449",
+        "poi_307",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在玉兰2门，想去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_449",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_steps_1",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_steps",
+      "od_group": "v2h_T3_ball_steps_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_031",
+        "poi_069",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部第4教学楼出发去打球，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_031",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_steps_2",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_steps",
+      "od_group": "v2h_T3_ball_steps_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_181",
+        "poi_202",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部10教学楼出发去打球，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_181",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_steps_3",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_steps",
+      "od_group": "v2h_T3_ball_steps_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_258",
+        "poi_254",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部体育场出发去打球，别走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_258",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_bike_1",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_bike",
+      "od_group": "v2h_T3_ball_bike_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_030",
+        "poi_082",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学文理学部教3楼，想骑车去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_030",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_bike_2",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_bike",
+      "od_group": "v2h_T3_ball_bike_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_182",
+        "poi_447",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学工学部11教学楼，想骑车去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_182",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_ball_bike_3",
+      "category": "T3",
+      "template_group": "v2h_T3_ball_bike",
+      "od_group": "v2h_T3_ball_bike_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_238",
+        "poi_446",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部1号教学楼，想骑车去打球。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_238",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "sport",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_1",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise",
+      "od_group": "v2h_T3_exercise_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_137",
+        "poi_153",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在凌波门，想运动。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_137",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_2",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise",
+      "od_group": "v2h_T3_exercise_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_227",
+        "poi_160",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在洪波门，想运动。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_227",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_3",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise",
+      "od_group": "v2h_T3_exercise_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_296",
+        "poi_297",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在珞瑜二门，想运动。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_296",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_near_1",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise_near",
+      "od_group": "v2h_T3_exercise_near_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_086",
+        "poi_079",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学风雨操场附近，找个运动的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_086",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_near_2",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise_near",
+      "od_group": "v2h_T3_exercise_near_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_432",
+        "poi_016",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在工学部排球场附近，找个运动的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_432",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_exercise_near_3",
+      "category": "T3",
+      "template_group": "v2h_T3_exercise_near",
+      "od_group": "v2h_T3_exercise_near_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_261",
+        "poi_237",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学信息学部游泳池附近，找个运动的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_261",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "activity",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_1",
+      "category": "T3",
+      "template_group": "v2h_T3_destination",
+      "od_group": "v2h_T3_destination_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_025",
+        "poi_074",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从武汉大学教1楼出发，帮我规划步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_025",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_2",
+      "category": "T3",
+      "template_group": "v2h_T3_destination",
+      "od_group": "v2h_T3_destination_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_040",
+        "poi_295",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从武汉大学桃园教8楼出发，帮我规划步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_040",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_3",
+      "category": "T3",
+      "template_group": "v2h_T3_destination",
+      "od_group": "v2h_T3_destination_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_245",
+        "poi_261",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从武汉大学信息学部西区B4教学楼出发，帮我规划步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_245",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_flat_1",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_flat",
+      "od_group": "v2h_T3_destination_flat_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_068",
+        "poi_067",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从桂园一食堂出发，想走平坦的路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_068",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_flat_2",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_flat",
+      "od_group": "v2h_T3_destination_flat_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_201",
+        "poi_226",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从工学部三食堂出发，想走平坦的路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_201",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_flat_3",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_flat",
+      "od_group": "v2h_T3_destination_flat_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_307",
+        "poi_449",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从星湖园食堂出发，想走平坦的路。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_307",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_weather_1",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_weather",
+      "od_group": "v2h_T3_destination_weather_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_152",
+        "poi_141",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学樱园，查天气后再带我过去。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_152",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_weather_2",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_weather",
+      "od_group": "v2h_T3_destination_weather_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_230",
+        "poi_227",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在武汉大学工学部大学生活动中心，查天气后再带我过去。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_230",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T3_destination_weather_3",
+      "category": "T3",
+      "template_group": "v2h_T3_destination_weather",
+      "od_group": "v2h_T3_destination_weather_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_424",
+        "poi_296",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我在信息学部快递服务中心，查天气后再带我过去。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "clarify",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_424",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": null,
+          "strategy": null,
+          "hard_constraints": {},
+          "required_outputs": [],
+          "candidate_poi_ids": [],
+          "clarification_slot": "destination",
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_mode_1",
+      "category": "T4",
+      "template_group": "v2h_T4_change_mode",
+      "od_group": "v2h_T4_change_mode_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学科技门到桂园食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成骑行，起点和终点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_mode_2",
+      "category": "T4",
+      "template_group": "v2h_T4_change_mode",
+      "od_group": "v2h_T4_change_mode_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_226",
+        "poi_075",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学茶港门到武汉大学田园食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成骑行，起点和终点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_mode_3",
+      "category": "T4",
+      "template_group": "v2h_T4_change_mode",
+      "od_group": "v2h_T4_change_mode_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_449",
+        "poi_307",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从玉兰2门到星湖园食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成骑行，起点和终点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "bike",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_strategy_1",
+      "category": "T4",
+      "template_group": "v2h_T4_change_strategy",
+      "od_group": "v2h_T4_change_strategy_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_031",
+        "poi_069",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部第4教学楼到桂园二食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成风景优先，地点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_031",
+          "end_poi_id": "poi_069",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_031",
+          "end_poi_id": "poi_069",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_strategy_2",
+      "category": "T4",
+      "template_group": "v2h_T4_change_strategy",
+      "od_group": "v2h_T4_change_strategy_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_181",
+        "poi_202",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部10教学楼到工学部一食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成风景优先，地点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_181",
+          "end_poi_id": "poi_202",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_181",
+          "end_poi_id": "poi_202",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_strategy_3",
+      "category": "T4",
+      "template_group": "v2h_T4_change_strategy",
+      "od_group": "v2h_T4_change_strategy_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_258",
+        "poi_254",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部体育场到武汉大学信息学部学生一食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "改成风景优先，地点不要变。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_258",
+          "end_poi_id": "poi_254",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_258",
+          "end_poi_id": "poi_254",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "scenic",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_via_1",
+      "category": "T4",
+      "template_group": "v2h_T4_add_via",
+      "od_group": "v2h_T4_add_via_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_030",
+        "poi_082",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部教3楼到武汉大学梅园操场，步行。"
+        },
+        {
+          "role": "user",
+          "content": "途中再经过武汉大学图书馆(总馆)。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_030",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_030",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_via_2",
+      "category": "T4",
+      "template_group": "v2h_T4_add_via",
+      "od_group": "v2h_T4_add_via_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_182",
+        "poi_447",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部11教学楼到露天羽毛球场，步行。"
+        },
+        {
+          "role": "user",
+          "content": "途中再经过武汉大学图书馆工学分馆。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_182",
+          "end_poi_id": "poi_447",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_182",
+          "end_poi_id": "poi_447",
+          "via_poi_ids": [
+            "poi_016"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_via_3",
+      "category": "T4",
+      "template_group": "v2h_T4_add_via",
+      "od_group": "v2h_T4_add_via_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_238",
+        "poi_446",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部1号教学楼到竹园网球场，步行。"
+        },
+        {
+          "role": "user",
+          "content": "途中再经过武汉大学信息学部图书馆。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_238",
+          "end_poi_id": "poi_446",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_238",
+          "end_poi_id": "poi_446",
+          "via_poi_ids": [
+            "poi_240"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_remove_via_1",
+      "category": "T4",
+      "template_group": "v2h_T4_remove_via",
+      "od_group": "v2h_T4_remove_via_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_137",
+        "poi_153",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从凌波门先去武汉大学图书馆(总馆)，再到武汉大学樱花大道。"
+        },
+        {
+          "role": "user",
+          "content": "不经过武汉大学图书馆(总馆)了，直接到终点。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_137",
+          "end_poi_id": "poi_153",
+          "via_poi_ids": [
+            "poi_015"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_137",
+          "end_poi_id": "poi_153",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_remove_via_2",
+      "category": "T4",
+      "template_group": "v2h_T4_remove_via",
+      "od_group": "v2h_T4_remove_via_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_227",
+        "poi_160",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从洪波门先去武汉大学图书馆工学分馆，再到武汉大学电力广场。"
+        },
+        {
+          "role": "user",
+          "content": "不经过武汉大学图书馆工学分馆了，直接到终点。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_227",
+          "end_poi_id": "poi_160",
+          "via_poi_ids": [
+            "poi_016"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_227",
+          "end_poi_id": "poi_160",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_remove_via_3",
+      "category": "T4",
+      "template_group": "v2h_T4_remove_via",
+      "od_group": "v2h_T4_remove_via_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_296",
+        "poi_297",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从珞瑜二门先去武汉大学信息学部图书馆，再到珞瑜门。"
+        },
+        {
+          "role": "user",
+          "content": "不经过武汉大学信息学部图书馆了，直接到终点。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_296",
+          "end_poi_id": "poi_297",
+          "via_poi_ids": [
+            "poi_240"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_296",
+          "end_poi_id": "poi_297",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_start_1",
+      "category": "T4",
+      "template_group": "v2h_T4_change_start",
+      "od_group": "v2h_T4_change_start_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_086",
+        "poi_079",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学风雨操场到梅园羽毛球场，步行。"
+        },
+        {
+          "role": "user",
+          "content": "起点改为武汉大学图书馆(总馆)，终点还是原来的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_086",
+          "end_poi_id": "poi_079",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_015",
+          "end_poi_id": "poi_079",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_start_2",
+      "category": "T4",
+      "template_group": "v2h_T4_change_start",
+      "od_group": "v2h_T4_change_start_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_432",
+        "poi_016",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部排球场到武汉大学图书馆工学分馆，步行。"
+        },
+        {
+          "role": "user",
+          "content": "起点改为武汉大学图书馆工学分馆，终点还是原来的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_432",
+          "end_poi_id": "poi_016",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_016",
+          "end_poi_id": "poi_016",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_start_3",
+      "category": "T4",
+      "template_group": "v2h_T4_change_start",
+      "od_group": "v2h_T4_change_start_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_261",
+        "poi_237",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部游泳池到星湖综合实验大楼，步行。"
+        },
+        {
+          "role": "user",
+          "content": "起点改为武汉大学信息学部图书馆，终点还是原来的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_261",
+          "end_poi_id": "poi_237",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_240",
+          "end_poi_id": "poi_237",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_end_1",
+      "category": "T4",
+      "template_group": "v2h_T4_change_end",
+      "od_group": "v2h_T4_change_end_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_025",
+        "poi_074",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学教1楼到武汉大学湖滨风味食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "终点改为武汉大学图书馆(总馆)，起点仍是刚才的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_025",
+          "end_poi_id": "poi_074",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_025",
+          "end_poi_id": "poi_015",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_end_2",
+      "category": "T4",
+      "template_group": "v2h_T4_change_end",
+      "od_group": "v2h_T4_change_end_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_040",
+        "poi_295",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学桃园教8楼到武汉大学文澜门，步行。"
+        },
+        {
+          "role": "user",
+          "content": "终点改为武汉大学图书馆工学分馆，起点仍是刚才的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_040",
+          "end_poi_id": "poi_295",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_040",
+          "end_poi_id": "poi_016",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_change_end_3",
+      "category": "T4",
+      "template_group": "v2h_T4_change_end",
+      "od_group": "v2h_T4_change_end_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_245",
+        "poi_261",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部西区B4教学楼到武汉大学信息学部游泳池，步行。"
+        },
+        {
+          "role": "user",
+          "content": "终点改为武汉大学信息学部图书馆，起点仍是刚才的。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_245",
+          "end_poi_id": "poi_261",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_245",
+          "end_poi_id": "poi_240",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_constraint_1",
+      "category": "T4",
+      "template_group": "v2h_T4_add_constraint",
+      "od_group": "v2h_T4_add_constraint_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_068",
+        "poi_067",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从桂园一食堂到枫园风味食堂，步行。"
+        },
+        {
+          "role": "user",
+          "content": "保留原来地点，但不要走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_068",
+          "end_poi_id": "poi_067",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_068",
+          "end_poi_id": "poi_067",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_constraint_2",
+      "category": "T4",
+      "template_group": "v2h_T4_add_constraint",
+      "od_group": "v2h_T4_add_constraint_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_201",
+        "poi_226",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部三食堂到武汉大学茶港门，步行。"
+        },
+        {
+          "role": "user",
+          "content": "保留原来地点，但不要走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_201",
+          "end_poi_id": "poi_226",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_201",
+          "end_poi_id": "poi_226",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_add_constraint_3",
+      "category": "T4",
+      "template_group": "v2h_T4_add_constraint",
+      "od_group": "v2h_T4_add_constraint_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_307",
+        "poi_449",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂到玉兰2门，步行。"
+        },
+        {
+          "role": "user",
+          "content": "保留原来地点，但不要走台阶。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_weather_after_1",
+      "category": "T4",
+      "template_group": "v2h_T4_weather_after",
+      "od_group": "v2h_T4_weather_after_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_152",
+        "poi_141",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学樱园到凌波门东湖观景点，步行。"
+        },
+        {
+          "role": "user",
+          "content": "再告诉我天气，不要改路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_152",
+          "end_poi_id": "poi_141",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_152",
+          "end_poi_id": "poi_141",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_weather_after_2",
+      "category": "T4",
+      "template_group": "v2h_T4_weather_after",
+      "od_group": "v2h_T4_weather_after_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_230",
+        "poi_227",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部大学生活动中心到洪波门，步行。"
+        },
+        {
+          "role": "user",
+          "content": "再告诉我天气，不要改路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_230",
+          "end_poi_id": "poi_227",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_230",
+          "end_poi_id": "poi_227",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T4_weather_after_3",
+      "category": "T4",
+      "template_group": "v2h_T4_weather_after",
+      "od_group": "v2h_T4_weather_after_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_424",
+        "poi_296",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从信息学部快递服务中心到珞瑜二门，步行。"
+        },
+        {
+          "role": "user",
+          "content": "再告诉我天气，不要改路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_296",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_296",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_weather_1",
+      "category": "T5",
+      "template_group": "v2h_T5_route_weather",
+      "od_group": "v2h_T5_route_weather_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气并规划从武汉大学科技门到桂园食堂的步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_weather_2",
+      "category": "T5",
+      "template_group": "v2h_T5_route_weather",
+      "od_group": "v2h_T5_route_weather_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_226",
+        "poi_075",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气并规划从武汉大学茶港门到武汉大学田园食堂的步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_226",
+          "end_poi_id": "poi_075",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_weather_3",
+      "category": "T5",
+      "template_group": "v2h_T5_route_weather",
+      "od_group": "v2h_T5_route_weather_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_449",
+        "poi_307",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气并规划从玉兰2门到星湖园食堂的步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_449",
+          "end_poi_id": "poi_307",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_conditions_1",
+      "category": "T5",
+      "template_group": "v2h_T5_route_conditions",
+      "od_group": "v2h_T5_route_conditions_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_031",
+        "poi_069",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部第4教学楼去桂园二食堂，顺便查路上有没有已确认管制。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_031",
+          "end_poi_id": "poi_069",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "road_conditions"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_conditions_2",
+      "category": "T5",
+      "template_group": "v2h_T5_route_conditions",
+      "od_group": "v2h_T5_route_conditions_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_181",
+        "poi_202",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部10教学楼去工学部一食堂，顺便查路上有没有已确认管制。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_181",
+          "end_poi_id": "poi_202",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "road_conditions"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_route_conditions_3",
+      "category": "T5",
+      "template_group": "v2h_T5_route_conditions",
+      "od_group": "v2h_T5_route_conditions_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_258",
+        "poi_254",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部体育场去武汉大学信息学部学生一食堂，顺便查路上有没有已确认管制。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_258",
+          "end_poi_id": "poi_254",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "road_conditions"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_food_before_route_1",
+      "category": "T5",
+      "template_group": "v2h_T5_food_before_route",
+      "od_group": "v2h_T5_food_before_route_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_030",
+        "poi_082",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学文理学部教3楼先找个附近能吃饭的地方，再去武汉大学梅园操场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_030",
+          "end_poi_id": "poi_082",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_food_before_route_2",
+      "category": "T5",
+      "template_group": "v2h_T5_food_before_route",
+      "od_group": "v2h_T5_food_before_route_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_182",
+        "poi_447",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部11教学楼先找个附近能吃饭的地方，再去露天羽毛球场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_182",
+          "end_poi_id": "poi_447",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_food_before_route_3",
+      "category": "T5",
+      "template_group": "v2h_T5_food_before_route",
+      "od_group": "v2h_T5_food_before_route_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_238",
+        "poi_446",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部1号教学楼先找个附近能吃饭的地方，再去竹园网球场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_238",
+          "end_poi_id": "poi_446",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "canteen_meal",
+          "restaurant_meal",
+          "fast_food"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_study_before_route_1",
+      "category": "T5",
+      "template_group": "v2h_T5_study_before_route",
+      "od_group": "v2h_T5_study_before_route_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_137",
+        "poi_153",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从凌波门出发，先找能自习的地方，再去武汉大学樱花大道。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_137",
+          "end_poi_id": "poi_153",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_study_before_route_2",
+      "category": "T5",
+      "template_group": "v2h_T5_study_before_route",
+      "od_group": "v2h_T5_study_before_route_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_227",
+        "poi_160",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从洪波门出发，先找能自习的地方，再去武汉大学电力广场。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_227",
+          "end_poi_id": "poi_160",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_study_before_route_3",
+      "category": "T5",
+      "template_group": "v2h_T5_study_before_route",
+      "od_group": "v2h_T5_study_before_route_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_296",
+        "poi_297",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "我从珞瑜二门出发，先找能自习的地方，再去珞瑜门。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_296",
+          "end_poi_id": "poi_297",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "study"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_sport_then_food_1",
+      "category": "T5",
+      "template_group": "v2h_T5_sport_then_food",
+      "od_group": "v2h_T5_sport_then_food_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_086",
+        "poi_079",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学风雨操场先去打篮球，再找附近能吃饭的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_086",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_sport_then_food_2",
+      "category": "T5",
+      "template_group": "v2h_T5_sport_then_food",
+      "od_group": "v2h_T5_sport_then_food_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_432",
+        "poi_016",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部排球场先去打篮球，再找附近能吃饭的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_432",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_sport_then_food_3",
+      "category": "T5",
+      "template_group": "v2h_T5_sport_then_food",
+      "od_group": "v2h_T5_sport_then_food_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_261",
+        "poi_237",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学信息学部游泳池先去打篮球，再找附近能吃饭的地方。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_261",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      },
+      "candidate_spec": {
+        "activities": [
+          "basketball"
+        ],
+        "coordinates": "gcj02",
+        "max_display": 4,
+        "rank_tolerance_m": 30
+      }
+    },
+    {
+      "id": "v2h_T5_two_vias_weather_1",
+      "category": "T5",
+      "template_group": "v2h_T5_two_vias_weather",
+      "od_group": "v2h_T5_two_vias_weather_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_025",
+        "poi_074",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气，从武汉大学教1楼经过武汉大学图书馆(总馆)和桂园一食堂到武汉大学湖滨风味食堂。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_025",
+          "end_poi_id": "poi_074",
+          "via_poi_ids": [
+            "poi_015",
+            "poi_068"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_two_vias_weather_2",
+      "category": "T5",
+      "template_group": "v2h_T5_two_vias_weather",
+      "od_group": "v2h_T5_two_vias_weather_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_040",
+        "poi_295",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气，从武汉大学桃园教8楼经过武汉大学图书馆工学分馆和工学部三食堂到武汉大学文澜门。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_040",
+          "end_poi_id": "poi_295",
+          "via_poi_ids": [
+            "poi_016",
+            "poi_201"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_two_vias_weather_3",
+      "category": "T5",
+      "template_group": "v2h_T5_two_vias_weather",
+      "od_group": "v2h_T5_two_vias_weather_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_245",
+        "poi_261",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气，从武汉大学信息学部西区B4教学楼经过武汉大学信息学部图书馆和信息学部清真食堂到武汉大学信息学部游泳池。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_245",
+          "end_poi_id": "poi_261",
+          "via_poi_ids": [
+            "poi_240",
+            "poi_253"
+          ],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_unknown_condition_1",
+      "category": "T5",
+      "template_group": "v2h_T5_unknown_condition",
+      "od_group": "v2h_T5_unknown_condition_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_068",
+        "poi_067",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从桂园一食堂到枫园风味食堂，如果某段路没路况记录，请明确说未知。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_068",
+          "end_poi_id": "poi_067",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_unknown_condition_2",
+      "category": "T5",
+      "template_group": "v2h_T5_unknown_condition",
+      "od_group": "v2h_T5_unknown_condition_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_201",
+        "poi_226",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从工学部三食堂到武汉大学茶港门，如果某段路没路况记录，请明确说未知。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_201",
+          "end_poi_id": "poi_226",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_unknown_condition_3",
+      "category": "T5",
+      "template_group": "v2h_T5_unknown_condition",
+      "od_group": "v2h_T5_unknown_condition_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_307",
+        "poi_449",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从星湖园食堂到玉兰2门，如果某段路没路况记录，请明确说未知。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_307",
+          "end_poi_id": "poi_449",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_no_route_then_option_1",
+      "category": "T5",
+      "template_group": "v2h_T5_no_route_then_option",
+      "od_group": "v2h_T5_no_route_then_option_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_152",
+        "poi_141",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学樱园到凌波门东湖观景点别走台阶；走不了就说明原因并给可行选择。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_152",
+          "end_poi_id": "poi_141",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_no_route_then_option_2",
+      "category": "T5",
+      "template_group": "v2h_T5_no_route_then_option",
+      "od_group": "v2h_T5_no_route_then_option_工学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_230",
+        "poi_227",
+        "poi_016",
+        "poi_201"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从武汉大学工学部大学生活动中心到洪波门别走台阶；走不了就说明原因并给可行选择。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_230",
+          "end_poi_id": "poi_227",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    },
+    {
+      "id": "v2h_T5_no_route_then_option_3",
+      "category": "T5",
+      "template_group": "v2h_T5_no_route_then_option",
+      "od_group": "v2h_T5_no_route_then_option_信息学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_424",
+        "poi_296",
+        "poi_240",
+        "poi_253"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "从信息学部快递服务中心到珞瑜二门别走台阶；走不了就说明原因并给可行选择。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_424",
+          "end_poi_id": "poi_296",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "required_outputs": [
+            "route"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    }
+  ]
+}
