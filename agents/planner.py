@@ -430,16 +430,23 @@ def _place_route_join_issue(legs: list[dict]) -> str | None:
         first_edge = second["recommended_edge_ids"][0]
         if (isinstance(last_edge, (list, tuple)) and len(last_edge) >= 2
                 and isinstance(first_edge, (list, tuple)) and len(first_edge) >= 2
-                and last_edge[1] != first_edge[0]):
+                and not set(last_edge[:2]).intersection(first_edge[:2])):
             return "相邻路段的路网节点没有接通"
         first_path, second_path = first.get("recommended"), second.get("recommended")
         if not first_path or not second_path:
             return "路段缺少可核对的路线几何"
         try:
-            lon1, lat1 = map(float, first_path[-1])
-            lon2, lat2 = map(float, second_path[0])
+            def lon_lat(point):
+                if isinstance(point, dict):
+                    return float(point.get("lng", point.get("lon"))), float(point["lat"])
+                return float(point[0]), float(point[1])
+
+            lon1, lat1 = lon_lat(first_path[-1])
+            lon2, lat2 = lon_lat(second_path[0])
+            if not all(math.isfinite(value) for value in (lon1, lat1, lon2, lat2)):
+                return "路段衔接坐标无效"
             gap_m = math.hypot((lon2 - lon1) * 96000, (lat2 - lat1) * 111000)
-        except (TypeError, ValueError):
+        except (IndexError, KeyError, TypeError, ValueError):
             return "路段衔接坐标无效"
         if gap_m > 3:
             return "相邻路段尚未在同一位置接通"

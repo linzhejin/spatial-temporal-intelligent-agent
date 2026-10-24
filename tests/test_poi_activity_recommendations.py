@@ -415,6 +415,28 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
     assert [call["end"]["name"] for call in route_calls] == ["测试食堂", "桂园食堂"]
 
 
+def test_live_shaped_ordered_legs_join_at_the_same_point_with_undirected_edges():
+    shared = {"lng": 114.363465, "lat": 30.53795}
+    legs = [
+        {"recommended_edge_ids": [[10, 20, 0]],
+         "recommended": [{"lng": 114.363, "lat": 30.537}, shared]},
+        {"recommended_edge_ids": [[20, 10, 0]],
+         "recommended": [shared, {"lng": 114.364, "lat": 30.538}]},
+    ]
+
+    assert planner._place_route_join_issue(legs) is None
+
+
+def test_ordered_legs_reject_disconnected_edge_sets_even_with_matching_poi_points():
+    shared = {"lng": 114.363465, "lat": 30.53795}
+    legs = [
+        {"recommended_edge_ids": [[10, 20, 0]], "recommended": [shared]},
+        {"recommended_edge_ids": [[30, 40, 0]], "recommended": [shared]},
+    ]
+
+    assert planner._place_route_join_issue(legs) is not None
+
+
 @pytest.mark.parametrize("origin,final_name", [
     ("武汉大学科技门", "桂园食堂"),
     ("武汉大学茶港门", "武汉大学田园食堂"),
@@ -485,10 +507,10 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     canteen = {"poi_id": "poi_meal", "name": "测试食堂", "activities": ["canteen_meal"],
                "subcategory": "canteen", "distance_m": 180}
     points = {
-        "工学部": [114.36, 30.53],
-        "工学部篮球场": [114.361, 30.53],
-        "测试食堂": [114.362, 30.53],
-        "武汉大学桂园6舍": [114.363, 30.53],
+        "工学部": {"lng": 114.36, "lat": 30.53},
+        "工学部篮球场": {"lng": 114.361, "lat": 30.53},
+        "测试食堂": {"lng": 114.362, "lat": 30.53},
+        "武汉大学桂园6舍": {"lng": 114.363, "lat": 30.53},
     }
     route_calls = []
 
@@ -502,7 +524,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
         route_calls.append(args)
         start_name = args["start"]["name"]
         end_name = args["end"]["name"]
-        edge_id = {"工学部篮球场": (1, 2, 0), "测试食堂": (2, 3, 0),
+        edge_id = {"工学部篮球场": (1, 2, 0), "测试食堂": (3, 2, 0),
                    "武汉大学桂园6舍": (3, 4, 0)}[end_name]
         route = {
             "start_name": start_name, "end_name": end_name, "mode": "walk",
