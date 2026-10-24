@@ -76,8 +76,114 @@ def test_v2_route_review_accepts_connected_allowed_path():
     assert result["task_success"] is True
 
 
+def _two_route_case_and_observation():
+    case = _case()
+    changed = {**_turn(), "end_poi_id": "c"}
+    case["messages"].append({"role": "user", "content": "终点改成丙，起点不变"})
+    case["expected_turns"].append(changed)
+    observed = _observation(["1|4|0", "4|3|0"])
+    observed["input_messages"] = case["messages"]
+    second = copy.deepcopy(observed["turns"][0])
+    second["end_poi_id"] = "c"
+    observed["turns"].append(second)
+    return case, observed
+
+
+def test_v2_multiturn_route_review_uses_each_turn_endpoint_reference():
+    case, observed = _two_route_case_and_observation()
+    case["route_references"] = {
+        "0": {"start_node": "1", "end_node": "3", "via_nodes": []},
+        "1": {"start_node": "1", "end_node": "4", "via_nodes": []},
+    }
+    observed["turns"][1]["route_edge_ids"] = ["1|4|0"]
+    assert score_case(case, observed, graph=_graph())["task_success"] is True
+
+
+def test_v2_multiturn_route_review_never_reuses_first_turn_reference():
+    case, observed = _two_route_case_and_observation()
+    score = score_case(case, observed, graph=_graph())
+    assert score["task_success"] is False
+    assert "route_review_missing" in score["unknowns"]
+
+
+def test_v2_route_after_clarification_uses_second_turn_reference():
+    case = _case()
+    case["messages"].insert(0, {"role": "user", "content": "带我去乙，起点稍后说"})
+    case["expected_turns"].insert(0, {
+        **_turn(), "status": "needs_input", "kind": "clarify",
+        "feasibility": "not_applicable", "start_poi_id": None,
+        "strategy": None, "hard_constraints": {}, "required_outputs": [],
+        "clarification_slot": "start",
+    })
+    case["route_references"] = {"1": case.pop("route_reference")}
+    observed = _observation(["1|4|0", "4|3|0"])
+    observed["input_messages"] = case["messages"]
+    observed["turns"].insert(0, {
+        "status": "needs_input", "kind": "clarify", "start_poi_id": None,
+        "end_poi_id": "b", "via_poi_ids": [], "travel_mode": "walk",
+        "strategy": None, "hard_constraints": {}, "candidate_poi_ids": [],
+        "clarification_slot": "start", "outputs": [], "route_edge_ids": [],
+    })
+    validate_dataset({"protocol_version": "scenario-v2", "split": "development",
+                      "cases": [case]})
+    assert score_case(case, observed, graph=_graph())["task_success"] is True
+
+
+def test_v2_multiturn_graph_gold_requires_complete_turn_references():
+    case, _ = _two_route_case_and_observation()
+    dataset = {"protocol_version": "scenario-v2", "split": "development",
+               "cases": [case]}
+    with pytest.raises(ValueError, match="per-turn route reference"):
+        validate_dataset(dataset)
+    case["route_references"] = {
+        "0": {"start_node": "1", "end_node": "3", "via_nodes": []},
+    }
+    with pytest.raises(ValueError, match="per-turn route reference"):
+        validate_dataset(dataset)
+    case["route_references"]["1"] = {
+        "start_node": "1", "end_node": "4", "via_nodes": [],
+    }
+    validate_dataset(dataset)
+
+
+def test_v2_route_gold_rejects_stale_extra_turn_reference():
+    case = _case()
+    case["route_references"] = {
+        "0": case["route_reference"],
+        "1": {"start_node": "1", "end_node": "3", "via_nodes": []},
+    }
+    dataset = {"protocol_version": "scenario-v2", "split": "development",
+               "cases": [case]}
+    with pytest.raises(ValueError, match="per-turn route reference"):
+        validate_dataset(dataset)
+
+
+def test_v2_multiturn_route_references_match_independent_poi_snaps():
+    from experiments.scenario_v2 import verify_route_reference_sources
+
+    case, _ = _two_route_case_and_observation()
+    case["route_coordinates"] = "wgs84"
+    case["route_references"] = {
+        "0": {"start_node": "1", "end_node": "3", "via_nodes": []},
+        "1": {"start_node": "1", "end_node": "4", "via_nodes": []},
+    }
+    graph = nx.MultiDiGraph()
+    for node, x in (("1", 114.0), ("4", 114.001), ("3", 114.002)):
+        graph.add_node(node, x=x, y=30.0)
+    graph.add_edge("1", "4", key=0, length=100, highway="path")
+    graph.add_edge("4", "3", key=0, length=100, highway="path")
+    pois = [{"id": poi_id, "coordinates": {"lng": x, "lat": 30.0}}
+            for poi_id, x in (("a", 114.0), ("c", 114.001), ("b", 114.002))]
+
+    assert verify_route_reference_sources(case, graph, pois) == 2
+    case["route_references"]["1"]["end_node"] = "3"
+    with pytest.raises(ValueError, match="route reference differs from frozen sources"):
+        verify_route_reference_sources(case, graph, pois)
+
+
 def test_v2_graph_route_and_manual_weather_preservation_can_be_reviewed_together():
     case = _case()
+    case["route_references"] = {"0": case.pop("route_reference")}
     case["messages"].append({"role": "user", "content": "再告诉我天气，不要改路线。"})
     case["expected_turns"].append({**_turn(), "kind": "information",
                                    "feasibility": "not_applicable", "start_poi_id": None,
@@ -229,6 +335,50 @@ def test_v2_replay_recomputes_candidates_from_frozen_pois_and_graph(tmp_path):
                ["poi_sha256"]) == 64
 
 
+def test_v2_replay_rejects_route_gold_with_poisoned_poi_anchor(tmp_path):
+    graph = nx.MultiDiGraph()
+    for node, x in (("1", 114.0), ("4", 114.001), ("3", 114.002)):
+        graph.add_node(node, x=x, y=30.0)
+    graph.add_edge("1", "4", key=0, length=100, highway="path")
+    graph.add_edge("4", "3", key=0, length=100, highway="path")
+    graph_path = tmp_path / "graph.graphml"
+    nx.write_graphml(graph, graph_path)
+    pois_path = tmp_path / "pois.json"
+    pois_path.write_text(json.dumps({"pois": [
+        {"id": "a", "coordinates": {"lng": 114.0, "lat": 30.0}},
+        {"id": "b", "coordinates": {"lng": 114.002, "lat": 30.0}},
+    ]}), encoding="utf-8")
+    case = _case()
+    case["route_coordinates"] = "wgs84"
+    case["route_reference"]["end_node"] = "4"
+    dataset_path = tmp_path / "dataset.json"
+    dataset_path.write_text(json.dumps({"protocol_version": "scenario-v2",
+                                        "split": "development", "cases": [case]}),
+                            encoding="utf-8")
+    observed = _observation(["1|4|0"])
+    observed["attempt"] = 1
+    replay_path = tmp_path / "replay.jsonl"
+    replay_path.write_text(json.dumps(observed) + "\n", encoding="utf-8")
+    protocol_path = tmp_path / "protocol.json"
+    protocol_path.write_text('{"protocol_version":"scenario-v2"}', encoding="utf-8")
+
+    with pytest.raises(ValueError, match="route reference differs from frozen sources"):
+        run_replay(dataset_path, replay_path, protocol_path, tmp_path / "results",
+                   "poisoned-route-gold", graph_path=graph_path, pois_path=pois_path)
+    assert not (tmp_path / "results/poisoned-route-gold").exists()
+
+    case["route_reference"]["end_node"] = "3"
+    dataset_path.write_text(json.dumps({"protocol_version": "scenario-v2",
+                                        "split": "development", "cases": [case]}),
+                            encoding="utf-8")
+    observed["turns"][0]["route_edge_ids"] = ["1|4|0", "4|3|0"]
+    replay_path.write_text(json.dumps(observed) + "\n", encoding="utf-8")
+    run = run_replay(dataset_path, replay_path, protocol_path, tmp_path / "results",
+                     "source-backed-route", graph_path=graph_path, pois_path=pois_path)
+    manifest = json.loads((run / "manifest.json").read_text(encoding="utf-8"))
+    assert manifest["route_reference_turns_verified_against_sources"] == 1
+
+
 def test_v2_route_audit_rejects_discontinuity_and_closure():
     graph = _graph()
     assert audit_route_edges(graph, ["1|4|0", "2|3|0"], "1", "3",
@@ -310,7 +460,7 @@ def _formal_dataset():
                 }
             cases.append(case)
     return {"protocol_version": "scenario-v2", "split": "test", "graph_sha256": "b" * 64,
-            "repeats": 3, "cases": cases}
+            "poi_sha256": "c" * 64, "repeats": 3, "cases": cases}
 
 
 def test_v2_formal_accepts_mixed_evidence_without_faking_manual_review():
@@ -322,6 +472,13 @@ def test_v2_formal_accepts_mixed_evidence_without_faking_manual_review():
         validate_dataset(bad, formal=True)
 
 
+def test_v2_formal_graph_route_gold_requires_frozen_poi_digest():
+    dataset = _formal_dataset()
+    dataset.pop("poi_sha256", None)
+    with pytest.raises(ValueError, match="poi_sha256"):
+        validate_dataset(dataset, formal=True)
+
+
 def test_v2_formal_rejects_empty_candidate_gold():
     dataset = _formal_dataset()
     candidate = next(case for case in dataset["cases"] if case["category"] == "T2")
@@ -329,6 +486,7 @@ def test_v2_formal_rejects_empty_candidate_gold():
         "kind": "candidates", "feasibility": "not_applicable",
         "required_outputs": ["candidates"], "candidate_poi_ids": [],
     })
+    dataset.pop("poi_sha256")
     with pytest.raises(ValueError, match="poi_sha256"):
         validate_dataset(dataset, formal=True)
     dataset["poi_sha256"] = "c" * 64

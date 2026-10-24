@@ -18,10 +18,11 @@
     "manual_independent": "Reviewer identity and evidence for questions with genuinely ambiguous answers.",
     "draft": "Authoring only; never counted as formal task success or failure."
   },
+  "route_reference_contract": "For graph-computed gold, a single-turn route may use route_reference. A conversation with more than one turn must use route_references keyed by zero-based turn index for every route turn, including a route after clarification or candidate selection. Formal replay requires frozen POI and graph inputs and verifies stored start/via/end nodes against independently snapped source POIs before scoring; graph agreement does not establish field passability.",
   "sampling": "Five groups, eight scenario families per group, three variants per family. A full conversation is one unit. Development and test must have disjoint template, OD, prompt and media-source groups.",
   "scoring": "Use the v2 scorer with supplied frozen graph and replay projection. Do not trust product verifier flags or embedded reviews; missing external evidence remains unknown. Tool-call sequence is diagnostic, not the primary endpoint.",
   "route_preservation": "A weather-only follow-up with preserve_route_from_turn requires independent client-state evidence that the prior displayed route remains unchanged. A server-only replay cannot establish this; absent independent review is unknown, not success.",
-  "formal_gates": ["120 adjudicated cases with source evidence", "three attempts per case", "frozen graph and POI SHA-256", "independently recomputed candidate ranking with unknown access explicitly retained", "split-leakage audit", "ready snapshot manifest", "matching Git commit", "clean tracked worktree", "independent replay scoring"],
+  "formal_gates": ["120 adjudicated cases with source evidence", "three attempts per case", "frozen graph and POI SHA-256", "per-turn graph route references verified against frozen POI snaps", "independently recomputed candidate ranking with unknown access explicitly retained", "split-leakage audit", "ready snapshot manifest", "matching Git commit", "clean tracked worktree", "independent replay scoring"],
   "separate_datasets": {
     "O1": "40 official BFCL multi-turn cases retain official IDs and scoring; do not merge their scores into campus T1-T5.",
     "D1": "24 synthetic road-event tasks with fixed event clock, edge IDs, modes and expiry.",

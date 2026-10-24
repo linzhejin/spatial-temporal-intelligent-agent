@@ -21,6 +21,15 @@ GROUPS = ("T1", "T2", "T3", "T4", "T5")
 METHODS = {"graph_computed", "official_reference", "manual_independent"}
 
 
+def _route_reference_for_turn(case: dict[str, Any], index: int) -> dict[str, Any] | None:
+    references = case.get("route_references")
+    if isinstance(references, dict):
+        return references.get(str(index))
+    if len(case["expected_turns"]) == 1 and index == 0:
+        return case.get("route_reference")
+    return None
+
+
 def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
     """Require 120 source-backed cases for a formal T1–T5 comparison."""
     if dataset.get("protocol_version") != VERSION:
@@ -41,9 +50,12 @@ def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
         raise ValueError("formal scenario-v2 requires graph_sha256")
     if formal and len(cases) != 120:
         raise ValueError("formal scenario-v2 requires 120 cases")
-    if formal and any(any(turn.get("kind") == "candidates"
-                          for turn in case.get("expected_turns", []))
-                      for case in cases):
+    if formal and any(
+            any(turn.get("kind") == "candidates" for turn in case.get("expected_turns", []))
+            or ((case.get("adjudication") or {}).get("method") == "graph_computed"
+                and any(turn.get("kind") == "route"
+                        for turn in case.get("expected_turns", [])))
+            for case in cases):
         poi_digest = dataset.get("poi_sha256")
         if (not isinstance(poi_digest, str) or len(poi_digest) != 64
                 or any(c not in "0123456789abcdef" for c in poi_digest)):
@@ -98,11 +110,23 @@ def validate_dataset(dataset: dict[str, Any], *, formal: bool = False) -> None:
                 raise ValueError(f"{case_id}: independent manual reviewer required")
             if method == "official_reference" and not adjudication.get("source_id"):
                 raise ValueError(f"{case_id}: official source ID required")
-            if method == "graph_computed" and any(t["kind"] == "route" for t in turns):
-                ref = case.get("route_reference")
-                if (not isinstance(ref, dict) or ref.get("start_node") is None
-                        or ref.get("end_node") is None or not isinstance(ref.get("via_nodes"), list)):
-                    raise ValueError(f"{case_id}: independent route endpoint reference required")
+            route_indices = [index for index, turn in enumerate(turns)
+                             if turn["kind"] == "route"]
+            if method == "graph_computed" and route_indices:
+                references = case.get("route_references")
+                if (references is not None
+                        and (not isinstance(references, dict)
+                             or set(references) != {str(i) for i in route_indices})):
+                    raise ValueError(f"{case_id}: per-turn route references are stale")
+                if len(turns) > 1 and references is None:
+                    raise ValueError(f"{case_id}: complete per-turn route references required")
+                for index in route_indices:
+                    ref = _route_reference_for_turn(case, index)
+                    if (not isinstance(ref, dict) or ref.get("start_node") is None
+                            or ref.get("end_node") is None
+                            or not isinstance(ref.get("via_nodes"), list)
+                            or len(ref["via_nodes"]) != len(turns[index]["via_poi_ids"])):
+                        raise ValueError(f"{case_id}: per-turn route reference is incomplete")
             if formal and any(t["kind"] == "candidates" for t in turns):
                 if method == "graph_computed":
                     spec = case.get("candidate_spec")
@@ -205,6 +229,36 @@ def load_frozen_graph(graph_path: Path, overrides_path: Path,
             old = {"walk", "bike", "drive"}
         edges[identity]["blocked_modes"] = sorted((old - passable) | blocked)
     return graph
+
+
+def verify_route_reference_sources(case: dict[str, Any], graph,
+                                   pois: list[dict[str, Any]]) -> int:
+    """Reject gold route nodes that disagree with independently snapped POIs."""
+    from experiments.route_reference import build_route_reference
+
+    coordinates = case.get("route_coordinates", "gcj02")
+    if coordinates not in {"gcj02", "wgs84"}:
+        raise ValueError(f"{case['id']}: invalid route coordinates")
+    checked = 0
+    for index, turn in enumerate(case["expected_turns"]):
+        if turn["kind"] != "route":
+            continue
+        stored = _route_reference_for_turn(case, index)
+        if not isinstance(stored, dict):
+            raise ValueError(f"{case['id']} turn {index}: per-turn route reference missing")
+        source = build_route_reference(
+            graph, pois, start_poi_id=turn["start_poi_id"],
+            end_poi_id=turn["end_poi_id"], via_poi_ids=turn["via_poi_ids"],
+            mode=turn["travel_mode"], constraints=turn["hard_constraints"],
+            coordinates=coordinates,
+        )
+        anchors = ("start_node", "via_nodes", "end_node")
+        if any(stored.get(field) != source[field] for field in anchors):
+            raise ValueError(f"{case['id']} turn {index}: route reference differs from frozen sources")
+        if turn["feasibility"] == "feasible" and not source["graph_feasible"]:
+            raise ValueError(f"{case['id']} turn {index}: graph route is not feasible")
+        checked += 1
+    return checked
 
 
 def closed_edges_at(graph, conditions: list[dict[str, Any]], mode: str,
@@ -430,8 +484,11 @@ def score_case(case: dict[str, Any], observed: dict[str, Any] | None, *, graph=N
             actual.pop("independent_review", None)
             method = (case.get("adjudication") or {}).get("method")
             expected = case["expected_turns"][index] if index < len(case["expected_turns"]) else {}
-            if method == "graph_computed" and graph is not None and expected.get("kind") == "route":
-                ref = case["route_reference"]
+            ref = _route_reference_for_turn(case, index) if expected.get("kind") == "route" else None
+            if (method == "graph_computed" and graph is not None
+                    and isinstance(ref, dict) and ref.get("start_node") is not None
+                    and ref.get("end_node") is not None
+                    and isinstance(ref.get("via_nodes"), list)):
                 mode = expected.get("travel_mode")
                 timed_closures = closed_edges
                 if conditions is not None:

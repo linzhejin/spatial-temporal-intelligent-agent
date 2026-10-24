@@ -26,6 +26,7 @@ from experiments.scenario_v2 import score_case as score_case_v2
 from experiments.scenario_v2 import validate_dataset as validate_dataset_v2
 from experiments.scenario_v2 import load_frozen_graph
 from experiments.scenario_v2 import closed_edges_at
+from experiments.scenario_v2 import verify_route_reference_sources
 from experiments.candidate_reference import build_candidate_reference
 
 
@@ -189,9 +190,12 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
     candidate_cases = [case for case in dataset["cases"]
                        if any(turn["kind"] == "candidates" for turn in case["expected_turns"])
                        and (case.get("adjudication") or {}).get("method") == "graph_computed"]
-    if v2 and formal and candidate_cases and (
+    graph_route_cases = [case for case in dataset["cases"]
+                         if any(turn["kind"] == "route" for turn in case["expected_turns"])
+                         and (case.get("adjudication") or {}).get("method") == "graph_computed"]
+    if v2 and formal and (candidate_cases or graph_route_cases) and (
             pois_bytes is None or _sha(pois_bytes) != dataset.get("poi_sha256")):
-        raise ValueError("formal candidate POIs do not match frozen poi_sha256")
+        raise ValueError("formal graph-scored POIs do not match frozen poi_sha256")
     overrides_bytes = overrides_path.read_bytes() if overrides_path is not None else None
     reviews_bytes = reviews_path.read_bytes() if reviews_path is not None else None
     conditions_bytes = conditions_path.read_bytes() if conditions_path is not None else None
@@ -231,7 +235,7 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
             for name, relative_name, layer_bytes in required_layers:
                 if (snapshot_report["versions"].get(name) or {}).get("sha256") != _readiness_file_sha(relative_name, layer_bytes):
                     raise ValueError(f"frozen {name} differs from snapshot manifest")
-            if candidate_cases and (snapshot_report["versions"].get("poi") or {}).get("sha256") != _readiness_file_sha("data/pois.json", pois_bytes):
+            if (candidate_cases or graph_route_cases) and (snapshot_report["versions"].get("poi") or {}).get("sha256") != _readiness_file_sha("data/pois.json", pois_bytes):
                 raise ValueError("frozen POIs differ from snapshot manifest")
             if (snapshot_report["versions"].get("event_state") or {}).get("sha256") != _sha(conditions_bytes):
                 raise ValueError("frozen road conditions differ from snapshot manifest")
@@ -269,11 +273,19 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
     if not set(observations) <= expected_keys:
         raise ValueError("replay contains unknown scenario or attempt")
     candidate_references: dict[str, dict[str, Any]] = {}
-    if candidate_cases and graph is not None and pois_bytes is not None:
+    verified_route_turns = 0
+    pois = None
+    if (candidate_cases or graph_route_cases) and pois_bytes is not None:
         pois_source = json.loads(pois_bytes)
         pois = pois_source.get("pois") if isinstance(pois_source, dict) else None
         if not isinstance(pois, list):
-            raise ValueError("candidate POI source must contain a pois list")
+            raise ValueError("graph-scored POI source must contain a pois list")
+    if graph_route_cases and graph is not None and pois is not None:
+        for case in graph_route_cases:
+            verified_route_turns += verify_route_reference_sources(case, graph, pois)
+    elif formal and graph_route_cases:
+        raise ValueError("formal route scoring requires frozen graph and POIs")
+    if candidate_cases and graph is not None and pois is not None:
         for case in candidate_cases:
             spec = case.get("candidate_spec")
             if not isinstance(spec, dict):
@@ -324,6 +336,7 @@ def run_replay(dataset_path: Path, replay_path: Path, protocol_path: Path,
         "gold_independence": ("mixed_source_backed" if v2 else "declared_manually_adjudicated")
         if formal else "unverified_draft_or_development",
         "dataset_sha256": _sha(dataset_bytes), "protocol_sha256": _sha(protocol_bytes),
+        "route_reference_turns_verified_against_sources": verified_route_turns,
         "replay_sha256": _sha(replay_bytes),
         "snapshot_manifest_sha256": _sha(snapshot_bytes) if snapshot_bytes is not None else None,
         "snapshot_effective_inputs_sha256": snapshot_fingerprint,
