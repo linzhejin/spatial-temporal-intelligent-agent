@@ -43,7 +43,7 @@ _OBSERVATION_FIELDS = {
 _TURN_FIELDS = {
     "status", "kind", "start_poi_id", "end_poi_id", "via_poi_ids",
     "travel_mode", "strategy", "hard_constraints", "candidate_poi_ids",
-    "clarification_slot", "outputs", "route_edge_ids", "tool_trace",
+    "clarification_slot", "outputs", "route_edge_ids", "partial_route_edge_ids", "tool_trace",
     "independent_review", "unknowns",
 }
 _REVIEW_FIELDS = {"source", "reviewer", "evidence", "route", "hard_constraints", "outputs"}

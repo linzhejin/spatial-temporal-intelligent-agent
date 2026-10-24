@@ -3,6 +3,7 @@
 import pytest
 
 from api.routes import _agent_response_to_legacy
+from experiments.scenario_runner import _validate_observation_projection
 from experiments.scenario_live_adapter import (
     build_poi_lookup,
     project_live_run,
@@ -42,6 +43,104 @@ def test_live_projection_keeps_exact_route_edges_and_stable_poi_ids():
     }
     assert "result" not in turn and "recommended" not in turn
     assert "independent_review" not in turn
+
+
+def test_partial_route_with_next_place_candidates_projects_the_pending_search():
+    lookup = build_poi_lookup([
+        {"id": "poi_001", "name": "玉兰2门"},
+        {"id": "poi_002", "name": "桂园操场"},
+        {"id": "poi_004", "name": "桂园食堂"},
+    ])
+    result = _agent_response_to_legacy({
+        "response_kind": "route", "message": "先到球场，再选吃饭地点。",
+        "route": {
+            "start_name": "玉兰2门", "end_name": "桂园操场",
+            "mode": "walk", "recommended": [[114.3, 30.5]],
+            "recommended_edge_ids": [[101, 102, 4]],
+            "route_state": {
+                "start": {"name": "玉兰2门"}, "end": {"name": "桂园操场"},
+                "travel_mode": "walk", "strategy": {"name": "shortest"},
+            },
+        },
+    })
+    result.update({
+        "needs_input": True,
+        "place_request": {
+            "pending_slot": "selection", "start": {"name": "桂园操场"},
+            "mode": "walk", "constraints": {}, "candidate_poi_ids": ["poi_004"],
+        },
+        "candidates": [{"poi_id": "poi_004", "name": "桂园食堂"}],
+    })
+
+    projected = project_live_run({"status": "needs_input", "result": result}, lookup)
+
+    assert projected["kind"] == "candidates"
+    assert projected["status"] == "needs_input"
+    assert projected["start_poi_id"] == "poi_002"
+    assert projected["end_poi_id"] is None
+    assert projected["via_poi_ids"] == []
+    assert projected["candidate_poi_ids"] == ["poi_004"]
+    assert projected["clarification_slot"] is None
+    assert projected["outputs"] == ["candidates"]
+    assert projected["route_edge_ids"] == []
+    assert projected["partial_route_edge_ids"] == [[101, 102, 4]]
+    _validate_observation_projection({"turns": [projected]})
+
+
+def test_pending_route_without_candidate_list_is_not_relabelled_as_recommendation():
+    projected = project_live_run({"status": "needs_input", "result": {
+        "response_kind": "route", "needs_input": True,
+        "recommended_edge_ids": [[101, 102, 4]],
+        "place_request": {"pending_slot": "selection", "start": {"name": "桂操"}},
+        "candidates": [],
+    }}, _lookup())
+
+    assert projected["kind"] == "route"
+    assert projected["outputs"] == ["route"]
+    assert projected["route_edge_ids"] == [[101, 102, 4]]
+    assert "partial_route_edge_ids" not in projected
+
+
+def test_candidate_selection_slot_is_not_a_missing_information_question():
+    projected = project_live_run({"status": "needs_input", "result": {
+        "response_kind": "candidates",
+        "place_request": {"pending_slot": "selection", "start": {"name": "桂操"}},
+        "candidates": [{"poi_id": "poi_015", "name": "武汉大学图书馆(总馆)"}],
+    }}, _lookup())
+
+    assert projected["kind"] == "candidates"
+    assert projected["clarification_slot"] is None
+
+
+def test_selected_second_stop_projects_the_ordered_full_route():
+    lookup = build_poi_lookup([
+        {"id": "poi_001", "name": "玉兰2门"},
+        {"id": "poi_002", "name": "桂园操场"},
+        {"id": "poi_004", "name": "桂园食堂"},
+    ])
+    result = _agent_response_to_legacy({
+        "response_kind": "route", "route_kind": "via",
+        "route": {
+            "start_name": "玉兰2门", "end_name": "桂园食堂",
+            "mode": "walk", "recommended": [[114.3, 30.5]],
+            "recommended_edge_ids": [[101, 102, 4], [102, 103, 0]],
+            "via": {"type": "multi", "points": [{"name": "桂园操场"}]},
+            "route_state": {
+                "start": {"name": "玉兰2门"}, "end": {"name": "桂园食堂"},
+                "via": {"name": "桂园操场"}, "travel_mode": "walk",
+                "strategy": {"name": "shortest"},
+            },
+        },
+    })
+
+    projected = project_live_run({"status": "completed", "result": result}, lookup)
+
+    assert projected["kind"] == "route"
+    assert projected["start_poi_id"] == "poi_001"
+    assert projected["via_poi_ids"] == ["poi_002"]
+    assert projected["end_poi_id"] == "poi_004"
+    assert projected["route_edge_ids"] == [[101, 102, 4], [102, 103, 0]]
+    assert "partial_route_edge_ids" not in projected
 
 
 def test_weather_output_requires_observation_and_user_facing_reply():

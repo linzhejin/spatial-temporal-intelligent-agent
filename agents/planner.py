@@ -165,6 +165,8 @@ def _named_via_request(text: str) -> dict | None:
     end = re.split(r"\s*(?:不走|避开|顺便|同时|查天气)", match.group("end"), maxsplit=1)[0].strip()
     if not via or not end or re.search(r"、|和|及|再经|途经|经过", via):
         return None
+    if any(agent_tools.is_open_ended_activity_stop(point) for point in (via, end)):
+        return None
     return {"start": (match.group("start") or "").strip(), "via": via, "end": end}
 
 
@@ -174,7 +176,7 @@ def _explicit_start_name(query: str) -> str | None:
     field = re.search(r"(?:起点|出发地)(?:设为|是|为|在|[:：])\s*([^，,。；;]+)", text)
     if field:
         name = field.group(1).strip()
-        return name or None
+        return name if name and not agent_tools.is_deictic_origin(name) else None
 
     # Common conversational form: “我在教五这边，帮我导航到图书馆”.
     located = re.search(r"(?:^|[，,。；;\s])我(?:现在)?在\s*([^，,。；;]{1,40})", text)
@@ -182,7 +184,8 @@ def _explicit_start_name(query: str) -> str | None:
         name = re.split(r"(?:出发|前往|去|到|帮我|请你|规划|导航|带我)",
                         located.group(1), maxsplit=1)[0].strip()
         name = re.sub(r"(?:这边|附近|旁边|周围|一带)$", "", name).strip()
-        if name and name not in {"我这", "我这里", "我这边", "这里", "当前位置", "当前"}:
+        if name and name not in {"我这", "我这里", "我这边", "这里", "当前位置", "当前"} \
+                and not agent_tools.is_deictic_origin(name):
             return name
 
     from_match = re.search(
@@ -190,7 +193,8 @@ def _explicit_start_name(query: str) -> str | None:
     )
     if from_match:
         name = from_match.group(1).strip()
-        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "地图起点"}:
+        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "地图起点"} \
+                and not agent_tools.is_deictic_origin(name):
             return name
         if name == "地图起点":
             return name
@@ -207,7 +211,7 @@ def _explicit_start_name(query: str) -> str | None:
         name,
     ):
         return None
-    return name or None
+    return name if name and not agent_tools.is_deictic_origin(name) else None
 
 
 def _manual_map_start_ref(coord_start: dict) -> dict | None:

@@ -6,6 +6,17 @@ from agents import planner, tools
 from spatial.poi import _flatten_poi
 
 
+def test_deictic_origin_does_not_replace_saved_selection_origin():
+    assert tools.recommendation_origin_from_text(
+        "吃饭选蔬三时轻食；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方"
+    ) is None
+    assert tools.recommendation_origin_from_text(
+        "从武汉大学工学部出发，找附近食堂"
+    ) == "武汉大学工学部"
+    assert planner._explicit_start_name("请从刚才的起点出发，经过球场再到食堂") is None
+    assert planner._explicit_start_name("请从武汉大学工学部出发，经过球场再到食堂") == "武汉大学工学部"
+
+
 def test_activity_filter_is_applied_to_the_full_category_result():
     records = [
         {"id": "basketball", "name": "篮球场", "type": "sports", "subcategory": "field",
@@ -617,7 +628,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     first = planner.run_agent("去这个地点", context={
         "place_request": initial["place_request"], "selected_poi_id": basketball["poi_id"],
     })
-    second = planner.run_agent("去这个地点", context={
+    second = planner.run_agent("吃饭选测试食堂；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方", context={
         "place_request": first["place_request"], "selected_poi_id": canteen["poi_id"],
     })
     third = planner.run_agent("桂园6舍", context={
@@ -633,6 +644,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     assert third["route_kind"] == "via"
     assert third["place_request"] is None
     assert len(third["route"]["recommended_edge_ids"]) == 3
+    assert route_calls[1]["start"]["name"] == basketball["name"]
     assert all(call["constraints"]["avoid_steps"] for call in route_calls)
 
 

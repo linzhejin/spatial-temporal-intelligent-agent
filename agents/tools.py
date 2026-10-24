@@ -77,6 +77,17 @@ _COMPARISON_STRATEGIES = (
 )
 
 
+def is_open_ended_activity_stop(name: str) -> bool:
+    """Distinguish an activity search from a concrete named route stop."""
+    text = str(name or "").strip()
+    if not resolve_activity_query(text):
+        return False
+    return bool(re.search(
+        r"^(?:(?:去|想|想要)?(?:找|推荐|打|踢|吃|喝|跑步|运动|健身|自习)|"
+        r"附近|最近|任意|随便|一个|一家)|能.+的地方|附近", text,
+    ))
+
+
 def ordered_via_request(query: str) -> dict | None:
     """Recognize a bounded ordered trip, without assuming a timed visit or loop."""
     text = (query or "").strip().rstrip("。.!！")
@@ -116,6 +127,8 @@ def ordered_via_request(query: str) -> dict | None:
     if (not 2 <= len(points) <= _MAX_VIA_POINTS + 1
             or any(not point or len(point) > 40 or re.search(r"[，,。；;？?]|帮我|导航|路线", point)
                    for point in points)):
+        return None
+    if any(is_open_ended_activity_stop(point) for point in points):
         return None
     return {"start": match.group("start").strip(), "via": points[:-1], "end": points[-1]}
 
@@ -753,9 +766,19 @@ def recommendation_origin_from_text(query: str) -> str | None:
         if not match:
             continue
         name = re.sub(stop_words, "", match.group(1)).strip()
-        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "这里", "这儿"}:
+        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "这里", "这儿"} \
+                and not is_deictic_origin(name):
             return name
     return None
+
+
+def is_deictic_origin(name: str) -> bool:
+    """A reference to a saved origin is not a new POI name."""
+    compact = re.sub(r"\s+", "", str(name or ""))
+    return bool(re.fullmatch(
+        r"(?:(?:刚才|之前|先前|原来|上次|前面)(?:的)?|原)"
+        r"(?:起点|出发点|出发地|位置|地点)", compact,
+    ))
 
 
 def _query_has_explicit_poi_destination(query: str) -> bool:

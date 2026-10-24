@@ -274,7 +274,7 @@ def test_v2_candidate_delivery_accepts_selection_pending_or_completed_status():
     observed["turns"][0].update({
         "status": "needs_input", "kind": "candidates", "end_poi_id": None,
         "hard_constraints": {}, "candidate_poi_ids": ["a", "b"],
-        "outputs": ["candidates"],
+        "outputs": ["candidates"], "strategy": None,
     })
     reference = {"distances_m": {"a": 100, "b": 200}, "max_display": 2,
                  "rank_tolerance_m": 0, "uncertain_access_ids": []}

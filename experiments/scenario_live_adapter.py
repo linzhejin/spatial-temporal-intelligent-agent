@@ -115,6 +115,18 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
     kind = {"path_planning": "route", "unknown": "clarify", "chat": "information"}.get(kind, kind)
     if kind not in {"route", "candidates", "clarify", "information", "no_route"}:
         kind = "information"
+    candidates = result.get("candidates") or []
+    # A completed leg can be shown together with candidates for the next stop.
+    # The pending decision is the observable task outcome; its leg is not the
+    # full route requested after the user chooses the next stop.
+    partial_route_with_candidates = (
+        kind == "route" and run.get("status") == "needs_input"
+        and result.get("needs_input") is True
+        and request.get("pending_slot") == "selection"
+        and isinstance(candidates, list) and bool(candidates)
+    )
+    if partial_route_with_candidates:
+        kind = "candidates"
     status = run.get("status")
     if status == "needs_input":
         status = "needs_input"
@@ -131,14 +143,14 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         )
         start = start or ({} if start_conflict else request.get("start"))
     else:
-        start = state.get("start") or result.get("start") or request.get("start")
-        end = state.get("end") or result.get("end")
+        start = (request.get("start") if partial_route_with_candidates else
+                 state.get("start") or result.get("start") or request.get("start"))
+        end = None if partial_route_with_candidates else state.get("end") or result.get("end")
         start_conflict = end_conflict = False
     if (end is None and kind == "clarify" and request.get("pending_slot") == "start"
             and isinstance(request.get("selected_poi_id"), str)):
         end = {"poi_id": request["selected_poi_id"]}
-    vias = _via_refs(state.get("via") or result.get("via"))
-    candidates = result.get("candidates") or []
+    vias = [] if partial_route_with_candidates else _via_refs(state.get("via") or result.get("via"))
     strategy = state.get("strategy") or result.get("strategy") or {}
     if isinstance(strategy, dict):
         strategy = strategy.get("name")
@@ -174,10 +186,13 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         "strategy": strategy, "hard_constraints": constraints,
         "candidate_poi_ids": [_poi_id(ref, lookup) for ref in candidates]
                              if isinstance(candidates, list) else [],
-        "clarification_slot": request.get("pending_slot"),
-        "outputs": outputs, "route_edge_ids": edges if isinstance(edges, list) else [],
+        "clarification_slot": request.get("pending_slot") if kind == "clarify" else None,
+        "outputs": outputs,
+        "route_edge_ids": (edges if kind == "route" and isinstance(edges, list) else []),
         "unknowns": unknowns,
     }
+    if partial_route_with_candidates:
+        projected["partial_route_edge_ids"] = edges if isinstance(edges, list) else []
     tool_trace = _project_tool_trace(run)
     if tool_trace is not None:
         projected["tool_trace"] = tool_trace

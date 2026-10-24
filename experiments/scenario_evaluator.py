@@ -253,7 +253,9 @@ def evaluate_scenario(case: dict[str, Any], observed: dict[str, Any] | None, *,
                     _append_once(failures, "wrong_poi")
         if actual.get("travel_mode") != expected["travel_mode"]:
             _append_once(failures, "wrong_travel_mode")
-        if actual.get("strategy") != expected["strategy"]:
+        # Candidate ranking is judged against its independent distance list.
+        # A POI shortlist has no user-facing route strategy to project.
+        if expected["kind"] != "candidates" and actual.get("strategy") != expected["strategy"]:
             _append_once(failures, "wrong_strategy")
         if actual.get("via_poi_ids") != expected["via_poi_ids"]:
             _append_once(failures, "wrong_poi_order")
