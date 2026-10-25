@@ -1,0 +1,40 @@
+{
+  "format": "controlled-event-pilot-spec-v1",
+  "scope": "synthetic_development_only",
+  "templates": {
+    "detour": {
+      "category": "compound_tools",
+      "template_group": "event_route_dev_v1",
+      "text": "先查路况，再给我从{start}{mode_text}到{end}的全程最短路线。"
+    },
+    "blocked": {
+      "category": "event_infeasible",
+      "template_group": "event_route_dev_v1",
+      "text": "先查路况，判断从{start}{mode_text}到{end}现在能否走通，并给出全程路线或不可达原因。"
+    }
+  },
+  "cases": [
+    {
+      "id": "event_dev_detour_001",
+      "template_id": "detour",
+      "od_group": "event_dev_poi_001_poi_015",
+      "parameters": {
+        "start_poi_id": "poi_001", "end_poi_id": "poi_015",
+        "via_poi_ids": [], "mode": "walk", "avoid_steps": false,
+        "event_snapshot_id": "simulated_detour_001",
+        "expected_verdict": "feasible"
+      }
+    },
+    {
+      "id": "event_dev_blocked_001",
+      "template_id": "blocked",
+      "od_group": "event_dev_poi_001_poi_015",
+      "parameters": {
+        "start_poi_id": "poi_001", "end_poi_id": "poi_015",
+        "via_poi_ids": [], "mode": "walk", "avoid_steps": false,
+        "event_snapshot_id": "simulated_blocked_001",
+        "expected_verdict": "infeasible"
+      }
+    }
+  ]
+}

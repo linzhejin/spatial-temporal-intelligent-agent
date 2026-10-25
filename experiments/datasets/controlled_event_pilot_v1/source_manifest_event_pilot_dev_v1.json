@@ -1,0 +1,144 @@
+{
+  "effective_inputs_sha256": "179a5b32ccc088c3cf5543bcfc796d8057508ee2e8105c32fedc5b7788f8a66b",
+  "format": "controlled-event-source-v1",
+  "inputs": {
+    "anchor_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_anchor_snapshot.py",
+      "sha256": "a5efe6682f0fd311006f7b0728e873aab8dfc7ccc56f1733e409964edcf50966"
+    },
+    "anchors": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_spatial_v1/walk_anchors.json",
+      "sha256": "a450914be440bb2a8086036b42651cd833d45babdd9abcd6969f5d64d6db0aae"
+    },
+    "boundary": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_spatial_v1/boundary_wgs84.wkt",
+      "sha256": "3e33c61140da50b72679137ae8be10481c96eeb1e6280dbf40e08116a2c2dcd8"
+    },
+    "boundary_source": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "config.py",
+      "sha256": "6b9f302b3fb9d75f056823fc1f7474665e385bb904ed8fef91602b3451033285"
+    },
+    "collector": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_live_adapter.py",
+      "sha256": "426aa2f20df9f92f14bbb279ef3ff45a1f5aac4612912d0604d828e92a483c5a"
+    },
+    "coordinate_transform": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "spatial/coord_transform.py",
+      "sha256": "f33b274eb0b1ac003284d2481d2b2684d5e48bd45c0fb05249293dad2bc3fa7f"
+    },
+    "dataset_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/build_controlled_event_pilot.py",
+      "sha256": "60f88461b95e3c45f71c2e5d54a03595b935b6c562824acefd1d3bc6a5bdf086"
+    },
+    "event_scorer": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_event_replay.py",
+      "sha256": "2a840c9bc909949ecd6dbdfcc43791bfd035e32055c89623887529a48a963a4a"
+    },
+    "event_snapshot": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_event_pilot_v1/event_snapshots_dev_v1.json",
+      "sha256": "77902e91778cdbc1c82574472fe2dfd71fd250a645135626405135d20016734a"
+    },
+    "generator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_event_cases.py",
+      "sha256": "f003b2931d4181cad27583a081c46440224a9e7e18a42e0f0a65dca79a730853"
+    },
+    "gold_contract": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_gold_contract.py",
+      "sha256": "f9c6db67d218c596838863ce0fda723d885a3005b62a8f927c4609b0217dde74"
+    },
+    "graph": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "data/whu_road_network.graphml",
+      "sha256": "559ad68ba2c7f57782cc61a114bd057582e6b75da43e358ed5955adfba9b78a7"
+    },
+    "observation_validator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_runner.py",
+      "sha256": "97188bd21cfb06cd542bd36df7b28b3795a4d1516564a70d7e835ad3a0a4bec1"
+    },
+    "oracle_event": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/independent_source_snapshot.py",
+      "sha256": "220540ef3ab72a4eb8007ada34f6cf7a5eb1e7f1f3c8e14bc6459e490cd2d531"
+    },
+    "oracle_existence": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_gold.py",
+      "sha256": "291eb907cb4831a3403bec57a005624359a679e13129af3e1f12709c494ff59b"
+    },
+    "oracle_mode": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/independent_source_snapshot.py",
+      "sha256": "220540ef3ab72a4eb8007ada34f6cf7a5eb1e7f1f3c8e14bc6459e490cd2d531"
+    },
+    "oracle_route": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/independent_route_oracle.py",
+      "sha256": "ae3d04cc543296a0f7a8c7cdebd773b3ff28ed345f29c6be1aa17c7a13bea9a6"
+    },
+    "packet_helpers": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/build_controlled_route_pilot.py",
+      "sha256": "f20b26d3d63b702667f52d99b81d61123b92b4d34d3a70ffc18b67566243f113"
+    },
+    "poi": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "data/pois.json",
+      "sha256": "30cb2e9a20b6bdd69ff76d7e1bcb9943f5bc6ef6df96c67723c4c2d465529bbf"
+    },
+    "route_case_helpers": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_cases.py",
+      "sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3"
+    },
+    "route_scorer": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_replay.py",
+      "sha256": "c32a0a8247386fd773c7b4742538e361c4aa7ff8c1330f3559ded73a668badbe"
+    },
+    "scenario_evaluator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_evaluator.py",
+      "sha256": "ca578c90f6444f240510c6d81722dc66a102260142e644145af19d35cf081f37"
+    },
+    "source_hash_helpers": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_source_manifest.py",
+      "sha256": "0349e4a53122acca279d703dae38f95f065c4d3dc3f37b192a633a7c91b9ed7e"
+    },
+    "source_manifest_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_event_manifest.py",
+      "sha256": "bbfb0ec7f7a923d451f4e9b041a253b97c047693c0033118b7d346847c8ddc38"
+    },
+    "spatial_snapshot_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/build_controlled_spatial_snapshot.py",
+      "sha256": "88aedb0cda7d3eaf0b27c239669205ef185f38ed14c259906c93d064b232c651"
+    },
+    "templates": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_event_pilot_v1/event_pilot_spec.json",
+      "sha256": "b4866f91853667f6c2005fb275b6cd40e9fe593bc3727bd7e115022cc613061a"
+    }
+  },
+  "metadata": {
+    "boundary_crs": "EPSG:4326",
+    "campus_truth": false,
+    "event_scope": "synthetic_development_only",
+    "graph_crs": "EPSG:4326"
+  },
+  "profile": "event_pilot",
+  "scope": "controlled_graph_input"
+}

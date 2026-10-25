@@ -1,0 +1,636 @@
+{
+  "cases": [
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "ded940984c6d14d881cfd6ae123eef4720cff9108d0440649d868bc4946472a4"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "82a35cf26951652f5d2fe6b0fc76867bf814adf7e6facb543230afdad09ff192"
+          },
+          {
+            "kind": "frozen_event_snapshot",
+            "sha256": "d7a44a78ac6398f4c896e0359ded70f8584e6a2e2278526cb29293a673a127bf"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "compound_tools",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_015",
+          "feasibility": "feasible",
+          "hard_constraints": {},
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "road_events",
+            "route"
+          ],
+          "start_poi_id": "poi_001",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "active_closed_edge_ids": [
+          [
+            13266196548,
+            13266196543,
+            0
+          ]
+        ],
+        "baseline_result": {
+          "length_m": 521.8,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              1197845980,
+              0
+            ],
+            [
+              1197845980,
+              13271173988,
+              0
+            ],
+            [
+              13271173988,
+              13271173970,
+              0
+            ],
+            [
+              13271173970,
+              13271173966,
+              0
+            ],
+            [
+              13271173966,
+              13271173958,
+              0
+            ],
+            [
+              13271173958,
+              13271173960,
+              0
+            ],
+            [
+              13271173960,
+              13273046928,
+              0
+            ],
+            [
+              13273046928,
+              13271168057,
+              0
+            ],
+            [
+              13271168057,
+              13271168052,
+              0
+            ],
+            [
+              13271168052,
+              13271168016,
+              0
+            ],
+            [
+              13271168016,
+              13271168019,
+              0
+            ],
+            [
+              13271168019,
+              13271168020,
+              0
+            ],
+            [
+              13271168020,
+              13266196511,
+              0
+            ],
+            [
+              13266196511,
+              13269409069,
+              0
+            ],
+            [
+              13269409069,
+              13266196506,
+              0
+            ],
+            [
+              13266196506,
+              13266196508,
+              0
+            ],
+            [
+              13266196508,
+              13266196548,
+              0
+            ],
+            [
+              13266196548,
+              13266196543,
+              0
+            ],
+            [
+              13266196543,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "event_snapshot_sha256": "d7a44a78ac6398f4c896e0359ded70f8584e6a2e2278526cb29293a673a127bf",
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle",
+          "frozen_event_snapshot"
+        ],
+        "generator_id": "controlled_event_cases_v1",
+        "generator_sha256": "f003b2931d4181cad27583a081c46440224a9e7e18a42e0f0a65dca79a730853",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 575.413,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              1197845980,
+              0
+            ],
+            [
+              1197845980,
+              13271173988,
+              0
+            ],
+            [
+              13271173988,
+              13271173970,
+              0
+            ],
+            [
+              13271173970,
+              13271173966,
+              0
+            ],
+            [
+              13271173966,
+              13271173958,
+              0
+            ],
+            [
+              13271173958,
+              13271173960,
+              0
+            ],
+            [
+              13271173960,
+              13273046928,
+              0
+            ],
+            [
+              13273046928,
+              13271168057,
+              0
+            ],
+            [
+              13271168057,
+              13271168052,
+              0
+            ],
+            [
+              13271168052,
+              13271168016,
+              0
+            ],
+            [
+              13271168016,
+              13271168019,
+              0
+            ],
+            [
+              13271168019,
+              13271168020,
+              0
+            ],
+            [
+              13271168020,
+              13266196511,
+              0
+            ],
+            [
+              13266196511,
+              13269409069,
+              0
+            ],
+            [
+              13269409069,
+              13266196506,
+              0
+            ],
+            [
+              13266196506,
+              13266196508,
+              0
+            ],
+            [
+              13266196508,
+              1196672324,
+              0
+            ],
+            [
+              1196672324,
+              13241415882,
+              0
+            ],
+            [
+              13241415882,
+              3631666680,
+              0
+            ],
+            [
+              3631666680,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": false,
+          "end_poi_id": "poi_015",
+          "event_snapshot_id": "simulated_detour_001",
+          "expected_verdict": "feasible",
+          "mode": "walk",
+          "start_poi_id": "poi_001",
+          "via_poi_ids": []
+        },
+        "parameters_sha256": "ded940984c6d14d881cfd6ae123eef4720cff9108d0440649d868bc4946472a4",
+        "template_id": "detour",
+        "template_sha256": "b4866f91853667f6c2005fb275b6cd40e9fe593bc3727bd7e115022cc613061a",
+        "unresolved_ambiguity": false
+      },
+      "id": "event_dev_detour_001",
+      "messages": [
+        {
+          "content": "先查路况，再给我从梅园综合楼步行到武汉大学图书馆(总馆)的全程最短路线。",
+          "role": "user"
+        }
+      ],
+      "od_group": "event_dev_poi_001_poi_015",
+      "snapshot_id": "179a5b32ccc088c3cf5543bcfc796d8057508ee2e8105c32fedc5b7788f8a66b",
+      "template_group": "event_route_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "0a2ac6ddc4a81f6f2f354e1914797510bf152a135955fac5b2c6b83c619ec34b"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "c43fe65b62b30cb4145e4b5e890be4a8ba596fac0307c9bfe5fb949f7f77c427"
+          },
+          {
+            "kind": "frozen_event_snapshot",
+            "sha256": "9490c9114d5d05f41e66745328d3994f10caf8fea641d7b43f73d37d708e4b5f"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "event_infeasible",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_015",
+          "feasibility": "infeasible",
+          "hard_constraints": {},
+          "intent_label": "route_planning",
+          "kind": "no_route",
+          "required_outputs": [
+            "road_events",
+            "infeasibility_explanation"
+          ],
+          "start_poi_id": "poi_001",
+          "status": "infeasible",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "active_closed_edge_ids": [
+          [
+            13273047778,
+            13273047777,
+            0
+          ]
+        ],
+        "baseline_result": {
+          "length_m": 521.8,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              1197845980,
+              0
+            ],
+            [
+              1197845980,
+              13271173988,
+              0
+            ],
+            [
+              13271173988,
+              13271173970,
+              0
+            ],
+            [
+              13271173970,
+              13271173966,
+              0
+            ],
+            [
+              13271173966,
+              13271173958,
+              0
+            ],
+            [
+              13271173958,
+              13271173960,
+              0
+            ],
+            [
+              13271173960,
+              13273046928,
+              0
+            ],
+            [
+              13273046928,
+              13271168057,
+              0
+            ],
+            [
+              13271168057,
+              13271168052,
+              0
+            ],
+            [
+              13271168052,
+              13271168016,
+              0
+            ],
+            [
+              13271168016,
+              13271168019,
+              0
+            ],
+            [
+              13271168019,
+              13271168020,
+              0
+            ],
+            [
+              13271168020,
+              13266196511,
+              0
+            ],
+            [
+              13266196511,
+              13269409069,
+              0
+            ],
+            [
+              13269409069,
+              13266196506,
+              0
+            ],
+            [
+              13266196506,
+              13266196508,
+              0
+            ],
+            [
+              13266196508,
+              13266196548,
+              0
+            ],
+            [
+              13266196548,
+              13266196543,
+              0
+            ],
+            [
+              13266196543,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "event_snapshot_sha256": "9490c9114d5d05f41e66745328d3994f10caf8fea641d7b43f73d37d708e4b5f",
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle",
+          "frozen_event_snapshot"
+        ],
+        "generator_id": "controlled_event_cases_v1",
+        "generator_sha256": "f003b2931d4181cad27583a081c46440224a9e7e18a42e0f0a65dca79a730853",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": null,
+          "reason": "no_path_in_frozen_eligible_graph",
+          "route_edge_ids": [],
+          "scope": "frozen_graph_only",
+          "verdict": "infeasible"
+        },
+        "parameters": {
+          "avoid_steps": false,
+          "end_poi_id": "poi_015",
+          "event_snapshot_id": "simulated_blocked_001",
+          "expected_verdict": "infeasible",
+          "mode": "walk",
+          "start_poi_id": "poi_001",
+          "via_poi_ids": []
+        },
+        "parameters_sha256": "0a2ac6ddc4a81f6f2f354e1914797510bf152a135955fac5b2c6b83c619ec34b",
+        "template_id": "blocked",
+        "template_sha256": "b4866f91853667f6c2005fb275b6cd40e9fe593bc3727bd7e115022cc613061a",
+        "unresolved_ambiguity": false
+      },
+      "id": "event_dev_blocked_001",
+      "messages": [
+        {
+          "content": "先查路况，判断从梅园综合楼步行到武汉大学图书馆(总馆)现在能否走通，并给出全程路线或不可达原因。",
+          "role": "user"
+        }
+      ],
+      "od_group": "event_dev_poi_001_poi_015",
+      "snapshot_id": "179a5b32ccc088c3cf5543bcfc796d8057508ee2e8105c32fedc5b7788f8a66b",
+      "template_group": "event_route_dev_v1"
+    }
+  ],
+  "gold_layer": "controlled_graph",
+  "protocol_version": "scenario-v2",
+  "repeats": 1,
+  "snapshot_id": "179a5b32ccc088c3cf5543bcfc796d8057508ee2e8105c32fedc5b7788f8a66b",
+  "source_manifest_sha256": "ec0b0d8996f95ab5a76f36edfc45ae03705c222a9ee4cc41cb8e9c96c6126906",
+  "split": "development"
+}
