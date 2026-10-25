@@ -63,3 +63,19 @@ def test_edge_with_missing_length_never_passes():
     )
     assert result["verdict"] == "unknown"
     assert "edge_length_missing" in result["unknowns"]
+
+
+def test_unknown_mode_and_steps_evidence_are_not_false_fail_or_false_pass():
+    graph = _graph()
+    del graph["a"]["b"][0]["highway"]
+    result = inspect_route_edges(
+        graph, [["a", "b", 0], ["b", "c", 0], ["c", "d", 0]],
+        start_node="a", end_node="d", via_nodes=[], mode="walk",
+        permitted_edge_ids={("b", "c", 0), ("c", "d", 0)},
+        uncertain_edge_ids={("a", "b", 0)},
+        closed_edge_ids=set(), avoid_steps=True,
+    )
+    assert result["verdict"] == "unknown"
+    assert "mode_edge_uncertain" in result["unknowns"]
+    assert "step_tag_missing" in result["unknowns"]
+    assert "mode_forbidden_edge" not in result["issues"]

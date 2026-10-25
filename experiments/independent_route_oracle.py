@@ -22,15 +22,17 @@ def _edge(raw: Any) -> tuple[Any, Any, Any] | None:
     return tuple(raw)
 
 
-def _highways(raw: Any) -> set[str]:
+def _highways(raw: Any) -> set[str] | None:
+    if raw is None:
+        return None
     if isinstance(raw, str) and raw.startswith("["):
         try:
             raw = ast.literal_eval(raw)
         except (ValueError, SyntaxError):
-            return set()
+            return None
     if isinstance(raw, (list, tuple, set)):
         return {str(value).lower().strip() for value in raw}
-    return {str(raw).lower().strip()} if raw is not None else set()
+    return {str(raw).lower().strip()}
 
 
 def _ordered_nodes(path: list[Any], vias: list[Any]) -> bool:
@@ -48,6 +50,7 @@ def inspect_route_edges(
     start_node: Any, end_node: Any, via_nodes: list[Any], mode: str,
     permitted_edge_ids: set[tuple[Any, Any, Any]] | None,
     closed_edge_ids: set[tuple[Any, Any, Any]] | None,
+    uncertain_edge_ids: set[tuple[Any, Any, Any]] | None = None,
     avoid_steps: bool = False, max_distance_m: float | None = None,
 ) -> dict[str, Any]:
     """Return pass/fail/unknown only for facts supported by frozen graph inputs."""
@@ -101,12 +104,19 @@ def inspect_route_edges(
             length_known = False
             continue
         if permitted_edge_ids is not None and edge not in permitted_edge_ids:
-            issue("mode_forbidden_edge")
+            if uncertain_edge_ids is not None and edge in uncertain_edge_ids:
+                unknown("mode_edge_uncertain")
+            else:
+                issue("mode_forbidden_edge")
         if closed_edge_ids is not None and edge in closed_edge_ids:
             issue("closed_edge_used")
         attrs = graph[u][v][key]
-        if avoid_steps and "steps" in _highways(attrs.get("highway")):
-            issue("marked_steps_used")
+        if avoid_steps:
+            highways = _highways(attrs.get("highway"))
+            if highways is None or not highways:
+                unknown("step_tag_missing")
+            elif "steps" in highways:
+                issue("marked_steps_used")
         raw_length = attrs.get("length")
         if (isinstance(raw_length, bool) or not isinstance(raw_length, (int, float))
                 or not math.isfinite(raw_length) or raw_length < 0):
