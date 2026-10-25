@@ -555,7 +555,7 @@
         },
         "parameters_sha256": "1f93bd4358d396bb145422898cb43a135a77223175d07ee9df91d4c792041587",
         "template_id": "route_revision",
-        "template_sha256": "8afdbc871ab98bf125ba924e6c9887e9665c8af6394a1ddef452935dec284112",
+        "template_sha256": "a27cfd965d5ed587077329acdf227c9c5db953ca49abbed55acceb500aa6314d",
         "unresolved_ambiguity": false
       },
       "id": "revision_dev_001",
@@ -570,7 +570,7 @@
         }
       ],
       "od_group": "poi_015_poi_016_poi_014",
-      "snapshot_id": "1bb9c825aee3c4bcb913ba7258e6deebe841ff82f6f711afe75e3f32ab93c0d0",
+      "snapshot_id": "fba7eb1f688c4d1b00c924f141d05961e6ae754095783b0fb3afebecd8e37210",
       "template_group": "route_revision"
     },
     {
@@ -578,11 +578,11 @@
         "evidence": [
           {
             "kind": "template_parameter",
-            "sha256": "424d1c7d10db3ec78ff56739ad9e85a5e25ae069870bc4c57ceb5d5395e70cf1"
+            "sha256": "3c01dbaa7f4a4bfea5545bf4237c3dfb021ee884314ff2eee578195c9a9f4e2e"
           },
           {
             "kind": "independent_graph_oracle",
-            "sha256": "9e6555f74b3ca02113552d25b066a4c4e11b42f90215507c13b2d80de0728f3d"
+            "sha256": "ce104fc6525677d12bb965c064929bfb4f1274b0f403ba1d015f72907f470f8d"
           }
         ],
         "method": "deterministic_source_rules",
@@ -598,7 +598,9 @@
           "clarification_slot": null,
           "end_poi_id": "poi_016",
           "feasibility": "feasible",
-          "hard_constraints": {},
+          "hard_constraints": {
+            "avoid_steps": true
+          },
           "intent_label": "route_planning",
           "kind": "route",
           "required_outputs": [
@@ -618,7 +620,9 @@
           "clarification_slot": null,
           "end_poi_id": "poi_015",
           "feasibility": "feasible",
-          "hard_constraints": {},
+          "hard_constraints": {
+            "avoid_steps": true
+          },
           "intent_label": "route_planning",
           "kind": "route",
           "required_outputs": [
@@ -642,7 +646,7 @@
         "oracle_result": {
           "turns": [
             {
-              "length_m": 832.236,
+              "length_m": 992.331,
               "reason": "confirmed_edge_path",
               "route_edge_ids": [
                 [
@@ -652,33 +656,33 @@
                 ],
                 [
                   13510725042,
-                  1199831236,
+                  3631666817,
                   0
                 ],
                 [
-                  1199831236,
-                  1199831232,
+                  3631666817,
+                  1199831231,
                   0
                 ],
                 [
-                  1199831232,
-                  3631666815,
-                  1
-                ],
-                [
-                  3631666815,
-                  12872883488,
+                  1199831231,
+                  3631666820,
                   0
                 ],
                 [
-                  12872883488,
-                  13732671297,
+                  3631666820,
+                  12803435207,
                   0
                 ],
                 [
-                  13732671297,
+                  12803435207,
+                  13732671277,
+                  0
+                ],
+                [
+                  13732671277,
                   3631666813,
-                  1
+                  0
                 ],
                 [
                   3631666813,
@@ -692,111 +696,101 @@
                 ],
                 [
                   1199831152,
-                  1199831212,
+                  12803435201,
                   0
                 ],
                 [
-                  1199831212,
-                  12848622703,
+                  12803435201,
+                  4320485415,
                   0
                 ],
                 [
-                  12848622703,
-                  1663938881,
+                  4320485415,
+                  13728848124,
                   0
                 ],
                 [
-                  1663938881,
-                  12805594654,
+                  13728848124,
+                  13701919399,
                   0
                 ],
                 [
-                  12805594654,
-                  12805594650,
+                  13701919399,
+                  1199821232,
                   0
                 ],
                 [
-                  12805594650,
-                  13701919398,
+                  1199821232,
+                  1417701861,
                   0
                 ],
                 [
-                  13701919398,
-                  1199831258,
+                  1417701861,
+                  13732671456,
                   0
                 ],
                 [
-                  1199831258,
-                  3112677663,
+                  13732671456,
+                  13732671466,
                   0
                 ],
                 [
-                  3112677663,
-                  13732671454,
+                  13732671466,
+                  13550984724,
                   0
                 ],
                 [
-                  13732671454,
-                  13550984723,
-                  0
-                ],
-                [
-                  13550984723,
-                  9554406744,
-                  0
-                ],
-                [
-                  9554406744,
-                  13246423697,
-                  0
-                ],
-                [
-                  13246423697,
-                  1417701862,
-                  0
-                ],
-                [
-                  1417701862,
-                  13566460667,
+                  13550984724,
+                  13621348282,
                   1
                 ],
                 [
-                  13566460667,
-                  4159413665,
-                  1
-                ],
-                [
-                  4159413665,
-                  12805594626,
+                  13621348282,
+                  13732671472,
                   0
                 ],
                 [
-                  12805594626,
-                  13732671514,
+                  13732671472,
+                  4320485447,
                   0
                 ],
                 [
-                  13732671514,
-                  1664012967,
+                  4320485447,
+                  1417701738,
                   0
                 ],
                 [
-                  1664012967,
-                  13555966772,
+                  1417701738,
+                  13732671489,
                   0
                 ],
                 [
-                  13555966772,
-                  13555966747,
+                  13732671489,
+                  13732671497,
                   0
                 ],
                 [
-                  13555966747,
-                  13704644558,
+                  13732671497,
+                  13732671502,
                   0
                 ],
                 [
-                  13704644558,
+                  13732671502,
+                  13732671511,
+                  0
+                ],
+                [
+                  13732671511,
+                  13732671510,
+                  0
+                ],
+                [
+                  13732671510,
+                  13704644561,
+                  0
+                ],
+                [
+                  13704644561,
                   13704644560,
                   0
                 ]
@@ -995,22 +989,22 @@
           ]
         },
         "parameters": {
-          "avoid_steps": false,
+          "avoid_steps": true,
           "initial_end_poi_id": "poi_016",
           "initial_mode": "walk",
           "revised_end_poi_id": "poi_015",
           "revised_mode": "bike",
           "start_poi_id": "poi_014"
         },
-        "parameters_sha256": "424d1c7d10db3ec78ff56739ad9e85a5e25ae069870bc4c57ceb5d5395e70cf1",
+        "parameters_sha256": "3c01dbaa7f4a4bfea5545bf4237c3dfb021ee884314ff2eee578195c9a9f4e2e",
         "template_id": "route_revision",
-        "template_sha256": "8afdbc871ab98bf125ba924e6c9887e9665c8af6394a1ddef452935dec284112",
+        "template_sha256": "a27cfd965d5ed587077329acdf227c9c5db953ca49abbed55acceb500aa6314d",
         "unresolved_ambiguity": false
       },
       "id": "revision_dev_002",
       "messages": [
         {
-          "content": "从武汉大学国际教育学院(桂园楼)步行到武汉大学图书馆工学分馆，按最短路径，按通常通行规则。",
+          "content": "从武汉大学国际教育学院(桂园楼)步行到武汉大学图书馆工学分馆，按最短路径，不要走台阶。",
           "role": "user"
         },
         {
@@ -1019,14 +1013,14 @@
         }
       ],
       "od_group": "poi_014_poi_016_poi_015",
-      "snapshot_id": "1bb9c825aee3c4bcb913ba7258e6deebe841ff82f6f711afe75e3f32ab93c0d0",
+      "snapshot_id": "fba7eb1f688c4d1b00c924f141d05961e6ae754095783b0fb3afebecd8e37210",
       "template_group": "route_revision"
     }
   ],
   "gold_layer": "controlled_graph",
   "protocol_version": "scenario-v2",
   "repeats": 1,
-  "snapshot_id": "1bb9c825aee3c4bcb913ba7258e6deebe841ff82f6f711afe75e3f32ab93c0d0",
-  "source_manifest_sha256": "e79b46e282e9c0f6af6940c6745294e36b6d8ba71b3c3cb96a1328c190c62e04",
+  "snapshot_id": "fba7eb1f688c4d1b00c924f141d05961e6ae754095783b0fb3afebecd8e37210",
+  "source_manifest_sha256": "53ca642fc1cd6ad1ac187fcdace12f304d4f1717a4f01b6442606302bd854ffb",
   "split": "development"
 }

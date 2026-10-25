@@ -19,13 +19,13 @@ import networkx as nx
 from experiments.build_controlled_multi_turn_pilot import verify_multi_turn_pilot_dataset
 from experiments.controlled_gold_contract import validate_controlled_dataset
 from experiments.controlled_multi_turn_cases import score_controlled_multi_turn_case
-from experiments.controlled_source_manifest import verify_source_manifest
+from experiments.controlled_multi_turn_manifest import verify_multi_turn_manifest
 from experiments.independent_source_snapshot import mode_edge_evidence
 from experiments.scenario_runner import _validate_observation_projection
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PILOT = Path("experiments/datasets/controlled_multi_turn_pilot_v1")
+PILOT = Path("experiments/datasets/controlled_multi_turn_pilot_v2")
 _RUN_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
 
 
@@ -59,14 +59,14 @@ def run_controlled_multi_turn_replay(
     )
     dataset, manifest, spec = (json.loads(data) for data in
                                (dataset_bytes, manifest_bytes, spec_bytes))
-    if dataset.get("split") != "development" or manifest.get("profile") != "route_pilot":
+    if dataset.get("split") != "development" or manifest.get("profile") != "multi_turn_pilot":
         raise ValueError("multi-turn replay accepts development pilot only")
     validate_controlled_dataset(dataset, formal=False)
     if any(case.get("category") != "multi_turn_revision" for case in dataset["cases"]):
         raise ValueError("multi-turn replay accepts revision cases only")
     if _sha(manifest_bytes) != dataset["source_manifest_sha256"]:
         raise ValueError("source manifest bytes differ from dataset")
-    if verify_source_manifest(manifest, root) != dataset["snapshot_id"]:
+    if verify_multi_turn_manifest(manifest, root) != dataset["snapshot_id"]:
         raise ValueError("source manifest differs from dataset snapshot")
     inputs = manifest["inputs"]
     recorded_spec = (root / inputs["templates"]["path"]).resolve()
@@ -131,11 +131,13 @@ def run_controlled_multi_turn_replay(
     manifest_out = {
         "run_type": "development_diagnostic", "formal_ready": False,
         "created_utc": datetime.now(timezone.utc).isoformat(),
-        "source_profile": "route_pilot", "source_snapshot_id": dataset["snapshot_id"],
+        "source_profile": "multi_turn_pilot", "source_snapshot_id": dataset["snapshot_id"],
         "dataset_sha256": _sha(dataset_bytes),
         "source_manifest_sha256": _sha(manifest_bytes),
         "spec_sha256": _sha(spec_bytes), "replay_sha256": _sha(replay_bytes),
         "scorer_sha256": _sha(Path(__file__).read_bytes().replace(b"\r\n", b"\n")),
+        "delegated_route_scorer_sha256": inputs["route_scorer"]["sha256"],
+        "observation_projection_sha256": inputs["observation_projection"]["sha256"],
         "scorer_content_encoding": "utf8_lf_canonical_v1",
         "limitations": [
             "Only frozen graph validity is checked; field passability is unverified.",

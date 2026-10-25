@@ -24,7 +24,7 @@ def _fixture():
     evidence = {mode: {"permitted": permitted, "unknown": set()}
                 for mode in ("walk", "bike")}
     spec = {
-        "format": "controlled-multi-turn-pilot-spec-v1", "scope": "development_only",
+        "format": "controlled-multi-turn-pilot-spec-v2", "scope": "development_only",
         "templates": {
             "first": "从{start}{initial_mode_text}到{old_end}，按最短路径，{constraint_text}。",
             "revision": "改成{revised_mode_text}，终点换成{new_end}；起点、原有约束和最短路径要求保持不变。",
@@ -34,7 +34,7 @@ def _fixture():
                                   "revised_end_poi_id": "new", "initial_mode": "walk",
                                   "revised_mode": "bike", "avoid_steps": True}}],
     }
-    manifest = {"profile": "route_pilot", "effective_inputs_sha256": "a" * 64,
+    manifest = {"profile": "multi_turn_pilot", "effective_inputs_sha256": "a" * 64,
                 "inputs": {"generator": {"sha256": "b" * 64},
                            "templates": {"sha256": "c" * 64}}}
     return graph, anchors, evidence, spec, manifest

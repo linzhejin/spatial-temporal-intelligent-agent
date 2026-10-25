@@ -1,5 +1,5 @@
 {
-  "format": "controlled-multi-turn-pilot-spec-v1",
+  "format": "controlled-multi-turn-pilot-spec-v2",
   "scope": "development_only",
   "templates": {
     "first": "从{start}{initial_mode_text}到{old_end}，按最短路径，{constraint_text}。",
@@ -27,7 +27,7 @@
         "revised_end_poi_id": "poi_015",
         "initial_mode": "walk",
         "revised_mode": "bike",
-        "avoid_steps": false
+        "avoid_steps": true
       }
     }
   ]

@@ -9,7 +9,7 @@ from experiments.controlled_multi_turn_replay import run_controlled_multi_turn_r
 
 
 ROOT = Path(__file__).resolve().parents[1]
-PILOT = ROOT / "experiments/datasets/controlled_multi_turn_pilot_v1"
+PILOT = ROOT / "experiments/datasets/controlled_multi_turn_pilot_v2"
 
 
 def test_missing_attempts_are_failures_and_output_is_immutable(tmp_path):
@@ -21,6 +21,10 @@ def test_missing_attempts_are_failures_and_output_is_immutable(tmp_path):
     assert summary["task_success_count"] == 0
     assert summary["failure_counts"] == {"missing_observation": 2}
     assert summary["formal_ready"] is False
+    run_manifest = json.loads((result / "manifest.json").read_text(encoding="utf-8"))
+    frozen_manifest = json.loads((PILOT / "source_manifest_multi_turn_dev_v1.json").read_text(encoding="utf-8"))
+    assert run_manifest["delegated_route_scorer_sha256"] == frozen_manifest["inputs"]["route_scorer"]["sha256"]
+    assert run_manifest["observation_projection_sha256"] == frozen_manifest["inputs"]["observation_projection"]["sha256"]
     with pytest.raises(FileExistsError):
         run_controlled_multi_turn_replay(replay, tmp_path, "empty")
 
@@ -39,6 +43,8 @@ def test_unknown_attempt_is_rejected_before_result_creation(tmp_path):
 
 def test_constructed_two_turn_observations_score_success_then_detect_lost_origin(tmp_path):
     packet = json.loads((PILOT / "scenarios_multi_turn_dev_v2.json").read_text(encoding="utf-8"))
+    assert all(turn["hard_constraints"] == {"avoid_steps": True}
+               for case in packet["cases"] for turn in case["expected_turns"])
     rows = []
     for case in packet["cases"]:
         turns = []

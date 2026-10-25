@@ -1,6 +1,6 @@
 {
-  "effective_inputs_sha256": "1bb9c825aee3c4bcb913ba7258e6deebe841ff82f6f711afe75e3f32ab93c0d0",
-  "format": "controlled-source-v3",
+  "effective_inputs_sha256": "fba7eb1f688c4d1b00c924f141d05961e6ae754095783b0fb3afebecd8e37210",
+  "format": "controlled-multi-turn-source-v1",
   "inputs": {
     "anchor_builder": {
       "content_encoding": "utf8_lf_canonical_v1",
@@ -22,6 +22,11 @@
       "path": "config.py",
       "sha256": "6b9f302b3fb9d75f056823fc1f7474665e385bb904ed8fef91602b3451033285"
     },
+    "controlled_source_manifest": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_source_manifest.py",
+      "sha256": "0349e4a53122acca279d703dae38f95f065c4d3dc3f37b192a633a7c91b9ed7e"
+    },
     "coordinate_transform": {
       "content_encoding": "utf8_lf_canonical_v1",
       "path": "spatial/coord_transform.py",
@@ -30,7 +35,7 @@
     "dataset_builder": {
       "content_encoding": "utf8_lf_canonical_v1",
       "path": "experiments/build_controlled_multi_turn_pilot.py",
-      "sha256": "a72fde36dedf12e96ee6a9293e44977b68e6ae76179e04dcf6e146f9b43e2ec1"
+      "sha256": "a451026860a031e18ce460e5ce82c9dbd15d863e148dbfce8fb530bcd943caf6"
     },
     "generator": {
       "content_encoding": "utf8_lf_canonical_v1",
@@ -46,6 +51,11 @@
       "content_encoding": "utf8_lf_canonical_v1",
       "path": "data/whu_road_network.graphml",
       "sha256": "559ad68ba2c7f57782cc61a114bd057582e6b75da43e358ed5955adfba9b78a7"
+    },
+    "observation_projection": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_runner.py",
+      "sha256": "97188bd21cfb06cd542bd36df7b28b3795a4d1516564a70d7e835ad3a0a4bec1"
     },
     "oracle_existence": {
       "content_encoding": "utf8_lf_canonical_v1",
@@ -67,10 +77,30 @@
       "path": "data/pois.json",
       "sha256": "30cb2e9a20b6bdd69ff76d7e1bcb9943f5bc6ef6df96c67723c4c2d465529bbf"
     },
+    "requirements": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "requirements.txt",
+      "sha256": "24a56414e6e0a91da9f96c8d049db1db0e6ee28bce11a8e451a9b4d2239884f3"
+    },
+    "route_case_helpers": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_cases.py",
+      "sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3"
+    },
+    "route_scorer": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_replay.py",
+      "sha256": "c32a0a8247386fd773c7b4742538e361c4aa7ff8c1330f3559ded73a668badbe"
+    },
+    "scenario_evaluator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_evaluator.py",
+      "sha256": "ca578c90f6444f240510c6d81722dc66a102260142e644145af19d35cf081f37"
+    },
     "source_manifest_builder": {
       "content_encoding": "utf8_lf_canonical_v1",
-      "path": "experiments/controlled_source_manifest.py",
-      "sha256": "0349e4a53122acca279d703dae38f95f065c4d3dc3f37b192a633a7c91b9ed7e"
+      "path": "experiments/controlled_multi_turn_manifest.py",
+      "sha256": "843ebcf96a4333ebfc2092e33fd52de77f4ece2d30309cb4c1d05f365c55bc20"
     },
     "spatial_snapshot_builder": {
       "content_encoding": "utf8_lf_canonical_v1",
@@ -79,16 +109,17 @@
     },
     "templates": {
       "content_encoding": "utf8_lf_canonical_v1",
-      "path": "experiments/datasets/controlled_multi_turn_pilot_v1/multi_turn_pilot_spec.json",
-      "sha256": "8afdbc871ab98bf125ba924e6c9887e9665c8af6394a1ddef452935dec284112"
+      "path": "experiments/datasets/controlled_multi_turn_pilot_v2/multi_turn_pilot_spec.json",
+      "sha256": "a27cfd965d5ed587077329acdf227c9c5db953ca49abbed55acceb500aa6314d"
     }
   },
   "metadata": {
+    "anchor_scope": "walk_nodes_within_20m_last_meter_unverified",
     "boundary_crs": "EPSG:4326",
-    "boundary_provenance": "product config.CAMPUS_POLYS_GCJ via gcj02_to_wgs84",
     "event_scope": "not_applicable",
-    "graph_crs": "EPSG:4326"
+    "graph_crs": "EPSG:4326",
+    "revision_rule": "retain_origin_avoid_steps_shortest_change_mode_destination",
+    "scope": "development_only"
   },
-  "profile": "route_pilot",
-  "scope": "controlled_graph_input"
+  "profile": "multi_turn_pilot"
 }

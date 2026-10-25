@@ -18,14 +18,14 @@ from experiments.build_controlled_spatial_snapshot import (
 )
 from experiments.controlled_gold_contract import validate_controlled_dataset
 from experiments.controlled_multi_turn_cases import make_multi_turn_route_case
-from experiments.controlled_source_manifest import (
-    ROUTE_PILOT_INPUTS, make_source_manifest, verify_source_manifest,
+from experiments.controlled_multi_turn_manifest import (
+    MULTI_TURN_INPUTS, make_multi_turn_manifest, verify_multi_turn_manifest,
 )
 from experiments.independent_source_snapshot import mode_edge_evidence
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_OUT = Path("experiments/datasets/controlled_multi_turn_pilot_v1")
+DEFAULT_OUT = Path("experiments/datasets/controlled_multi_turn_pilot_v2")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
 
 
@@ -40,12 +40,12 @@ def build_multi_turn_pilot_dataset(
 ) -> dict[str, Any]:
     """Regenerate every case, failing rather than skipping uncertain routes."""
     if (not isinstance(spec, dict)
-            or spec.get("format") != "controlled-multi-turn-pilot-spec-v1"
+            or spec.get("format") != "controlled-multi-turn-pilot-spec-v2"
             or spec.get("scope") != "development_only"
             or not isinstance(spec.get("templates"), dict)
             or not isinstance(spec.get("cases"), list) or not spec["cases"]):
         raise ValueError("invalid multi-turn pilot specification")
-    if (not isinstance(manifest, dict) or manifest.get("profile") != "route_pilot"
+    if (not isinstance(manifest, dict) or manifest.get("profile") != "multi_turn_pilot"
             or not _DIGEST.fullmatch(str(manifest.get("effective_inputs_sha256", "")))
             or not _DIGEST.fullmatch(manifest_sha256)):
         raise ValueError("verified route pilot source manifest required")
@@ -138,6 +138,12 @@ def main() -> None:
         "oracle_mode": "experiments/independent_source_snapshot.py",
         "oracle_route": "experiments/independent_route_oracle.py",
         "oracle_existence": "experiments/controlled_route_gold.py",
+        "route_case_helpers": "experiments/controlled_route_cases.py",
+        "route_scorer": "experiments/controlled_route_replay.py",
+        "observation_projection": "experiments/scenario_runner.py",
+        "controlled_source_manifest": "experiments/controlled_source_manifest.py",
+        "scenario_evaluator": "experiments/scenario_evaluator.py",
+        "requirements": "requirements.txt",
         "generator": "experiments/controlled_multi_turn_cases.py",
         "templates": spec_path.resolve().relative_to(root).as_posix(),
         "coordinate_transform": "spatial/coord_transform.py",
@@ -147,16 +153,12 @@ def main() -> None:
         "spatial_snapshot_builder": "experiments/build_controlled_spatial_snapshot.py",
         "dataset_builder": "experiments/build_controlled_multi_turn_pilot.py",
         "gold_contract": "experiments/controlled_gold_contract.py",
-        "source_manifest_builder": "experiments/controlled_source_manifest.py",
+        "source_manifest_builder": "experiments/controlled_multi_turn_manifest.py",
     }
-    if set(source_paths) != ROUTE_PILOT_INPUTS:
+    if set(source_paths) != MULTI_TURN_INPUTS:
         raise ValueError("pilot source input list differs from contract")
-    manifest = make_source_manifest(root, source_paths, {
-        "graph_crs": "EPSG:4326", "boundary_crs": "EPSG:4326",
-        "boundary_provenance": "product config.CAMPUS_POLYS_GCJ via gcj02_to_wgs84",
-        "event_scope": "not_applicable",
-    }, profile="route_pilot")
-    if verify_source_manifest(manifest, root) != manifest["effective_inputs_sha256"]:
+    manifest = make_multi_turn_manifest(root, source_paths)
+    if verify_multi_turn_manifest(manifest, root) != manifest["effective_inputs_sha256"]:
         raise ValueError("source manifest failed verification")
     manifest_bytes = _json_bytes(manifest)
     manifest_sha = hashlib.sha256(manifest_bytes).hexdigest()
