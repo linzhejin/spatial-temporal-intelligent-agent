@@ -1,0 +1,50 @@
+{
+  "protocol_version": "scenario-v2",
+  "purpose": "Controlled full-task comparison with source-derived labels and a separate small human semantic review layer.",
+  "status": "Contract validation implemented; generator, derivation replay, v2 runner and blind test set are not yet complete.",
+  "controlled_layer": {
+    "gold_layer": "controlled_graph",
+    "formal_test_scenarios": 300,
+    "categories": {
+      "place_recommendation": 50,
+      "mode_access": 50,
+      "multi_via_itinerary": 50,
+      "compound_tools": 50,
+      "multi_turn_revision": 50,
+      "event_infeasible": 50
+    },
+    "repeats_per_scenario": 3,
+    "required_source_inputs": [
+      "graph", "poi", "boundary", "event_snapshot", "oracle_mode",
+      "oracle_route", "generator", "templates", "information_snapshot"
+    ],
+    "source_manifest": "Each named file path and SHA-256 must resolve within the frozen source root; effective_inputs_sha256 binds file paths, hashes and coordinate/event metadata.",
+    "case_derivation": "Each case declares generator/template/parameter hashes, source evidence types, and no unresolved ambiguity; a separate derivation replay must reproduce the label before formal scoring.",
+    "allowed_evidence_basis": [
+      "template_parameter", "catalog_attribute", "independent_graph_oracle",
+      "frozen_event_snapshot", "independent_information_source"
+    ],
+    "specific_evidence_rules": {
+      "route_or_no_route": "independent_graph_oracle",
+      "event_infeasible_or_road_events": "frozen_event_snapshot",
+      "weather": "independent_information_source",
+      "candidates": "catalog_attribute"
+    },
+    "unknown_policy": "Missing or contradictory source evidence rejects the case; it cannot become a feasible route by default.",
+    "tool_use": "Tool-sequence gold is optional and reported separately. It must not determine complete-task success for source-derived cases."
+  },
+  "semantic_review_layer": {
+    "first_packet_cards": 18,
+    "target_range": [12, 20],
+    "status": "Development packet prepared; human conclusions pending.",
+    "denominator": "Separate from the 300 controlled scenarios and their repeats."
+  },
+  "formal_gate": [
+    "All input bytes and source manifest verified",
+    "Every generated label reproduced independently before model outputs are seen",
+    "Blind development/test leakage audit passed",
+    "Exactly 300 unseen controlled scenarios, 50 per category and three repeats",
+    "Agent readiness snapshot, matching commit and clean tracked worktree",
+    "Same-model baseline configuration and batch cost approved before API calls"
+  ]
+}
