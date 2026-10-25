@@ -44,6 +44,42 @@ def test_message_endpoint_returns_independent_idempotent_run_and_poll_status(cli
     assert polled.get_json()["data"]["events"] == []
 
 
+@pytest.mark.parametrize("worker_started", [False, True])
+def test_overdue_run_poll_finishes_without_worker_and_allows_new_request(client,
+                                                                         worker_started):
+    conversation_id = make_conversation(client)
+    first = client.post(f"/api/conversations/{conversation_id}/messages", json={
+        "query": "先找球场然后去吃饭", "request_id": "expired-composite-1",
+    })
+    assert first.status_code == 202
+    run_id = first.get_json()["data"]["run_id"]
+    if worker_started:
+        from storage.task_repository import claim_next_run
+
+        assert claim_next_run(DATABASE_URL, "slow-worker", 30)["run_id"] == run_id
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("UPDATE run SET deadline_at=now()-interval '1 second' WHERE run_id=%s",
+                     (run_id,))
+
+    polled = client.get(f"/api/runs/{run_id}?conversation_id={conversation_id}")
+    assert polled.status_code == 200
+    result = polled.get_json()["data"]
+    assert result["status"] == "failed"
+    assert result["error"]["code"] == "deadline_exceeded"
+    assert any(event["event_type"] == "run_completed" and
+               event["payload"]["status"] == "failed"
+               for event in result["events"])
+
+    again = client.get(f"/api/runs/{run_id}?conversation_id={conversation_id}")
+    assert again.get_json()["data"]["status"] == "failed"
+    assert len(again.get_json()["data"]["events"]) == len(result["events"])
+    retry = client.post(f"/api/conversations/{conversation_id}/messages", json={
+        "query": "先找球场然后去吃饭", "request_id": "expired-composite-2",
+    })
+    assert retry.status_code == 202
+    assert retry.get_json()["data"]["run_id"] != run_id
+
+
 def test_run_status_and_cancel_are_owner_scoped(client):
     conversation_id = make_conversation(client)
     response = client.post(f"/api/conversations/{conversation_id}/messages", json={

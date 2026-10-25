@@ -391,6 +391,8 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
                 return
             if body["query"] == "\u5904\u7406\u4e2d":
                 run_id = "local-active-run"
+            elif body["query"] == "\u8d85\u65f6\u4efb\u52a1":
+                run_id = "local-expired-run"
             elif body["query"] == "\u65b0\u4f1a\u8bdd":
                 run_id = "local-fresh-run"
             else:
@@ -410,6 +412,16 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
                 "status": status,
                 "events": [],
                 "error": {"message": "cancelled"} if status == "cancelled" else None,
+            }})
+            return
+        if parsed.path == "/api/runs/local-expired-run":
+            json_response(route, {"data": {
+                "run_id": "local-expired-run",
+                "task_id": "expired-task",
+                "current_task_revision": 1,
+                "status": "failed",
+                "events": [],
+                "error": {"code": "deadline_exceeded", "message": "\u4efb\u52a1\u8d85\u8fc7\u6267\u884c\u65f6\u9650\u3002"},
             }})
             return
         if parsed.path == "/api/runs/local-fresh-run":
@@ -474,6 +486,14 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
         assert submissions[0] == submissions[1]
         assert submissions[0][0] == "local-conversation-1"
 
+        input_box.fill("\u8d85\u65f6\u4efb\u52a1")
+        with page.expect_response(lambda response: "/api/runs/local-expired-run?" in response.url):
+            submit.click()
+        expect(page.locator("#chat-content")).to_contain_text(
+            "\u4efb\u52a1\u8d85\u8fc7\u6267\u884c\u65f6\u9650\u3002", timeout=10000,
+        )
+        expect(page.locator("#chat-content")).not_to_contain_text("\u6b63\u5728\u7ee7\u7eed\u7b49\u5f85")
+
         input_box.fill("\u5904\u7406\u4e2d")
         with page.expect_response(lambda response: "/api/runs/local-active-run?" in response.url):
             submit.click()
@@ -490,8 +510,9 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
             "\u65b0\u4f1a\u8bdd\u5df2\u6b63\u5e38\u54cd\u5e94",
             timeout=10000,
         )
-        assert len(submissions) == 4
-        assert submissions[2] == ("local-conversation-1", "\u5904\u7406\u4e2d")
+        assert len(submissions) == 5
+        assert submissions[2] == ("local-conversation-1", "\u8d85\u65f6\u4efb\u52a1")
+        assert submissions[3] == ("local-conversation-1", "\u5904\u7406\u4e2d")
         assert submissions[-1] == ("local-conversation-2", "\u65b0\u4f1a\u8bdd")
         assert "\u7b2c\u4e00\u6b21\u63d0\u4ea4" not in page.locator("#chat-content").inner_text()
 
