@@ -1,0 +1,560 @@
+{
+  "status": "visible_development_diagnostic_no_model",
+  "cases": [
+    {
+      "case_id": "v2h_T3_ball_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_139"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.626
+    },
+    {
+      "case_id": "v2h_T3_ball_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_226"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.614
+    },
+    {
+      "case_id": "v2h_T3_ball_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_449"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.559
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_031"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.544
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_181"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.713
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_258"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.619
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_030"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.907
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_182"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.584
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "sport"
+      ],
+      "start": [
+        "poi_238"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.833
+    },
+    {
+      "case_id": "v2h_T3_exercise_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_137"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.802
+    },
+    {
+      "case_id": "v2h_T3_exercise_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_227"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.599
+    },
+    {
+      "case_id": "v2h_T3_exercise_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_296"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.721
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_086"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.603
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_432"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.725
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_261"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.719
+    },
+    {
+      "case_id": "v2h_T3_destination_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_025"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.5
+    },
+    {
+      "case_id": "v2h_T3_destination_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_040"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.492
+    },
+    {
+      "case_id": "v2h_T3_destination_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_245"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.64
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_068"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.712
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_201"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.795
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "destination"
+      ],
+      "start": [
+        "poi_307"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.596
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_1",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_152"
+      ],
+      "end": [
+        "poi_141",
+        "poi_141"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 4.14
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_2",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_230"
+      ],
+      "end": [
+        "poi_227",
+        "poi_227"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 3.067
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_3",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_424"
+      ],
+      "end": [
+        "poi_296",
+        "poi_296"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 2.918
+    }
+  ]
+}

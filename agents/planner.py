@@ -1378,8 +1378,15 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route_constraints["slope"] = "avoid"
         if route_constraints:
             route_args["constraints"] = route_constraints
+        full_request = str((place_request or {}).get("original_query") or "") + " " + str(query)
+        if re.search(r"平坦(?:的)?路|平坦优先|少爬坡|少走坡", full_request):
+            route_args["strategy"] = "flat"
+        elif re.search(r"风景优先|景观优先|看风景|风景好", full_request):
+            route_args["strategy"] = "scenery"
+        if re.search(r"最短|赶时间|赶课|不绕路", query):
+            route_args["strategy"] = "shortest"
         result, artifact = execute_tool("plan_route", route_args,
-                                                     {"query": query, "uid": uid})
+                                        {"query": full_request, "uid": uid})
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
         if route:
             route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
@@ -1416,6 +1423,41 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     if place_request and place_request.get("pending_slot") == "follow_up":
         original_request = place_request.get("original_query") or original_request
+    if not place_request and not coord_end:
+        start_ref = explicit_place_start(query)
+        origin_clause = re.match(
+            r"^(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}?"
+            r"(?:出发|附近|旁边|周边|周围|这边)[，,。；;]?",
+            str(query or "").strip(),
+        ) or re.match(
+            r"^(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}[，,。；;]",
+            str(query or "").strip(),
+        )
+        tail = str(query or "")[origin_clause.end():] if origin_clause else ""
+        wants_route = agent_tools.query_requests_route(tail) or bool(re.search(
+            r"平坦(?:的)?路|平坦优先|风景优先|景观优先|少爬坡|少走坡|不走台阶",
+            tail,
+        ))
+        named_destination = re.search(r"(?:到|去|前往|终点(?:是|为|设为|[:：]))\s*[^，,。；;]+", tail)
+        if (origin_clause and start_ref and not start_ref.get("ambiguous_name")
+                and wants_route and not named_destination
+                and not agent_tools.resolve_activity_query(query)):
+            detected_mode, explicit_mode = detect_travel_mode(query)
+            constraints = {}
+            if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+                constraints["avoid_steps"] = True
+            if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", query):
+                constraints["avoid_slope"] = True
+            pending = _place_request_state(
+                query, pending_slot="destination", start=start_ref,
+                mode=detected_mode if explicit_mode else travel_mode or "walk",
+                constraints=constraints,
+            )
+            question = "你想去哪个地点？目的地明确后，我会从你说的起点规划路线。"
+            return {"response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question, "options": []},
+                    "place_request": pending, "suggestions": None, "turns": 0}
     activity_sequence = agent_tools.resolve_activity_sequence(original_request)
     sequence_followups = [
         {"query": item["query"],

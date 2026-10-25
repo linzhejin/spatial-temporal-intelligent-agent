@@ -4,6 +4,63 @@ import pytest
 
 from agents import planner, tools
 from spatial.poi import _flatten_poi
+from spatial.poi_taxonomy import resolve_activity_query
+
+
+@pytest.mark.parametrize("query,expected_slot", [
+    ("我在工学部排球场附近，找个运动的地方。", "needs_clarification"),
+    ("我在信息学部游泳池附近，找个运动的地方。", "needs_clarification"),
+    ("我从桂园一食堂出发，想走平坦的路。", None),
+    ("我在篮球场附近想喝咖啡", "resolved"),
+    ("从武汉大学文理学部第4教学楼出发去打球，别走台阶。", "needs_clarification"),
+])
+def test_activity_intent_ignores_poi_category_in_explicit_origin(query, expected_slot):
+    result = resolve_activity_query(query)
+    assert (result or {}).get("status") == expected_slot
+    if expected_slot == "needs_clarification":
+        assert result["question"] == ("想打什么球？" if "打球" in query else "想做哪种运动？")
+    if "咖啡" in query:
+        assert result["activities"] == ["coffee"]
+
+
+@pytest.mark.parametrize("query", [
+    "我从武汉大学教1楼出发，帮我规划步行路线。",
+    "我从桂园一食堂出发，想走平坦的路。",
+    "我从桂园一食堂出发想走平坦的路。",
+])
+def test_named_origin_without_destination_asks_before_model(query):
+    with patch.object(planner, "_make_client", side_effect=AssertionError("unexpected LLM call")):
+        response = planner.run_agent(query)
+    assert response["response_kind"] == "clarify"
+    assert response["place_request"]["pending_slot"] == "destination"
+    assert response["place_request"]["start"]["type"] == "poi"
+    assert response["clarify"]["question"] == "你想去哪个地点？目的地明确后，我会从你说的起点规划路线。"
+
+
+def test_flat_preference_survives_destination_answer():
+    first = planner.run_agent("我从桂园一食堂出发，想走平坦的路。")
+    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+        {"error": "route unavailable"}, {},
+    )) as execute:
+        planner.run_agent("卓尔体育馆", context={"place_request": first["place_request"]})
+    name, args = execute.call_args.args[:2]
+    assert name == "plan_route"
+    assert args["start"]["name"] == "桂园一食堂"
+    assert args["strategy"] == "flat"
+
+
+@pytest.mark.parametrize("route_query,weights", [
+    ("我从桂园一食堂出发，想走平坦的路。",
+     {"distance": 0.5, "slope": 0.4, "scenery": 0.1}),
+    ("我从桂园一食堂出发，风景优先。",
+     {"distance": 0.5, "slope": 0.1, "scenery": 0.4}),
+])
+def test_preference_is_applied_by_actual_route_tool_after_destination_answer(route_query, weights):
+    first = planner.run_agent(route_query)
+    second = planner.run_agent("卓尔体育馆", context={"place_request": first["place_request"]})
+    assert first["response_kind"] == "clarify"
+    assert second["response_kind"] == "route"
+    assert second["route"]["applied_weights"] == weights
 
 
 def test_deictic_origin_does_not_replace_saved_selection_origin():

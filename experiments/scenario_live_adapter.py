@@ -177,6 +177,10 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         outputs.append("weather")
     if kind == "candidates" and isinstance(candidates, list) and candidates:
         outputs.append("candidates")
+    clarification_slot = request.get("pending_slot") if kind == "clarify" else None
+    clarify = result.get("clarify") if isinstance(result.get("clarify"), dict) else {}
+    if clarification_slot == "activity" and "什么球" in str(clarify.get("question") or ""):
+        clarification_slot = "sport"
     projected = {
         "status": status, "kind": kind,
         "start_poi_id": _poi_id(start, lookup),
@@ -186,7 +190,7 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
         "strategy": strategy, "hard_constraints": constraints,
         "candidate_poi_ids": [_poi_id(ref, lookup) for ref in candidates]
                              if isinstance(candidates, list) else [],
-        "clarification_slot": request.get("pending_slot") if kind == "clarify" else None,
+        "clarification_slot": clarification_slot,
         "outputs": outputs,
         "route_edge_ids": (edges if kind == "route" and isinstance(edges, list) else []),
         "unknowns": unknowns,

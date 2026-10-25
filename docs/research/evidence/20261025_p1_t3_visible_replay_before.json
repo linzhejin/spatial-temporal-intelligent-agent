@@ -1,0 +1,570 @@
+{
+  "status": "visible_development_diagnostic_no_model",
+  "cases": [
+    {
+      "case_id": "v2h_T3_ball_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_139"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 1.292
+    },
+    {
+      "case_id": "v2h_T3_ball_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_226"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.701
+    },
+    {
+      "case_id": "v2h_T3_ball_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_449"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.822
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_031"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.585
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_181"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.813
+    },
+    {
+      "case_id": "v2h_T3_ball_steps_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_258"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.816
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_030"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.806
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_182"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.639
+    },
+    {
+      "case_id": "v2h_T3_ball_bike_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_238"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.727
+    },
+    {
+      "case_id": "v2h_T3_exercise_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_137"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.746
+    },
+    {
+      "case_id": "v2h_T3_exercise_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_227"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.721
+    },
+    {
+      "case_id": "v2h_T3_exercise_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_296"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.594
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "clarify"
+      ],
+      "slot": [
+        "activity"
+      ],
+      "start": [
+        "poi_086"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.696
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "candidates"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        "poi_432"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        [
+          "candidates"
+        ]
+      ],
+      "elapsed_s": 2.487
+    },
+    {
+      "case_id": "v2h_T3_exercise_near_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "candidates"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        "poi_261"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        [
+          "candidates"
+        ]
+      ],
+      "elapsed_s": 1.229
+    },
+    {
+      "case_id": "v2h_T3_destination_1",
+      "status": [
+        "failed"
+      ],
+      "kind": [
+        "information"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        null
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 1.538
+    },
+    {
+      "case_id": "v2h_T3_destination_2",
+      "status": [
+        "failed"
+      ],
+      "kind": [
+        "information"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        null
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.59
+    },
+    {
+      "case_id": "v2h_T3_destination_3",
+      "status": [
+        "failed"
+      ],
+      "kind": [
+        "information"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        null
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        []
+      ],
+      "elapsed_s": 0.699
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_1",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "candidates"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        "poi_068"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        [
+          "candidates"
+        ]
+      ],
+      "elapsed_s": 0.984
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_2",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "candidates"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        "poi_201"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        [
+          "candidates"
+        ]
+      ],
+      "elapsed_s": 1.11
+    },
+    {
+      "case_id": "v2h_T3_destination_flat_3",
+      "status": [
+        "needs_input"
+      ],
+      "kind": [
+        "candidates"
+      ],
+      "slot": [
+        null
+      ],
+      "start": [
+        "poi_307"
+      ],
+      "end": [
+        null
+      ],
+      "outputs": [
+        [
+          "candidates"
+        ]
+      ],
+      "elapsed_s": 0.967
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_1",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_152"
+      ],
+      "end": [
+        "poi_141",
+        "poi_141"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 2.932
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_2",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_230"
+      ],
+      "end": [
+        "poi_227",
+        "poi_227"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 3.304
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_3",
+      "status": [
+        "needs_input",
+        "completed"
+      ],
+      "kind": [
+        "clarify",
+        "route"
+      ],
+      "slot": [
+        "start",
+        null
+      ],
+      "start": [
+        null,
+        "poi_424"
+      ],
+      "end": [
+        "poi_296",
+        "poi_296"
+      ],
+      "outputs": [
+        [],
+        [
+          "route",
+          "weather"
+        ]
+      ],
+      "elapsed_s": 3.014
+    }
+  ]
+}

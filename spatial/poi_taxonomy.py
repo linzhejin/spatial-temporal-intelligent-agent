@@ -52,9 +52,25 @@ def _compact(text: str) -> str:
     return re.sub(r"\s+", "", str(text or "")).lower()
 
 
+def _without_leading_origin(text: str) -> str:
+    """Do not infer the requested activity from a named starting place."""
+    origin = re.match(r"^(?:我(?:现在)?在|(?:我)?从|由)(.+)$", text)
+    if not origin:
+        return text
+    remainder = origin.group(1)
+    origin_end = re.search(r"出发|附近|旁边|周边|周围|这边", remainder)
+    if origin_end:
+        return remainder[origin_end.end():].lstrip(" ，,。；;")
+    clauses = re.split(r"[，,。；;]", remainder, maxsplit=1)
+    if len(clauses) == 2 and clauses[1]:
+        return clauses[1]
+    action = re.search(r"想|要|找|推荐|帮我|请|准备|打算|希望", remainder)
+    return remainder[action.start():] if action and action.start() >= 2 else text
+
+
 def resolve_activity_query(query: str) -> dict | None:
     """Resolve an explicit use case, or ask only for a materially missing one."""
-    text = _compact(query)
+    text = _without_leading_origin(_compact(query))
     if not text:
         return None
 

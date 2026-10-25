@@ -503,6 +503,19 @@ def test_live_case_resumes_pending_task_and_projects_only_known_fields():
     assert all("result" not in turn for turn in turns)
 
 
+def test_live_projection_uses_question_to_distinguish_ball_type_from_generic_activity():
+    ball = {"status": "needs_input", "result": {
+        "response_kind": "clarify", "place_request": {"pending_slot": "activity"},
+        "clarify": {"question": "想打什么球？", "options": ["篮球", "羽毛球", "其他球类"]},
+    }}
+    exercise = {"status": "needs_input", "result": {
+        "response_kind": "clarify", "place_request": {"pending_slot": "activity"},
+        "clarify": {"question": "想做哪种运动？", "options": ["跑步", "打球", "其他"]},
+    }}
+    assert project_live_run(ball, _lookup())["clarification_slot"] == "sport"
+    assert project_live_run(exercise, _lookup())["clarification_slot"] == "activity"
+
+
 def test_direct_live_case_refuses_writes_without_isolated_database_proof():
     case = {"messages": [{"role": "user", "content": "我想打球"}]}
 
