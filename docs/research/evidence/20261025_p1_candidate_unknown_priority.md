@@ -1,5 +1,7 @@
 # P1 候选排序的可判错误与接驳未知
 
+研究代码提交为 `89ad06a147b52b1262ba93772c78ef11fb6202b3`。提交后在干净受跟踪工作树捕获开发态输入清单 `output/experiments/dev_input_inventory_89ad06a_20261025.json`，SHA-256 `87cf8df3ed5f73cd8c97ee000c03cd7a4c64987c2f3dcd134faadd61b4e25c54`；有效产品输入指纹仍为 `83ad771013cd1d857675760a60863541f688fc0fad5b2111e0f5f40d4c0dca03`。清单明确 `snapshot_kind=diagnostic`、`formal_eligible=false`，所以这不是正式冻结快照。
+
 当前 `scenario-v2` 独立评分器先前在名单含有末端接驳未核实地点时，直接返回 `unknown`。这会掩盖名单中**其他已知地点**之间的确定性错误：距离明显倒序，或漏掉比已选已知地点更近的合格地点。末端未知只影响与该地点有关的名次，不应豁免其余可判部分。
 
 现先检查已知地点：超过容差的倒序判 `wrong_distance_order`；漏掉比已选最远已知地点更近的合格已知地点判 `closer_eligible_omitted`。其余受未核实入口影响的情况仍判 `last_meter_access_unverified`，不以估算距离强判对错。两项回归先各自复现 `unknown` 的错误结果，再修改评分顺序使其判 `fail`；包含未知地点但已知地点顺序正确的反例仍判 `unknown`。
