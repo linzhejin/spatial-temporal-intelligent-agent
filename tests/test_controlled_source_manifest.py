@@ -11,7 +11,7 @@ from experiments.controlled_source_manifest import (
 
 INPUT_NAMES = (
     "graph", "poi", "boundary", "event_snapshot", "oracle_mode",
-    "oracle_route", "generator", "templates", "information_snapshot",
+    "oracle_route", "oracle_existence", "generator", "templates", "information_snapshot",
     "coordinate_transform", "poi_taxonomy", "attribute_master",
     "anchor_builder", "anchors", "boundary_source", "spatial_snapshot_builder",
 )
@@ -80,7 +80,7 @@ def test_information_snapshot_is_required_for_compound_tool_cases(tmp_path):
 
 @pytest.mark.parametrize("name", ["coordinate_transform", "poi_taxonomy", "attribute_master",
                                   "anchor_builder", "anchors", "boundary_source",
-                                  "spatial_snapshot_builder"])
+                                  "spatial_snapshot_builder", "oracle_existence"])
 def test_generator_dependency_must_be_frozen(tmp_path, name):
     paths = _files(tmp_path)
     paths.pop(name)
