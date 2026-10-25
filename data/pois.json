@@ -11303,6 +11303,9 @@
    "rating": null,
    "subcategory": "fastfood",
    "is_minor": true,
+   "campus_boundary_refs": [
+    "relation/20349097"
+   ],
    "poi_id": "poi_387",
    "activities": [
     "fast_food"
@@ -11331,6 +11334,9 @@
    "rating": null,
    "subcategory": "fastfood",
    "is_minor": true,
+   "campus_boundary_refs": [
+    "relation/20349097"
+   ],
    "poi_id": "poi_388",
    "activities": [
     "fast_food"
