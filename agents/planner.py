@@ -24,7 +24,7 @@ import httpx
 import config
 from agents import tools as agent_tools
 from agents import experience, knowledge, profile, provenance, reflection, tool_skills
-from agents.preferences import route_preference_requested
+from agents.preferences import detect_strategy_hint, route_preference_requested
 from agents.timings import normalize_timings
 from spatial.route_constraints import positive_budget
 
@@ -123,6 +123,19 @@ def _build_route_message(route: dict) -> str:
                 tail += f"、{shortest_dur:g} 分钟"
             tail += "，地图灰虚线可对比"
     return head + "。" + (tail + "。" if tail else "")
+
+
+def _road_condition_feedback(route: dict, request: str) -> str:
+    if not re.search(r"路况|管制|封路|封闭|禁行|为何绕行|为什么绕路", request or ""):
+        return ""
+    applied = route.get("road_conditions_applied")
+    if type(applied) is not int:
+        return " 本次未取得可核实的路况应用信息。"
+    if not applied:
+        return " 本次算路未应用生效路况记录；未覆盖路段仍需现场确认。"
+    mode_label = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
+        route.get("mode"), "本次出行方式")
+    return f" 本次算路纳入 {applied} 条适用于{mode_label}的生效路况记录。"
 
 
 def _build_route_comparison_message(comparison: dict) -> str:
@@ -577,12 +590,25 @@ def _combined_place_route(legs: list[dict]) -> dict:
     return combined
 
 
+def _explicit_place_strategy(query: str) -> str | None:
+    """Keep only a supported, explicitly requested strategy in task memory."""
+    if not re.search(
+        r"最短|赶时间|赶课|不绕路|平坦|平路|少爬坡|少走坡|省力|"
+        r"风景优先|景观优先|看风景|风景好|游览|旅游|散步|赏樱|赏花|逛",
+        query or "",
+    ):
+        return None
+    strategy = detect_strategy_hint(query)
+    return strategy if strategy in {"shortest", "recommended", "scenery", "flat"} else None
+
+
 def _place_request_state(query: str, *, activities=None, subcategories=None,
                          pending_slot=None, start=None, constraints=None,
                          previous=None, candidate_poi_ids=None, selected_poi_id=None,
                          follow_up_requests=None,
                          mode="walk") -> dict:
     previous = previous if isinstance(previous, dict) else {}
+    strategy = previous.get("strategy") or _explicit_place_strategy(query)
     return {
         "request_id": previous.get("request_id") or uuid4().hex,
         "original_query": previous.get("original_query") or query,
@@ -598,6 +624,7 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
         "candidate_poi_ids": list(candidate_poi_ids if candidate_poi_ids is not None
                                    else previous.get("candidate_poi_ids") or []),
         "mode": previous.get("mode") or mode,
+        "strategy": strategy,
         "constraints": constraints if constraints is not None else previous.get("constraints") or {},
     }
 
@@ -647,6 +674,9 @@ def _apply_place_request_correction(saved: dict, query: str) -> dict:
     mode, explicit_mode = detect_travel_mode(query)
     if explicit_mode:
         updated["mode"] = mode
+    strategy = _explicit_place_strategy(query)
+    if strategy:
+        updated["strategy"] = strategy
     constraints = dict(updated.get("constraints") or {})
     if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
         constraints["avoid_steps"] = True
@@ -827,7 +857,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
                 return {
                     "response_kind": "route",
-                    "message": _build_route_message(route),
+                    "message": _build_route_message(route) + _road_condition_feedback(route, query),
                     "route": route,
                     "route_kind": (artifact or {}).get("route_kind", "via"),
                     "candidates": None, "clarify": None, "suggestions": None, "turns": 0,
@@ -942,7 +972,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route", "message": _build_route_message(route),
+                return {"response_kind": "route",
+                        "message": _build_route_message(route) + _road_condition_feedback(route, full_request),
                         "route": route, "route_kind": "direct", "candidates": None,
                         "clarify": None, "suggestions": None, "turns": 0}
             return {"response_kind": "chat", "message": (result or {}).get("message")
@@ -996,7 +1027,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route", "message": _build_route_message(route),
+                return {"response_kind": "route",
+                        "message": _build_route_message(route) + _road_condition_feedback(route, query),
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None, "turns": 0}
             if isinstance(result, dict) and result.get("error") in {
@@ -1024,7 +1056,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route", "message": _build_route_message(route),
+                return {"response_kind": "route",
+                        "message": _build_route_message(route) + _road_condition_feedback(route, query),
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None,
                         "turns": 0}
@@ -1085,7 +1118,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
         if route:
             route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-            return {"response_kind": "route", "message": _build_route_message(route),
+            return {"response_kind": "route",
+                    "message": _build_route_message(route) + _road_condition_feedback(route, full_request),
                     "route": route, "route_kind": "via", "candidates": None,
                     "clarify": None, "suggestions": None, "turns": 0}
         if isinstance(result, dict) and result.get("error") in {
@@ -1160,7 +1194,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "multimodal" if len({leg.get("mode") for leg in completed_legs}) > 1
                 else "via"
             )
-            route_response["message"] = _build_route_message(route_response["route"])
+            route_response["message"] = _build_route_message(route_response["route"]) + _road_condition_feedback(
+                route_response["route"], str((saved_request or {}).get("original_query") or "") + " " + query,
+            )
             if route_response["route"].get("route_state_unavailable"):
                 route_response["message"] += "各段方式或约束不同，请在分段路线查看详情；全程暂不支持一键切换策略。"
         if not followups:
@@ -1195,6 +1231,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     final_args["constraints"]["avoid_steps"] = True
                 if saved_constraints.get("avoid_slope"):
                     final_args["constraints"]["slope"] = "avoid"
+            first_strategy = ((route_response["route"].get("route_state") or {})
+                              .get("strategy") or {}).get("name")
+            final_strategy = first_strategy or (saved_request or {}).get("strategy") or detect_strategy_hint(
+                str((saved_request or {}).get("original_query") or ""),
+            )
+            if final_strategy in {"shortest", "recommended", "scenery", "flat"}:
+                final_args["strategy"] = final_strategy
             final_result, final_artifact = execute_tool(
                 "plan_route", final_args, {"query": next_query, "uid": uid},
             )
@@ -1214,7 +1257,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "needs_input": False, "place_request": None}
             full_route = _combined_place_route(full_legs)
             return {**route_response, "response_kind": "route", "route": full_route,
-                    "route_kind": "via", "message": _build_route_message(full_route),
+                    "route_kind": "via", "message": _build_route_message(full_route) + _road_condition_feedback(
+                        full_route, str((saved_request or {}).get("original_query") or "") + " " + query),
                     "needs_input": False, "place_request": None, "clarify": None,
                     "suggestions": None}
         next_activities = list(next_request.get("activities") or [])
@@ -1232,6 +1276,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
             constraints=(saved_request or {}).get("constraints") or {},
             candidate_poi_ids=[],
         )
+        if pending.get("strategy") is None:
+            route_strategy = ((route_response["route"].get("route_state") or {})
+                              .get("strategy") or {}).get("name")
+            if route_strategy in {"shortest", "recommended", "scenery", "flat"}:
+                pending["strategy"] = route_strategy
         pending["completed_legs"] = completed_legs
         route_response["needs_input"] = True
         route_response["place_request"] = pending
@@ -1356,12 +1405,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if route_constraints:
             route_args["constraints"] = route_constraints
         full_request = str((place_request or {}).get("original_query") or "") + " " + str(query)
-        if re.search(r"平坦(?:的)?路|平坦优先|少爬坡|少走坡", full_request):
-            route_args["strategy"] = "flat"
-        elif re.search(r"风景优先|景观优先|看风景|风景好", full_request):
-            route_args["strategy"] = "scenery"
-        if re.search(r"最短|赶时间|赶课|不绕路", query):
-            route_args["strategy"] = "shortest"
+        route_strategy = (place_request or {}).get("strategy") or _explicit_place_strategy(full_request)
+        if route_strategy:
+            route_args["strategy"] = route_strategy
         result, artifact = execute_tool("plan_route", route_args,
                                         {"query": full_request, "uid": uid})
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
@@ -1388,7 +1434,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         ) else "继续下一步",
                         "query": continuation,
                     })
-            response = {"response_kind": "route", "message": _build_route_message(route),
+            response = {"response_kind": "route",
+                        "message": _build_route_message(route) + _road_condition_feedback(route, full_request),
                         "route": route, "route_kind": "direct", "candidates": None,
                         "clarify": None, "place_request": None,
                         "suggestions": suggestions, "turns": 0}
@@ -1457,9 +1504,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "query": final_name, "destination_poi_id": resolved_final["id"],
                     "activities": [], "subcategories": [],
                 }
-                if sequence_followups:
+                if (sequence_followups and activity_sequence[-1]["query"].strip(" ，,。；;、 ")
+                        == ordered_parts[-1].strip(" ，,。；;、 ")):
                     sequence_followups[-1] = named_followup
-                elif agent_tools.resolve_activity_query(ordered_parts[0]):
+                elif activity_sequence or agent_tools.resolve_activity_query(ordered_parts[0]):
                     sequence_followups.append(named_followup)
     activity_intent = (activity_sequence[0]["intent"] if activity_sequence else
                        agent_tools.resolve_activity_query(original_request))
@@ -1681,7 +1729,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                      if isinstance(route_artifact, dict) else None)
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                response = {"response_kind": "route", "message": _build_route_message(route),
+                response = {"response_kind": "route",
+                            "message": _build_route_message(route) + _road_condition_feedback(route, route_request),
                             "route": route, "route_kind": "direct", "candidates": None,
                             "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
                 saved_request = {**(place_request or {}), "mode": route_args["mode"],
@@ -2155,16 +2204,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
         else:
             final_message += " 本次未取得天气信息；路线仅依据现有道路数据。"
 
-    if artifact_route and re.search(r"路况|管制|封路|封闭|禁行|为何绕行|为什么绕路",
-                                    (active_task_request or "") + query):
-        applied = artifact_route.get("road_conditions_applied")
-        if type(applied) is int:
-            if applied:
-                mode_label = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
-                    artifact_route.get("mode"), "本次出行方式")
-                final_message += f" 本次算路纳入 {applied} 条适用于{mode_label}的生效路况记录。"
-            else:
-                final_message += " 本次算路未应用生效路况记录；未覆盖路段仍需现场确认。"
+    if artifact_route:
+        final_message += _road_condition_feedback(
+            artifact_route, (active_task_request or "") + query,
+        )
 
     response_kind = "chat"
     if artifact_route:

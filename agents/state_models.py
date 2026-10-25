@@ -142,6 +142,7 @@ class PlaceRequestState(Contract):
     selected_poi_id: Identifier | None = None
     candidate_poi_ids: list[Identifier] = Field(default_factory=list, max_length=20)
     mode: TravelMode = "walk"
+    strategy: Literal["shortest", "recommended", "scenery", "flat"] | None = None
     constraints: HardConstraints = Field(default_factory=HardConstraints)
 
 

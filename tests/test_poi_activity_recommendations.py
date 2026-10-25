@@ -3,6 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from agents import planner, tools
+from agents.state_models import PlaceRequestState
 from spatial.poi import _flatten_poi
 from spatial.poi_taxonomy import resolve_activity_query
 
@@ -46,6 +47,46 @@ def test_compound_nearby_activity_waits_for_choice_before_named_final_stop():
         selected["name"], "星湖园食堂",
     ]
     assert selected["name"] in completed["message"]
+
+
+def test_two_activity_stops_remain_before_a_named_final_stop(monkeypatch):
+    basketball = {"poi_id": "poi_206", "name": "工学部篮球场",
+                  "activities": ["basketball"], "distance_m": 120}
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda *_args: (
+        {"candidates": [basketball], "start_name": "工学部"},
+        {"candidates": [dict(basketball)]},
+    ))
+    with patch.object(planner, "_make_client", side_effect=AssertionError("unexpected LLM")):
+        first = planner.run_agent(
+            "从工学部出发，先打篮球，再吃饭，最后到武汉大学文理学部教3楼。",
+        )
+    followups = first["place_request"]["follow_up_requests"]
+    assert first["response_kind"] == "candidates"
+    assert len(followups) == 2
+    assert followups[0]["activities"] == ["meal"]
+    assert followups[1]["destination_poi_id"]
+
+
+def test_custom_weights_do_not_make_saved_place_request_invalid():
+    saved = planner._place_request_state(
+        "从工学部出发，先找篮球场，再吃饭，距离坡度风景 0.5:0.4:0.1",
+    )
+    assert PlaceRequestState.model_validate(saved).strategy is None
+
+
+def test_less_slope_phrase_keeps_flat_strategy_for_place_task():
+    assert planner._explicit_place_strategy("少走坡") == "flat"
+    saved = planner._place_request_state("从工学部出发先找篮球场，再吃饭，少走坡")
+    assert PlaceRequestState.model_validate(saved).strategy == "flat"
+
+
+def test_constraint_only_followup_keeps_preference_and_explicit_change_wins():
+    saved = planner._place_request_state("从工学部出发，找食堂，平坦优先")
+    constrained = planner._apply_place_request_correction(saved, "就去桂园一食堂，不走台阶")
+    changed = planner._apply_place_request_correction(saved, "改成风景优先，就去桂园一食堂")
+    assert constrained["strategy"] == "flat"
+    assert constrained["constraints"]["avoid_steps"] is True
+    assert changed["strategy"] == "scenery"
 
 
 @pytest.mark.parametrize("query", [
@@ -508,7 +549,13 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
     assert [call["end"]["name"] for call in route_calls] == ["测试食堂", "桂园食堂"]
 
 
-def test_textual_meal_selection_keeps_named_non_activity_final_stop(monkeypatch):
+@pytest.mark.parametrize("selection_query,expected_strategy", [
+    ("就去桂园一食堂，当前有无道路管制？然后到刚才说的终点；请按顺序给出全程步行路线。", "flat"),
+    ("改成风景优先，就去桂园一食堂，然后到刚才说的终点；请按顺序给出全程步行路线。", "scenery"),
+])
+def test_textual_meal_selection_keeps_named_non_activity_final_stop(
+    monkeypatch, selection_query, expected_strategy,
+):
     meal = {"poi_id": "poi_068", "name": "桂园一食堂", "activities": ["canteen_meal"],
             "subcategory": "canteen", "distance_m": 150}
     route_calls = []
@@ -537,18 +584,19 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(monkeypatch)
             "duration_min": 2.0, "shortest_duration_min": 2.0,
             "steps": [], "pois": [], "timings_ms": {},
             "route_verification": {"status": "pass", "field_truth_verified": False},
+            "road_conditions_applied": 1,
         }
         return route, {"route": route}
 
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
     first = planner.run_agent(
-        "从武汉大学文理学部教3楼先找个附近能吃饭的地方，再去武汉大学梅园操场。",
+        "从武汉大学文理学部教3楼出发，走平坦的路，先找个附近能吃饭的地方，再去武汉大学梅园操场。",
     )
     assert first["response_kind"] == "candidates"
     assert first["place_request"]["follow_up_requests"][-1]["destination_poi_id"] == "poi_082"
 
     completed = planner.run_agent(
-        "就去桂园一食堂，然后到刚才说的终点；请从出发地按顺序给出全程步行路线。",
+        selection_query,
         context={"place_request": first["place_request"]},
     )
     assert completed["response_kind"] == "route"
@@ -557,6 +605,9 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(monkeypatch)
         "桂园一食堂", "武汉大学梅园操场",
     ]
     assert [call["end"]["poi_id"] for call in route_calls] == ["poi_068", "poi_082"]
+    assert [call.get("strategy") for call in route_calls] == [expected_strategy] * 2
+    if "道路管制" in selection_query:
+        assert "纳入 1 条适用于步行的生效路况记录" in completed["message"]
 
 
 def test_textual_candidate_choice_respects_rejection_and_ambiguity():
@@ -706,7 +757,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
         {"id": canteen["poi_id"], "name": canteen["name"]},
         {"id": "poi_110", "name": "武汉大学桂园6舍"},
     ])
-    initial = planner.run_agent("我在工学部，先打篮球，再吃饭，最后回宿舍，不走台阶")
+    initial = planner.run_agent("我在工学部，先打篮球，再吃饭，最后回宿舍，不走台阶，平坦优先")
     first = planner.run_agent("去这个地点", context={
         "place_request": initial["place_request"], "selected_poi_id": basketball["poi_id"],
     })
@@ -728,6 +779,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     assert len(third["route"]["recommended_edge_ids"]) == 3
     assert route_calls[1]["start"]["name"] == basketball["name"]
     assert all(call["constraints"]["avoid_steps"] for call in route_calls)
+    assert [call.get("strategy") for call in route_calls] == ["flat", "flat", "flat"]
 
 
 def test_unrecognized_dorm_answer_keeps_the_pending_task(monkeypatch):

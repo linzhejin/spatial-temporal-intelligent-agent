@@ -14,7 +14,7 @@ _FOLLOWUP = re.compile(r"^(还是|换|改|那|继续|然后|从那里|从这|骑
 _NEGATED_SCENERY = re.compile(r"(?:不看|不要看|不用看|不考虑|无所谓)(?:风景|景观|景色|景)")
 _LEISURE = re.compile(r"游览|逛|散步|赏樱|赏花|拍照|打卡|带朋友|推荐.{0,6}路线|游玩|参观")
 _SCENERY = re.compile(r"风景|景观|临湖|林荫|赏樱|赏花|拍照|打卡")
-_FLAT = re.compile(r"平坦|平路|少爬坡|不爬坡|避开陡坡|省力|无障碍")
+_FLAT = re.compile(r"平坦|平路|少爬坡|少走坡|不爬坡|避开陡坡|省力|无障碍")
 _CUSTOM_WEIGHTS = re.compile(
     r"(?:距离.{0,8}坡度.{0,8}风景|distance.{0,8}slope.{0,8}scenery)"
     r".{0,12}(?:按|权重|比例)?\s*\d+(?:\.\d+)?\s*[:：/]\s*"

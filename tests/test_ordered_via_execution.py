@@ -43,6 +43,18 @@ def test_ordered_route_executes_all_stops_without_model_or_itinerary(
     assert "stop_duration_min" not in args
 
 
+def test_named_via_route_answers_road_condition_question(monkeypatch):
+    route = {"start_name": "玉兰2门", "end_name": "樱顶", "mode": "walk",
+             "road_conditions_applied": 1}
+    monkeypatch.setattr(tools, "execute_tool", lambda *_args: (
+        route, {"route": route, "route_kind": "via"},
+    ))
+    monkeypatch.setattr(planner, "_make_client", lambda: pytest.fail("unexpected LLM"))
+    result = planner.run_agent("从玉兰2门经卓尔体育馆到樱顶，当前有无道路管制？")
+    assert result["response_kind"] == "route"
+    assert "纳入 1 条适用于步行的生效路况记录" in result["message"]
+
+
 def test_wrong_itinerary_call_cannot_invent_budget_dwell_or_return(monkeypatch):
     query = "从南门先到图书馆，再到实验楼，最后北门。"
     calls = []
