@@ -24,7 +24,8 @@ def test_missing_attempts_are_failures_and_output_is_immutable(tmp_path):
     run_manifest = json.loads((result / "manifest.json").read_text(encoding="utf-8"))
     frozen_manifest = json.loads((PILOT / "source_manifest_multi_turn_dev_v1.json").read_text(encoding="utf-8"))
     assert run_manifest["delegated_route_scorer_sha256"] == frozen_manifest["inputs"]["route_scorer"]["sha256"]
-    assert run_manifest["observation_projection_sha256"] == frozen_manifest["inputs"]["observation_projection"]["sha256"]
+    assert run_manifest["projection_validator_sha256"] == frozen_manifest["inputs"]["observation_projection"]["sha256"]
+    assert run_manifest["replay_collector_verified"] is False
     with pytest.raises(FileExistsError):
         run_controlled_multi_turn_replay(replay, tmp_path, "empty")
 

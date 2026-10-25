@@ -137,12 +137,14 @@ def run_controlled_multi_turn_replay(
         "spec_sha256": _sha(spec_bytes), "replay_sha256": _sha(replay_bytes),
         "scorer_sha256": _sha(Path(__file__).read_bytes().replace(b"\r\n", b"\n")),
         "delegated_route_scorer_sha256": inputs["route_scorer"]["sha256"],
-        "observation_projection_sha256": inputs["observation_projection"]["sha256"],
+        "projection_validator_sha256": inputs["observation_projection"]["sha256"],
+        "replay_collector_verified": False,
         "scorer_content_encoding": "utf8_lf_canonical_v1",
         "limitations": [
             "Only frozen graph validity is checked; field passability is unverified.",
             "These two development cases are neither blind nor formal results.",
             "No model attempt was run by this scorer; a replay must be supplied.",
+            "The replay collector is not identified by this JSONL scorer.",
         ],
     }
     output_root.mkdir(parents=True, exist_ok=True)
