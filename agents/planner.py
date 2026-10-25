@@ -155,15 +155,21 @@ def _build_route_comparison_message(comparison: dict) -> str:
 
 
 def _route_verification_failure_response(result, *, message, turns=0):
-    detail = str((result or {}).get("message") or "") if isinstance(result, dict) else ""
+    verification = (result or {}).get("route_verification") if isinstance(result, dict) else None
+    issues = set(verification.get("issues") or []) if isinstance(verification, dict) else set()
+    if (isinstance(verification, dict) and verification.get("status") == "unknown"
+            and issues == {"slope_evidence_unknown"}):
+        message = "部分路段缺少可核实的坡度信息，无法确认这条路线满足坡度要求；本次未展示新路线。"
+        detail = ""
+    else:
+        detail = str((result or {}).get("message") or "") if isinstance(result, dict) else ""
     if detail:
         message += f"原因：{detail}"
     return {
         "response_kind": "chat", "message": message,
         "route": None, "route_kind": None, "candidates": None,
         "clarify": None, "suggestions": None, "turns": turns,
-        "route_verification": (result or {}).get("route_verification")
-        if isinstance(result, dict) else None,
+        "route_verification": verification,
     }
 
 

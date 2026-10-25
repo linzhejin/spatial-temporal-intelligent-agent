@@ -125,6 +125,23 @@ class TestSummarize:
         assert reflection.summarize({}) == ""
 
 
+def test_route_failure_tells_user_when_slope_evidence_is_missing():
+    report = _report(
+        checks={"mode_and_constraints": _group("unknown", ["slope_evidence_unknown"])},
+        status="unknown",
+        issues=["slope_evidence_unknown"],
+    )
+    result = planner._route_verification_failure_response(
+        {"route_verification": report, "message": "路线结果无法核对。"},
+        message="路线未通过独立核验，没有展示路线。",
+    )
+    assert result["response_kind"] == "chat"
+    assert result["route"] is None
+    assert "坡度信息" in result["message"]
+    assert "未展示新路线" in result["message"]
+    assert result["route_verification"] == report
+
+
 class TestGuardrails:
     def test_budget_constants_unchanged(self):
         assert planner.MAX_TURNS == 6
