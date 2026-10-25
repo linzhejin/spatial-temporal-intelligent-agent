@@ -1,0 +1,1528 @@
+{
+  "cases": [
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "0839fa6067b22fe8807cd64a3d7ee99e430d8254284260c94b49e81c825a3450"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "616b0c2d99da1b75dbd8f9959aae656a212dd33f019b5f42b3a1d9685062f479"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_254",
+            "poi_255"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_信息学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "canteen_meal",
+          "all_reachable_poi_ids": [
+            "poi_254",
+            "poi_255",
+            "poi_253",
+            "poi_256",
+            "poi_307",
+            "poi_069",
+            "poi_070",
+            "poi_068",
+            "poi_075",
+            "poi_072",
+            "poi_067",
+            "poi_074",
+            "poi_203",
+            "poi_202",
+            "poi_201"
+          ],
+          "candidate_poi_ids": [
+            "poi_254",
+            "poi_255"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_071",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_073",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_076",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_361",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_067": 2084.754,
+            "poi_068": 1473.371,
+            "poi_069": 1460.773,
+            "poi_070": 1460.773,
+            "poi_072": 2005.515,
+            "poi_074": 2211.122,
+            "poi_075": 1892.903,
+            "poi_201": 2525.503,
+            "poi_202": 2444.077,
+            "poi_203": 2372.476,
+            "poi_253": 176.326,
+            "poi_254": 39.539,
+            "poi_255": 148.483,
+            "poi_256": 182.848,
+            "poi_307": 370.43
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters": {
+          "activity": "canteen_meal",
+          "activity_label": "食堂",
+          "limit": 2,
+          "mode": "walk",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters_sha256": "0839fa6067b22fe8807cd64a3d7ee99e430d8254284260c94b49e81c825a3450",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_001",
+      "messages": [
+        {
+          "content": "从信息学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐2个食堂。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_info_canteen",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "6a9a6be42c2428c8999702ec8f74f8767f4f50fbbf03e5c664cb4b3562e4949b"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "f5f6922ba76ce67a9fb2e53a13fb1b4c0478a0f69a0f7edcbe177f6a6dad963b"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_317",
+            "poi_313",
+            "poi_310"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_信息学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "coffee",
+          "all_reachable_poi_ids": [
+            "poi_317",
+            "poi_313",
+            "poi_310",
+            "poi_309",
+            "poi_349",
+            "poi_332",
+            "poi_338",
+            "poi_371",
+            "poi_405",
+            "poi_355",
+            "poi_369",
+            "poi_384",
+            "poi_383"
+          ],
+          "candidate_poi_ids": [
+            "poi_317",
+            "poi_313",
+            "poi_310"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_354",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_366",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_373",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_375",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_410",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_452",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_309": 528.323,
+            "poi_310": 182.848,
+            "poi_313": 179.993,
+            "poi_317": 81.406,
+            "poi_332": 1186.998,
+            "poi_338": 1189.787,
+            "poi_349": 1174.928,
+            "poi_355": 2005.515,
+            "poi_369": 2345.34,
+            "poi_371": 1578.662,
+            "poi_383": 2525.503,
+            "poi_384": 2464.544,
+            "poi_405": 1892.903
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters": {
+          "activity": "coffee",
+          "activity_label": "咖啡店",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters_sha256": "6a9a6be42c2428c8999702ec8f74f8767f4f50fbbf03e5c664cb4b3562e4949b",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_002",
+      "messages": [
+        {
+          "content": "从信息学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个咖啡店。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_info_coffee",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "a0997063cc67c0286b1b8eae2c66449f97df602f55f8c50bda0e4b551a4f62d9"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "3fba89442e64cf7543d7ea1229f86203b3403ebc9c1b313f8e7b1bf9f6e7b1f4"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_240",
+            "poi_015",
+            "poi_034"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_信息学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "study",
+          "all_reachable_poi_ids": [
+            "poi_240",
+            "poi_015",
+            "poi_034",
+            "poi_039",
+            "poi_016"
+          ],
+          "candidate_poi_ids": [
+            "poi_240",
+            "poi_015",
+            "poi_034"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_194",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_015": 1106.444,
+            "poi_016": 2213.689,
+            "poi_034": 1607.622,
+            "poi_039": 2005.515,
+            "poi_240": 269.995
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters": {
+          "activity": "study",
+          "activity_label": "学习场所",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters_sha256": "a0997063cc67c0286b1b8eae2c66449f97df602f55f8c50bda0e4b551a4f62d9",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_003",
+      "messages": [
+        {
+          "content": "从信息学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个学习场所。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_info_study",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "7cb86e3e1b56b0a9c5d3d2362b4955fe8c95d384a4b5039fca2323e43670d966"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "469f9fe382e7b17e493b6f1be24ae49cd29914cd95318915e25e06dc9eb5b134"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_451",
+            "poi_257",
+            "poi_079"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_信息学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "badminton",
+          "all_reachable_poi_ids": [
+            "poi_451",
+            "poi_257",
+            "poi_079",
+            "poi_086",
+            "poi_447"
+          ],
+          "candidate_poi_ids": [
+            "poi_451",
+            "poi_257",
+            "poi_079"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_204",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_079": 1246.251,
+            "poi_086": 1382.115,
+            "poi_257": 499.832,
+            "poi_447": 2331.361,
+            "poi_451": 464.554
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters": {
+          "activity": "badminton",
+          "activity_label": "羽毛球场地",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_信息学部"
+        },
+        "parameters_sha256": "7cb86e3e1b56b0a9c5d3d2362b4955fe8c95d384a4b5039fca2323e43670d966",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_004",
+      "messages": [
+        {
+          "content": "从信息学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个羽毛球场地。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_info_badminton",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "b2348061a7d741ea4c0ca720a67580575090cd24e5121bdfc7a1433e9561837c"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "66553818e41827ab1fd5229bc6f0c35fc27e6b5b7a8c5daa2dce779717a8c8ab"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_201",
+            "poi_203"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "poi_002",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "canteen_meal",
+          "all_reachable_poi_ids": [
+            "poi_201",
+            "poi_203",
+            "poi_202",
+            "poi_075",
+            "poi_074",
+            "poi_068",
+            "poi_069",
+            "poi_070",
+            "poi_067",
+            "poi_072",
+            "poi_307",
+            "poi_254",
+            "poi_255",
+            "poi_253",
+            "poi_256"
+          ],
+          "candidate_poi_ids": [
+            "poi_201",
+            "poi_203"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_071",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_073",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_076",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_361",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_067": 1513.307,
+            "poi_068": 1057.621,
+            "poi_069": 1140.112,
+            "poi_070": 1140.112,
+            "poi_072": 1584.531,
+            "poi_074": 979.763,
+            "poi_075": 819.793,
+            "poi_201": 367.186,
+            "poi_202": 423.333,
+            "poi_203": 373.811,
+            "poi_253": 2459.193,
+            "poi_254": 2390.521,
+            "poi_255": 2431.349,
+            "poi_256": 2465.715,
+            "poi_307": 2171.669
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "poi_002"
+        },
+        "parameters": {
+          "activity": "canteen_meal",
+          "activity_label": "食堂",
+          "limit": 2,
+          "mode": "walk",
+          "start_poi_id": "poi_002"
+        },
+        "parameters_sha256": "b2348061a7d741ea4c0ca720a67580575090cd24e5121bdfc7a1433e9561837c",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_005",
+      "messages": [
+        {
+          "content": "从武大动力与机械学院机械工程系步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐2个食堂。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_engineering_mechanical_canteen",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "0a4b38626e47ad1e8f60ff1d22490c0ee7be160b3bdd45f3eb0e22995334c19a"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "1c57c008ec8ec729c21e3d9b6db28bf7c3aa6b6980cc3424dda51add1a2270c8"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_384",
+            "poi_383",
+            "poi_369"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "poi_002",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "coffee",
+          "all_reachable_poi_ids": [
+            "poi_384",
+            "poi_383",
+            "poi_369",
+            "poi_405",
+            "poi_371",
+            "poi_338",
+            "poi_349",
+            "poi_355",
+            "poi_309",
+            "poi_332",
+            "poi_317",
+            "poi_310",
+            "poi_313"
+          ],
+          "candidate_poi_ids": [
+            "poi_384",
+            "poi_383",
+            "poi_369"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_354",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_366",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_373",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_375",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_410",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_452",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_309": 1921.51,
+            "poi_310": 2465.715,
+            "poi_313": 2529.117,
+            "poi_317": 2454.756,
+            "poi_332": 1977.173,
+            "poi_338": 1450.461,
+            "poi_349": 1476.369,
+            "poi_355": 1584.531,
+            "poi_369": 762.638,
+            "poi_371": 1174.658,
+            "poi_383": 367.186,
+            "poi_384": 262.324,
+            "poi_405": 819.793
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "poi_002"
+        },
+        "parameters": {
+          "activity": "coffee",
+          "activity_label": "咖啡店",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "poi_002"
+        },
+        "parameters_sha256": "0a4b38626e47ad1e8f60ff1d22490c0ee7be160b3bdd45f3eb0e22995334c19a",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_006",
+      "messages": [
+        {
+          "content": "从武大动力与机械学院机械工程系步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个咖啡店。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_engineering_mechanical_coffee",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "6d30e02e6d3adbf4d84274bcded74f7d12886d1879e36dddb826a580147a77bf"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "99890d9bc2208e259fdb4db70136dd756b1ccda509155bd0eacf8ff863af2c0a"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_016",
+            "poi_034",
+            "poi_015"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "poi_002",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "study",
+          "all_reachable_poi_ids": [
+            "poi_016",
+            "poi_034",
+            "poi_015",
+            "poi_039",
+            "poi_240"
+          ],
+          "candidate_poi_ids": [
+            "poi_016",
+            "poi_034",
+            "poi_015"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_194",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_015": 1491.277,
+            "poi_016": 297.494,
+            "poi_034": 1096.49,
+            "poi_039": 1584.531,
+            "poi_240": 2377.663
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "poi_002"
+        },
+        "parameters": {
+          "activity": "study",
+          "activity_label": "学习场所",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "poi_002"
+        },
+        "parameters_sha256": "6d30e02e6d3adbf4d84274bcded74f7d12886d1879e36dddb826a580147a77bf",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_007",
+      "messages": [
+        {
+          "content": "从武大动力与机械学院机械工程系步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个学习场所。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_engineering_mechanical_study",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "cf9e489d2886ddbbd21cedbaef1cf7f0aa0495832d9fc3aceb7a11badeed960e"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "77ef50d5a2538b82bf74e276ca316ae67e414360e779552c513c2cea38c45e04"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_447",
+            "poi_086",
+            "poi_079"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "poi_002",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "badminton",
+          "all_reachable_poi_ids": [
+            "poi_447",
+            "poi_086",
+            "poi_079",
+            "poi_451",
+            "poi_257"
+          ],
+          "candidate_poi_ids": [
+            "poi_447",
+            "poi_086",
+            "poi_079"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_204",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_079": 1461.903,
+            "poi_086": 1060.632,
+            "poi_257": 2556.666,
+            "poi_447": 307.717,
+            "poi_451": 2525.081
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "poi_002"
+        },
+        "parameters": {
+          "activity": "badminton",
+          "activity_label": "羽毛球场地",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "poi_002"
+        },
+        "parameters_sha256": "cf9e489d2886ddbbd21cedbaef1cf7f0aa0495832d9fc3aceb7a11badeed960e",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_008",
+      "messages": [
+        {
+          "content": "从武大动力与机械学院机械工程系步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个羽毛球场地。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_engineering_mechanical_badminton",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "723bf1447244b834e1679ded191f3affecc63b00c4e6a3536ad8770769c09c3b"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "d3489c81a38c301f6709cd38cf83128a008176551b5627b109c490891f3be98b"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_068",
+            "poi_069"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_文理学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "canteen_meal",
+          "all_reachable_poi_ids": [
+            "poi_068",
+            "poi_069",
+            "poi_070",
+            "poi_075",
+            "poi_074",
+            "poi_203",
+            "poi_202",
+            "poi_307",
+            "poi_072",
+            "poi_201",
+            "poi_067",
+            "poi_254",
+            "poi_255",
+            "poi_253",
+            "poi_256"
+          ],
+          "candidate_poi_ids": [
+            "poi_068",
+            "poi_069"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_071",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_073",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_076",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_361",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_067": 1216.552,
+            "poi_068": 398.37,
+            "poi_069": 495.427,
+            "poi_070": 495.427,
+            "poi_072": 1141.127,
+            "poi_074": 875.45,
+            "poi_075": 803.873,
+            "poi_201": 1189.367,
+            "poi_202": 1107.941,
+            "poi_203": 1101.665,
+            "poi_253": 1558.923,
+            "poi_254": 1361.245,
+            "poi_255": 1531.079,
+            "poi_256": 1565.445,
+            "poi_307": 1121.864
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters": {
+          "activity": "canteen_meal",
+          "activity_label": "食堂",
+          "limit": 2,
+          "mode": "walk",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters_sha256": "723bf1447244b834e1679ded191f3affecc63b00c4e6a3536ad8770769c09c3b",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_009",
+      "messages": [
+        {
+          "content": "从文理学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐2个食堂。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_arts_canteen",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "c03255874d625921f66bff08b230d83f14c5b5f8d3bb622ded3d2038c02cf958"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "9a81dd62091f34cfb0abca487c61eb83c76b2f87da5fee3e5d26dedbc9d8a8d4"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_371",
+            "poi_349",
+            "poi_338"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_文理学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "coffee",
+          "all_reachable_poi_ids": [
+            "poi_371",
+            "poi_349",
+            "poi_338",
+            "poi_405",
+            "poi_309",
+            "poi_369",
+            "poi_332",
+            "poi_355",
+            "poi_383",
+            "poi_384",
+            "poi_317",
+            "poi_313",
+            "poi_310"
+          ],
+          "candidate_poi_ids": [
+            "poi_371",
+            "poi_349",
+            "poi_338"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_354",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_366",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_373",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_375",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_410",
+              "reason": "not_in_anchored_catalog"
+            },
+            {
+              "poi_id": "poi_452",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_309": 871.705,
+            "poi_310": 1565.445,
+            "poi_313": 1479.312,
+            "poi_317": 1424.918,
+            "poi_332": 1136.466,
+            "poi_338": 609.335,
+            "poi_349": 453.174,
+            "poi_355": 1141.127,
+            "poi_369": 1009.669,
+            "poi_371": 248.292,
+            "poi_383": 1189.367,
+            "poi_384": 1193.733,
+            "poi_405": 803.873
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters": {
+          "activity": "coffee",
+          "activity_label": "咖啡店",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters_sha256": "c03255874d625921f66bff08b230d83f14c5b5f8d3bb622ded3d2038c02cf958",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_010",
+      "messages": [
+        {
+          "content": "从文理学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个咖啡店。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_arts_coffee",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "a607a21e88ae849b065aca6056579a45fb24e897dff020933f1eeac5bf255b73"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "bf5a28a8467464400beb7bb9f614e27927f13f10718c5e972d6c49f0e3b0b634"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_034",
+            "poi_015",
+            "poi_016"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_文理学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "study",
+          "all_reachable_poi_ids": [
+            "poi_034",
+            "poi_015",
+            "poi_016",
+            "poi_039",
+            "poi_240"
+          ],
+          "candidate_poi_ids": [
+            "poi_034",
+            "poi_015",
+            "poi_016"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_194",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_015": 468.083,
+            "poi_016": 942.878,
+            "poi_034": 217.971,
+            "poi_039": 1141.127,
+            "poi_240": 1327.993
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters": {
+          "activity": "study",
+          "activity_label": "学习场所",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters_sha256": "a607a21e88ae849b065aca6056579a45fb24e897dff020933f1eeac5bf255b73",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_011",
+      "messages": [
+        {
+          "content": "从文理学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个学习场所。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_arts_study",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "2d369608069f91efe4039c5c95d0781c3bdcefc834757bc5e4a192a9c5d99e38"
+          },
+          {
+            "kind": "catalog_attribute",
+            "sha256": "a277412e45d7aad1769126093671cf4353f44829cf0a7e8b75efbfc9d220be4e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "95faf65106d6f991decae96c0b05e55f1a1ff220f4c35efe52104c5dcd101d0d"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "place_recommendation",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [
+            "poi_086",
+            "poi_079",
+            "poi_447"
+          ],
+          "clarification_slot": null,
+          "end_poi_id": null,
+          "feasibility": "not_applicable",
+          "hard_constraints": {},
+          "intent_label": "activity_recommendation",
+          "kind": "candidates",
+          "required_outputs": [
+            "candidates"
+          ],
+          "start_poi_id": "area_文理学部",
+          "status": "completed",
+          "strategy": "nearest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "catalog_attribute",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_recommendation_cases_v1",
+        "generator_sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "activity": "badminton",
+          "all_reachable_poi_ids": [
+            "poi_086",
+            "poi_079",
+            "poi_447",
+            "poi_451",
+            "poi_257"
+          ],
+          "candidate_poi_ids": [
+            "poi_086",
+            "poi_079",
+            "poi_447"
+          ],
+          "excluded": [
+            {
+              "poi_id": "poi_204",
+              "reason": "not_in_anchored_catalog"
+            }
+          ],
+          "graph_distance_m": {
+            "poi_079": 474.202,
+            "poi_086": 401.381,
+            "poi_257": 1674.929,
+            "poi_447": 1060.55,
+            "poi_451": 1523.113
+          },
+          "last_meter_status": "unverified",
+          "mode": "walk",
+          "scope": "frozen_anchored_catalog_graph_only",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters": {
+          "activity": "badminton",
+          "activity_label": "羽毛球场地",
+          "limit": 3,
+          "mode": "walk",
+          "start_poi_id": "area_文理学部"
+        },
+        "parameters_sha256": "2d369608069f91efe4039c5c95d0781c3bdcefc834757bc5e4a192a9c5d99e38",
+        "template_id": "nearby",
+        "template_sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d",
+        "unresolved_ambiguity": false
+      },
+      "id": "recommend_dev_012",
+      "messages": [
+        {
+          "content": "从文理学部步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐3个羽毛球场地。",
+          "role": "user"
+        }
+      ],
+      "od_group": "dev_arts_badminton",
+      "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+      "template_group": "recommend_nearby_dev_v1"
+    }
+  ],
+  "gold_layer": "controlled_graph",
+  "protocol_version": "scenario-v2",
+  "repeats": 1,
+  "snapshot_id": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+  "source_manifest_sha256": "8b945d7f35f0c14d091a1901ee0a75b61b384828324508a8d9cdd523d5b00a40",
+  "split": "development"
+}

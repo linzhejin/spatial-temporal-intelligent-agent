@@ -1,0 +1,117 @@
+{
+  "effective_inputs_sha256": "d8f9af375ba8c9ab6b2799a3c5af3846d7496fa31780f2692ffd25e65063fbd3",
+  "format": "controlled-recommendation-source-v1",
+  "inputs": {
+    "anchor_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_anchor_snapshot.py",
+      "sha256": "a5efe6682f0fd311006f7b0728e873aab8dfc7ccc56f1733e409964edcf50966"
+    },
+    "anchors": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_spatial_v1/walk_anchors.json",
+      "sha256": "a450914be440bb2a8086036b42651cd833d45babdd9abcd6969f5d64d6db0aae"
+    },
+    "boundary": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_spatial_v1/boundary_wgs84.wkt",
+      "sha256": "3e33c61140da50b72679137ae8be10481c96eeb1e6280dbf40e08116a2c2dcd8"
+    },
+    "boundary_source": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "config.py",
+      "sha256": "6b9f302b3fb9d75f056823fc1f7474665e385bb904ed8fef91602b3451033285"
+    },
+    "controlled_source_manifest": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_source_manifest.py",
+      "sha256": "0349e4a53122acca279d703dae38f95f065c4d3dc3f37b192a633a7c91b9ed7e"
+    },
+    "coordinate_transform": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "spatial/coord_transform.py",
+      "sha256": "f33b274eb0b1ac003284d2481d2b2684d5e48bd45c0fb05249293dad2bc3fa7f"
+    },
+    "dataset_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/build_controlled_recommendation_pilot.py",
+      "sha256": "f9ae1ad69a87ae44cf26e8aa3d0cab33ab5b4dddfe01b7e3c4c6aefd302c39f5"
+    },
+    "generator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_recommendation_cases.py",
+      "sha256": "5b27d6ae1d6dccd85632c73460fb85bdda2620bf8362b8fab5c0be436ee5951d"
+    },
+    "gold_contract": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_gold_contract.py",
+      "sha256": "f9c6db67d218c596838863ce0fda723d885a3005b62a8f927c4609b0217dde74"
+    },
+    "graph": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "data/whu_road_network.graphml",
+      "sha256": "559ad68ba2c7f57782cc61a114bd057582e6b75da43e358ed5955adfba9b78a7"
+    },
+    "oracle_existence": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_route_gold.py",
+      "sha256": "291eb907cb4831a3403bec57a005624359a679e13129af3e1f12709c494ff59b"
+    },
+    "oracle_mode": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/independent_source_snapshot.py",
+      "sha256": "220540ef3ab72a4eb8007ada34f6cf7a5eb1e7f1f3c8e14bc6459e490cd2d531"
+    },
+    "oracle_route": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/independent_route_oracle.py",
+      "sha256": "ae3d04cc543296a0f7a8c7cdebd773b3ff28ed345f29c6be1aa17c7a13bea9a6"
+    },
+    "poi": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "data/pois.json",
+      "sha256": "30cb2e9a20b6bdd69ff76d7e1bcb9943f5bc6ef6df96c67723c4c2d465529bbf"
+    },
+    "recommendation_gold": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_recommendation_gold.py",
+      "sha256": "3475512c779dff5147dcc2e64a8e89ef7ac92f32d1978e8a17d2f005ada01398"
+    },
+    "requirements": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "requirements.txt",
+      "sha256": "24a56414e6e0a91da9f96c8d049db1db0e6ee28bce11a8e451a9b4d2239884f3"
+    },
+    "scenario_evaluator": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/scenario_evaluator.py",
+      "sha256": "ca578c90f6444f240510c6d81722dc66a102260142e644145af19d35cf081f37"
+    },
+    "source_manifest_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/controlled_recommendation_manifest.py",
+      "sha256": "4e1c9405eafa012cb757ecbf8aec8453d638d8a716ce78acf0b859f3a7449167"
+    },
+    "spatial_snapshot_builder": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/build_controlled_spatial_snapshot.py",
+      "sha256": "88aedb0cda7d3eaf0b27c239669205ef185f38ed14c259906c93d064b232c651"
+    },
+    "templates": {
+      "content_encoding": "utf8_lf_canonical_v1",
+      "path": "experiments/datasets/controlled_recommendation_pilot_v2/recommendation_pilot_spec.json",
+      "sha256": "47e952f9fed705531a62d951e7c9433c4a1df659c066e7e57a9d34b9e7f0750d"
+    }
+  },
+  "metadata": {
+    "activity_rule": "source_supported_with_nonempty_activity_basis",
+    "anchor_scope": "walk_nodes_within_20m_last_meter_unverified",
+    "boundary_crs": "EPSG:4326",
+    "distance_rule": "shortest_permitted_walk_graph_length_m",
+    "event_scope": "not_applicable",
+    "graph_crs": "EPSG:4326",
+    "poi_crs": "GCJ-02",
+    "scope": "development_only"
+  },
+  "profile": "recommendation_pilot"
+}

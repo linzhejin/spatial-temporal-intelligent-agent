@@ -1,0 +1,24 @@
+{
+  "format": "controlled-recommendation-pilot-spec-v1",
+  "scope": "development_only",
+  "templates": {
+    "nearby": {
+      "template_group": "recommend_nearby_dev_v1",
+      "text": "从{start}步行出发，在已收录且可接入校园路网的地点里，按路网距离由近到远推荐{limit}个{activity_label}。"
+    }
+  },
+  "cases": [
+    {"id": "recommend_dev_001", "template_id": "nearby", "od_group": "dev_info_canteen", "parameters": {"start_poi_id": "area_信息学部", "activity": "canteen_meal", "activity_label": "食堂", "mode": "walk", "limit": 2}},
+    {"id": "recommend_dev_002", "template_id": "nearby", "od_group": "dev_info_coffee", "parameters": {"start_poi_id": "area_信息学部", "activity": "coffee", "activity_label": "咖啡店", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_003", "template_id": "nearby", "od_group": "dev_info_study", "parameters": {"start_poi_id": "area_信息学部", "activity": "study", "activity_label": "学习场所", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_004", "template_id": "nearby", "od_group": "dev_info_badminton", "parameters": {"start_poi_id": "area_信息学部", "activity": "badminton", "activity_label": "羽毛球场地", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_005", "template_id": "nearby", "od_group": "dev_engineering_mechanical_canteen", "parameters": {"start_poi_id": "poi_002", "activity": "canteen_meal", "activity_label": "食堂", "mode": "walk", "limit": 2}},
+    {"id": "recommend_dev_006", "template_id": "nearby", "od_group": "dev_engineering_mechanical_coffee", "parameters": {"start_poi_id": "poi_002", "activity": "coffee", "activity_label": "咖啡店", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_007", "template_id": "nearby", "od_group": "dev_engineering_mechanical_study", "parameters": {"start_poi_id": "poi_002", "activity": "study", "activity_label": "学习场所", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_008", "template_id": "nearby", "od_group": "dev_engineering_mechanical_badminton", "parameters": {"start_poi_id": "poi_002", "activity": "badminton", "activity_label": "羽毛球场地", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_009", "template_id": "nearby", "od_group": "dev_arts_canteen", "parameters": {"start_poi_id": "area_文理学部", "activity": "canteen_meal", "activity_label": "食堂", "mode": "walk", "limit": 2}},
+    {"id": "recommend_dev_010", "template_id": "nearby", "od_group": "dev_arts_coffee", "parameters": {"start_poi_id": "area_文理学部", "activity": "coffee", "activity_label": "咖啡店", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_011", "template_id": "nearby", "od_group": "dev_arts_study", "parameters": {"start_poi_id": "area_文理学部", "activity": "study", "activity_label": "学习场所", "mode": "walk", "limit": 3}},
+    {"id": "recommend_dev_012", "template_id": "nearby", "od_group": "dev_arts_badminton", "parameters": {"start_poi_id": "area_文理学部", "activity": "badminton", "activity_label": "羽毛球场地", "mode": "walk", "limit": 3}}
+  ]
+}
