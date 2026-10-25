@@ -4,11 +4,11 @@
   "split": "test",
   "repeats": 3,
   "authoring_status": "UNADJUDICATED CANDIDATES. No frozen graph, independent gold or blind test result.",
-  "source_poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
+  "source_poi_sha256": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
   "source_graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
   "source_overrides_sha256": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
   "source_reviews_sha256": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169",
-  "poi_sha256": "db5f4177b596a1b1ae614dacafa39ce78ae04d5a7f8ef41ef7fa166a62958b0c",
+  "poi_sha256": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
   "cases": [
     {
       "id": "v2_T1_explicit_1",
@@ -6144,7 +6144,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学信息学部篮球场打篮球，吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学信息学部篮球场打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6153,6 +6157,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_139",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_262",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6195,13 +6218,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {
@@ -6226,7 +6261,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学篮球场(文体路)打篮球，吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学篮球场(文体路)打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选蔬三时轻食(武大校内店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6235,6 +6274,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_226",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_083",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6277,13 +6335,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {
@@ -6308,7 +6378,11 @@
         },
         {
           "role": "user",
-          "content": "就去武汉大学信息学部篮球场打篮球，吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，按顺序给出全程步行路线。"
+          "content": "就去武汉大学信息学部篮球场打篮球，接着找这个球场附近能吃饭的地方。"
+        },
+        {
+          "role": "user",
+          "content": "吃饭选鱼你在一起(信息学部店)；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方，给出全程步行路线。"
         }
       ],
       "expected_turns": [
@@ -6317,6 +6391,25 @@
           "kind": "candidates",
           "feasibility": "not_applicable",
           "start_poi_id": "poi_449",
+          "end_poi_id": null,
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "candidates"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        },
+        {
+          "status": "needs_input",
+          "kind": "candidates",
+          "feasibility": "not_applicable",
+          "start_poi_id": "poi_262",
           "end_poi_id": null,
           "via_poi_ids": [],
           "travel_mode": "walk",
@@ -6359,13 +6452,25 @@
         "reviewer": null,
         "evidence": []
       },
-      "candidate_spec": {
-        "activities": [
-          "basketball"
-        ],
-        "coordinates": "gcj02",
-        "max_display": 4,
-        "rank_tolerance_m": 30
+      "candidate_specs": {
+        "0": {
+          "activities": [
+            "basketball"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        },
+        "1": {
+          "activities": [
+            "canteen_meal",
+            "restaurant_meal",
+            "fast_food"
+          ],
+          "coordinates": "gcj02",
+          "max_display": 4,
+          "rank_tolerance_m": 30
+        }
       }
     },
     {
