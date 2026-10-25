@@ -1,0 +1,34 @@
+{
+  "format": "controlled-multi-turn-pilot-spec-v1",
+  "scope": "development_only",
+  "templates": {
+    "first": "从{start}{initial_mode_text}到{old_end}，按最短路径，{constraint_text}。",
+    "revision": "改成{revised_mode_text}，终点换成{new_end}；起点、原有约束和最短路径要求保持不变。"
+  },
+  "cases": [
+    {
+      "id": "revision_dev_001",
+      "od_group": "poi_015_poi_016_poi_014",
+      "parameters": {
+        "start_poi_id": "poi_015",
+        "initial_end_poi_id": "poi_016",
+        "revised_end_poi_id": "poi_014",
+        "initial_mode": "walk",
+        "revised_mode": "bike",
+        "avoid_steps": true
+      }
+    },
+    {
+      "id": "revision_dev_002",
+      "od_group": "poi_014_poi_016_poi_015",
+      "parameters": {
+        "start_poi_id": "poi_014",
+        "initial_end_poi_id": "poi_016",
+        "revised_end_poi_id": "poi_015",
+        "initial_mode": "walk",
+        "revised_mode": "bike",
+        "avoid_steps": false
+      }
+    }
+  ]
+}

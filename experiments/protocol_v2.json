@@ -1,7 +1,7 @@
 {
   "protocol_version": "scenario-v2",
   "purpose": "Controlled full-task comparison with source-derived labels and a separate small human semantic review layer.",
-  "status": "Route development pilot generation and graph-based offline scoring implemented; remaining categories, full v2 runner and blind test set are not yet complete.",
+  "status": "Development-only generation and offline scoring cover routes, location-ranked recommendations, and two-turn route revisions; compound tools, dynamic events, full v2 runner, and blind test set are not yet complete.",
   "controlled_layer": {
     "gold_layer": "controlled_graph",
     "formal_test_scenarios": 300,
