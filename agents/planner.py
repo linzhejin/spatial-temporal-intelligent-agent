@@ -96,7 +96,17 @@ def _build_route_message(route: dict) -> str:
     shortest = route.get("shortest_length_m")
     shortest_dur = route.get("shortest_duration_min")
 
-    head = f"已为你规划好从{s_name}到{e_name}的{verb}路线"
+    intermediate_names = [
+        str(leg.get("end_name")).strip()
+        for leg in (route.get("legs") or [])[:-1]
+        if isinstance(leg, dict) and leg.get("end_name")
+    ]
+    via_text = ""
+    if intermediate_names:
+        via_text = "经" + "、".join(intermediate_names[:3])
+        if len(intermediate_names) > 3:
+            via_text += f"等 {len(intermediate_names)} 处"
+    head = f"已为你规划好从{s_name}{via_text}到{e_name}的{verb}路线"
     ld = _fmt_dist(length)
     if ld:
         head += f"，约 {ld}"
@@ -1438,6 +1448,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
     named_final = None
     if len(ordered_parts) > 1:
         final_name = ordered_parts[-1].strip(" ，,。；;、 ")
+        final_name = re.sub(r"^(?:到|去|前往)\s*", "", final_name)
         if final_name:
             resolved_final, final_alternatives = agent_tools.find_poi_ambiguous(final_name)
             if resolved_final and not final_alternatives:
@@ -1522,7 +1533,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
     )
     if ((recommendation_categories or recommendation_activities)
             and not recommendation_has_target
-            and (not agent_tools.query_requests_route(recommendation_query) or route_to_nearest)):
+            and (not agent_tools.query_requests_route(recommendation_query)
+                 or route_to_nearest or bool(activity_sequence and named_final))):
         start_ref = None
         explicit_origin = agent_tools.recommendation_origin_from_text(query)
         if explicit_origin:

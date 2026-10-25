@@ -23,6 +23,31 @@ def test_activity_intent_ignores_poi_category_in_explicit_origin(query, expected
         assert result["activities"] == ["coffee"]
 
 
+def test_compound_nearby_activity_waits_for_choice_before_named_final_stop():
+    query = "从武汉大学信息学部出发，先找附近能打篮球的地方，再到星湖园食堂。"
+    with patch.object(planner, "_make_client", side_effect=AssertionError("must not skip selection")):
+        result = planner.run_agent(query)
+    assert result["response_kind"] == "candidates"
+    assert result["route"] is None
+    assert result["place_request"]["pending_slot"] == "selection"
+    assert result["place_request"]["follow_up_requests"][0]["destination_poi_id"] == "poi_307"
+    assert all("basketball" in item.get("activities", []) for item in result["candidates"])
+
+    selected = result["candidates"][0]
+    with patch.object(planner, "_make_client", side_effect=AssertionError("must not drop task")):
+        completed = planner.run_agent(
+            "就选这个篮球场，再去星湖园食堂。",
+            context={"place_request": result["place_request"],
+                     "selected_poi_id": selected["poi_id"]},
+        )
+    assert completed["response_kind"] == "route"
+    assert completed["route_kind"] == "via"
+    assert [leg["end_name"] for leg in completed["route"]["legs"]] == [
+        selected["name"], "星湖园食堂",
+    ]
+    assert selected["name"] in completed["message"]
+
+
 @pytest.mark.parametrize("query", [
     "我从武汉大学教1楼出发，帮我规划步行路线。",
     "我从桂园一食堂出发，想走平坦的路。",

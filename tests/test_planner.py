@@ -73,6 +73,20 @@ def test_model_client_requests_supported_response_encoding():
     assert client_constructor.call_args.kwargs["default_headers"]["Accept-Encoding"] == "gzip, deflate"
 
 
+def test_route_summary_names_the_ordered_intermediate_stop():
+    route = {
+        "start_name": "信息学部", "end_name": "星湖园食堂", "mode": "walk",
+        "recommended_length_m": 684, "duration_min": 9.1,
+        "legs": [
+            {"end_name": "武汉大学信息学部篮球场"},
+            {"end_name": "星湖园食堂"},
+        ],
+    }
+    message = planner._build_route_message(route)
+    assert "从信息学部经武汉大学信息学部篮球场到星湖园食堂" in message
+    assert "684 米" in message
+
+
 class TestAgentLoop:
     def test_weather_snapshot_is_shared_across_tools_only_within_one_run(self):
         snapshot = {"live": {"weather": "晴"}, "impact": {}}
