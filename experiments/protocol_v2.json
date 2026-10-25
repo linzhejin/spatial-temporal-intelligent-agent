@@ -16,7 +16,9 @@
     "repeats_per_scenario": 3,
     "required_source_inputs": [
       "graph", "poi", "boundary", "event_snapshot", "oracle_mode",
-      "oracle_route", "generator", "templates", "information_snapshot"
+      "oracle_route", "generator", "templates", "information_snapshot",
+      "coordinate_transform", "poi_taxonomy", "attribute_master",
+      "anchor_builder", "anchors", "boundary_source", "spatial_snapshot_builder"
     ],
     "source_manifest": "Each named file path and SHA-256 must resolve within the frozen source root; effective_inputs_sha256 binds file paths, hashes and coordinate/event metadata.",
     "case_derivation": "Each case declares generator/template/parameter hashes, source evidence types, and no unresolved ambiguity; a separate derivation replay must reproduce the label before formal scoring.",

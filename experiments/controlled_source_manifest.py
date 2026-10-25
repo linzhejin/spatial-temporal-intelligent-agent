@@ -16,6 +16,8 @@ FORMAT = "controlled-source-v1"
 REQUIRED_INPUTS = frozenset({
     "graph", "poi", "boundary", "event_snapshot", "oracle_mode",
     "oracle_route", "generator", "templates", "information_snapshot",
+    "coordinate_transform", "poi_taxonomy", "attribute_master",
+    "anchor_builder", "anchors", "boundary_source", "spatial_snapshot_builder",
 })
 REQUIRED_METADATA = frozenset({
     "graph_crs", "boundary_crs", "boundary_provenance", "event_scope",
