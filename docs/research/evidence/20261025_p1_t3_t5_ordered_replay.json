@@ -1,0 +1,1036 @@
+{
+  "status": "visible_development_diagnostic_no_model",
+  "dataset_sha256": "b7e0971bba4c21591cbe3832d0cb70c2758819ec87cb5f8fcced8265a0d28bcd",
+  "data_component_sha256": {
+    "data/pois.json": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+    "data/whu_road_network.graphml": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+    "data/edge_overrides.json": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+    "data/campus_review_decisions.json": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169"
+  },
+  "case_count": 6,
+  "development_checks_pass_count": 6,
+  "cases": [
+    {
+      "case_id": "v2h_T3_destination_weather_1",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 4.552,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "clarify",
+          "actual_kind": "clarify",
+          "expected_start": null,
+          "actual_start": null,
+          "expected_end": "poi_141",
+          "actual_end": "poi_141",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [],
+          "actual_outputs": [],
+          "actual_candidate_poi_ids": []
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_152",
+          "actual_start": "poi_152",
+          "expected_end": "poi_141",
+          "actual_end": "poi_141",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 18,
+          "route_edge_ids": [
+            [
+              13732671280,
+              13732671285,
+              0
+            ],
+            [
+              13732671285,
+              13732671294,
+              0
+            ],
+            [
+              13732671294,
+              13732671296,
+              0
+            ],
+            [
+              13732671296,
+              13732671299,
+              0
+            ],
+            [
+              13732671299,
+              13732671304,
+              0
+            ],
+            [
+              13732671304,
+              13732671306,
+              0
+            ],
+            [
+              13732671306,
+              13732671313,
+              0
+            ],
+            [
+              13732671313,
+              13732671316,
+              0
+            ],
+            [
+              13732671316,
+              13732671317,
+              0
+            ],
+            [
+              13732671317,
+              13732671325,
+              0
+            ],
+            [
+              13732671325,
+              13732671331,
+              0
+            ],
+            [
+              13732671331,
+              1199819102,
+              0
+            ],
+            [
+              1199819102,
+              9591350636,
+              0
+            ],
+            [
+              9591350636,
+              13732671351,
+              0
+            ],
+            [
+              13732671351,
+              9591350619,
+              0
+            ],
+            [
+              9591350619,
+              1196701873,
+              1
+            ],
+            [
+              1196701873,
+              13613667173,
+              0
+            ],
+            [
+              13613667173,
+              1196701925,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_2",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 2.498,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "clarify",
+          "actual_kind": "clarify",
+          "expected_start": null,
+          "actual_start": null,
+          "expected_end": "poi_227",
+          "actual_end": "poi_227",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [],
+          "actual_outputs": [],
+          "actual_candidate_poi_ids": []
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_230",
+          "actual_start": "poi_230",
+          "expected_end": "poi_227",
+          "actual_end": "poi_227",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 9,
+          "route_edge_ids": [
+            [
+              3842096761,
+              3842096760,
+              0
+            ],
+            [
+              3842096760,
+              3842095842,
+              0
+            ],
+            [
+              3842095842,
+              3842095844,
+              0
+            ],
+            [
+              3842095844,
+              12848166031,
+              0
+            ],
+            [
+              12848166031,
+              3842095840,
+              0
+            ],
+            [
+              3842095840,
+              1379619933,
+              0
+            ],
+            [
+              1379619933,
+              12823522537,
+              0
+            ],
+            [
+              12823522537,
+              13613667185,
+              0
+            ],
+            [
+              13613667185,
+              1371798845,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T3_destination_weather_3",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 3.115,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "clarify",
+          "actual_kind": "clarify",
+          "expected_start": null,
+          "actual_start": null,
+          "expected_end": "poi_296",
+          "actual_end": "poi_296",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [],
+          "actual_outputs": [],
+          "actual_candidate_poi_ids": []
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_424",
+          "actual_start": "poi_424",
+          "expected_end": "poi_296",
+          "actual_end": "poi_296",
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_outputs": [
+            "route",
+            "weather"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 18,
+          "route_edge_ids": [
+            [
+              1369724916,
+              13704353200,
+              0
+            ],
+            [
+              13704353200,
+              13732671037,
+              0
+            ],
+            [
+              13732671037,
+              9558228580,
+              0
+            ],
+            [
+              9558228580,
+              4060915715,
+              0
+            ],
+            [
+              4060915715,
+              3123587154,
+              0
+            ],
+            [
+              3123587154,
+              13513425315,
+              0
+            ],
+            [
+              13513425315,
+              1204185484,
+              0
+            ],
+            [
+              1204185484,
+              13732671039,
+              0
+            ],
+            [
+              13732671039,
+              1199840474,
+              0
+            ],
+            [
+              1199840474,
+              13704300581,
+              0
+            ],
+            [
+              13704300581,
+              9552100025,
+              0
+            ],
+            [
+              9552100025,
+              3123587158,
+              0
+            ],
+            [
+              3123587158,
+              3147251082,
+              0
+            ],
+            [
+              3147251082,
+              1199840493,
+              0
+            ],
+            [
+              1199840493,
+              13732671019,
+              0
+            ],
+            [
+              13732671019,
+              13732671017,
+              0
+            ],
+            [
+              13732671017,
+              13708188222,
+              0
+            ],
+            [
+              13708188222,
+              13708188224,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_1",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 4.544,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "expected_start": "poi_030",
+          "actual_start": "poi_030",
+          "expected_end": "poi_082",
+          "actual_end": null,
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "candidates"
+          ],
+          "actual_outputs": [
+            "candidates"
+          ],
+          "actual_candidate_poi_ids": [
+            "poi_068",
+            "poi_069",
+            "poi_070",
+            "poi_394"
+          ],
+          "selected_stop_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_030",
+          "actual_start": "poi_030",
+          "expected_end": "poi_082",
+          "actual_end": "poi_082",
+          "expected_via": [
+            "poi_068"
+          ],
+          "actual_via": [
+            "poi_068"
+          ],
+          "expected_outputs": [
+            "route"
+          ],
+          "actual_outputs": [
+            "route"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 42,
+          "route_edge_ids": [
+            [
+              13556582695,
+              13556582694,
+              0
+            ],
+            [
+              13556582694,
+              13556582690,
+              0
+            ],
+            [
+              13556582690,
+              1199831232,
+              0
+            ],
+            [
+              1199831232,
+              1199831236,
+              0
+            ],
+            [
+              1199831236,
+              12802598370,
+              0
+            ],
+            [
+              12802598370,
+              12802598371,
+              0
+            ],
+            [
+              12802598371,
+              13510725036,
+              0
+            ],
+            [
+              13510725036,
+              13510725037,
+              0
+            ],
+            [
+              13510725037,
+              13510725036,
+              0
+            ],
+            [
+              13510725036,
+              12802598371,
+              0
+            ],
+            [
+              12802598371,
+              12802598370,
+              0
+            ],
+            [
+              12802598370,
+              1199831236,
+              0
+            ],
+            [
+              1199831236,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223620,
+              0
+            ],
+            [
+              13255223620,
+              13255223608,
+              0
+            ],
+            [
+              13255223608,
+              13256761715,
+              0
+            ],
+            [
+              13256761715,
+              13256677548,
+              0
+            ],
+            [
+              13256677548,
+              13256677551,
+              0
+            ],
+            [
+              13256677551,
+              13256761724,
+              0
+            ],
+            [
+              13256761724,
+              13256761725,
+              0
+            ],
+            [
+              13256761725,
+              13256677442,
+              0
+            ],
+            [
+              13256677442,
+              13256677430,
+              0
+            ],
+            [
+              13256677430,
+              13256671284,
+              0
+            ],
+            [
+              13256671284,
+              13256677497,
+              0
+            ],
+            [
+              13256677497,
+              13256677498,
+              0
+            ],
+            [
+              13256677498,
+              13256677501,
+              0
+            ],
+            [
+              13256677501,
+              13256677499,
+              0
+            ],
+            [
+              13256677499,
+              13265776309,
+              0
+            ],
+            [
+              13265776309,
+              13265776312,
+              0
+            ],
+            [
+              13265776312,
+              13265776317,
+              0
+            ],
+            [
+              13265776317,
+              13246710091,
+              0
+            ],
+            [
+              13246710091,
+              13246710082,
+              0
+            ],
+            [
+              13246710082,
+              13246710083,
+              0
+            ],
+            [
+              13246710083,
+              3631666689,
+              0
+            ],
+            [
+              3631666689,
+              13244712052,
+              0
+            ],
+            [
+              13244712052,
+              13244712018,
+              0
+            ],
+            [
+              13244712018,
+              13244712022,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_2",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 4.963,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "expected_start": "poi_182",
+          "actual_start": "poi_182",
+          "expected_end": "poi_447",
+          "actual_end": null,
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "candidates"
+          ],
+          "actual_outputs": [
+            "candidates"
+          ],
+          "actual_candidate_poi_ids": [
+            "poi_402",
+            "poi_403",
+            "poi_414",
+            "poi_399"
+          ],
+          "selected_stop_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_182",
+          "actual_start": "poi_182",
+          "expected_end": "poi_447",
+          "actual_end": "poi_447",
+          "expected_via": [
+            "poi_402"
+          ],
+          "actual_via": [
+            "poi_402"
+          ],
+          "expected_outputs": [
+            "route"
+          ],
+          "actual_outputs": [
+            "route"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 29,
+          "route_edge_ids": [
+            [
+              13728848122,
+              12848622703,
+              0
+            ],
+            [
+              12848622703,
+              1663938881,
+              0
+            ],
+            [
+              1663938881,
+              12805594645,
+              0
+            ],
+            [
+              12805594645,
+              13550957428,
+              0
+            ],
+            [
+              13550957428,
+              12805594646,
+              0
+            ],
+            [
+              12805594646,
+              12805594647,
+              0
+            ],
+            [
+              12805594647,
+              13701927101,
+              0
+            ],
+            [
+              13701927101,
+              979945409,
+              0
+            ],
+            [
+              979945409,
+              6901657551,
+              0
+            ],
+            [
+              6901657551,
+              12888527080,
+              0
+            ],
+            [
+              12888527080,
+              6901657551,
+              0
+            ],
+            [
+              6901657551,
+              979945409,
+              0
+            ],
+            [
+              979945409,
+              1199831258,
+              0
+            ],
+            [
+              1199831258,
+              3112677663,
+              0
+            ],
+            [
+              3112677663,
+              13732671454,
+              0
+            ],
+            [
+              13732671454,
+              13550984723,
+              0
+            ],
+            [
+              13550984723,
+              9554406744,
+              0
+            ],
+            [
+              9554406744,
+              13246423697,
+              0
+            ],
+            [
+              13246423697,
+              1417701862,
+              0
+            ],
+            [
+              1417701862,
+              1417701738,
+              0
+            ],
+            [
+              1417701738,
+              4159413654,
+              0
+            ],
+            [
+              4159413654,
+              4320485455,
+              0
+            ],
+            [
+              4320485455,
+              4159413681,
+              0
+            ],
+            [
+              4159413681,
+              13563082430,
+              0
+            ],
+            [
+              13563082430,
+              4159413690,
+              0
+            ],
+            [
+              4159413690,
+              1664000422,
+              0
+            ],
+            [
+              1664000422,
+              9681727639,
+              1
+            ],
+            [
+              9681727639,
+              9681727640,
+              0
+            ],
+            [
+              9681727640,
+              13563157063,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_3",
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "elapsed_s": 5.444,
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_status": "needs_input",
+          "actual_status": "needs_input",
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "expected_start": "poi_238",
+          "actual_start": "poi_238",
+          "expected_end": "poi_446",
+          "actual_end": null,
+          "expected_via": [],
+          "actual_via": [],
+          "expected_outputs": [
+            "candidates"
+          ],
+          "actual_outputs": [
+            "candidates"
+          ],
+          "actual_candidate_poi_ids": [
+            "poi_321",
+            "poi_323",
+            "poi_320",
+            "poi_322"
+          ],
+          "selected_stop_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_status": "completed",
+          "actual_status": "completed",
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "expected_start": "poi_238",
+          "actual_start": "poi_238",
+          "expected_end": "poi_446",
+          "actual_end": "poi_446",
+          "expected_via": [
+            "poi_321"
+          ],
+          "actual_via": [
+            "poi_321"
+          ],
+          "expected_outputs": [
+            "route"
+          ],
+          "actual_outputs": [
+            "route"
+          ],
+          "actual_candidate_poi_ids": [],
+          "edge_count": 14,
+          "route_edge_ids": [
+            [
+              13227634466,
+              13240045351,
+              0
+            ],
+            [
+              13240045351,
+              13669303669,
+              0
+            ],
+            [
+              13669303669,
+              1199840610,
+              0
+            ],
+            [
+              1199840610,
+              13505885338,
+              0
+            ],
+            [
+              13505885338,
+              13505885341,
+              0
+            ],
+            [
+              13505885341,
+              13704353196,
+              0
+            ],
+            [
+              13704353196,
+              13505885341,
+              0
+            ],
+            [
+              13505885341,
+              13505885344,
+              0
+            ],
+            [
+              13505885344,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              5196008421,
+              0
+            ],
+            [
+              5196008421,
+              1201323413,
+              0
+            ],
+            [
+              1201323413,
+              12803991855,
+              0
+            ],
+            [
+              12803991855,
+              13704300448,
+              0
+            ]
+          ],
+          "independent_route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "endpoint_access_uncertain": false
+        }
+      ]
+    }
+  ]
+}
