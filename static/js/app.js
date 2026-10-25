@@ -528,6 +528,55 @@
         } catch (e) {}
     }
 
+    async function restoreCompletedRouteFromRun(runId, expectedRoute, expectedTurnId,
+                                                expectedSequence, restoreEpoch,
+                                                restoreConversationId, restoreTurnId) {
+        if (!runId || !expectedRoute || !expectedRoute.route_id
+                || !expectedRoute.data_version || !expectedRoute.road_condition_version) return;
+        function isCurrent() {
+            var current = state.routeStore && state.routeStore.current();
+            return restoreEpoch === state.conversationEpoch
+                && restoreConversationId === state.serverConversationId
+                && restoreTurnId === state.nextConversationTurnId
+                && expectedTurnId === state.latestRouteTurnId
+                && expectedSequence === state.latestRouteSequence
+                && current && current.route_id === expectedRoute.route_id;
+        }
+        try {
+            var run = await apiRequest('/api/runs/' + encodeURIComponent(runId)
+                + '?conversation_id=' + encodeURIComponent(restoreConversationId), null, 'GET', 15000);
+            if (!isCurrent()) return;
+            if (!run || (run.status !== 'completed' && run.status !== 'partial'
+                    && run.status !== 'needs_input')) return;
+            var result = run && run.result;
+            if (!result || !Array.isArray(result.recommended) || !result.recommended.length
+                    || !result.route_state || result.route_state.route_id !== expectedRoute.route_id
+                    || result.route_state.data_version !== expectedRoute.data_version
+                    || result.route_state.road_condition_version !== expectedRoute.road_condition_version) return;
+            var versions = await apiRequest(
+                '/api/road-conditions?version_only=1&include_route_data_version=1',
+                null, 'GET', 15000
+            );
+            if (!isCurrent()) return;
+            if (!versions || versions.data_version !== expectedRoute.data_version) {
+                showTopBanner('校园地图数据已更新，请重新规划这段行程。', 'warning');
+                return;
+            }
+            if (versions.active_event_version !== expectedRoute.road_condition_version) {
+                showTopBanner('校园路况已更新，请按最新路况重新规划。', 'warning');
+                return;
+            }
+            syncModeFromServer(result);
+            renderRoute(result);
+            showResults(result);
+        } catch (error) {
+            if (isCurrent()) {
+                console.warn('[SESSION] 上次路线暂时无法恢复:', error && error.message);
+                showTopBanner('上次路线暂时无法恢复，请稍后重试或重新规划。', 'warning');
+            }
+        }
+    }
+
     async function restoreServerConversation() {
         if (!state.serverConversationId) return false;
         var restoreEpoch = state.conversationEpoch;
@@ -564,6 +613,7 @@
             var latestRouteState = null;
             var latestRouteTurnId = 0;
             var latestRouteSequence = 0;
+            var latestRouteRunId = null;
             messages.forEach(function (message) {
                 if (!message || (message.role !== 'user' && message.role !== 'assistant')) return;
                 var key = message.task_id || ('message-' + message.seq);
@@ -573,12 +623,15 @@
                     _seq: Number.isFinite(Number(message.seq)) ? Number(message.seq) : null };
                 if (message.role === 'assistant' && message.metadata) {
                     item.task_type = message.metadata.task_type || null;
-                    if (message.metadata.route_state) {
+                    if (message.metadata.route_state
+                            && (!message.metadata.status
+                                || ['completed', 'partial', 'needs_input'].includes(message.metadata.status))) {
                         var routeSequence = Number(message.metadata.source_message_seq) || item._seq || 0;
                         if (!latestRouteState || routeSequence >= latestRouteSequence) {
                             latestRouteState = message.metadata.route_state;
                             latestRouteTurnId = item._turnId;
                             latestRouteSequence = routeSequence;
+                            latestRouteRunId = message.metadata.run_id || null;
                         }
                     }
                 }
@@ -597,6 +650,11 @@
                 }
             }
             saveContext();
+            if (latestRouteRunId) {
+                restoreCompletedRouteFromRun(latestRouteRunId, latestRouteState,
+                    latestRouteTurnId, latestRouteSequence, restoreEpoch,
+                    restoreConversationId, state.nextConversationTurnId);
+            }
             return true;
         } catch (error) {
             if (restoreEpoch !== state.conversationEpoch

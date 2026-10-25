@@ -35,9 +35,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/agent-release-candidate @ 6d78bc5 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-25 16:12
+- 版本：codex/agent-release-candidate @ f19f1b6 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-10-26 01:11
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v93 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 15（最新 015）
+- 前端 SW whu-walker-v94 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 15（最新 015）
 <!-- FACTS:END -->
 
 ## 管理台道路事件表单（2026-10-12）

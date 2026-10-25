@@ -1012,6 +1012,19 @@ def test_random_real_campus_closures_remove_their_aligned_corridor_from_routes()
 
 
 class TestRoadConditionAPI:
+    def test_version_endpoint_includes_route_data_only_when_requested(self, client, monkeypatch):
+        import api.routes as routes
+
+        monkeypatch.setattr(routes, "_current_data_version", lambda: "data-current")
+        ordinary = client.get("/api/road-conditions?version_only=1").get_json()["data"]
+        assert "data_version" not in ordinary
+
+        restored = client.get(
+            "/api/road-conditions?version_only=1&include_route_data_version=1"
+        ).get_json()["data"]
+        assert restored["data_version"] == "data-current"
+        assert restored["active_event_version"] == ordinary["active_event_version"]
+
     def test_snap_requires_auth(self, client):
         r = client.get("/api/road-conditions/snap?lng=114.36&lat=30.53")
         assert r.status_code == 401

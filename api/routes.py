@@ -2308,7 +2308,10 @@ def get_road_conditions():
             c.pop("audit", None)
             c.pop("source", None)
     if request.args.get("version_only") in ("1", "true", "yes"):
-        return _ok({"active_event_version": active_event_version})
+        version = {"active_event_version": active_event_version}
+        if request.args.get("include_route_data_version") == "1":
+            version["data_version"] = _current_data_version()
+        return _ok(version)
     return _ok({
         "conditions": conditions,
         "count": len(conditions),

@@ -1197,6 +1197,139 @@ test('refresh resumes polling for an accepted active run', async () => {
     assert.equal(h.bubbles.at(-1).text, 'restored-route');
 });
 
+test('browser reload redraws the latest completed route only while its data and road versions match', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    const saved = { ...existingRoute(), route_id: 'route-1', data_version: 'data-v1',
+        road_condition_version: 'roads-v1' };
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'route-task', role: 'user', content: '从星湖园到卓尔体育馆', seq: 1 },
+                { task_id: 'route-task', role: 'assistant', content: '路线已生成', seq: 2,
+                    metadata: { task_type: 'path_planning', source_message_seq: 1,
+                        run_id: 'completed-run', route_state: saved } },
+            ],
+            tasks: [], active_runs: [],
+        };
+        if (url === '/api/runs/completed-run?conversation_id=server-c1') return {
+            status: 'completed', result: { ...routeResult('route-1'), route_state: saved },
+        };
+        if (url === '/api/road-conditions?version_only=1&include_route_data_version=1') return {
+            data_version: 'data-v1', active_event_version: 'roads-v1',
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.rendered.length, 1);
+    assert.equal(h.rendered[0].route_state.route_id, 'route-1');
+});
+
+test('browser reload does not redraw a completed route after road conditions change', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    const saved = { ...existingRoute(), route_id: 'route-1', data_version: 'data-v1',
+        road_condition_version: 'roads-v1' };
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'route-task', role: 'user', content: '从星湖园到卓尔体育馆', seq: 1 },
+                { task_id: 'route-task', role: 'assistant', content: '路线已生成', seq: 2,
+                    metadata: { task_type: 'path_planning', source_message_seq: 1,
+                        run_id: 'completed-run', route_state: saved } },
+            ],
+            tasks: [], active_runs: [],
+        };
+        if (url === '/api/runs/completed-run?conversation_id=server-c1') return {
+            status: 'completed', result: { ...routeResult('route-1'), route_state: saved },
+        };
+        if (url === '/api/road-conditions?version_only=1&include_route_data_version=1') return {
+            data_version: 'data-v1', active_event_version: 'roads-v2',
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.rendered.length, 0);
+    assert.equal(h.state.routeStore.current().route_id, 'route-1');
+});
+
+test('browser reload does not redraw a route after the campus data version changes', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    const saved = { ...existingRoute(), route_id: 'route-1', data_version: 'data-v1',
+        road_condition_version: 'roads-v1' };
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'route-task', role: 'user', content: '旧路线', seq: 1 },
+                { task_id: 'route-task', role: 'assistant', content: '路线已生成', seq: 2,
+                    metadata: { task_type: 'path_planning', source_message_seq: 1,
+                        run_id: 'completed-run', route_state: saved } },
+            ],
+            tasks: [], active_runs: [],
+        };
+        if (url === '/api/runs/completed-run?conversation_id=server-c1') return {
+            status: 'completed', result: { ...routeResult('route-1'), route_state: saved },
+        };
+        if (url === '/api/road-conditions?version_only=1&include_route_data_version=1') return {
+            data_version: 'data-v2', active_event_version: 'roads-v1',
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.rendered.length, 0);
+});
+
+test('reset while a saved route is loading cannot redraw the old route', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    const runRequest = deferred();
+    const saved = { ...existingRoute(), route_id: 'route-1', data_version: 'data-v1',
+        road_condition_version: 'roads-v1' };
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'route-task', role: 'user', content: '旧路线', seq: 1 },
+                { task_id: 'route-task', role: 'assistant', content: '路线已生成', seq: 2,
+                    metadata: { task_type: 'path_planning', source_message_seq: 1,
+                        run_id: 'completed-run', route_state: saved } },
+            ],
+            tasks: [], active_runs: [],
+        };
+        if (url === '/api/runs/completed-run?conversation_id=server-c1') return runRequest.promise;
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    h.refreshPage();
+    runRequest.resolve({ status: 'completed', result: { ...routeResult('route-1'), route_state: saved } });
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.rendered.length, 0);
+    assert.equal(h.state.routeStore.current(), null);
+});
+
+test('a superseded route in the transcript is not restored as the current route', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'old-task', role: 'user', content: '旧路线', seq: 1 },
+                { task_id: 'old-task', role: 'assistant', content: '已取消', seq: 2,
+                    metadata: { task_type: 'path_planning', status: 'superseded',
+                        run_id: 'old-run', route_state: { ...existingRoute(), route_id: 'old' } } },
+            ],
+            tasks: [], active_runs: [],
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    assert.equal(h.state.routeStore.current(), null);
+    assert.equal(h.rendered.length, 0);
+});
+
 test('a restored older run cannot replace a newer route already in the transcript', async () => {
     const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
     h.setQueuedApi(async (url) => {
