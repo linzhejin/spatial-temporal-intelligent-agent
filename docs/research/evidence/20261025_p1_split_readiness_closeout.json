@@ -1,0 +1,90 @@
+{
+  "audit_version": "scenario-split-audit-v2",
+  "leakage_evaluable": true,
+  "leakage_free": true,
+  "formal_ready": false,
+  "blockers": [
+    {
+      "code": "test_adjudication_incomplete",
+      "detail": "120 test cases lack valid source-backed gold."
+    },
+    {
+      "code": "test_snapshot_id_invalid",
+      "detail": "120 test cases lack a frozen input fingerprint."
+    },
+    {
+      "code": "test_dataset_contract_invalid",
+      "detail": "Formal dataset contract failed: formal scenario-v2 requires graph_sha256"
+    },
+    {
+      "code": "external_gate_unverified:frozen_snapshot_manifest",
+      "detail": "Formal run gate 'frozen_snapshot_manifest' has not been verified."
+    },
+    {
+      "code": "external_gate_unverified:agent_readiness_gate",
+      "detail": "Formal run gate 'agent_readiness_gate' has not been verified."
+    },
+    {
+      "code": "external_gate_unverified:matching_git_commit",
+      "detail": "Formal run gate 'matching_git_commit' has not been verified."
+    },
+    {
+      "code": "external_gate_unverified:clean_tracked_worktree",
+      "detail": "Formal run gate 'clean_tracked_worktree' has not been verified."
+    }
+  ],
+  "dataset_counts": {
+    "development": 60,
+    "test": 120,
+    "test_by_category": {
+      "T1": 24,
+      "T2": 24,
+      "T3": 24,
+      "T4": 24,
+      "T5": 24
+    },
+    "test_adjudication_status": {
+      "draft": 120
+    }
+  },
+  "overlap_counts": {
+    "scenario_ids": 0,
+    "template_groups": 0,
+    "od_groups": 0,
+    "prompt_fingerprints": 0,
+    "source_groups": 0
+  },
+  "test_spatial_diversity": {
+    "T1": {
+      "distinct_start_pois": 24,
+      "distinct_first_turn_od_pairs": 24
+    },
+    "T2": {
+      "distinct_start_pois": 24,
+      "distinct_first_turn_od_pairs": 0
+    },
+    "T3": {
+      "distinct_start_pois": 21,
+      "distinct_first_turn_od_pairs": 0
+    },
+    "T4": {
+      "distinct_start_pois": 24,
+      "distinct_first_turn_od_pairs": 24
+    },
+    "T5": {
+      "distinct_start_pois": 24,
+      "distinct_first_turn_od_pairs": 21
+    }
+  },
+  "external_gates": {
+    "frozen_snapshot_manifest": false,
+    "agent_readiness_gate": false,
+    "matching_git_commit": false,
+    "clean_tracked_worktree": false
+  },
+  "privacy": "Prompt overlaps are reported as counts only; prompt text and fingerprints are not emitted.",
+  "input_sha256": {
+    "development": "38f1a07330f7887e7c56ad2b8e27a414b4cd2c69ce72a492b695ca4fd5851fbd",
+    "test": "b7e0971bba4c21591cbe3832d0cb70c2758819ec87cb5f8fcced8265a0d28bcd"
+  }
+}

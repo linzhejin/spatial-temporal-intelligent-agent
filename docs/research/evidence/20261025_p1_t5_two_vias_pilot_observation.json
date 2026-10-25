@@ -1,0 +1,587 @@
+{
+  "status": "development_pilot_only",
+  "condition": "campus_agent",
+  "case_id": "v2h_T5_two_vias_weather_1",
+  "category": "T5",
+  "development_dataset_sha256": "14fe125b4720d56c1606dc6f78bd771311cb08ed140c80f78b42860869408511",
+  "case_messages_sha256": "701fdfcaf110dc17c14d608fe55d9af16b3a0c1f2012ee6276939ba86fe1ece6",
+  "tool_schema_sha256": "70afbcea6f1938f3f278d225b0b1fe7c70cfff494bf4a3c2a0f2197603d44733",
+  "data_component_sha256": {
+    "data/pois.json": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+    "data/whu_road_network.graphml": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+    "data/edge_overrides.json": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+    "data/campus_review_decisions.json": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169"
+  },
+  "weather_fixture": {
+    "fixture_id": "development_weather_clear_v1",
+    "source": "synthetic_development_fixture",
+    "observed_at": "2026-10-24T09:00:00+08:00",
+    "sha256": "fab71cf975d02313e09270500b50e236e6b5d4ce89daeed834bfad8eb7bc48b6"
+  },
+  "elapsed_s": 11.098,
+  "turns": [
+    {
+      "status": "completed",
+      "kind": "route",
+      "start_poi_id": "poi_025",
+      "end_poi_id": "poi_074",
+      "via_poi_ids": [
+        "poi_015",
+        "poi_068"
+      ],
+      "travel_mode": "walk",
+      "strategy": "shortest",
+      "hard_constraints": {},
+      "candidate_poi_ids": [],
+      "clarification_slot": null,
+      "outputs": [
+        "route",
+        "weather"
+      ],
+      "route_edge_ids": [
+        [
+          13269409014,
+          13269409015,
+          0
+        ],
+        [
+          13269409015,
+          13269409011,
+          0
+        ],
+        [
+          13269409011,
+          12805668771,
+          0
+        ],
+        [
+          12805668771,
+          13244712010,
+          0
+        ],
+        [
+          13244712010,
+          12809012186,
+          0
+        ],
+        [
+          12809012186,
+          13266196559,
+          0
+        ],
+        [
+          13266196559,
+          13266196567,
+          0
+        ],
+        [
+          13266196567,
+          1196701894,
+          0
+        ],
+        [
+          1196701894,
+          1196701977,
+          0
+        ],
+        [
+          1196701977,
+          1196672324,
+          1
+        ],
+        [
+          1196672324,
+          13241415882,
+          0
+        ],
+        [
+          13241415882,
+          3631666680,
+          0
+        ],
+        [
+          3631666680,
+          13266196537,
+          0
+        ],
+        [
+          13266196537,
+          13240921538,
+          0
+        ],
+        [
+          13240921538,
+          13239742873,
+          0
+        ],
+        [
+          13239742873,
+          13239742868,
+          0
+        ],
+        [
+          13239742868,
+          13239742852,
+          0
+        ],
+        [
+          13239742852,
+          3709156199,
+          0
+        ],
+        [
+          3709156199,
+          13241429529,
+          0
+        ],
+        [
+          13241429529,
+          1199821230,
+          0
+        ],
+        [
+          1199821230,
+          13254944119,
+          0
+        ],
+        [
+          13254944119,
+          13238420209,
+          0
+        ],
+        [
+          13238420209,
+          3110802383,
+          0
+        ],
+        [
+          3110802383,
+          13254944126,
+          0
+        ],
+        [
+          13254944126,
+          1379619942,
+          0
+        ],
+        [
+          1379619942,
+          13732671476,
+          0
+        ],
+        [
+          13732671476,
+          13732671477,
+          0
+        ],
+        [
+          13732671477,
+          13732671475,
+          0
+        ],
+        [
+          13732671475,
+          13732671474,
+          0
+        ],
+        [
+          13732671474,
+          12808341226,
+          0
+        ],
+        [
+          12808341226,
+          12808341227,
+          0
+        ],
+        [
+          12808341227,
+          1417702671,
+          0
+        ],
+        [
+          1417702671,
+          1417702609,
+          0
+        ],
+        [
+          1417702609,
+          979935996,
+          0
+        ],
+        [
+          979935996,
+          13246350966,
+          0
+        ],
+        [
+          13246350966,
+          13732671411,
+          0
+        ],
+        [
+          13732671411,
+          13510725030,
+          0
+        ],
+        [
+          13510725030,
+          12802598370,
+          1
+        ],
+        [
+          12802598370,
+          12802598371,
+          0
+        ],
+        [
+          12802598371,
+          13510725036,
+          0
+        ],
+        [
+          13510725036,
+          13510725037,
+          0
+        ],
+        [
+          13510725037,
+          13510725036,
+          0
+        ],
+        [
+          13510725036,
+          12802598371,
+          0
+        ],
+        [
+          12802598371,
+          12802598370,
+          0
+        ],
+        [
+          12802598370,
+          1199831236,
+          0
+        ],
+        [
+          1199831236,
+          13510725042,
+          0
+        ],
+        [
+          13510725042,
+          3631666817,
+          0
+        ],
+        [
+          3631666817,
+          3631666820,
+          0
+        ],
+        [
+          3631666820,
+          12803435207,
+          0
+        ],
+        [
+          12803435207,
+          13732671275,
+          0
+        ],
+        [
+          13732671275,
+          4052778660,
+          0
+        ],
+        [
+          4052778660,
+          13255223620,
+          0
+        ],
+        [
+          13255223620,
+          13255223608,
+          0
+        ],
+        [
+          13255223608,
+          13256761715,
+          0
+        ],
+        [
+          13256761715,
+          13256677548,
+          0
+        ],
+        [
+          13256677548,
+          13256677551,
+          0
+        ],
+        [
+          13256677551,
+          13256761724,
+          0
+        ],
+        [
+          13256761724,
+          13256761725,
+          0
+        ],
+        [
+          13256761725,
+          13256677442,
+          0
+        ],
+        [
+          13256677442,
+          13256677430,
+          0
+        ],
+        [
+          13256677430,
+          13256671284,
+          0
+        ],
+        [
+          13256671284,
+          13256677497,
+          0
+        ],
+        [
+          13256677497,
+          13256677498,
+          0
+        ],
+        [
+          13256677498,
+          13256677501,
+          0
+        ],
+        [
+          13256677501,
+          13256677506,
+          0
+        ],
+        [
+          13256677506,
+          1196701892,
+          0
+        ],
+        [
+          1196701892,
+          12802089609,
+          0
+        ],
+        [
+          12802089609,
+          12802074253,
+          0
+        ],
+        [
+          12802074253,
+          1807168448,
+          0
+        ],
+        [
+          1807168448,
+          12802089606,
+          0
+        ],
+        [
+          12802089606,
+          13732671293,
+          0
+        ],
+        [
+          13732671293,
+          4052353083,
+          0
+        ],
+        [
+          4052353083,
+          13732671295,
+          0
+        ],
+        [
+          13732671295,
+          13251027372,
+          0
+        ],
+        [
+          13251027372,
+          1807168486,
+          0
+        ],
+        [
+          1807168486,
+          1196701963,
+          0
+        ],
+        [
+          1196701963,
+          12848608572,
+          0
+        ],
+        [
+          12848608572,
+          1196701917,
+          0
+        ],
+        [
+          1196701917,
+          13732671305,
+          0
+        ],
+        [
+          13732671305,
+          1196701888,
+          0
+        ],
+        [
+          1196701888,
+          13701919381,
+          0
+        ],
+        [
+          13701919381,
+          1196701976,
+          0
+        ],
+        [
+          1196701976,
+          1196701883,
+          0
+        ],
+        [
+          1196701883,
+          12808058180,
+          0
+        ],
+        [
+          12808058180,
+          5487754076,
+          0
+        ],
+        [
+          5487754076,
+          4052778594,
+          0
+        ],
+        [
+          4052778594,
+          13545293354,
+          0
+        ]
+      ],
+      "unknowns": [],
+      "tool_trace": [
+        {
+          "tool_name": "get_weather",
+          "argument_keys": [],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "get_weather",
+          "argument_keys": [],
+          "outcome": "tool_error",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "resolve_poi",
+          "argument_keys": [
+            "name"
+          ],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "resolve_poi",
+          "argument_keys": [
+            "name"
+          ],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "resolve_poi",
+          "argument_keys": [
+            "name"
+          ],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "resolve_poi",
+          "argument_keys": [
+            "name"
+          ],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "plan_via_route",
+          "argument_keys": [
+            "end",
+            "mode",
+            "start",
+            "via_points"
+          ],
+          "outcome": "success",
+          "artifact_kind": "route"
+        }
+      ]
+    }
+  ],
+  "run_evidence": [
+    {
+      "run_id": "970b080f-34fa-44f0-8179-1100ed68fe98",
+      "status": "completed",
+      "model_requests": [
+        {
+          "requested_model_id": "deepseek-chat",
+          "resolved_model_id": "deepseek-flash",
+          "tool_schema_sha256": "70afbcea6f1938f3f278d225b0b1fe7c70cfff494bf4a3c2a0f2197603d44733",
+          "temperature": 0.0,
+          "max_tokens": 800,
+          "input_tokens": 12872,
+          "output_tokens": 164,
+          "cache_hit_input_tokens": 12544,
+          "cache_miss_input_tokens": 328,
+          "outcome": "success",
+          "error_type": null
+        },
+        {
+          "requested_model_id": "deepseek-chat",
+          "resolved_model_id": "deepseek-flash",
+          "tool_schema_sha256": "70afbcea6f1938f3f278d225b0b1fe7c70cfff494bf4a3c2a0f2197603d44733",
+          "temperature": 0.0,
+          "max_tokens": 800,
+          "input_tokens": 13548,
+          "output_tokens": 175,
+          "cache_hit_input_tokens": 12928,
+          "cache_miss_input_tokens": 620,
+          "outcome": "success",
+          "error_type": null
+        }
+      ]
+    }
+  ],
+  "provider_http_attempt_count": 2,
+  "provider_http_attempts": [
+    {
+      "http_status": 200
+    },
+    {
+      "http_status": 200
+    }
+  ],
+  "provider_transport_complete": true,
+  "limitations": [
+    "visible development task",
+    "not formal gold",
+    "graph verification is not field truth"
+  ]
+}

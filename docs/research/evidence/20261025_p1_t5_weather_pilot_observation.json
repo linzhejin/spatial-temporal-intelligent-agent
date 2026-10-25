@@ -1,0 +1,255 @@
+{
+  "status": "development_pilot_only",
+  "condition": "campus_agent",
+  "case_id": "v2h_T5_route_weather_1",
+  "category": "T5",
+  "development_dataset_sha256": "d4fe92072eba25f3cb9e3a5a96a47587f3a9b1b7b9adf6acff17ee21e43c4561",
+  "case_messages_sha256": "ad986619eb032910bf1735904a776d24342a4076ccfa04961f747d8653f45260",
+  "tool_schema_sha256": "70afbcea6f1938f3f278d225b0b1fe7c70cfff494bf4a3c2a0f2197603d44733",
+  "data_component_sha256": {
+    "data/pois.json": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+    "data/whu_road_network.graphml": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+    "data/edge_overrides.json": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+    "data/campus_review_decisions.json": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169"
+  },
+  "weather_fixture": {
+    "fixture_id": "development_weather_clear_v1",
+    "source": "synthetic_development_fixture",
+    "observed_at": "2026-10-24T09:00:00+08:00",
+    "sha256": "fab71cf975d02313e09270500b50e236e6b5d4ce89daeed834bfad8eb7bc48b6"
+  },
+  "elapsed_s": 8.635,
+  "turns": [
+    {
+      "status": "completed",
+      "kind": "route",
+      "start_poi_id": "poi_139",
+      "end_poi_id": "poi_070",
+      "via_poi_ids": [],
+      "travel_mode": "walk",
+      "strategy": "shortest",
+      "hard_constraints": {},
+      "candidate_poi_ids": [],
+      "clarification_slot": null,
+      "outputs": [
+        "route",
+        "weather"
+      ],
+      "route_edge_ids": [
+        [
+          3186610000,
+          13584097522,
+          0
+        ],
+        [
+          13584097522,
+          13584122204,
+          0
+        ],
+        [
+          13584122204,
+          13240918470,
+          0
+        ],
+        [
+          13240918470,
+          13240918473,
+          0
+        ],
+        [
+          13240918473,
+          12804525253,
+          0
+        ],
+        [
+          12804525253,
+          1842395417,
+          0
+        ],
+        [
+          1842395417,
+          13240030429,
+          0
+        ],
+        [
+          13240030429,
+          13238420063,
+          0
+        ],
+        [
+          13238420063,
+          3110802174,
+          0
+        ],
+        [
+          3110802174,
+          3110802181,
+          0
+        ],
+        [
+          3110802181,
+          13239717598,
+          0
+        ],
+        [
+          13239717598,
+          3110802194,
+          0
+        ],
+        [
+          3110802194,
+          13239306749,
+          0
+        ],
+        [
+          13239306749,
+          13239326500,
+          0
+        ],
+        [
+          13239326500,
+          1807168479,
+          0
+        ],
+        [
+          1807168479,
+          1807168516,
+          0
+        ],
+        [
+          1807168516,
+          13253498095,
+          0
+        ],
+        [
+          13253498095,
+          13704616425,
+          0
+        ],
+        [
+          13704616425,
+          13253498073,
+          0
+        ],
+        [
+          13253498073,
+          13255061966,
+          0
+        ],
+        [
+          13255061966,
+          13254316045,
+          0
+        ],
+        [
+          13254316045,
+          3631666640,
+          0
+        ],
+        [
+          3631666640,
+          13511031923,
+          0
+        ],
+        [
+          13511031923,
+          13254342848,
+          0
+        ],
+        [
+          13254342848,
+          1417702609,
+          0
+        ],
+        [
+          1417702609,
+          979935996,
+          0
+        ],
+        [
+          979935996,
+          13246350966,
+          0
+        ],
+        [
+          13246350966,
+          13732671407,
+          0
+        ],
+        [
+          13732671407,
+          13701927125,
+          0
+        ],
+        [
+          13701927125,
+          13701927128,
+          0
+        ],
+        [
+          13701927128,
+          12862467397,
+          0
+        ]
+      ],
+      "unknowns": [],
+      "tool_trace": [
+        {
+          "tool_name": "get_weather",
+          "argument_keys": [],
+          "outcome": "success",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "get_weather",
+          "argument_keys": [],
+          "outcome": "tool_error",
+          "artifact_kind": null
+        },
+        {
+          "tool_name": "plan_route",
+          "argument_keys": [
+            "end",
+            "mode",
+            "start"
+          ],
+          "outcome": "success",
+          "artifact_kind": "route"
+        }
+      ]
+    }
+  ],
+  "run_evidence": [
+    {
+      "run_id": "15c0babf-84b0-4243-a0f7-95b60f655d04",
+      "status": "completed",
+      "model_requests": [
+        {
+          "requested_model_id": "deepseek-chat",
+          "resolved_model_id": "deepseek-flash",
+          "tool_schema_sha256": "70afbcea6f1938f3f278d225b0b1fe7c70cfff494bf4a3c2a0f2197603d44733",
+          "temperature": 0.0,
+          "max_tokens": 800,
+          "input_tokens": 12918,
+          "output_tokens": 119,
+          "cache_hit_input_tokens": 12416,
+          "cache_miss_input_tokens": 502,
+          "outcome": "success",
+          "error_type": null
+        }
+      ]
+    }
+  ],
+  "provider_http_attempt_count": 1,
+  "provider_http_attempts": [
+    {
+      "http_status": 200
+    }
+  ],
+  "provider_transport_complete": true,
+  "limitations": [
+    "visible development task",
+    "not formal gold",
+    "graph verification is not field truth"
+  ]
+}

@@ -1,0 +1,62 @@
+{
+  "protocol_version": "scenario-v2",
+  "version": "scenarios-test-v2-diverse-authoring-draft",
+  "split": "development",
+  "repeats": 1,
+  "authoring_status": "visible_development_model_pilot",
+  "source_poi_sha256": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+  "source_graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "source_overrides_sha256": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+  "source_reviews_sha256": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169",
+  "poi_sha256": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+  "cases": [
+    {
+      "id": "v2h_T5_route_weather_1",
+      "category": "T5",
+      "template_group": "v2h_T5_route_weather",
+      "od_group": "v2h_T5_route_weather_文理学部",
+      "source_group": "campus_poi_diverse_authoring_v2",
+      "source_poi_ids": [
+        "poi_139",
+        "poi_070",
+        "poi_015",
+        "poi_068"
+      ],
+      "snapshot_id": "PENDING_FROZEN_SNAPSHOT",
+      "messages": [
+        {
+          "role": "user",
+          "content": "查天气并规划从武汉大学科技门到桂园食堂的步行路线。"
+        }
+      ],
+      "expected_turns": [
+        {
+          "status": "completed",
+          "kind": "route",
+          "feasibility": "unknown",
+          "start_poi_id": "poi_139",
+          "end_poi_id": "poi_070",
+          "via_poi_ids": [],
+          "travel_mode": "walk",
+          "strategy": "shortest",
+          "hard_constraints": {},
+          "required_outputs": [
+            "route",
+            "weather"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "allowed_unknowns": [],
+          "intent_label": null,
+          "expected_tools": null
+        }
+      ],
+      "adjudication": {
+        "status": "draft",
+        "method": null,
+        "reviewer": null,
+        "evidence": []
+      }
+    }
+  ]
+}
