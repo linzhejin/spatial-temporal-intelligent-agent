@@ -1,0 +1,79 @@
+{
+  "format": "controlled-simulated-events-v1",
+  "scope": "synthetic_development_only",
+  "campus_truth": false,
+  "snapshots": [
+    {
+      "id": "simulated_detour_001",
+      "scope": "synthetic_development_only",
+      "campus_truth": false,
+      "as_of_epoch": 1792965600,
+      "conditions": [
+        {
+          "id": "simulated_detour_edge_001",
+          "action": "closure",
+          "affected_modes": [
+            "walk"
+          ],
+          "edge": {
+            "u": 13266196508,
+            "v": 13266196548,
+            "key": 0
+          },
+          "start_time": 1792962000,
+          "end_time": 1792969200
+        },
+        {
+          "id": "simulated_detour_edge_reverse_001",
+          "action": "closure",
+          "affected_modes": [
+            "walk"
+          ],
+          "edge": {
+            "u": 13266196548,
+            "v": 13266196508,
+            "key": 0
+          },
+          "start_time": 1792962000,
+          "end_time": 1792969200
+        }
+      ]
+    },
+    {
+      "id": "simulated_blocked_001",
+      "scope": "synthetic_development_only",
+      "campus_truth": false,
+      "as_of_epoch": 1792965600,
+      "conditions": [
+        {
+          "id": "simulated_blocked_edge_001",
+          "action": "closure",
+          "affected_modes": [
+            "walk"
+          ],
+          "edge": {
+            "u": 13273047778,
+            "v": 13273047777,
+            "key": 0
+          },
+          "start_time": 1792962000,
+          "end_time": 1792969200
+        },
+        {
+          "id": "simulated_blocked_edge_reverse_001",
+          "action": "closure",
+          "affected_modes": [
+            "walk"
+          ],
+          "edge": {
+            "u": 13273047777,
+            "v": 13273047778,
+            "key": 0
+          },
+          "start_time": 1792962000,
+          "end_time": 1792969200
+        }
+      ]
+    }
+  ]
+}
