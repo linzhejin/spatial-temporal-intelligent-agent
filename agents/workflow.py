@@ -4,12 +4,16 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 import math
 import os
+import re
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
 from langgraph.runtime import Runtime
 
 from storage.task_repository import append_run_event, get_run_input
+
+
+_TRACE_EVENT_ID = re.compile(r"[A-Za-z0-9_.-]{1,80}\Z")
 
 
 class AgentRunState(TypedDict, total=False):
@@ -250,13 +254,22 @@ def build_agent_workflow(
                         "skipped_after_route_verification_retry",
                         "skipped_after_route_verification_failure"}:
                     outcome = "exception"
-                _emit_agent_tool_trace(
-                    state, runtime, database_url, "agent_tool_call", {
+                trace_payload = {
                         "tool_name": str(item.get("tool_name") or "unknown")[:80],
                         "argument_keys": argument_keys,
                         "outcome": outcome,
                         "artifact_kind": artifact_kind,
-                    },
+                }
+                ids = item.get("road_event_ids")
+                if (trace_payload["tool_name"] == "list_road_conditions"
+                        and outcome == "success" and isinstance(ids, list)
+                        and len(ids) <= 128
+                        and all(isinstance(value, str) and _TRACE_EVENT_ID.fullmatch(value)
+                                for value in ids)
+                        and len(set(ids)) == len(ids)):
+                    trace_payload["road_event_ids"] = sorted(ids)
+                _emit_agent_tool_trace(
+                    state, runtime, database_url, "agent_tool_call", trace_payload,
                 )
 
         def run_weather_tool():

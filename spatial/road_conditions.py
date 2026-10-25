@@ -92,6 +92,9 @@ _cache_error = None
 @contextmanager
 def _condition_write_lock():
     """Serialize read-modify-write across the production web processes."""
+    if (os.getenv("AGENT_REPLAY_EVENT_EPOCH") is not None
+            or os.getenv("AGENT_REPLAY_EVENT_SHA256") is not None):
+        raise RoadConditionsUnavailableError("模拟路况重放期间不能修改路况文件")
     directory = os.path.dirname(_CONDITIONS_FILE)
     os.makedirs(directory, exist_ok=True)
     with _write_lock, open(_CONDITIONS_FILE + ".lock", "a+b") as lock_file:
@@ -308,10 +311,19 @@ def list_conditions(include_inactive: bool = False, *, strict: bool = False) -> 
     生效判定：start_time <= now < end_time（end_time 为 0 表示长期有效）。
     include_inactive=True 时返回全部事件（含未开始/已过期），供管理端展示。
     """
-    conditions = _load_conditions(strict=strict)
+    from experiments.event_replay_guard import certified_event_snapshot
+
+    try:
+        replay_snapshot = certified_event_snapshot(_CONDITIONS_FILE)
+    except (OSError, ValueError) as exc:
+        raise RoadConditionsUnavailableError(
+            "模拟路况重放配置无效，无法确认当前路况"
+        ) from exc
+    conditions = (replay_snapshot[1] if replay_snapshot is not None
+                  else _load_conditions(strict=strict))
     if include_inactive:
         return list(conditions)
-    now = time.time()
+    now = replay_snapshot[0] if replay_snapshot is not None else time.time()
     active = []
     for c in conditions:
         if c.get("revoked_at"):

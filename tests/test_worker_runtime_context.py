@@ -182,6 +182,51 @@ def test_opt_in_agent_tool_trace_records_direct_weather_execution(monkeypatch):
     assert result["result"]["weather"]["temperature"] == 22
 
 
+def test_road_event_trace_persists_only_valid_ids_from_successful_condition_tool(monkeypatch):
+    from agents import workflow
+
+    monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    events = []
+
+    def append(_url, _run, _worker, event_type, payload, node_id=None):
+        events.append({"event_type": event_type, "payload": payload})
+        return {"stored": True}
+
+    monkeypatch.setattr(workflow, "append_run_event", append)
+    monkeypatch.setattr(workflow, "get_run_input", lambda _url, _run: {
+        "query": "查询路况", "history": [], "task": {},
+    })
+
+    def fake_agent(_query, *, tool_trace_callback=None, **_kwargs):
+        tool_trace_callback({
+            "tool_name": "list_road_conditions", "argument_keys": [],
+            "outcome": "success", "artifact_kind": None,
+            "road_event_ids": ["simulated_2", "simulated_1"],
+            "raw_result": {"description": "private location"},
+        })
+        tool_trace_callback({
+            "tool_name": "plan_route", "argument_keys": ["start", "end"],
+            "outcome": "success", "artifact_kind": "route",
+            "road_event_ids": ["injected_by_model"],
+        })
+        return {"response_kind": "chat", "message": "路况已查询。"}
+
+    workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent).invoke(
+        {"run_id": "road-trace-run"},
+        {"configurable": {"thread_id": "road-trace-run"}},
+        context={"worker_id": "road-trace-worker"},
+    )
+    calls = [item["payload"] for item in events
+             if item["event_type"] == "agent_tool_call"]
+    assert calls[0] == {
+        "tool_name": "list_road_conditions", "argument_keys": [],
+        "outcome": "success", "artifact_kind": None,
+        "road_event_ids": ["simulated_1", "simulated_2"],
+    }
+    assert "road_event_ids" not in calls[1]
+    assert "private location" not in json.dumps(calls)
+
+
 def test_clarification_answer_keeps_original_multitool_request(monkeypatch):
     from agents import workflow
 

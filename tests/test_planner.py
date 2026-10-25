@@ -504,6 +504,37 @@ class TestAgentLoop:
         assert "晴" not in json.dumps(trace, ensure_ascii=False)
         assert result["message"] == "当前天气晴。"
 
+    def test_road_event_trace_ids_come_only_from_successful_tool_result(self):
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("list_road_conditions", {})]),
+            _fake_response(content="路况已查询。"),
+        ])
+        trace = []
+        with patch.object(planner.agent_tools, "execute_tool", return_value=({
+            "conditions": [{"id": "simulated_2", "description": "private detail"},
+                           {"id": "simulated_1", "description": "another detail"}],
+            "count": 2,
+        }, None)):
+            _run(client, tool_trace_callback=trace.append)
+        assert trace == [{
+            "tool_name": "list_road_conditions", "argument_keys": [],
+            "outcome": "success", "artifact_kind": None,
+            "road_event_ids": ["simulated_1", "simulated_2"],
+        }]
+        assert "private detail" not in json.dumps(trace)
+
+        failed = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("list_road_conditions", {})]),
+            _fake_response(content="路况服务不可用。"),
+        ])
+        with patch.object(planner.agent_tools, "execute_tool", return_value=({
+            "error": "road_conditions_unavailable", "message": "private failure",
+        }, None)):
+            trace.clear()
+            _run(failed, tool_trace_callback=trace.append)
+        assert trace[0]["outcome"] == "tool_error"
+        assert "road_event_ids" not in trace[0]
+
     def test_manual_map_start_is_used_when_natural_language_omits_the_origin(self):
         selected_start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
         client = FakeClient([])

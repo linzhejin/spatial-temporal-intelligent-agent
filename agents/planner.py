@@ -805,6 +805,36 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if _external_tool_trace is not None:
             _external_tool_trace(payload)
 
+    def record_tool_result(name, args, result, artifact):
+        artifact_kind = next(
+            (kind for key, kind in (("route", "route"),
+                                    ("candidates", "candidates"),
+                                    ("clarify", "clarify"),
+                                    ("suggestions", "suggestions"),
+                                    ("route_comparison", "route_comparison"))
+             if isinstance(artifact, dict) and key in artifact),
+            None,
+        )
+        trace_item = {
+                "tool_name": name,
+                "argument_keys": sorted(args) if isinstance(args, dict) else [],
+                "outcome": "tool_error" if isinstance(result, dict) and result.get("error")
+                          else "success",
+                "artifact_kind": artifact_kind,
+        }
+        if (name == "list_road_conditions" and trace_item["outcome"] == "success"
+                and isinstance(result, dict)
+                and isinstance(result.get("conditions"), list)):
+            conditions = result["conditions"]
+            ids = [item.get("id") for item in conditions
+                   if isinstance(item, dict)]
+            if (len(conditions) <= 128 and len(ids) == len(conditions)
+                    and all(isinstance(value, str) and 0 < len(value) <= 80
+                            for value in ids)
+                    and len(set(ids)) == len(ids)):
+                trace_item["road_event_ids"] = sorted(ids)
+        tool_trace_callback(trace_item)
+
     def execute_tool(name, args, tool_context, *, record_trace=True):
         # This keyword is supplied only by trusted workflow code, separately
         # from browser context, uid and model-produced tool arguments.
@@ -830,22 +860,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if "_route_weather_snapshot" in tool_context:
             run_weather["_route_weather_snapshot"] = tool_context["_route_weather_snapshot"]
         if record_trace and tool_trace_callback:
-            artifact_kind = next(
-                (kind for key, kind in (("route", "route"),
-                                        ("candidates", "candidates"),
-                                        ("clarify", "clarify"),
-                                        ("suggestions", "suggestions"),
-                                        ("route_comparison", "route_comparison"))
-                 if isinstance(artifact, dict) and key in artifact),
-                None,
-            )
-            tool_trace_callback({
-                "tool_name": name,
-                "argument_keys": sorted(args) if isinstance(args, dict) else [],
-                "outcome": "tool_error" if isinstance(result, dict) and result.get("error")
-                          else "success",
-                "artifact_kind": artifact_kind,
-            })
+            record_tool_result(name, args, result, artifact)
         return result, artifact
 
     # 地图端已经把起点、终点和每个途经点解析成精确坐标，不应再让 LLM
@@ -2022,22 +2037,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                             })
                         raise
                 if tool_trace_callback:
-                    artifact_kind = next(
-                        (kind for key, kind in (("route", "route"),
-                                                ("candidates", "candidates"),
-                                                ("clarify", "clarify"),
-                                                ("suggestions", "suggestions"),
-                                                ("route_comparison", "route_comparison"))
-                         if isinstance(artifact, dict) and key in artifact),
-                        None,
-                    )
-                    tool_trace_callback({
-                        "tool_name": name,
-                        "argument_keys": sorted(args) if isinstance(args, dict) else [],
-                        "outcome": "tool_error" if isinstance(result, dict) and result.get("error")
-                                  else "success",
-                        "artifact_kind": artifact_kind,
-                    })
+                    record_tool_result(name, args, result, artifact)
 
             if name == "get_weather" and isinstance(result, dict):
                 if result.get("error"):

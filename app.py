@@ -54,6 +54,14 @@ def create_app() -> Flask:
         raise RuntimeError("Production requires a strong SECRET_KEY of at least 32 characters")
     app.config["SECRET_KEY"] = secret_key or "whu-walker-dev-secret-change-me"
     app.config["DATABASE_URL"] = os.getenv("DATABASE_URL")
+    if (os.getenv("AGENT_REPLAY_EVENT_EPOCH") is not None
+            or os.getenv("AGENT_REPLAY_EVENT_SHA256") is not None):
+        from experiments.event_replay_guard import assert_replay_database_target
+
+        if (is_production or os.getenv("AGENT_REPLAY_ENABLE_LOCAL") != "1"
+                or os.getenv("AGENT_TOOL_TRACE_ENABLED") != "1"):
+            raise ValueError("synthetic event replay requires an isolated local service")
+        assert_replay_database_target(app.config["DATABASE_URL"])
     app.config["SESSION_COOKIE_HTTPONLY"] = True
     app.config["SESSION_COOKIE_SAMESITE"] = "Strict"
 
@@ -154,6 +162,30 @@ def create_app() -> Flask:
         return jsonify({
             "status": "ready", "service": "local_development",
             "database_isolated": True,
+        })
+
+    @app.route("/api/research/event-replay-readiness")
+    def event_replay_readiness():
+        """Certify both local stores and the frozen clock before event replay."""
+        database_proof = research_replay_readiness()
+        if isinstance(database_proof, tuple):
+            return database_proof
+        try:
+            from experiments.event_replay_guard import certify_local_event_fixture
+            from spatial import road_conditions
+
+            fixture_proof = certify_local_event_fixture(
+                road_conditions._CONDITIONS_FILE
+            )
+        except (OSError, ValueError):
+            return jsonify({
+                "status": "blocked", "database_isolated": True,
+                "road_conditions_isolated": False,
+            }), 503
+        return jsonify({
+            "status": "ready", "service": "local_development",
+            "database_isolated": True, "road_conditions_isolated": True,
+            **fixture_proof,
         })
 
     @app.after_request
