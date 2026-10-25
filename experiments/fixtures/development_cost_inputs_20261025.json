@@ -1,0 +1,131 @@
+{
+  "status": "visible_development_pilots_not_formal_budget",
+  "reports": [
+    {
+      "cohort": "matched_T5_weather",
+      "group": "T5",
+      "condition": "luojia",
+      "path": "output/experiments/product_T5_weather_control_trusted_input_20261024.json",
+      "sha256": "eeaaef121437d4dd9e5cf1d12f80e213e44ef3922ad91f8c251bf0ecb5ac967f"
+    },
+    {
+      "cohort": "matched_T5_weather",
+      "group": "T5",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_T5_weather_control_20261024.json",
+      "sha256": "88b4104429e69435ec60e11cf5aa6d533b3229b3890ed69a3650e4a563e4e62d"
+    },
+    {
+      "cohort": "matched_T5_weather",
+      "group": "T5",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_T5_weather_control_20261024.json",
+      "sha256": "57edc3a8e3b8019d69762e0621dbdd7b9ca61d45172a6c53f0341c63132d9a47"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T1",
+      "condition": "luojia",
+      "path": "output/experiments/product_live_seed_mode_01_httpaudit_20261025.json",
+      "sha256": "e236aefd9e01a4277daba1cd5c52e55a03d71afc36a8994149868eed0136f48e"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T1",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_seed_mode_01_httpaudit_20261025.json",
+      "sha256": "bc99de6ca0a14ce860282b05b700dad95bd236387cce813af021101ce45a04b1"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T1",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_seed_mode_01_httpaudit_20261025.json",
+      "sha256": "c0c1f7cfdd77450e6a1447fb3e63873fd79bc41c27beb36692a3928dd12839bd"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T2",
+      "condition": "luojia",
+      "path": "output/experiments/product_live_seed_place_01_httpaudit_20261025.json",
+      "sha256": "0733bfaf75942e700223b4b5b40ee3f51379fa65e822a98dc9389437616baa23"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T2",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_seed_place_01_httpaudit_20261025.json",
+      "sha256": "7a1d4a4d54cb1bc848248c871e06fe1af747d3d1b66a5aae37fc723fd1a8d3dc"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T2",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_seed_place_01_httpaudit_20261025.json",
+      "sha256": "045ae5fb283d3531da4d478ff1e20a2c1b64c0da950769a98eb9c0ae6c54beb3"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T3",
+      "condition": "luojia",
+      "path": "output/experiments/product_live_t3_context_weather_fixed_20261025.json",
+      "sha256": "9b5d026260a548fc23e9119060986d771748edb95fae1e66553e9f8969de4023"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T3",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_t3_context_weather_httpaudit_20261025.json",
+      "sha256": "990848963db57170ad0f80e0bce4c8b0ba0f5d1892e6c15a608a990dd34a5ac6"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T3",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_t3_context_weather_20261025.json",
+      "sha256": "24a8d5e0bb5ce1ee60404112f43f3d3bd93edfd6ad68198c43c36a3dfc3104aa"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T4",
+      "condition": "luojia",
+      "path": "output/experiments/product_live_draft_multi_turn_revision_02_httpaudit_20261025.json",
+      "sha256": "2b497aa9b294f1b79afe1633ead3f8a42e09f6753cce48ffeb387f37991a9080"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T4",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_t4_revision_httpaudit_20261025.json",
+      "sha256": "aada23c678d66f0d78cc71a2d7f1ac1bf97be334853df3844d4ee7cb93a7116d"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T4",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_t4_revision_20261025.json",
+      "sha256": "7d06287c3767b373abba717ced806cf4bfaa4e66660c4def53b190c08f195ed3"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T5",
+      "condition": "luojia",
+      "path": "output/experiments/product_live_t5_full_route_fixed_20261025.json",
+      "sha256": "fb2aa056fada6bcf4539dbea7dd3444cf66cca31a7fb2a726c786e82286bd7e0"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T5",
+      "condition": "ordinary_tool_agent",
+      "path": "output/experiments/ordinary_t5_full_route_20261025.json",
+      "sha256": "4c05b622bd72620703df48dcdcd0de6633057dd23802b65e9396203bbf0a11cb"
+    },
+    {
+      "cohort": "matched_20261025",
+      "group": "T5",
+      "condition": "deepseek_harness",
+      "path": "output/experiments/harness_t5_full_route_20261025.json",
+      "sha256": "a19009fefce0da1d90df5eb8a603e4ed989f1c0952da06ba8dac7854935e05b1"
+    }
+  ]
+}

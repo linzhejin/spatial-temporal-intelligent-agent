@@ -38,12 +38,19 @@ def _usage(report: dict, condition: str) -> dict:
     if condition == "luojia":
         traces = report.get("model_trace")
         if not isinstance(traces, list) or not traces:
-            raise ValueError("product pilot lacks model trace")
+            runs = report.get("run_evidence")
+            if not isinstance(runs, list) or not runs or any(
+                    not isinstance(run, dict) or not isinstance(run.get("model_requests"), list)
+                    for run in runs):
+                raise ValueError("product pilot lacks model trace")
+            traces = [request for run in runs for request in run["model_requests"]]
+            if any(not isinstance(request, dict) for request in traces):
+                raise ValueError("product pilot has invalid model request")
         ids = {entry.get("resolved_model_id") for entry in traces}
-        if len(ids) != 1:
+        if len(ids) > 1:
             raise ValueError("product response models differ")
         entries = traces
-        model_id = ids.pop()
+        model_id = ids.pop() if ids else None
     else:
         measured = report.get("measured_usage")
         if not isinstance(measured, dict):
@@ -53,7 +60,7 @@ def _usage(report: dict, condition: str) -> dict:
     requests = sum(_nonnegative_int(row.get("requests", 1), "requests") for row in entries)
     inputs = sum(_nonnegative_int(row.get("input_tokens"), "input_tokens") for row in entries)
     outputs = sum(_nonnegative_int(row.get("output_tokens"), "output_tokens") for row in entries)
-    if not model_id or requests < 1:
+    if requests < 0 or (requests and not model_id) or (not requests and condition != "luojia"):
         raise ValueError("pilot has no observed response model or requests")
     cache_known = all("cache_hit_input_tokens" in row and "cache_miss_input_tokens" in row
                       for row in entries)
@@ -65,10 +72,14 @@ def _usage(report: dict, condition: str) -> dict:
                      for row in entries)
         if hits + misses != inputs:
             raise ValueError("cache accounting differs from total input tokens")
+    http_attempts = report.get("provider_http_attempt_count")
+    if http_attempts is not None:
+        http_attempts = _nonnegative_int(http_attempts, "provider HTTP attempts")
     return {"response_model_id": model_id, "requests": requests,
             "input_tokens": inputs, "output_tokens": outputs,
             "cache_hit_input_tokens": hits, "cache_miss_input_tokens": misses,
-            "cache_accounting_observed": cache_known}
+            "cache_accounting_observed": cache_known,
+            "provider_http_attempt_count": http_attempts}
 
 
 def _price(usage: dict, rates: dict) -> dict:
@@ -76,7 +87,8 @@ def _price(usage: dict, rates: dict) -> dict:
     minimum = (inputs * rates["input_cache_hit"] + outputs * rates["output"]) / 1_000_000
     maximum = (inputs * rates["input_cache_miss"] + outputs * rates["output"]) / 1_000_000
     exact = None
-    if usage["cache_accounting_observed"]:
+    if usage["cache_accounting_observed"] and not (
+            usage["requests"] == 0 and usage.get("provider_http_attempt_count") is None):
         exact = (usage["cache_hit_input_tokens"] * rates["input_cache_hit"]
                  + usage["cache_miss_input_tokens"] * rates["input_cache_miss"]
                  + outputs * rates["output"]) / 1_000_000
@@ -99,7 +111,7 @@ def estimate(root: Path, catalog: dict, pricing: dict) -> dict:
         if report.get("case_id") is None or not str(report.get("status", "")).startswith("development_pilot_only"):
             raise ValueError("only labelled development pilot reports are accepted")
         usage = _usage(report, item["condition"])
-        if usage["response_model_id"] != pricing["model"]:
+        if usage["requests"] and usage["response_model_id"] != pricing["model"]:
             raise ValueError("response model differs from pricing model")
         rows.append({**{name: item[name] for name in ("cohort", "group", "condition", "path", "sha256")},
                      "case_id": report["case_id"], "usage": usage,
@@ -123,6 +135,20 @@ def estimate(root: Path, catalog: dict, pricing: dict) -> dict:
         raise ValueError("matched T5 pilots lack weather fixture provenance")
     if len({item["sha256"] for item in fixtures}) != 1:
         raise ValueError("matched T5 pilots used different weather fixtures")
+    matched_development = {}
+    for group in sorted({row["group"] for row in rows
+                         if row["cohort"] == "matched_20261025"}):
+        items = [item for item in catalog["reports"]
+                 if item["cohort"] == "matched_20261025" and item["group"] == group]
+        if len(items) != 3 or {item["condition"] for item in items} != CONDITIONS:
+            raise ValueError(f"matched development {group} requires three conditions")
+        reports = [_read_report(root, item) for item in items]
+        for field in ("case_id", "development_dataset_sha256", "case_messages_sha256",
+                      "tool_schema_sha256", "data_component_sha256", "weather_fixture"):
+            values = [report.get(field) for report in reports]
+            if len({json.dumps(value, sort_keys=True) for value in values}) != 1:
+                raise ValueError(f"matched development pilots differ on {field}")
+        matched_development[group] = reports[0]["case_id"]
     # A single visible case scaled to its 24 x 3 planned runs is a planning
     # illustration only. Other groups and repeated token distributions are missing.
     t5_runs_per_condition = 24 * 3
@@ -137,14 +163,23 @@ def estimate(root: Path, catalog: dict, pricing: dict) -> dict:
     coverage = {group: {condition: len({row["case_id"] for row in rows
                                         if row["group"] == group and row["condition"] == condition})
                         for condition in sorted(CONDITIONS)} for group in sorted(GROUPS)}
+    group_blocker = (f"Only {len(matched_development)}/5 task groups have a matched "
+                     "three-condition development case; no per-group repeat distributions."
+                     if len(matched_development) < len(GROUPS)
+                     else "Only one visible case per task group; no per-group repeat distributions.")
+    formal_blockers = [
+        group_blocker,
+        "Some Harness reports lack cache hit/miss accounting; observed bill is unknown.",
+        "Current official prices, Search/Fetch charges and a user-approved batch ceiling must be rechecked before formal paid calls.",
+    ]
+    if any(row["usage"]["requests"] == 0
+           and row["usage"]["provider_http_attempt_count"] is None for row in rows):
+        formal_blockers.append("Some zero-request reports lack provider HTTP attempt audit; zero bill is unverified.")
     return {"status": "development_cost_audit_only", "formal_budget_ready": False,
             "pricing": pricing, "rows": rows, "matched_T5_illustration": illustration,
+            "matched_development_cases": matched_development,
             "observed_distinct_cases_by_group_condition": coverage,
-            "formal_blockers": [
-                "Only one matched T5 case; no three-condition T1-T4 coverage or per-group repeat distributions.",
-                "Some Harness reports lack cache hit/miss accounting; observed bill is unknown.",
-                "Current official prices, Search/Fetch charges and a user-approved batch ceiling must be rechecked before formal paid calls.",
-            ]}
+            "formal_blockers": formal_blockers}
 
 
 def main() -> int:
