@@ -1,0 +1,3112 @@
+{
+  "status": "visible_development_diagnostic_no_model_not_formal",
+  "source_sha256": {
+    "draft": "b7e0971bba4c21591cbe3832d0cb70c2758819ec87cb5f8fcced8265a0d28bcd",
+    "pois": "8322f12d0787e6aff7bceb489a7b8607bd748e3c4bbde543011475b7528d3307",
+    "graph": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+    "overrides": "84fbf3490cfa6b2b3fdf30cb6ddb6088f02f51bb25d93fbb08f133a6692b7076",
+    "reviews": "e38766cb0c3011f9c229a5820b70cdacd597ab37bd1573a3ae0d50f153824169"
+  },
+  "case_count": 24,
+  "development_checks_pass_count": 9,
+  "model_required_count": 15,
+  "unexpected_failure_count": 0,
+  "candidate_order_unknown_turns": 6,
+  "cases": [
+    {
+      "case_id": "v2h_T5_route_weather_1",
+      "elapsed_s": 0.749,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_139",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_070",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_route_weather_2",
+      "elapsed_s": 0.598,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_226",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_075",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_route_weather_3",
+      "elapsed_s": 0.854,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_449",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_307",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_route_conditions_1",
+      "elapsed_s": 0.933,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_031",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_069",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_route_conditions_2",
+      "elapsed_s": 0.482,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_181",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_202",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_route_conditions_3",
+      "elapsed_s": 0.69,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_258",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_254",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_1",
+      "elapsed_s": 5.747,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_068",
+            "poi_069",
+            "poi_070",
+            "poi_394"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_068",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13556582695,
+              13556582694,
+              0
+            ],
+            [
+              13556582694,
+              13556582690,
+              0
+            ],
+            [
+              13556582690,
+              1199831232,
+              0
+            ],
+            [
+              1199831232,
+              1199831236,
+              0
+            ],
+            [
+              1199831236,
+              12802598370,
+              0
+            ],
+            [
+              12802598370,
+              12802598371,
+              0
+            ],
+            [
+              12802598371,
+              13510725036,
+              0
+            ],
+            [
+              13510725036,
+              13510725037,
+              0
+            ],
+            [
+              13510725037,
+              13510725036,
+              0
+            ],
+            [
+              13510725036,
+              12802598371,
+              0
+            ],
+            [
+              12802598371,
+              12802598370,
+              0
+            ],
+            [
+              12802598370,
+              1199831236,
+              0
+            ],
+            [
+              1199831236,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223620,
+              0
+            ],
+            [
+              13255223620,
+              13255223608,
+              0
+            ],
+            [
+              13255223608,
+              13256761715,
+              0
+            ],
+            [
+              13256761715,
+              13256677548,
+              0
+            ],
+            [
+              13256677548,
+              13256677551,
+              0
+            ],
+            [
+              13256677551,
+              13256761724,
+              0
+            ],
+            [
+              13256761724,
+              13256761725,
+              0
+            ],
+            [
+              13256761725,
+              13256677442,
+              0
+            ],
+            [
+              13256677442,
+              13256677430,
+              0
+            ],
+            [
+              13256677430,
+              13256671284,
+              0
+            ],
+            [
+              13256671284,
+              13256677497,
+              0
+            ],
+            [
+              13256677497,
+              13256677498,
+              0
+            ],
+            [
+              13256677498,
+              13256677501,
+              0
+            ],
+            [
+              13256677501,
+              13256677499,
+              0
+            ],
+            [
+              13256677499,
+              13265776309,
+              0
+            ],
+            [
+              13265776309,
+              13265776312,
+              0
+            ],
+            [
+              13265776312,
+              13265776317,
+              0
+            ],
+            [
+              13265776317,
+              13246710091,
+              0
+            ],
+            [
+              13246710091,
+              13246710082,
+              0
+            ],
+            [
+              13246710082,
+              13246710083,
+              0
+            ],
+            [
+              13246710083,
+              3631666689,
+              0
+            ],
+            [
+              3631666689,
+              13244712052,
+              0
+            ],
+            [
+              13244712052,
+              13244712018,
+              0
+            ],
+            [
+              13244712018,
+              13244712022,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_2",
+      "elapsed_s": 5.155,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_402",
+            "poi_403",
+            "poi_414",
+            "poi_399"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_402",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13728848122,
+              12848622703,
+              0
+            ],
+            [
+              12848622703,
+              1663938881,
+              0
+            ],
+            [
+              1663938881,
+              12805594645,
+              0
+            ],
+            [
+              12805594645,
+              13550957428,
+              0
+            ],
+            [
+              13550957428,
+              12805594646,
+              0
+            ],
+            [
+              12805594646,
+              12805594647,
+              0
+            ],
+            [
+              12805594647,
+              13701927101,
+              0
+            ],
+            [
+              13701927101,
+              979945409,
+              0
+            ],
+            [
+              979945409,
+              6901657551,
+              0
+            ],
+            [
+              6901657551,
+              12888527080,
+              0
+            ],
+            [
+              12888527080,
+              6901657551,
+              0
+            ],
+            [
+              6901657551,
+              979945409,
+              0
+            ],
+            [
+              979945409,
+              1199831258,
+              0
+            ],
+            [
+              1199831258,
+              3112677663,
+              0
+            ],
+            [
+              3112677663,
+              13732671454,
+              0
+            ],
+            [
+              13732671454,
+              13550984723,
+              0
+            ],
+            [
+              13550984723,
+              9554406744,
+              0
+            ],
+            [
+              9554406744,
+              13246423697,
+              0
+            ],
+            [
+              13246423697,
+              1417701862,
+              0
+            ],
+            [
+              1417701862,
+              1417701738,
+              0
+            ],
+            [
+              1417701738,
+              4159413654,
+              0
+            ],
+            [
+              4159413654,
+              4320485455,
+              0
+            ],
+            [
+              4320485455,
+              4159413681,
+              0
+            ],
+            [
+              4159413681,
+              13563082430,
+              0
+            ],
+            [
+              13563082430,
+              4159413690,
+              0
+            ],
+            [
+              4159413690,
+              1664000422,
+              0
+            ],
+            [
+              1664000422,
+              9681727639,
+              1
+            ],
+            [
+              9681727639,
+              9681727640,
+              0
+            ],
+            [
+              9681727640,
+              13563157063,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_food_before_route_3",
+      "elapsed_s": 5.115,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_321",
+            "poi_323",
+            "poi_320",
+            "poi_322"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_321",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13227634466,
+              13240045351,
+              0
+            ],
+            [
+              13240045351,
+              13669303669,
+              0
+            ],
+            [
+              13669303669,
+              1199840610,
+              0
+            ],
+            [
+              1199840610,
+              13505885338,
+              0
+            ],
+            [
+              13505885338,
+              13505885341,
+              0
+            ],
+            [
+              13505885341,
+              13704353196,
+              0
+            ],
+            [
+              13704353196,
+              13505885341,
+              0
+            ],
+            [
+              13505885341,
+              13505885344,
+              0
+            ],
+            [
+              13505885344,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              5196008421,
+              0
+            ],
+            [
+              5196008421,
+              1201323413,
+              0
+            ],
+            [
+              1201323413,
+              12803991855,
+              0
+            ],
+            [
+              12803991855,
+              13704300448,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_study_before_route_1",
+      "elapsed_s": 5.065,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_194",
+            "poi_039",
+            "poi_034",
+            "poi_016"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_039",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13732671357,
+              1196701873,
+              0
+            ],
+            [
+              1196701873,
+              9591350619,
+              1
+            ],
+            [
+              9591350619,
+              13732671351,
+              0
+            ],
+            [
+              13732671351,
+              9591350636,
+              0
+            ],
+            [
+              9591350636,
+              1199819102,
+              0
+            ],
+            [
+              1199819102,
+              13732671331,
+              0
+            ],
+            [
+              13732671331,
+              13732671324,
+              0
+            ],
+            [
+              13732671324,
+              13732671311,
+              0
+            ],
+            [
+              13732671311,
+              13732671289,
+              0
+            ],
+            [
+              13732671289,
+              13732671286,
+              0
+            ],
+            [
+              13732671286,
+              13732671270,
+              0
+            ],
+            [
+              13732671270,
+              13732671268,
+              0
+            ],
+            [
+              13732671268,
+              1196701983,
+              0
+            ],
+            [
+              1196701983,
+              3631666728,
+              0
+            ],
+            [
+              3631666728,
+              12808058135,
+              0
+            ],
+            [
+              12808058135,
+              13565526934,
+              0
+            ],
+            [
+              13565526934,
+              13565526939,
+              0
+            ],
+            [
+              13565526939,
+              13565526940,
+              0
+            ],
+            [
+              13565526940,
+              13565526939,
+              0
+            ],
+            [
+              13565526939,
+              13565526936,
+              0
+            ],
+            [
+              13565526936,
+              12808058131,
+              0
+            ],
+            [
+              12808058131,
+              13545143093,
+              0
+            ],
+            [
+              13545143093,
+              13545143094,
+              0
+            ],
+            [
+              13545143094,
+              13732671241,
+              0
+            ],
+            [
+              13732671241,
+              12802032531,
+              0
+            ],
+            [
+              12802032531,
+              1196689538,
+              0
+            ],
+            [
+              1196689538,
+              13246423618,
+              0
+            ],
+            [
+              13246423618,
+              13246423610,
+              0
+            ],
+            [
+              13246423610,
+              13732671245,
+              0
+            ],
+            [
+              13732671245,
+              13246423611,
+              0
+            ],
+            [
+              13246423611,
+              13269304555,
+              0
+            ],
+            [
+              13269304555,
+              13273102322,
+              0
+            ],
+            [
+              13273102322,
+              13273102317,
+              0
+            ],
+            [
+              13273102317,
+              13273102318,
+              0
+            ],
+            [
+              13273102318,
+              13273102315,
+              0
+            ],
+            [
+              13273102315,
+              13273201228,
+              0
+            ],
+            [
+              13273201228,
+              13273196359,
+              0
+            ],
+            [
+              13273196359,
+              13273102306,
+              0
+            ],
+            [
+              13273102306,
+              13273047795,
+              0
+            ],
+            [
+              13273047795,
+              13273047791,
+              0
+            ],
+            [
+              13273047791,
+              13273047796,
+              0
+            ],
+            [
+              13273047796,
+              13273047789,
+              0
+            ],
+            [
+              13273047789,
+              13273047788,
+              0
+            ],
+            [
+              13273047788,
+              13266002386,
+              0
+            ],
+            [
+              13266002386,
+              13266002384,
+              0
+            ],
+            [
+              13266002384,
+              1197862963,
+              0
+            ],
+            [
+              1197862963,
+              13244712017,
+              0
+            ],
+            [
+              13244712017,
+              3631666685,
+              0
+            ],
+            [
+              3631666685,
+              13244712020,
+              0
+            ],
+            [
+              13244712020,
+              13244712053,
+              0
+            ],
+            [
+              13244712053,
+              3631666691,
+              0
+            ],
+            [
+              3631666691,
+              13246710089,
+              0
+            ],
+            [
+              13246710089,
+              13246710084,
+              0
+            ],
+            [
+              13246710084,
+              13265776328,
+              0
+            ],
+            [
+              13265776328,
+              13256677480,
+              0
+            ],
+            [
+              13256677480,
+              1807168448,
+              0
+            ],
+            [
+              1807168448,
+              12802074253,
+              0
+            ],
+            [
+              12802074253,
+              12802089609,
+              0
+            ],
+            [
+              12802089609,
+              1196701892,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_study_before_route_2",
+      "elapsed_s": 4.82,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_016",
+            "poi_194",
+            "poi_034",
+            "poi_039"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_016",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              1371798845,
+              12847404820,
+              0
+            ],
+            [
+              12847404820,
+              8101909381,
+              0
+            ],
+            [
+              8101909381,
+              13563512960,
+              0
+            ],
+            [
+              13563512960,
+              13668234411,
+              0
+            ],
+            [
+              13668234411,
+              13555966818,
+              0
+            ],
+            [
+              13555966818,
+              13555966811,
+              0
+            ],
+            [
+              13555966811,
+              8101909384,
+              0
+            ],
+            [
+              8101909384,
+              13704644558,
+              0
+            ],
+            [
+              13704644558,
+              13704644560,
+              0
+            ],
+            [
+              13704644560,
+              13704644558,
+              0
+            ],
+            [
+              13704644558,
+              8101909384,
+              0
+            ],
+            [
+              8101909384,
+              13555966811,
+              0
+            ],
+            [
+              13555966811,
+              13555966706,
+              0
+            ],
+            [
+              13555966706,
+              13555966767,
+              1
+            ],
+            [
+              13555966767,
+              13555966817,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_study_before_route_3",
+      "elapsed_s": 4.839,
+      "expected_turn_count": 2,
+      "actual_turn_count": 2,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_240",
+            "poi_015",
+            "poi_034",
+            "poi_016"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_240",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13708188224,
+              13708188222,
+              0
+            ],
+            [
+              13708188222,
+              13732671017,
+              0
+            ],
+            [
+              13732671017,
+              13732671019,
+              0
+            ],
+            [
+              13732671019,
+              1199840493,
+              0
+            ],
+            [
+              1199840493,
+              3147251082,
+              0
+            ],
+            [
+              3147251082,
+              3123587158,
+              0
+            ],
+            [
+              3123587158,
+              9552100025,
+              0
+            ],
+            [
+              9552100025,
+              13704300581,
+              0
+            ],
+            [
+              13704300581,
+              1199840474,
+              0
+            ],
+            [
+              1199840474,
+              13732671039,
+              0
+            ],
+            [
+              13732671039,
+              1204185484,
+              0
+            ],
+            [
+              1204185484,
+              13513425315,
+              0
+            ],
+            [
+              13513425315,
+              3123587154,
+              0
+            ],
+            [
+              3123587154,
+              4060915713,
+              0
+            ],
+            [
+              4060915713,
+              4060915712,
+              0
+            ],
+            [
+              4060915712,
+              13266231623,
+              0
+            ],
+            [
+              13266231623,
+              4060915711,
+              0
+            ],
+            [
+              4060915711,
+              3123587172,
+              0
+            ],
+            [
+              3123587172,
+              13227634451,
+              0
+            ],
+            [
+              13227634451,
+              4060915703,
+              0
+            ],
+            [
+              4060915703,
+              3631666774,
+              0
+            ],
+            [
+              3631666774,
+              13505885343,
+              0
+            ],
+            [
+              13505885343,
+              13505885344,
+              0
+            ],
+            [
+              13505885344,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              13704353187,
+              0
+            ],
+            [
+              13704353187,
+              13704353189,
+              0
+            ],
+            [
+              13704353189,
+              12877128264,
+              0
+            ],
+            [
+              12877128264,
+              5196006520,
+              0
+            ],
+            [
+              5196006520,
+              12877128255,
+              0
+            ],
+            [
+              12877128255,
+              5196006520,
+              0
+            ],
+            [
+              5196006520,
+              12877128264,
+              0
+            ],
+            [
+              12877128264,
+              13704353189,
+              0
+            ],
+            [
+              13704353189,
+              13704353187,
+              0
+            ],
+            [
+              13704353187,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              12877128243,
+              0
+            ],
+            [
+              12877128243,
+              3631666771,
+              0
+            ],
+            [
+              3631666771,
+              9554504333,
+              0
+            ],
+            [
+              9554504333,
+              1204185541,
+              0
+            ],
+            [
+              1204185541,
+              13240045322,
+              0
+            ],
+            [
+              13240045322,
+              13513425371,
+              0
+            ],
+            [
+              13513425371,
+              13240045312,
+              0
+            ],
+            [
+              13240045312,
+              1199840610,
+              0
+            ],
+            [
+              1199840610,
+              13669303669,
+              0
+            ],
+            [
+              13669303669,
+              12805570360,
+              0
+            ],
+            [
+              12805570360,
+              12928862533,
+              0
+            ],
+            [
+              12928862533,
+              13615527569,
+              0
+            ],
+            [
+              13615527569,
+              1201323300,
+              0
+            ],
+            [
+              1201323300,
+              1201323362,
+              0
+            ],
+            [
+              1201323362,
+              13510900038,
+              0
+            ],
+            [
+              13510900038,
+              1144979602,
+              0
+            ],
+            [
+              1144979602,
+              12928862588,
+              0
+            ],
+            [
+              12928862588,
+              13577919989,
+              0
+            ],
+            [
+              13577919989,
+              8463138833,
+              0
+            ],
+            [
+              8463138833,
+              13732671007,
+              0
+            ],
+            [
+              13732671007,
+              13732671008,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_sport_then_food_1",
+      "elapsed_s": 6.124,
+      "expected_turn_count": 3,
+      "actual_turn_count": 3,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_083",
+            "poi_206",
+            "poi_262"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_083",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_351",
+            "poi_348",
+            "poi_346",
+            "poi_076"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_351",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 2,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13510725031,
+              13510725030,
+              0
+            ],
+            [
+              13510725030,
+              12802598370,
+              1
+            ],
+            [
+              12802598370,
+              1199831236,
+              0
+            ],
+            [
+              1199831236,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256677424,
+              0
+            ],
+            [
+              13256677424,
+              13244749936,
+              0
+            ],
+            [
+              13244749936,
+              13244749937,
+              0
+            ],
+            [
+              13244749937,
+              13244749939,
+              0
+            ],
+            [
+              13244749939,
+              13244569636,
+              0
+            ],
+            [
+              13244569636,
+              13244569715,
+              0
+            ],
+            [
+              13244569715,
+              13244569628,
+              0
+            ],
+            [
+              13244569628,
+              12808367707,
+              0
+            ],
+            [
+              12808367707,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              3709156221,
+              0
+            ],
+            [
+              3709156221,
+              13704616429,
+              0
+            ],
+            [
+              13704616429,
+              3709156217,
+              0
+            ],
+            [
+              3709156217,
+              13241429487,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_sport_then_food_2",
+      "elapsed_s": 5.636,
+      "expected_turn_count": 3,
+      "actual_turn_count": 3,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_206",
+            "poi_083",
+            "poi_262"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_083",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_351",
+            "poi_348",
+            "poi_346",
+            "poi_076"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_351",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 2,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              12805877877,
+              9822215303,
+              0
+            ],
+            [
+              9822215303,
+              13550822534,
+              0
+            ],
+            [
+              13550822534,
+              13550842833,
+              0
+            ],
+            [
+              13550842833,
+              1199818999,
+              0
+            ],
+            [
+              1199818999,
+              1199819071,
+              0
+            ],
+            [
+              1199819071,
+              1199819047,
+              0
+            ],
+            [
+              1199819047,
+              13701919346,
+              0
+            ],
+            [
+              13701919346,
+              1196701976,
+              0
+            ],
+            [
+              1196701976,
+              13701919381,
+              0
+            ],
+            [
+              13701919381,
+              1196701888,
+              0
+            ],
+            [
+              1196701888,
+              13732671305,
+              0
+            ],
+            [
+              13732671305,
+              1196701917,
+              0
+            ],
+            [
+              1196701917,
+              12848608572,
+              0
+            ],
+            [
+              12848608572,
+              13266007647,
+              0
+            ],
+            [
+              13266007647,
+              13266081039,
+              0
+            ],
+            [
+              13266081039,
+              13269304582,
+              0
+            ],
+            [
+              13269304582,
+              13246710098,
+              0
+            ],
+            [
+              13246710098,
+              13246710099,
+              0
+            ],
+            [
+              13246710099,
+              13246710096,
+              0
+            ],
+            [
+              13246710096,
+              13732671287,
+              0
+            ],
+            [
+              13732671287,
+              13246710089,
+              0
+            ],
+            [
+              13246710089,
+              13246710082,
+              0
+            ],
+            [
+              13246710082,
+              13246710091,
+              0
+            ],
+            [
+              13246710091,
+              13246710079,
+              0
+            ],
+            [
+              13246710079,
+              12808367706,
+              0
+            ],
+            [
+              12808367706,
+              13244569756,
+              0
+            ],
+            [
+              13244569756,
+              13244569715,
+              0
+            ],
+            [
+              13244569715,
+              13244569628,
+              0
+            ],
+            [
+              13244569628,
+              12808367707,
+              0
+            ],
+            [
+              12808367707,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              3709156221,
+              0
+            ],
+            [
+              3709156221,
+              13704616429,
+              0
+            ],
+            [
+              13704616429,
+              3709156217,
+              0
+            ],
+            [
+              3709156217,
+              13241429487,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_sport_then_food_3",
+      "elapsed_s": 5.838,
+      "expected_turn_count": 3,
+      "actual_turn_count": 3,
+      "model_call_attempts_blocked": 0,
+      "case_status": "pass",
+      "development_checks_pass": true,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_262",
+            "poi_083",
+            "poi_206"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "unknown",
+            "reason": "last_meter_access_unverified"
+          },
+          "selected_followup_poi": "poi_262",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 1,
+          "expected_kind": "candidates",
+          "actual_kind": "candidates",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "candidate_poi_ids": [
+            "poi_321",
+            "poi_322",
+            "poi_323",
+            "poi_254"
+          ],
+          "candidate_rank_audit": {
+            "verdict": "pass",
+            "reason": "eligible_and_distance_consistent"
+          },
+          "selected_followup_poi": "poi_321",
+          "selection_in_candidates": true
+        },
+        {
+          "turn_index": 2,
+          "expected_kind": "route",
+          "actual_kind": "route",
+          "field_matches": {
+            "status": true,
+            "kind": true,
+            "start_poi_id": true,
+            "via_poi_ids": true,
+            "travel_mode": true,
+            "hard_constraints": true,
+            "end_poi_id": true,
+            "strategy": true
+          },
+          "field_mismatches": {},
+          "required_outputs_present": true,
+          "actual_unknowns": [],
+          "route_edge_ids": [
+            [
+              13510900008,
+              13518537621,
+              0
+            ],
+            [
+              13518537621,
+              12805592863,
+              0
+            ],
+            [
+              12805592863,
+              3631666782,
+              0
+            ],
+            [
+              3631666782,
+              13505885348,
+              0
+            ],
+            [
+              13505885348,
+              13704359631,
+              0
+            ],
+            [
+              13704359631,
+              3631666783,
+              0
+            ],
+            [
+              3631666783,
+              3123587176,
+              0
+            ],
+            [
+              3123587176,
+              4060915704,
+              0
+            ],
+            [
+              4060915704,
+              13700720849,
+              0
+            ],
+            [
+              13700720849,
+              3123587171,
+              0
+            ],
+            [
+              3123587171,
+              13227634458,
+              0
+            ],
+            [
+              13227634458,
+              13227634456,
+              0
+            ],
+            [
+              13227634456,
+              3123587174,
+              0
+            ],
+            [
+              3123587174,
+              1615510160,
+              0
+            ],
+            [
+              1615510160,
+              3631666775,
+              0
+            ],
+            [
+              3631666775,
+              12877128241,
+              0
+            ],
+            [
+              12877128241,
+              13505885344,
+              0
+            ],
+            [
+              13505885344,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              5196008421,
+              0
+            ],
+            [
+              5196008421,
+              1201323413,
+              0
+            ],
+            [
+              1201323413,
+              13732671043,
+              0
+            ],
+            [
+              13732671043,
+              13732671053,
+              0
+            ],
+            [
+              13732671053,
+              3631666757,
+              0
+            ],
+            [
+              3631666757,
+              13732671053,
+              0
+            ],
+            [
+              13732671053,
+              13732671043,
+              0
+            ],
+            [
+              13732671043,
+              1201323413,
+              0
+            ],
+            [
+              1201323413,
+              5196008421,
+              0
+            ],
+            [
+              5196008421,
+              13577919955,
+              0
+            ],
+            [
+              13577919955,
+              3113067000,
+              0
+            ],
+            [
+              3113067000,
+              13505885344,
+              0
+            ],
+            [
+              13505885344,
+              13505885341,
+              0
+            ],
+            [
+              13505885341,
+              13704353196,
+              0
+            ]
+          ],
+          "route_audit": {
+            "route": "pass",
+            "issues": [],
+            "hard_constraints": {}
+          },
+          "access_uncertain": false
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_two_vias_weather_1",
+      "elapsed_s": 0.732,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": false,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_025",
+              "actual": null
+            },
+            "via_poi_ids": {
+              "expected": [
+                "poi_015",
+                "poi_068"
+              ],
+              "actual": []
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_074",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_two_vias_weather_2",
+      "elapsed_s": 0.736,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": false,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_040",
+              "actual": null
+            },
+            "via_poi_ids": {
+              "expected": [
+                "poi_016",
+                "poi_201"
+              ],
+              "actual": []
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_295",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_two_vias_weather_3",
+      "elapsed_s": 0.736,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": false,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_245",
+              "actual": null
+            },
+            "via_poi_ids": {
+              "expected": [
+                "poi_240",
+                "poi_253"
+              ],
+              "actual": []
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_261",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_unknown_condition_1",
+      "elapsed_s": 0.589,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_068",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_067",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_unknown_condition_2",
+      "elapsed_s": 0.844,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_201",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_226",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_unknown_condition_3",
+      "elapsed_s": 0.596,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": true,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_307",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "end_poi_id": {
+              "expected": "poi_449",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_no_route_then_option_1",
+      "elapsed_s": 0.905,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": false,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_152",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "hard_constraints": {
+              "expected": {
+                "avoid_steps": true
+              },
+              "actual": {}
+            },
+            "end_poi_id": {
+              "expected": "poi_141",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_no_route_then_option_2",
+      "elapsed_s": 0.826,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": false,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_230",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "hard_constraints": {
+              "expected": {
+                "avoid_steps": true
+              },
+              "actual": {}
+            },
+            "end_poi_id": {
+              "expected": "poi_227",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    },
+    {
+      "case_id": "v2h_T5_no_route_then_option_3",
+      "elapsed_s": 0.707,
+      "expected_turn_count": 1,
+      "actual_turn_count": 1,
+      "model_call_attempts_blocked": 1,
+      "case_status": "model_required",
+      "development_checks_pass": null,
+      "turns": [
+        {
+          "turn_index": 0,
+          "expected_kind": "route",
+          "actual_kind": "information",
+          "field_matches": {
+            "status": false,
+            "kind": false,
+            "start_poi_id": false,
+            "via_poi_ids": true,
+            "travel_mode": false,
+            "hard_constraints": false,
+            "end_poi_id": false,
+            "strategy": false
+          },
+          "field_mismatches": {
+            "status": {
+              "expected": "completed",
+              "actual": "failed"
+            },
+            "kind": {
+              "expected": "route",
+              "actual": "information"
+            },
+            "start_poi_id": {
+              "expected": "poi_424",
+              "actual": null
+            },
+            "travel_mode": {
+              "expected": "walk",
+              "actual": null
+            },
+            "hard_constraints": {
+              "expected": {
+                "avoid_steps": true
+              },
+              "actual": {}
+            },
+            "end_poi_id": {
+              "expected": "poi_296",
+              "actual": null
+            },
+            "strategy": {
+              "expected": "shortest",
+              "actual": null
+            }
+          },
+          "required_outputs_present": false,
+          "actual_unknowns": []
+        }
+      ]
+    }
+  ]
+}
