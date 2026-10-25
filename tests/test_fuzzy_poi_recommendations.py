@@ -1,5 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import patch
+import json
+from pathlib import Path
 
 import networkx as nx
 import pytest
@@ -179,6 +181,61 @@ def test_named_current_location_is_used_for_nearby_recommendation():
     assert args["start"] == {"type": "poi", "name": "信息学部"}
     assert args["subcategories"] == ["canteen", "restaurant", "fastfood"]
     assert candidate["recommendation_start_name"] == "信息学部"
+
+
+@pytest.mark.parametrize(("query", "expected_limit"), [
+    ("我在信息学部，推荐2个食堂", 2),
+    ("我在信息学部，推荐三家咖啡店", 3),
+])
+def test_nearby_recommendation_honors_explicit_candidate_count(query, expected_limit):
+    candidate = {"name": "附近地点", "distance_m": 210, "subcategory_label": "食堂"}
+    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+        {"start_name": "信息学部", "candidates": [candidate]},
+        {"candidates": [candidate]},
+    )) as execute:
+        result = planner.run_agent(query)
+    assert result["response_kind"] == "candidates"
+    assert execute.call_args.args[1]["limit"] == expected_limit
+
+
+def test_recommendation_count_defaults_and_ignores_unrelated_building_number():
+    assert planner._requested_recommendation_limit("找食堂", catalog=False) == 4
+    assert planner._requested_recommendation_limit("学校有哪些食堂", catalog=True) == 20
+    assert planner._requested_recommendation_limit(
+        "从信息学部3号楼出发，推荐两家食堂", catalog=False,
+    ) == 2
+
+
+def test_frozen_development_recommendation_prompts_use_requested_limit():
+    packet_path = (Path(__file__).resolve().parents[1] /
+                   "experiments/datasets/controlled_recommendation_pilot_v2/"
+                   "scenarios_recommendation_dev_v2.json")
+    cases = json.loads(packet_path.read_text(encoding="utf-8"))["cases"]
+    pois_path = Path(__file__).resolve().parents[1] / "data/pois.json"
+    poi_names = {poi["id"]: poi["name"] for poi in
+                 json.loads(pois_path.read_text(encoding="utf-8"))["pois"]}
+    candidate = {"id": "test-place", "name": "候选地点", "distance_m": 210}
+    for case in cases:
+        prompt = case["messages"][0]["content"]
+        requested = case["gold_derivation"]["parameters"]["limit"]
+        with patch.object(planner.agent_tools, "execute_tool", return_value=(
+            {"start_name": "校内起点", "candidates": [candidate]},
+            {"candidates": [candidate]},
+        )) as execute:
+            result = planner.run_agent(prompt)
+        assert result["response_kind"] == "candidates", case["id"]
+        assert execute.call_args.args[0] == "search_poi_candidates", case["id"]
+        assert execute.call_args.args[1]["limit"] == requested, case["id"]
+        assert execute.call_args.args[1]["start"]["name"] == poi_names[
+            case["gold_derivation"]["parameters"]["start_poi_id"]
+        ], case["id"]
+
+
+def test_distance_ordering_language_does_not_request_directions():
+    assert not tools.query_requests_route(
+        "从信息学部出发，按路网距离由近到远推荐2个食堂。"
+    )
+    assert tools.query_requests_route("从信息学部到桂园食堂，怎么走？")
 
 
 def test_explicit_text_origin_takes_precedence_over_passed_coordinates():

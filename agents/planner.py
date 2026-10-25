@@ -608,6 +608,20 @@ def _explicit_place_strategy(query: str) -> str | None:
     return strategy if strategy in {"shortest", "recommended", "scenery", "flat"} else None
 
 
+def _requested_recommendation_limit(query: str, *, catalog: bool) -> int:
+    """Honor a small explicit shortlist size without truncating the search pool."""
+    match = re.search(
+        r"(?:推荐|介绍|列出|给我|找|选)[^，,。；;！？?!]{0,12}?"
+        r"([1-5一二三四五两])\s*(?:个|家|处|座)",
+        query or "",
+    )
+    if match:
+        return {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5}.get(
+            match.group(1), int(match.group(1)) if match.group(1).isdigit() else 4,
+        )
+    return 20 if catalog else 4
+
+
 def _place_request_state(query: str, *, activities=None, subcategories=None,
                          pending_slot=None, start=None, constraints=None,
                          previous=None, candidate_poi_ids=None, selected_poi_id=None,
@@ -1647,7 +1661,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "activities": recommendation_activities,
             "mode": (place_request or {}).get("mode") or
                     (travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"),
-            "limit": 20 if recommendation_is_catalog else 4,
+            "limit": _requested_recommendation_limit(
+                recommendation_query, catalog=recommendation_is_catalog,
+            ),
         }
         request_constraints = (place_request or {}).get("constraints") or {}
         constraint_query = str(recommendation_query) + " " + str(query)

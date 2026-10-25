@@ -760,7 +760,7 @@ def recommendation_origin_from_text(query: str) -> str | None:
         r"(?:从|由)\s*([^，,。；;]+)",
         r"起点(?:设为|是|为|在|[:：])\s*([^，,。；;]+)",
     )
-    stop_words = r"(?:附近|周边|旁边|周围|一带|这边|出发|开始|先|想|准备|打算|帮我|请|推荐|找|吃|喝|运动|锻炼|学习|逛|游玩|去|到).*$"
+    stop_words = r"(?:(?:步行|骑行|驾车|开车)出发|附近|周边|旁边|周围|一带|这边|出发|开始|先|想|准备|打算|帮我|请|推荐|找|吃|喝|运动|锻炼|学习|逛|游玩|去|到).*$"
     for pattern in patterns:
         match = re.search(pattern, text)
         if not match:
@@ -805,7 +805,9 @@ def _query_has_explicit_poi_destination(query: str) -> bool:
 
 def query_requests_route(query: str) -> bool:
     """True when the user explicitly wants directions rather than a place shortlist."""
-    text = str(query or "")
+    # Ranking language is not an origin-destination instruction: the old
+    # "由...到" pattern mistook "由近到远" for a route request.
+    text = re.sub(r"[从由]近到远", "", str(query or ""))
     return bool(re.search(
         r"路线|导航|怎么走|帶我(?:去|到)|带我(?:去|到)|送我(?:去|到)|"
         r"从.{1,30}(?:到|前往)|由.{1,30}(?:到|前往)|规划.{0,8}(?:路线|怎么走)", text
