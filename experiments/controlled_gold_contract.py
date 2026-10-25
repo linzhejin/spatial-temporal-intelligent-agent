@@ -169,6 +169,8 @@ def validate_controlled_dataset(
             manifest = json.loads(source_manifest_bytes)
         except (json.JSONDecodeError, UnicodeDecodeError) as exc:
             raise ValueError("invalid source_manifest_bytes") from exc
+        if manifest.get("profile") != "full":
+            raise ValueError("formal controlled test requires full source profile")
         if verify_source_manifest(manifest, Path(source_root)) != dataset["snapshot_id"]:
             raise ValueError("snapshot_id differs from verified source inputs")
         for case in cases:

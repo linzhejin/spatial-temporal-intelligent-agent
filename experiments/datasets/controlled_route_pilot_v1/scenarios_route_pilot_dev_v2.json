@@ -1,0 +1,2341 @@
+{
+  "cases": [
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "6167a98dc09cf17c4c72c8a99049bdd0c7bbbe39c5c7fdd9c10be95f120ddb6e"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "36a2b6c7ab9e3d662617606cf3a27f8b84b125c1af87921e8a65a15d65ff3237"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "mode_access",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_015",
+          "feasibility": "feasible",
+          "hard_constraints": {},
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "route"
+          ],
+          "start_poi_id": "poi_001",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 521.8,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              1197845980,
+              0
+            ],
+            [
+              1197845980,
+              13271173988,
+              0
+            ],
+            [
+              13271173988,
+              13271173970,
+              0
+            ],
+            [
+              13271173970,
+              13271173966,
+              0
+            ],
+            [
+              13271173966,
+              13271173958,
+              0
+            ],
+            [
+              13271173958,
+              13271173960,
+              0
+            ],
+            [
+              13271173960,
+              13273046928,
+              0
+            ],
+            [
+              13273046928,
+              13271168057,
+              0
+            ],
+            [
+              13271168057,
+              13271168052,
+              0
+            ],
+            [
+              13271168052,
+              13271168016,
+              0
+            ],
+            [
+              13271168016,
+              13271168019,
+              0
+            ],
+            [
+              13271168019,
+              13271168020,
+              0
+            ],
+            [
+              13271168020,
+              13266196511,
+              0
+            ],
+            [
+              13266196511,
+              13269409069,
+              0
+            ],
+            [
+              13269409069,
+              13266196506,
+              0
+            ],
+            [
+              13266196506,
+              13266196508,
+              0
+            ],
+            [
+              13266196508,
+              13266196548,
+              0
+            ],
+            [
+              13266196548,
+              13266196543,
+              0
+            ],
+            [
+              13266196543,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": false,
+          "end_poi_id": "poi_015",
+          "mode": "walk",
+          "start_poi_id": "poi_001",
+          "via_poi_ids": []
+        },
+        "parameters_sha256": "6167a98dc09cf17c4c72c8a99049bdd0c7bbbe39c5c7fdd9c10be95f120ddb6e",
+        "template_id": "direct",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_direct_001",
+      "messages": [
+        {
+          "content": "从梅园综合楼到武汉大学图书馆(总馆)，步行。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_001_poi_015",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_direct_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "0daf4ab7bd2dff754da312ee025d484800143919bcf813bcb5d8a15f7543c4d0"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "81f3af4f15a82e279aa9e27210ff9a264e7bfd5a1a689ff92153e1be7de16b9c"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "mode_access",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_016",
+          "feasibility": "feasible",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "route"
+          ],
+          "start_poi_id": "poi_015",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 1435.056,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13239742873,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13254954713,
+              0
+            ],
+            [
+              13254954713,
+              13254954710,
+              0
+            ],
+            [
+              13254954710,
+              13545143088,
+              0
+            ],
+            [
+              13545143088,
+              13243704718,
+              0
+            ],
+            [
+              13243704718,
+              13266196547,
+              0
+            ],
+            [
+              13266196547,
+              13266196512,
+              0
+            ],
+            [
+              13266196512,
+              12805668777,
+              0
+            ],
+            [
+              12805668777,
+              13266196508,
+              1
+            ],
+            [
+              13266196508,
+              1196672324,
+              0
+            ],
+            [
+              1196672324,
+              1196701977,
+              1
+            ],
+            [
+              1196701977,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671277,
+              0
+            ],
+            [
+              13732671277,
+              3631666813,
+              0
+            ],
+            [
+              3631666813,
+              13556596361,
+              1
+            ],
+            [
+              13556596361,
+              1199831152,
+              0
+            ],
+            [
+              1199831152,
+              12803435201,
+              0
+            ],
+            [
+              12803435201,
+              4320485415,
+              0
+            ],
+            [
+              4320485415,
+              13728848124,
+              0
+            ],
+            [
+              13728848124,
+              13701919399,
+              0
+            ],
+            [
+              13701919399,
+              1199821232,
+              0
+            ],
+            [
+              1199821232,
+              1417701861,
+              0
+            ],
+            [
+              1417701861,
+              13732671456,
+              0
+            ],
+            [
+              13732671456,
+              13732671466,
+              0
+            ],
+            [
+              13732671466,
+              13550984724,
+              0
+            ],
+            [
+              13550984724,
+              13621348282,
+              1
+            ],
+            [
+              13621348282,
+              13732671472,
+              0
+            ],
+            [
+              13732671472,
+              4320485447,
+              0
+            ],
+            [
+              4320485447,
+              1417701738,
+              0
+            ],
+            [
+              1417701738,
+              13732671489,
+              0
+            ],
+            [
+              13732671489,
+              13732671497,
+              0
+            ],
+            [
+              13732671497,
+              13732671502,
+              0
+            ],
+            [
+              13732671502,
+              13732671511,
+              0
+            ],
+            [
+              13732671511,
+              13732671510,
+              0
+            ],
+            [
+              13732671510,
+              13704644561,
+              0
+            ],
+            [
+              13704644561,
+              13704644560,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": true,
+          "end_poi_id": "poi_016",
+          "mode": "walk",
+          "start_poi_id": "poi_015",
+          "via_poi_ids": []
+        },
+        "parameters_sha256": "0daf4ab7bd2dff754da312ee025d484800143919bcf813bcb5d8a15f7543c4d0",
+        "template_id": "direct",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_direct_002",
+      "messages": [
+        {
+          "content": "从武汉大学图书馆(总馆)到武汉大学图书馆工学分馆，步行且不要走台阶。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_015_poi_016",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_direct_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "b3aceeed3da590cfe102c541118cda7f35658dbd11773121f73d98edc4a03909"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "c43fe65b62b30cb4145e4b5e890be4a8ba596fac0307c9bfe5fb949f7f77c427"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "mode_access",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_001",
+          "feasibility": "infeasible",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "intent_label": "route_planning",
+          "kind": "no_route",
+          "required_outputs": [
+            "infeasibility_explanation"
+          ],
+          "start_poi_id": "poi_014",
+          "status": "infeasible",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": []
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": null,
+          "reason": "no_path_in_frozen_eligible_graph",
+          "route_edge_ids": [],
+          "scope": "frozen_graph_only",
+          "verdict": "infeasible"
+        },
+        "parameters": {
+          "avoid_steps": true,
+          "end_poi_id": "poi_001",
+          "mode": "walk",
+          "start_poi_id": "poi_014",
+          "via_poi_ids": []
+        },
+        "parameters_sha256": "b3aceeed3da590cfe102c541118cda7f35658dbd11773121f73d98edc4a03909",
+        "template_id": "direct",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_direct_003",
+      "messages": [
+        {
+          "content": "从武汉大学国际教育学院(桂园楼)到梅园综合楼，步行且不要走台阶。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_014_poi_001",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_direct_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "a973c47fe373256a2c7fdb0a022771599d17e0d1261e965911b2c61434224885"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "31ce73e76fc311438fc9a46cee2c4bd9da0ea9c82b7f3698769c5984adc69f42"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "multi_via_itinerary",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_015",
+          "feasibility": "feasible",
+          "hard_constraints": {},
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "route"
+          ],
+          "start_poi_id": "poi_001",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": [
+            "poi_014"
+          ]
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 1506.193,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              13269409004,
+              0
+            ],
+            [
+              13269409004,
+              13269409017,
+              0
+            ],
+            [
+              13269409017,
+              13269409016,
+              0
+            ],
+            [
+              13269409016,
+              13269409015,
+              0
+            ],
+            [
+              13269409015,
+              13269409011,
+              0
+            ],
+            [
+              13269409011,
+              12805668771,
+              0
+            ],
+            [
+              12805668771,
+              13244712010,
+              0
+            ],
+            [
+              13244712010,
+              12809012186,
+              0
+            ],
+            [
+              12809012186,
+              13266196559,
+              0
+            ],
+            [
+              13266196559,
+              13266196567,
+              0
+            ],
+            [
+              13266196567,
+              1196701894,
+              0
+            ],
+            [
+              1196701894,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              13510725041,
+              0
+            ],
+            [
+              13510725041,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701977,
+              0
+            ],
+            [
+              1196701977,
+              1196672324,
+              1
+            ],
+            [
+              1196672324,
+              13241415882,
+              0
+            ],
+            [
+              13241415882,
+              3631666680,
+              0
+            ],
+            [
+              3631666680,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": false,
+          "end_poi_id": "poi_015",
+          "mode": "walk",
+          "start_poi_id": "poi_001",
+          "via_poi_ids": [
+            "poi_014"
+          ]
+        },
+        "parameters_sha256": "a973c47fe373256a2c7fdb0a022771599d17e0d1261e965911b2c61434224885",
+        "template_id": "ordered",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_via_001",
+      "messages": [
+        {
+          "content": "从梅园综合楼出发，先经过武汉大学国际教育学院(桂园楼)，再到武汉大学图书馆(总馆)，步行。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_001_poi_014_poi_015",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_ordered_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "13b04d3cc65064bea82a4563d3cb0ee81738654c7986a504ac3c526aa4d4c912"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "51bf840ef6ba6ccc9c4664c190fd56ef041ee4484bb85a54fed1ab8c879ba1bb"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "multi_via_itinerary",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_016",
+          "feasibility": "feasible",
+          "hard_constraints": {
+            "avoid_steps": true
+          },
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "route"
+          ],
+          "start_poi_id": "poi_014",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": [
+            "poi_015"
+          ]
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 2225.089,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13510725041,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              1199831231,
+              0
+            ],
+            [
+              1199831231,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701977,
+              0
+            ],
+            [
+              1196701977,
+              1196672324,
+              1
+            ],
+            [
+              1196672324,
+              13266196508,
+              0
+            ],
+            [
+              13266196508,
+              12805668777,
+              1
+            ],
+            [
+              12805668777,
+              13266196512,
+              0
+            ],
+            [
+              13266196512,
+              13266196547,
+              0
+            ],
+            [
+              13266196547,
+              13243704718,
+              0
+            ],
+            [
+              13243704718,
+              13545143088,
+              0
+            ],
+            [
+              13545143088,
+              13254954710,
+              0
+            ],
+            [
+              13254954710,
+              13254954713,
+              0
+            ],
+            [
+              13254954713,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ],
+            [
+              13239742873,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13254954713,
+              0
+            ],
+            [
+              13254954713,
+              13254954710,
+              0
+            ],
+            [
+              13254954710,
+              13545143088,
+              0
+            ],
+            [
+              13545143088,
+              13243704718,
+              0
+            ],
+            [
+              13243704718,
+              13266196547,
+              0
+            ],
+            [
+              13266196547,
+              13266196512,
+              0
+            ],
+            [
+              13266196512,
+              12805668777,
+              0
+            ],
+            [
+              12805668777,
+              13266196508,
+              1
+            ],
+            [
+              13266196508,
+              1196672324,
+              0
+            ],
+            [
+              1196672324,
+              1196701977,
+              1
+            ],
+            [
+              1196701977,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671277,
+              0
+            ],
+            [
+              13732671277,
+              3631666813,
+              0
+            ],
+            [
+              3631666813,
+              13556596361,
+              1
+            ],
+            [
+              13556596361,
+              1199831152,
+              0
+            ],
+            [
+              1199831152,
+              12803435201,
+              0
+            ],
+            [
+              12803435201,
+              4320485415,
+              0
+            ],
+            [
+              4320485415,
+              13728848124,
+              0
+            ],
+            [
+              13728848124,
+              13701919399,
+              0
+            ],
+            [
+              13701919399,
+              1199821232,
+              0
+            ],
+            [
+              1199821232,
+              1417701861,
+              0
+            ],
+            [
+              1417701861,
+              13732671456,
+              0
+            ],
+            [
+              13732671456,
+              13732671466,
+              0
+            ],
+            [
+              13732671466,
+              13550984724,
+              0
+            ],
+            [
+              13550984724,
+              13621348282,
+              1
+            ],
+            [
+              13621348282,
+              13732671472,
+              0
+            ],
+            [
+              13732671472,
+              4320485447,
+              0
+            ],
+            [
+              4320485447,
+              1417701738,
+              0
+            ],
+            [
+              1417701738,
+              13732671489,
+              0
+            ],
+            [
+              13732671489,
+              13732671497,
+              0
+            ],
+            [
+              13732671497,
+              13732671502,
+              0
+            ],
+            [
+              13732671502,
+              13732671511,
+              0
+            ],
+            [
+              13732671511,
+              13732671510,
+              0
+            ],
+            [
+              13732671510,
+              13704644561,
+              0
+            ],
+            [
+              13704644561,
+              13704644560,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": true,
+          "end_poi_id": "poi_016",
+          "mode": "walk",
+          "start_poi_id": "poi_014",
+          "via_poi_ids": [
+            "poi_015"
+          ]
+        },
+        "parameters_sha256": "13b04d3cc65064bea82a4563d3cb0ee81738654c7986a504ac3c526aa4d4c912",
+        "template_id": "ordered",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_via_002",
+      "messages": [
+        {
+          "content": "从武汉大学国际教育学院(桂园楼)出发，先经过武汉大学图书馆(总馆)，再到武汉大学图书馆工学分馆，步行且不要走台阶。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_014_poi_015_poi_016",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_ordered_dev_v1"
+    },
+    {
+      "adjudication": {
+        "evidence": [
+          {
+            "kind": "template_parameter",
+            "sha256": "dd0249e63b0b8730b74b6a2f880931a38071ea4f47de7f01a425f7c622174531"
+          },
+          {
+            "kind": "independent_graph_oracle",
+            "sha256": "2f3f2664b15382c11fcada428af915e379455c3e28838c32a94dd22d1bebd7b6"
+          }
+        ],
+        "method": "deterministic_source_rules",
+        "status": "generated_verified"
+      },
+      "category": "multi_via_itinerary",
+      "expected_turns": [
+        {
+          "allowed_unknowns": [
+            "last_meter_unverified"
+          ],
+          "candidate_poi_ids": [],
+          "clarification_slot": null,
+          "end_poi_id": "poi_016",
+          "feasibility": "feasible",
+          "hard_constraints": {},
+          "intent_label": "route_planning",
+          "kind": "route",
+          "required_outputs": [
+            "route"
+          ],
+          "start_poi_id": "poi_001",
+          "status": "completed",
+          "strategy": "shortest",
+          "travel_mode": "walk",
+          "via_poi_ids": [
+            "poi_014",
+            "poi_015"
+          ]
+        }
+      ],
+      "gold_derivation": {
+        "evidence_basis": [
+          "template_parameter",
+          "independent_graph_oracle"
+        ],
+        "generator_id": "controlled_route_cases_v1",
+        "generator_sha256": "a8481199929f515037eecb774b29de7e9b0e923df32f4424a295758a9315fcf3",
+        "kind": "controlled_template",
+        "oracle_result": {
+          "length_m": 2816.704,
+          "reason": "confirmed_edge_path",
+          "route_edge_ids": [
+            [
+              13273047778,
+              13273047777,
+              0
+            ],
+            [
+              13273047777,
+              13273196378,
+              0
+            ],
+            [
+              13273196378,
+              12862472457,
+              0
+            ],
+            [
+              12862472457,
+              13269383983,
+              0
+            ],
+            [
+              13269383983,
+              1199738795,
+              0
+            ],
+            [
+              1199738795,
+              13269409006,
+              0
+            ],
+            [
+              13269409006,
+              13269383994,
+              0
+            ],
+            [
+              13269383994,
+              13269409004,
+              0
+            ],
+            [
+              13269409004,
+              13269409017,
+              0
+            ],
+            [
+              13269409017,
+              13269409016,
+              0
+            ],
+            [
+              13269409016,
+              13269409015,
+              0
+            ],
+            [
+              13269409015,
+              13269409011,
+              0
+            ],
+            [
+              13269409011,
+              12805668771,
+              0
+            ],
+            [
+              12805668771,
+              13244712010,
+              0
+            ],
+            [
+              13244712010,
+              12809012186,
+              0
+            ],
+            [
+              12809012186,
+              13266196559,
+              0
+            ],
+            [
+              13266196559,
+              13266196567,
+              0
+            ],
+            [
+              13266196567,
+              1196701894,
+              0
+            ],
+            [
+              1196701894,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              13510725041,
+              0
+            ],
+            [
+              13510725041,
+              13510725042,
+              0
+            ],
+            [
+              13510725042,
+              3631666817,
+              0
+            ],
+            [
+              3631666817,
+              3631666820,
+              0
+            ],
+            [
+              3631666820,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701977,
+              0
+            ],
+            [
+              1196701977,
+              1196672324,
+              1
+            ],
+            [
+              1196672324,
+              13241415882,
+              0
+            ],
+            [
+              13241415882,
+              3631666680,
+              0
+            ],
+            [
+              3631666680,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13239742873,
+              0
+            ],
+            [
+              13239742873,
+              13240921538,
+              0
+            ],
+            [
+              13240921538,
+              13266196537,
+              0
+            ],
+            [
+              13266196537,
+              3631666680,
+              0
+            ],
+            [
+              3631666680,
+              13241415882,
+              0
+            ],
+            [
+              13241415882,
+              1196672324,
+              0
+            ],
+            [
+              1196672324,
+              1196701977,
+              1
+            ],
+            [
+              1196701977,
+              1196672318,
+              0
+            ],
+            [
+              1196672318,
+              1196701965,
+              0
+            ],
+            [
+              1196701965,
+              12808367705,
+              0
+            ],
+            [
+              12808367705,
+              12805673948,
+              0
+            ],
+            [
+              12805673948,
+              1196701902,
+              0
+            ],
+            [
+              1196701902,
+              1196701915,
+              0
+            ],
+            [
+              1196701915,
+              13256677416,
+              0
+            ],
+            [
+              13256677416,
+              13256671214,
+              0
+            ],
+            [
+              13256671214,
+              13256671221,
+              0
+            ],
+            [
+              13256671221,
+              1199831203,
+              0
+            ],
+            [
+              1199831203,
+              13732671265,
+              0
+            ],
+            [
+              13732671265,
+              13255218349,
+              0
+            ],
+            [
+              13255218349,
+              1199831140,
+              0
+            ],
+            [
+              1199831140,
+              13256677553,
+              0
+            ],
+            [
+              13256677553,
+              13255223607,
+              0
+            ],
+            [
+              13255223607,
+              13255223603,
+              0
+            ],
+            [
+              13255223603,
+              13255223606,
+              0
+            ],
+            [
+              13255223606,
+              4052778660,
+              0
+            ],
+            [
+              4052778660,
+              13732671275,
+              0
+            ],
+            [
+              13732671275,
+              12803435207,
+              0
+            ],
+            [
+              12803435207,
+              13732671277,
+              0
+            ],
+            [
+              13732671277,
+              3631666813,
+              0
+            ],
+            [
+              3631666813,
+              13556596361,
+              1
+            ],
+            [
+              13556596361,
+              1199831152,
+              0
+            ],
+            [
+              1199831152,
+              1199831212,
+              0
+            ],
+            [
+              1199831212,
+              12848622703,
+              0
+            ],
+            [
+              12848622703,
+              1663938881,
+              0
+            ],
+            [
+              1663938881,
+              12805594654,
+              0
+            ],
+            [
+              12805594654,
+              12805594650,
+              0
+            ],
+            [
+              12805594650,
+              13701919398,
+              0
+            ],
+            [
+              13701919398,
+              1199831258,
+              0
+            ],
+            [
+              1199831258,
+              3112677663,
+              0
+            ],
+            [
+              3112677663,
+              13732671454,
+              0
+            ],
+            [
+              13732671454,
+              13550984723,
+              0
+            ],
+            [
+              13550984723,
+              9554406744,
+              0
+            ],
+            [
+              9554406744,
+              13246423697,
+              0
+            ],
+            [
+              13246423697,
+              1417701862,
+              0
+            ],
+            [
+              1417701862,
+              13566460667,
+              1
+            ],
+            [
+              13566460667,
+              4159413665,
+              1
+            ],
+            [
+              4159413665,
+              12805594626,
+              0
+            ],
+            [
+              12805594626,
+              13732671514,
+              0
+            ],
+            [
+              13732671514,
+              1664012967,
+              0
+            ],
+            [
+              1664012967,
+              13555966772,
+              0
+            ],
+            [
+              13555966772,
+              13555966747,
+              0
+            ],
+            [
+              13555966747,
+              13704644558,
+              0
+            ],
+            [
+              13704644558,
+              13704644560,
+              0
+            ]
+          ],
+          "scope": "frozen_graph_only",
+          "verdict": "feasible"
+        },
+        "parameters": {
+          "avoid_steps": false,
+          "end_poi_id": "poi_016",
+          "mode": "walk",
+          "start_poi_id": "poi_001",
+          "via_poi_ids": [
+            "poi_014",
+            "poi_015"
+          ]
+        },
+        "parameters_sha256": "dd0249e63b0b8730b74b6a2f880931a38071ea4f47de7f01a425f7c622174531",
+        "template_id": "ordered",
+        "template_sha256": "d9342c83b751b14842481642ee13d14fbf4eee3508d8b73f2f444a0f857c89f1",
+        "unresolved_ambiguity": false
+      },
+      "id": "route_dev_via_003",
+      "messages": [
+        {
+          "content": "从梅园综合楼出发，先经过武汉大学国际教育学院(桂园楼)、武汉大学图书馆(总馆)，再到武汉大学图书馆工学分馆，步行。",
+          "role": "user"
+        }
+      ],
+      "od_group": "route_dev_poi_001_poi_014_poi_015_poi_016",
+      "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+      "template_group": "route_ordered_dev_v1"
+    }
+  ],
+  "gold_layer": "controlled_graph",
+  "protocol_version": "scenario-v2",
+  "repeats": 1,
+  "snapshot_id": "5c81b349aa93f686a2039e9ab07ccb0435d358e6f76f58b1f405b3087c6b1a7d",
+  "source_manifest_sha256": "0c174a84a3badd45d15ce98fff529fde334a8a96b4ec1c409b74866d1a3b3fd7",
+  "split": "development"
+}

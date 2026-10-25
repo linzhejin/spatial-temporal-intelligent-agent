@@ -1,0 +1,54 @@
+{
+  "format": "controlled-route-pilot-spec-v1",
+  "scope": "development_only",
+  "templates": {
+    "direct": {
+      "category": "mode_access",
+      "template_group": "route_direct_dev_v1",
+      "text": "从{start}到{end}，{mode_text}{constraint_text}。"
+    },
+    "ordered": {
+      "category": "multi_via_itinerary",
+      "template_group": "route_ordered_dev_v1",
+      "text": "从{start}出发，先经过{vias}，再到{end}，{mode_text}{constraint_text}。"
+    }
+  },
+  "cases": [
+    {
+      "id": "route_dev_direct_001",
+      "template_id": "direct",
+      "od_group": "route_dev_poi_001_poi_015",
+      "parameters": {"start_poi_id": "poi_001", "end_poi_id": "poi_015", "via_poi_ids": [], "mode": "walk", "avoid_steps": false}
+    },
+    {
+      "id": "route_dev_direct_002",
+      "template_id": "direct",
+      "od_group": "route_dev_poi_015_poi_016",
+      "parameters": {"start_poi_id": "poi_015", "end_poi_id": "poi_016", "via_poi_ids": [], "mode": "walk", "avoid_steps": true}
+    },
+    {
+      "id": "route_dev_direct_003",
+      "template_id": "direct",
+      "od_group": "route_dev_poi_014_poi_001",
+      "parameters": {"start_poi_id": "poi_014", "end_poi_id": "poi_001", "via_poi_ids": [], "mode": "walk", "avoid_steps": true}
+    },
+    {
+      "id": "route_dev_via_001",
+      "template_id": "ordered",
+      "od_group": "route_dev_poi_001_poi_014_poi_015",
+      "parameters": {"start_poi_id": "poi_001", "end_poi_id": "poi_015", "via_poi_ids": ["poi_014"], "mode": "walk", "avoid_steps": false}
+    },
+    {
+      "id": "route_dev_via_002",
+      "template_id": "ordered",
+      "od_group": "route_dev_poi_014_poi_015_poi_016",
+      "parameters": {"start_poi_id": "poi_014", "end_poi_id": "poi_016", "via_poi_ids": ["poi_015"], "mode": "walk", "avoid_steps": true}
+    },
+    {
+      "id": "route_dev_via_003",
+      "template_id": "ordered",
+      "od_group": "route_dev_poi_001_poi_014_poi_015_poi_016",
+      "parameters": {"start_poi_id": "poi_001", "end_poi_id": "poi_016", "via_poi_ids": ["poi_014", "poi_015"], "mode": "walk", "avoid_steps": false}
+    }
+  ]
+}

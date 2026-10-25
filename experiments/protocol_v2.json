@@ -1,7 +1,7 @@
 {
   "protocol_version": "scenario-v2",
   "purpose": "Controlled full-task comparison with source-derived labels and a separate small human semantic review layer.",
-  "status": "Contract validation implemented; generator, derivation replay, v2 runner and blind test set are not yet complete.",
+  "status": "Route development pilot generation and replay implemented; remaining categories, v2 runner and blind test set are not yet complete.",
   "controlled_layer": {
     "gold_layer": "controlled_graph",
     "formal_test_scenarios": 300,
@@ -18,9 +18,10 @@
       "graph", "poi", "boundary", "event_snapshot", "oracle_mode",
       "oracle_route", "oracle_existence", "generator", "templates", "information_snapshot",
       "coordinate_transform", "poi_taxonomy", "attribute_master",
-      "anchor_builder", "anchors", "boundary_source", "spatial_snapshot_builder"
+      "anchor_builder", "anchors", "boundary_source", "spatial_snapshot_builder",
+      "dataset_builder", "gold_contract", "source_manifest_builder"
     ],
-    "source_manifest": "Each named file path and SHA-256 must resolve within the frozen source root; effective_inputs_sha256 binds file paths, hashes and coordinate/event metadata.",
+    "source_manifest": "Each named UTF-8 source is hashed after explicit CRLF-to-LF normalization; effective_inputs_sha256 binds paths, normalized content hashes, source profile and coordinate/event metadata.",
     "case_derivation": "Each case declares generator/template/parameter hashes, source evidence types, and no unresolved ambiguity; a separate derivation replay must reproduce the label before formal scoring.",
     "allowed_evidence_basis": [
       "template_parameter", "catalog_attribute", "independent_graph_oracle",

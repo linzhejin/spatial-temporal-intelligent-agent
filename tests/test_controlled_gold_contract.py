@@ -8,7 +8,9 @@ from pathlib import Path
 import pytest
 
 from experiments.controlled_gold_contract import validate_controlled_dataset
-from experiments.controlled_source_manifest import REQUIRED_INPUTS, make_source_manifest
+from experiments.controlled_source_manifest import (
+    REQUIRED_INPUTS, ROUTE_PILOT_INPUTS, make_source_manifest,
+)
 from experiments.scenario_evaluator import CATEGORIES
 
 
@@ -138,6 +140,21 @@ def test_formal_contract_verifies_manifest_bytes_and_current_sources(tmp_path):
         validate_controlled_dataset(dataset, formal=True)
     validate_controlled_dataset(dataset, formal=True,
                                 source_manifest_bytes=source_bytes, source_root=tmp_path)
+    pilot = make_source_manifest(
+        tmp_path, {name: paths[name] for name in ROUTE_PILOT_INPUTS},
+        {"graph_crs": "EPSG:4326", "boundary_crs": "EPSG:4326",
+         "boundary_provenance": "fixed fixture", "event_scope": "not_applicable"},
+        profile="route_pilot",
+    )
+    pilot_bytes = json.dumps(pilot, sort_keys=True).encode("utf-8")
+    pilot_dataset = deepcopy(dataset)
+    pilot_dataset["source_manifest_sha256"] = sha256(pilot_bytes).hexdigest()
+    pilot_dataset["snapshot_id"] = pilot["effective_inputs_sha256"]
+    for case in pilot_dataset["cases"]:
+        case["snapshot_id"] = pilot_dataset["snapshot_id"]
+    with pytest.raises(ValueError, match="full source profile"):
+        validate_controlled_dataset(pilot_dataset, formal=True,
+                                    source_manifest_bytes=pilot_bytes, source_root=tmp_path)
     dataset["cases"][0]["gold_derivation"]["generator_sha256"] = _HASH
     with pytest.raises(ValueError, match="generator_sha256"):
         validate_controlled_dataset(dataset, formal=True,
