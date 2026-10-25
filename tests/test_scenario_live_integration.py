@@ -87,7 +87,7 @@ def test_local_replay_survives_real_api_persistence_and_worker_continuation(monk
             build_poi_lookup([{"id": "poi_002", "name": "桂园操场"}]),
             poll_interval_s=0)
     assert [turn["kind"] for turn in turns] == ["clarify", "candidates"]
-    assert turns[0]["clarification_slot"] == "activity"
+    assert turns[0]["clarification_slot"] == "sport"
     assert turns[1]["candidate_poi_ids"] == ["poi_002"]
     assert seen[1][1]["request_id"] == "sport-1"
 
