@@ -173,6 +173,57 @@ def test_development_replay_counts_projected_agent_tool_calls(artifact_kind):
     assert rows[0]["turns"][0]["tool_trace"][0]["tool_name"] == "search_poi_candidates"
 
 
+def test_development_adapter_accepts_controlled_v2_case_with_isolation_proof():
+    import json
+    from experiments import scenario_live_adapter
+
+    dataset = json.loads((scenario_live_adapter.ROOT
+                          / "experiments/datasets/controlled_route_pilot_v1"
+                          / "scenarios_route_pilot_dev_v2.json").read_text(encoding="utf-8"))
+    dataset["cases"] = dataset["cases"][:1]
+
+    class RouteSession(_Session):
+        def __init__(self):
+            super().__init__()
+            self.runs = iter([{
+                "status": "completed", "result": {
+                    "response_kind": "route", "task_type": "path_planning",
+                    "route_state": {"start": {"poi_id": "poi_001"},
+                                    "end": {"poi_id": "poi_015"},
+                                    "travel_mode": "walk",
+                                    "strategy": {"name": "shortest"},
+                                    "hard_constraints": {}},
+                    "recommended_edge_ids": [[1, 2, 0]],
+                },
+            }])
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+    rows = scenario_live_adapter.collect_development_replay(
+        dataset, "http://127.0.0.1:5000", _lookup(), session_factory=RouteSession,
+    )
+    assert len(rows) == 1
+    assert rows[0]["scenario_id"] == "route_dev_direct_001"
+    assert rows[0]["turns"][0]["route_edge_ids"] == [[1, 2, 0]]
+
+
+def test_no_route_explanation_is_projected_only_from_explicit_no_route_answer():
+    no_route = project_live_run({"status": "completed", "result": {
+        "response_kind": "no_route", "message": "目前没有符合约束的通路。",
+    }}, _lookup())
+    assert no_route["kind"] == "no_route"
+    assert "infeasibility_explanation" in no_route["outputs"]
+    vague_chat = project_live_run({"status": "completed", "result": {
+        "response_kind": "chat", "message": "目前没有符合约束的通路。",
+    }}, _lookup())
+    assert vague_chat["kind"] == "information"
+    assert "infeasibility_explanation" not in vague_chat["outputs"]
+
+
 def test_development_replay_refuses_service_without_isolated_database_proof():
     import copy
     import json

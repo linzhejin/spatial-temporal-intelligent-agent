@@ -127,6 +127,8 @@ def project_live_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, A
     outputs = []
     if kind == "route":
         outputs.append("route")
+    if kind == "no_route" and isinstance(result.get("message"), str) and result["message"].strip():
+        outputs.append("infeasibility_explanation")
     if isinstance(result.get("weather"), dict) and result["weather"].get("weather"):
         outputs.append("weather")
     if kind == "candidates" and isinstance(candidates, list) and candidates:
@@ -234,10 +236,18 @@ def collect_development_replay(dataset: dict[str, Any], base_url: str,
                                lookup: dict[str, Any], session_factory=requests.Session
                                ) -> list[dict[str, Any]]:
     """Collect attempts; failures stay explicit and never become invented turns."""
-    from experiments.scenario_evaluator import validate_dataset
-
     require_local_service(base_url)
-    validate_dataset(dataset)
+    version = dataset.get("protocol_version")
+    if version == "scenario-v1":
+        from experiments.scenario_evaluator import validate_dataset
+
+        validate_dataset(dataset)
+    elif version == "scenario-v2":
+        from experiments.controlled_gold_contract import validate_controlled_dataset
+
+        validate_controlled_dataset(dataset)
+    else:
+        raise ValueError("unsupported protocol_version")
     if dataset["split"] != "development":
         raise ValueError("live adapter only collects development scenarios")
     rows = []
