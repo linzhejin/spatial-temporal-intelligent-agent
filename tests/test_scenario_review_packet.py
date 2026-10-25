@@ -62,3 +62,5 @@ def test_review_text_shows_plain_names_but_keeps_answers_pending():
     assert "卓尔体育馆（poi_002）" in text
     assert "待人工确认" in text
     assert "草稿建议，不是金标准" in text
+    assert "预期呈现：route" in text
+    assert "需要澄清：未指定" in text

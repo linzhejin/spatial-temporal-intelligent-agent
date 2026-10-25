@@ -102,6 +102,9 @@ def render_review_packet(packet: dict[str, Any], poi_names: dict[str, str]) -> s
                 f"- 按顺序途经：{' → '.join(place(item) for item in vias) if vias else '无'}",
                 f"- 出行方式：{proposed.get('travel_mode') or '未指定'}；策略：{proposed.get('strategy') or '未指定'}",
                 f"- 条件：`{json.dumps(proposed.get('hard_constraints') or {}, ensure_ascii=False, sort_keys=True)}`",
+                f"- 预期呈现：{'、'.join(proposed.get('required_outputs') or []) or '未指定'}；候选地点："
+                f"{'、'.join(place(item) for item in proposed.get('candidate_poi_ids') or []) or '未指定'}",
+                f"- 需要澄清：{proposed.get('clarification_slot') or '未指定'}",
                 f"- 待补证据：路线可行性={proposed.get('feasibility') or '未标记'}；审查结论=待人工确认",
                 "",
             ])
