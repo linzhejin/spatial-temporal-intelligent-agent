@@ -77,6 +77,17 @@ _COMPARISON_STRATEGIES = (
 )
 
 
+def is_open_ended_activity_stop(name: str) -> bool:
+    """Distinguish an activity search from a concrete named route stop."""
+    text = str(name or "").strip()
+    if not resolve_activity_query(text):
+        return False
+    return bool(re.search(
+        r"^(?:(?:去|想|想要)?(?:找|推荐|打|踢|吃|喝|跑步|运动|健身|自习)|"
+        r"附近|最近|任意|随便|一个|一家)|能.+的地方|附近", text,
+    ))
+
+
 def ordered_via_request(query: str) -> dict | None:
     """Recognize a bounded ordered trip, without assuming a timed visit or loop."""
     text = (query or "").strip().rstrip("。.!！")
@@ -116,6 +127,8 @@ def ordered_via_request(query: str) -> dict | None:
     if (not 2 <= len(points) <= _MAX_VIA_POINTS + 1
             or any(not point or len(point) > 40 or re.search(r"[，,。；;？?]|帮我|导航|路线", point)
                    for point in points)):
+        return None
+    if any(is_open_ended_activity_stop(point) for point in points):
         return None
     return {"start": match.group("start").strip(), "via": points[:-1], "end": points[-1]}
 
@@ -466,6 +479,10 @@ TOOL_SCHEMAS = [
                     "options": {"type": "array", "items": {"type": "string"},
                                 "maxItems": _MAX_CLARIFY_OPTIONS,
                                 "description": "可选回答，最多 5 个"},
+                    "slot": {"type": "string",
+                             "enum": ["start", "destination", "activity", "sport",
+                                      "selection", "follow_up", "other"],
+                             "description": "本次只追问的一项信息类型；能确定时填写，不能确定可省略"},
                 },
                 "required": ["question"],
             },
@@ -749,9 +766,19 @@ def recommendation_origin_from_text(query: str) -> str | None:
         if not match:
             continue
         name = re.sub(stop_words, "", match.group(1)).strip()
-        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "这里", "这儿"}:
+        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "这里", "这儿"} \
+                and not is_deictic_origin(name):
             return name
     return None
+
+
+def is_deictic_origin(name: str) -> bool:
+    """A reference to a saved origin is not a new POI name."""
+    compact = re.sub(r"\s+", "", str(name or ""))
+    return bool(re.fullmatch(
+        r"(?:(?:刚才|之前|先前|原来|上次|前面)(?:的)?|原)"
+        r"(?:起点|出发点|出发地|位置|地点)", compact,
+    ))
 
 
 def _query_has_explicit_poi_destination(query: str) -> bool:
@@ -1054,6 +1081,7 @@ def _route_payload(G, route_result, start_name, end_name, mode):
         "shortest_baseline_feasible": route_result.get("shortest_baseline_feasible", True),
         "mode": route_result["mode"],
         "speed_kmh": route_result.get("speed_kmh", MODE_SPEEDS_KMH.get(mode, 4.5)),
+        "road_conditions_applied": route_result.get("road_conditions_applied"),
     }
     timings = normalize_timings(route_result.get("timings_ms"))
     timings["response_build"] = round(
@@ -1630,6 +1658,8 @@ def _prepare_route_context(ctx):
         except Exception:
             logger.exception("读取天气快照失败；本次路线不应用天气成本")
             context["_route_weather_snapshot"] = None
+        if isinstance(ctx, dict):
+            ctx["_route_weather_snapshot"] = context["_route_weather_snapshot"]
     return context, None
 
 
@@ -3088,7 +3118,13 @@ def _tool_plan_tour(args, ctx):
 
 
 def _tool_get_weather(args, ctx):
-    pub = _weather_public(_weather_snapshot())
+    if isinstance(ctx, dict):
+        if "_route_weather_snapshot" not in ctx:
+            ctx["_route_weather_snapshot"] = _weather_snapshot()
+        snapshot = ctx["_route_weather_snapshot"]
+    else:
+        snapshot = _weather_snapshot()
+    pub = _weather_public(snapshot)
     if not pub:
         return {"error": "weather_unavailable", "message": "天气暂时获取不到"}, None
     return pub, None
@@ -3162,7 +3198,14 @@ def _tool_list_road_conditions(args, ctx):
 def _tool_ask_user(args, ctx):
     question = (args.get("question") or "").strip() or "能再说得具体一点吗？"
     options = [str(o)[:30] for o in (args.get("options") or [])][:_MAX_CLARIFY_OPTIONS]
-    return {"question": question, "options": options}, {"clarify": {"question": question, "options": options}}
+    slot = args.get("slot")
+    allowed = {"start", "destination", "activity", "sport", "selection", "follow_up", "other"}
+    if slot is not None and (not isinstance(slot, str) or slot not in allowed):
+        return {"error": "invalid_clarification_slot", "message": "澄清类型不支持"}, None
+    result = {"question": question, "options": options}
+    if slot is not None:
+        result["slot"] = slot
+    return result, {"clarify": dict(result)}
 
 
 def _tool_suggest_followup(args, ctx):

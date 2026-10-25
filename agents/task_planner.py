@@ -36,6 +36,10 @@ _ROUTE_INTENT = re.compile(
     r"(?:从.{1,40}(?:到|去)|(?:途经|经过|经由).{1,40}(?:到|去)|^经.{1,40}(?:到|去)|"
     r"路线|怎么走|如何去|带我去|带我过去|导航到|去.{1,30}(?:门|楼|馆|食堂|图书馆|宿舍|樱顶|珞珈))"
 )
+_NO_ROUTE_CHANGE = re.compile(
+    r"(?:不要|不用|别|无需)(?:再|重新)?(?:改|调整|重算|重新规划)"
+    r"(?:刚才的|原来的|这条)?路线"
+)
 _OTHER_TOOL_INTENT = re.compile(
     r"推荐|找(?:一下|一个|家|到)?|搜(?:一下|索)|哪里有|哪家|"
     r"查询.{0,15}(?:地点|餐厅|食堂|咖啡|奶茶|厕所|图书馆|体育馆|路况)|"
@@ -48,7 +52,12 @@ def build_task_plan(query: str, *, has_route_context: bool = False) -> TaskPlan:
     """Dispatch explicit weather and route asks without losing either request."""
     text = str(query or "").strip()
     wants_weather = bool(_WEATHER_INTENT.search(text))
-    wants_route = has_route_context or bool(_ROUTE_INTENT.search(text))
+    # A weather follow-up may mention a route solely to forbid changing it.
+    # Remove that negative clause before looking for a positive route request.
+    route_request = _NO_ROUTE_CHANGE.sub("", text) if wants_weather else text
+    forbids_route_change = route_request != text
+    wants_route = bool(_ROUTE_INTENT.search(route_request)) or (
+        has_route_context and not (wants_weather and forbids_route_change))
     wants_other_tool = bool(_OTHER_TOOL_INTENT.search(text))
     requirements: list[TaskRequirement] = []
     nodes: list[PlannedNode] = []

@@ -160,6 +160,8 @@ def _named_via_request(text: str) -> dict | None:
     end = re.split(r"\s*(?:不走|避开|顺便|同时|查天气)", match.group("end"), maxsplit=1)[0].strip()
     if not via or not end or re.search(r"、|和|及|再经|途经|经过", via):
         return None
+    if any(agent_tools.is_open_ended_activity_stop(point) for point in (via, end)):
+        return None
     return {"start": (match.group("start") or "").strip(), "via": via, "end": end}
 
 
@@ -169,7 +171,7 @@ def _explicit_start_name(query: str) -> str | None:
     field = re.search(r"(?:起点|出发地)(?:设为|是|为|在|[:：])\s*([^，,。；;]+)", text)
     if field:
         name = field.group(1).strip()
-        return name or None
+        return name if name and not agent_tools.is_deictic_origin(name) else None
 
     # Common conversational form: “我在教五这边，帮我导航到图书馆”.
     located = re.search(r"(?:^|[，,。；;\s])我(?:现在)?在\s*([^，,。；;]{1,40})", text)
@@ -177,7 +179,8 @@ def _explicit_start_name(query: str) -> str | None:
         name = re.split(r"(?:出发|前往|去|到|帮我|请你|规划|导航|带我)",
                         located.group(1), maxsplit=1)[0].strip()
         name = re.sub(r"(?:这边|附近|旁边|周围|一带)$", "", name).strip()
-        if name and name not in {"我这", "我这里", "我这边", "这里", "当前位置", "当前"}:
+        if name and name not in {"我这", "我这里", "我这边", "这里", "当前位置", "当前"} \
+                and not agent_tools.is_deictic_origin(name):
             return name
 
     from_match = re.search(
@@ -185,7 +188,8 @@ def _explicit_start_name(query: str) -> str | None:
     )
     if from_match:
         name = from_match.group(1).strip()
-        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "地图起点"}:
+        if name and name not in {"我这", "我这里", "我的位置", "当前位置", "地图起点"} \
+                and not agent_tools.is_deictic_origin(name):
             return name
         if name == "地图起点":
             return name
@@ -202,7 +206,7 @@ def _explicit_start_name(query: str) -> str | None:
         name,
     ):
         return None
-    return name or None
+    return name if name and not agent_tools.is_deictic_origin(name) else None
 
 
 def _manual_map_start_ref(coord_start: dict) -> dict | None:
@@ -588,6 +592,43 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
     }
 
 
+def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str]) -> str | None:
+    """Accept a clear spoken choice only from the current candidate list."""
+    candidate_ids = set(candidate_poi_ids)
+    if not candidate_ids:
+        return None
+    choices = []
+    for poi in agent_tools.load_pois():
+        if poi.get("id") not in candidate_ids:
+            continue
+        names = [poi.get("name"), *(poi.get("aliases") or [])]
+        choices.extend((str(name).strip(), poi["id"]) for name in names
+                       if name and len(str(name).strip()) >= 3)
+    for clause in re.split(r"[，,。；;]|然后|接着|随后|最后", query or ""):
+        clause = clause.strip()
+        if not clause:
+            continue
+        # A bare name or an affirmative selection is a choice. A rejected
+        # candidate mentioned in the same sentence is not.
+        matches = set()
+        for name, poi_id in choices:
+            if name not in clause:
+                continue
+            before = clause[:clause.find(name)]
+            if re.search(r"(?:不(?:要|想)?去|别去|不是|排除)\s*$", before):
+                continue
+            affirmative = re.search(
+                r"(?:就去|还是去|改为|换成|选(?:择)?|要去|去|定)\s*$", before,
+            )
+            if clause == name or (affirmative and not clause.endswith(("吗", "？", "?"))):
+                matches.add(poi_id)
+        if len(matches) == 1:
+            return matches.pop()
+        if len(matches) > 1:
+            return None
+    return None
+
+
 def _apply_place_request_correction(saved: dict, query: str) -> dict:
     """Keep unanswered slots while applying only explicit current-turn changes."""
     from agents.parser import detect_travel_mode
@@ -686,6 +727,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         task_revision=(context or {}).get("task_revision")
         if isinstance(context, dict) else None,
     )
+    # Keep weather consistent between weather and routing tools in this run.
+    # Do not carry a live snapshot into a later user turn.
+    run_weather = {}
 
     def tool_trace_callback(payload):
         try:
@@ -705,6 +749,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         # This keyword is supplied only by trusted workflow code, separately
         # from browser context, uid and model-produced tool arguments.
         tool_context = dict(tool_context)
+        if "_route_weather_snapshot" in run_weather:
+            tool_context.setdefault("_route_weather_snapshot",
+                                    run_weather["_route_weather_snapshot"])
         if isinstance(context, dict) and isinstance(context.get("task_revision"), int):
             tool_context.setdefault("task_revision", context["task_revision"])
         if proof_identity is not None:
@@ -720,6 +767,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "artifact_kind": None,
                 })
             raise
+        if "_route_weather_snapshot" in tool_context:
+            run_weather["_route_weather_snapshot"] = tool_context["_route_weather_snapshot"]
         if record_trace and tool_trace_callback:
             artifact_kind = next(
                 (kind for key, kind in (("route", "route"),
@@ -789,6 +838,41 @@ def run_agent(query: str, context: dict = None, history: list = None,
     # Resolve a deictic continuation only within the same unfinished task.
     # Chat history or an unrelated old route must never supply this endpoint.
     from agents.parser import detect_travel_mode
+    if (not isinstance(coord_start, dict) and not _explicit_start_name(query)
+            and not isinstance((context or {}).get("place_request"), dict)
+            and not agent_tools.ordered_via_request(query)
+            and not _named_via_request(query)
+            and not re.search(r"先.+(?:然后|再|接着|最后)", query)):
+        destination_match = re.match(
+            r"^(?:我想|我要|请|帮我|麻烦)?\s*(?:带我去|导航到|前往|去|到)\s*([^，,。；;]+)",
+            query.strip(),
+        )
+        destination_name = (re.split(r"(?=不走|避开|不要走|查天气|顺便|同时|起点)",
+                                     destination_match.group(1), maxsplit=1)[0].strip()
+                            if destination_match else "")
+        destination, alternatives = (agent_tools.find_poi_ambiguous(destination_name)
+                                     if destination_name else (None, []))
+        if destination and not alternatives:
+            mode = travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"
+            detected_mode, explicit_mode = detect_travel_mode(query)
+            if explicit_mode:
+                mode = detected_mode
+            constraints = {}
+            if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+                constraints["avoid_steps"] = True
+            if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", query):
+                constraints["avoid_slope"] = True
+            pending = _place_request_state(
+                query, pending_slot="start", selected_poi_id=destination["id"],
+                constraints=constraints, mode=mode,
+            )
+            question = "你从哪里出发？可以点地图起点，或告诉我所在地点。"
+            return {"response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question,
+                                "options": ["地图上选起点", "告诉我所在地点"]},
+                    "place_request": pending, "suggestions": None, "turns": 0}
+
     active_request = ((context or {}).get("active_task_request")
                       if isinstance(context, dict) else None)
     if (isinstance(active_request, str)
@@ -1013,6 +1097,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                      if isinstance(place_request, dict) else None)
     selected_poi_id = ((context or {}).get("selected_poi_id")
                        or (place_request or {}).get("selected_poi_id")) if isinstance(context, dict) else None
+    if (not selected_poi_id and place_request
+            and place_request.get("pending_slot") == "selection"):
+        selected_poi_id = _selected_candidate_from_text(
+            query, place_request.get("candidate_poi_ids") or [],
+        )
     recommendation_query = original_request
 
     def current_coordinate_start():
@@ -1256,8 +1345,15 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route_constraints["slope"] = "avoid"
         if route_constraints:
             route_args["constraints"] = route_constraints
+        full_request = str((place_request or {}).get("original_query") or "") + " " + str(query)
+        if re.search(r"平坦(?:的)?路|平坦优先|少爬坡|少走坡", full_request):
+            route_args["strategy"] = "flat"
+        elif re.search(r"风景优先|景观优先|看风景|风景好", full_request):
+            route_args["strategy"] = "scenery"
+        if re.search(r"最短|赶时间|赶课|不绕路", query):
+            route_args["strategy"] = "shortest"
         result, artifact = execute_tool("plan_route", route_args,
-                                                     {"query": query, "uid": uid})
+                                        {"query": full_request, "uid": uid})
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
         if route:
             route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
@@ -1294,6 +1390,41 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     if place_request and place_request.get("pending_slot") == "follow_up":
         original_request = place_request.get("original_query") or original_request
+    if not place_request and not coord_end:
+        start_ref = explicit_place_start(query)
+        origin_clause = re.match(
+            r"^(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}?"
+            r"(?:出发|附近|旁边|周边|周围|这边)[，,。；;]?",
+            str(query or "").strip(),
+        ) or re.match(
+            r"^(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}[，,。；;]",
+            str(query or "").strip(),
+        )
+        tail = str(query or "")[origin_clause.end():] if origin_clause else ""
+        wants_route = agent_tools.query_requests_route(tail) or bool(re.search(
+            r"平坦(?:的)?路|平坦优先|风景优先|景观优先|少爬坡|少走坡|不走台阶",
+            tail,
+        ))
+        named_destination = re.search(r"(?:到|去|前往|终点(?:是|为|设为|[:：]))\s*[^，,。；;]+", tail)
+        if (origin_clause and start_ref and not start_ref.get("ambiguous_name")
+                and wants_route and not named_destination
+                and not agent_tools.resolve_activity_query(query)):
+            detected_mode, explicit_mode = detect_travel_mode(query)
+            constraints = {}
+            if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", query):
+                constraints["avoid_steps"] = True
+            if re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", query):
+                constraints["avoid_slope"] = True
+            pending = _place_request_state(
+                query, pending_slot="destination", start=start_ref,
+                mode=detected_mode if explicit_mode else travel_mode or "walk",
+                constraints=constraints,
+            )
+            question = "你想去哪个地点？目的地明确后，我会从你说的起点规划路线。"
+            return {"response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question, "options": []},
+                    "place_request": pending, "suggestions": None, "turns": 0}
     activity_sequence = agent_tools.resolve_activity_sequence(original_request)
     sequence_followups = [
         {"query": item["query"],
@@ -1311,11 +1442,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
             resolved_final, final_alternatives = agent_tools.find_poi_ambiguous(final_name)
             if resolved_final and not final_alternatives:
                 named_final = resolved_final
+                named_followup = {
+                    "query": final_name, "destination_poi_id": resolved_final["id"],
+                    "activities": [], "subcategories": [],
+                }
                 if sequence_followups:
-                    sequence_followups[-1] = {
-                        "query": final_name, "destination_poi_id": resolved_final["id"],
-                        "activities": [], "subcategories": [],
-                    }
+                    sequence_followups[-1] = named_followup
+                elif agent_tools.resolve_activity_query(ordered_parts[0]):
+                    sequence_followups.append(named_followup)
     activity_intent = (activity_sequence[0]["intent"] if activity_sequence else
                        agent_tools.resolve_activity_query(original_request))
     if place_request and place_request.get("pending_slot") == "activity":
@@ -1600,6 +1734,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
     artifact_candidates, artifact_clarify = None, None
     artifact_route_comparison = None
     artifact_suggestions = None
+    weather_result = None
+    weather_tool_failed = False
     final_message = ""
     turns = 0
     agent_elapsed_ms = 0.0
@@ -1820,6 +1956,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "artifact_kind": artifact_kind,
                     })
 
+            if name == "get_weather" and isinstance(result, dict):
+                if result.get("error"):
+                    weather_tool_failed = True
+                elif isinstance(result.get("weather"), str) and result["weather"]:
+                    weather_result = result
+
             if artifact:
                 if "route" in artifact:
                     artifact_route = artifact["route"]
@@ -1986,6 +2128,32 @@ def run_agent(query: str, context: dict = None, history: list = None,
         else:
             raise PlannerError("Agent 循环结束但没有产出任何结果")
 
+    delivered_weather = None
+    if artifact_route and re.search(r"天气|气温|现在.*(?:下雨|下雪)",
+                                    (active_task_request or "") + query):
+        if weather_result:
+            description = weather_result["weather"]
+            temperature = weather_result.get("temperature")
+            if isinstance(temperature, (int, float)):
+                description += f"、{temperature:g}°C"
+            final_message += f" 天气参考：{description}。"
+            delivered_weather = weather_result
+        elif weather_tool_failed:
+            final_message += " 天气暂时获取不到；本次路线没有依据天气调整。"
+        else:
+            final_message += " 本次未取得天气信息；路线仅依据现有道路数据。"
+
+    if artifact_route and re.search(r"路况|管制|封路|封闭|禁行|为何绕行|为什么绕路",
+                                    (active_task_request or "") + query):
+        applied = artifact_route.get("road_conditions_applied")
+        if type(applied) is int:
+            if applied:
+                mode_label = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
+                    artifact_route.get("mode"), "本次出行方式")
+                final_message += f" 本次算路纳入 {applied} 条适用于{mode_label}的生效路况记录。"
+            else:
+                final_message += " 本次算路未应用生效路况记录；未覆盖路段仍需现场确认。"
+
     response_kind = "chat"
     if artifact_route:
         response_kind = "route"
@@ -1996,6 +2164,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         "response_kind": response_kind,
         "message": final_message,
         "route": artifact_route,
+        "weather": delivered_weather,
         "route_kind": route_kind,
         "candidates": artifact_candidates,
         "clarify": None,

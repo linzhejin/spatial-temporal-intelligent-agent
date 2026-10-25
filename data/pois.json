@@ -11293,9 +11293,9 @@
     "lat": 30.54032
    },
    "type": "dining",
-   "campus": "文理学部",
+   "campus": "工学部",
    "category": "dining",
-   "description": "文理学部校内地点。工学部集贸市场小吃店（高德餐饮POI逆地核实为校内）。",
+   "description": "工学部校内地点。工学部集贸市场小吃店（高德餐饮POI逆地核实为校内）。",
    "season_tags": [
     "all"
    ],
@@ -11321,9 +11321,9 @@
     "lat": 30.54032
    },
    "type": "dining",
-   "campus": "文理学部",
+   "campus": "工学部",
    "category": "dining",
-   "description": "文理学部校内地点。工学部集贸市场馄饨店（高德餐饮POI逆地核实为校内）。",
+   "description": "工学部校内地点。工学部集贸市场馄饨店（高德餐饮POI逆地核实为校内）。",
    "season_tags": [
     "all"
    ],
@@ -12090,7 +12090,7 @@
    "type": "service",
    "campus": "工学部",
    "category": "service",
-   "description": "文理学部校内地点。工学部集贸市场（工学部菜市场），茶港路计算机大楼后，生鲜副食综合市场（高德核实）。",
+   "description": "工学部校内地点。工学部集贸市场（工学部菜市场），茶港路计算机大楼后，生鲜副食综合市场（高德核实）。",
    "season_tags": [
     "all"
    ],

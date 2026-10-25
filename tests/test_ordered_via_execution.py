@@ -85,6 +85,16 @@ def test_list_unknown_suffix_is_not_another_destination():
     assert tools.ordered_via_request("从南门依次到甲楼、乙楼、北门，需要安静的路") is None
 
 
+def test_open_ended_activity_stops_are_not_mistaken_for_named_route_points(monkeypatch):
+    query = "从工学部排球场先去打篮球，再找附近能吃饭的地方。"
+    assert tools.ordered_via_request(query) is None
+    assert planner._named_via_request(query) is None
+    monkeypatch.setattr(planner, "_make_client", lambda: pytest.fail("activity request called LLM"))
+    first = planner.run_agent(query)
+    assert first["response_kind"] == "candidates"
+    assert first["place_request"]["follow_up_requests"][0]["activities"] == ["meal"]
+
+
 def test_itinerary_guard_uses_explicit_mode_and_keeps_strategy(monkeypatch):
     calls = []
 

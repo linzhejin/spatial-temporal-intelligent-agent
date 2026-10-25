@@ -74,6 +74,88 @@ def test_model_client_requests_supported_response_encoding():
 
 
 class TestAgentLoop:
+    def test_weather_snapshot_is_shared_across_tools_only_within_one_run(self):
+        snapshot = {"live": {"weather": "晴"}, "impact": {}}
+        seen = []
+
+        def execute(name, _args, tool_context):
+            seen.append((name, tool_context.get("_route_weather_snapshot")))
+            if name == "get_weather":
+                tool_context["_route_weather_snapshot"] = snapshot
+            return {"ok": True}, None
+
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(tool_calls=[_fake_tool_call("plan_route", {})]),
+            _fake_response(content="完成"),
+        ])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("先看天气再规划路线")
+        assert seen == [("get_weather", None), ("plan_route", snapshot)]
+
+        another = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("get_weather", {})]),
+            _fake_response(content="完成"),
+        ])
+        with patch.object(planner, "_make_client", return_value=another), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            planner.run_agent("另一轮天气")
+        assert seen[-1] == ("get_weather", None)
+
+    def test_compound_weather_route_response_includes_observed_weather(self):
+        route = {"start_name": "玉兰2门", "end_name": "老斋舍", "mode": "walk",
+                 "recommended_length_m": 1000, "duration_min": 15}
+        weather = {"weather": "晴", "temperature": 22, "windpower": "≤3"}
+        client = FakeClient([_fake_response(tool_calls=[
+            _fake_tool_call("get_weather", {}),
+            _fake_tool_call("plan_route", {"start": {"name": "玉兰2门"},
+                                           "end": {"name": "老斋舍"}}),
+        ])])
+
+        def execute(name, _args, _context):
+            if name == "get_weather":
+                return weather, None
+            return route, {"route": route, "route_kind": "direct"}
+
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            result = planner.run_agent("先看天气，再规划从玉兰2门到老斋舍的路线")
+        assert result["response_kind"] == "route"
+        assert "晴" in result["message"]
+        assert "22" in result["message"]
+        assert result["weather"] == weather
+
+    @pytest.mark.parametrize("applied,expected", [
+        (1, "纳入 1 条适用于步行的生效路况记录"),
+        (0, "未应用生效路况记录"),
+    ])
+    def test_route_feedback_answers_road_condition_question_from_route_snapshot(
+            self, applied, expected):
+        route = {"start_name": "玉兰2门", "end_name": "老斋舍", "mode": "walk",
+                 "road_conditions_applied": applied}
+        client = FakeClient([_fake_response(tool_calls=[_fake_tool_call("plan_route", {})])])
+        with patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route})):
+            result = planner.run_agent("从玉兰2门到老斋舍，当前有无道路管制？")
+        assert result["response_kind"] == "route"
+        assert expected in result["message"]
+
+    def test_named_destination_waiting_for_origin_is_structured_task(self):
+        destination = {"id": "poi_141", "name": "凌波门东湖观景点"}
+        client = FakeClient([_fake_response(content="你从哪里出发？")])
+        with patch.object(planner.agent_tools, "find_poi_ambiguous",
+                          return_value=(destination, [])), \
+             patch.object(planner, "_make_client", return_value=client), \
+             patch.object(planner.agent_tools, "execute_tool") as execute:
+            result = planner.run_agent("带我去凌波门东湖观景点，起点等我补充。")
+        assert result["response_kind"] == "clarify"
+        assert result["place_request"]["pending_slot"] == "start"
+        assert result["place_request"]["selected_poi_id"] == "poi_141"
+        assert not client.calls
+        execute.assert_not_called()
+
     @pytest.mark.parametrize("query,expected_strategy,expected_end,expected_constraints", [
         ("刚才的路线改为平坦优先", "flat", "樱顶", {}),
         ("刚才的路线改为最短路径", "shortest", "樱顶", {}),
