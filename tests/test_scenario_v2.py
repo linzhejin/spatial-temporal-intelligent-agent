@@ -237,6 +237,34 @@ def test_v2_candidate_order_uses_full_reference_and_tie_tolerance():
         **reference, "uncertain_access_ids": ["e"]})["verdict"] == "unknown"
 
 
+def test_v2_candidate_order_fails_known_inversion_despite_other_unknown_access():
+    from experiments.scenario_v2 import audit_candidate_order
+
+    reference = {"distances_m": {"near": 100, "far": 220, "middle": 260,
+                                 "uncertain": 280},
+                 "max_display": 4, "rank_tolerance_m": 10,
+                 "uncertain_access_ids": ["uncertain"]}
+    verdict = audit_candidate_order(
+        ["far", "uncertain", "near", "middle"], reference,
+    )
+    assert verdict == {"verdict": "fail", "reason": "wrong_distance_order"}
+    assert audit_candidate_order(
+        ["uncertain", "near", "far", "middle"], reference,
+    )["verdict"] == "unknown"
+
+
+def test_v2_candidate_order_fails_known_omission_despite_other_unknown_access():
+    from experiments.scenario_v2 import audit_candidate_order
+
+    reference = {"distances_m": {"near": 100, "omitted": 160,
+                                 "far": 300, "uncertain": 320},
+                 "max_display": 4, "rank_tolerance_m": 10,
+                 "uncertain_access_ids": ["uncertain"]}
+    assert audit_candidate_order(
+        ["near", "far", "uncertain"], reference,
+    ) == {"verdict": "fail", "reason": "closer_eligible_omitted"}
+
+
 def test_v2_candidate_review_does_not_require_exact_tie_order():
     case = _case()
     case["category"] = "T2"

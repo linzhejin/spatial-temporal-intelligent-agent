@@ -344,16 +344,21 @@ def audit_candidate_order(ids: list[str], reference: dict[str, Any], *,
     minimum_count = min(3, cap, len(distances))
     if len(ids) < minimum_count:
         return {"verdict": "fail", "reason": "too_few_candidates"}
+    known_ids = [key for key in ids if key not in uncertain]
+    if any(distances[left] > distances[right] + tolerance
+           for left, right in zip(known_ids, known_ids[1:])):
+        return {"verdict": "fail", "reason": "wrong_distance_order"}
+    if known_ids:
+        farthest_known = max(distances[key] for key in known_ids)
+        if any(value + tolerance < farthest_known
+               for key, value in distances.items()
+               if key not in ids and key not in uncertain):
+            return {"verdict": "fail", "reason": "closer_eligible_omitted"}
     farthest = max(distances[key] for key in ids)
     if (any(key in uncertain for key in ids)
             or any(key in uncertain and value <= farthest + tolerance
                    for key, value in distances.items() if key not in ids)):
         return {"verdict": "unknown", "reason": "last_meter_access_unverified"}
-    if any(distances[left] > distances[right] + tolerance
-           for left, right in zip(ids, ids[1:])):
-        return {"verdict": "fail", "reason": "wrong_distance_order"}
-    if any(value + tolerance < farthest for key, value in distances.items() if key not in ids):
-        return {"verdict": "fail", "reason": "closer_eligible_omitted"}
     return {"verdict": "pass", "reason": "eligible_and_distance_consistent"}
 
 
