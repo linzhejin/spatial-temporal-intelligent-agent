@@ -486,6 +486,42 @@ for (const result of [
     assert.equal(h.state.routeStore.current().route_id,'existing');
     assert.ok(!h.bubbles[0].text.includes('正在为你'));
 });
+test('no-route result clears an old route while retaining the requested endpoints', async () => {
+    const h = harness();
+    h.setApi(async () => h.context.reply);
+    h.state.routeStore.replace(existingRoute());
+    h.state.latestRoute = existingRoute();
+    h.context.reply = {
+        task_type: 'chat', response_kind: 'no_route',
+        reply: '当前路网下没有可通行路线。',
+        route_state: {
+            start: { name: '梅园综合楼' }, end: { name: '武汉大学图书馆' },
+            travel_mode: 'walk', hard_constraints: { avoid_steps: true },
+        },
+    };
+    await h.submit('从梅园综合楼到武汉大学图书馆，避开台阶');
+    assert.equal(h.bubbles.at(-1).text, '当前路网下没有可通行路线。');
+    assert.equal(h.state.routeStore.current(), null);
+    assert.equal(h.state.latestRoute, null);
+    assert.ok(h.clearCount() > 0);
+    assert.equal(h.state.pendingIntent.start.name, '梅园综合楼');
+    assert.equal(h.state.pendingIntent.end.name, '武汉大学图书馆');
+});
+
+test('older no-route reply cannot clear a newer displayed route', async () => {
+    const h = harness();
+    h.setApi(async () => h.context.reply);
+    h.state.routeStore.replace(existingRoute());
+    h.state.latestRouteTurnId = 2;
+    h.context.reply = { task_type: 'chat', response_kind: 'no_route',
+        reply: '旧任务无路。', route_state: {
+            start: { name: '旧起点' }, end: { name: '旧终点' }, travel_mode: 'walk',
+        } };
+    await h.submit('旧任务');
+    assert.equal(h.state.routeStore.current().route_id, 'existing');
+    assert.equal(h.clearCount(), 0);
+});
+
 test('failed request keeps route and settles its bubble', async () => {
     const h=harness(); h.state.routeStore.replace(existingRoute()); h.setApi(async () => { throw Error('断网'); });
     await h.submit('查天气'); assert.equal(h.clearCount(),0); assert.equal(h.bubbles[0].text,'断网');

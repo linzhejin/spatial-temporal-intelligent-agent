@@ -71,6 +71,7 @@ def test_model_client_requests_supported_response_encoding():
     with patch("openai.OpenAI") as client_constructor:
         planner._make_client()
     assert client_constructor.call_args.kwargs["default_headers"]["Accept-Encoding"] == "gzip, deflate"
+    assert client_constructor.call_args.kwargs["max_retries"] == 0
 
 
 def test_route_summary_names_the_ordered_intermediate_stop():
@@ -88,6 +89,81 @@ def test_route_summary_names_the_ordered_intermediate_stop():
 
 
 class TestAgentLoop:
+    def test_typed_graph_no_path_returns_complete_refusal_without_more_model_calls(self):
+        args = {"start": {"name": "梅园综合楼"},
+                "end": {"name": "武汉大学图书馆(总馆)"}, "mode": "walk"}
+        client = FakeClient([_fake_response(tool_calls=[_fake_tool_call("plan_route", args)])])
+        failure = {
+            "error": "route_not_found", "reason_code": "graph_no_path",
+            "message": "graph has no route", "request_digest": "a" * 64,
+            "route_request": {
+                "start": args["start"], "end": args["end"],
+                "travel_mode": "walk", "strategy": {"name": "shortest"},
+                "hard_constraints": {},
+            },
+        }
+        trace = []
+        with patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(failure, None)):
+            result = _run(client, tool_trace_callback=trace.append)
+
+        assert len(client.calls) == 1
+        assert result["response_kind"] == "no_route"
+        assert result["route"] is None
+        assert result["route_state"]["start"] == args["start"]
+        assert result["route_state"]["end"] == args["end"]
+        assert "当前路网" in result["message"]
+        assert trace[0]["error_code"] == "graph_no_path"
+
+    @pytest.mark.parametrize("no_path_first", [False, True])
+    def test_successful_route_in_same_tool_batch_takes_precedence_over_no_path(
+            self, no_path_first):
+        route = {"start_name": "梅园综合楼", "end_name": "图书馆", "mode": "walk",
+                 "recommended_length_m": 900, "duration_min": 12}
+        failure = {"error": "route_not_found", "reason_code": "graph_no_path",
+                   "route_request": {"start": {"name": "梅园综合楼"},
+                                     "end": {"name": "图书馆"},
+                                     "travel_mode": "walk"}}
+        calls = [_fake_tool_call("plan_route", {"start": {"name": "梅园综合楼"},
+                                                "end": {"name": "图书馆"}})
+                 for _ in range(2)]
+        calls[0].id, calls[1].id = "first", "second"
+        client = FakeClient([_fake_response(tool_calls=calls)])
+        outcomes = [(failure, None), (route, {"route": route})]
+        if not no_path_first:
+            outcomes.reverse()
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=outcomes) as execute:
+            result = _run(client)
+        assert execute.call_count == 2
+        assert result["response_kind"] == "route"
+        assert result["route"] is route
+
+    @pytest.mark.parametrize("terminal_kind", ["clarify", "route_comparison"])
+    @pytest.mark.parametrize("no_path_first", [False, True])
+    def test_terminal_artifact_in_same_batch_takes_precedence_over_no_path(
+            self, terminal_kind, no_path_first):
+        failure = {"error": "route_not_found", "reason_code": "graph_no_path",
+                   "route_request": {"start": {"name": "起点"},
+                                     "end": {"name": "终点"},
+                                     "travel_mode": "walk"}}
+        if terminal_kind == "clarify":
+            terminal = ({"question": "请选目的地"},
+                        {"clarify": {"question": "请选目的地", "options": []}})
+            tool_name = "ask_user"
+        else:
+            comparison = {"status": "partial", "alternatives": [], "unavailable": []}
+            terminal = (comparison, {"route_comparison": comparison})
+            tool_name = "compare_routes"
+        calls = [_fake_tool_call("plan_route", {}), _fake_tool_call(tool_name, {})]
+        outcomes = [(failure, None), terminal]
+        if not no_path_first:
+            calls.reverse()
+            outcomes.reverse()
+        client = FakeClient([_fake_response(tool_calls=calls)])
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=outcomes):
+            result = _run(client)
+        assert result["response_kind"] == terminal_kind
+
     def test_weather_snapshot_is_shared_across_tools_only_within_one_run(self):
         snapshot = {"live": {"weather": "晴"}, "impact": {}}
         seen = []

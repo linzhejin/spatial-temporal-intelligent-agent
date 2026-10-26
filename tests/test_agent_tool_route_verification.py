@@ -117,7 +117,8 @@ def test_only_typed_graph_no_path_produces_no_path_evidence(monkeypatch):
     _patch_common(monkeypatch, graph)
     context = {"query": "从起点到终点", "_route_graph_snapshot": graph,
                "_route_conditions_snapshot": [], "_route_weather_snapshot": None}
-    args = {"start": {"name": "起点"}, "end": {"name": "终点"}}
+    args = {"start": {"name": "起点"}, "end": {"name": "终点"},
+            "strategy": "shortest"}
 
     def no_path(**_kwargs):
         raise tools.RouteNoPathError("no graph path")
@@ -128,6 +129,16 @@ def test_only_typed_graph_no_path_produces_no_path_evidence(monkeypatch):
     assert result["error"] == "route_not_found"
     assert result["reason_code"] == "graph_no_path"
     assert len(result["request_digest"]) == 64
+    assert result["route_request"] == {
+        "start": {"name": "起点"}, "end": {"name": "终点"},
+        "travel_mode": "walk", "strategy": {"name": "shortest"},
+        "hard_constraints": {},
+    }
+
+    monkeypatch.delenv("AGENT_REPLAY_ENABLE_LOCAL")
+    result, _ = tools.execute_tool("plan_route", args, context)
+    assert result["reason_code"] == "graph_no_path"
+    assert "request_digest" not in result
 
     def bad_argument(**_kwargs):
         raise ValueError("max_duration_s must be positive")

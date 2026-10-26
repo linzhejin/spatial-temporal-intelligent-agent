@@ -63,6 +63,8 @@ def _make_client():
         default_headers={"Accept-Encoding": "gzip, deflate"},
         # 循环内每次调用给 25s read；总时长由 TIME_BUDGET_S 兜底
         timeout=httpx.Timeout(connect=5.0, read=25.0, write=10.0, pool=5.0),
+        # SDK 默认会对超时自动重试；两次 25 秒重试可耗尽任务截止时间。
+        max_retries=0,
     )
 
 
@@ -1841,6 +1843,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
     artifact_route, route_kind = None, None
     artifact_candidates, artifact_clarify = None, None
     artifact_route_comparison = None
+    no_path_result = None
     artifact_suggestions = None
     weather_result = None
     weather_tool_failed = False
@@ -2074,6 +2077,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "content": agent_tools.result_to_json(result),
             })
 
+            if (name == "plan_route" and verification_failure is None
+                    and isinstance(result, dict)
+                    and result.get("error") == "route_not_found"
+                    and result.get("reason_code") == "graph_no_path"
+                    and isinstance(result.get("route_request"), dict)):
+                no_path_result = result
+
             if (name in route_tools and isinstance(result, dict)
                     and result.get("error") in {
                         "route_verification_failed", "route_verification_unknown",
@@ -2149,6 +2159,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         # 终止型工具：澄清提问立即结束
         if verification_retry_exhausted:
             break
+        if (no_path_result is not None and artifact_route is None
+                and artifact_clarify is None and artifact_route_comparison is None):
+            break
         if artifact_clarify:
             break
 
@@ -2168,6 +2181,26 @@ def run_agent(query: str, context: dict = None, history: list = None,
             message=f"{prefix}路线未通过独立核验且已无可执行的修正，没有展示路线。",
             turns=turns,
         ))
+
+    if (no_path_result is not None and artifact_route is None
+            and artifact_clarify is None and artifact_route_comparison is None):
+        route_request = no_path_result["route_request"]
+        start_name = str((route_request.get("start") or {}).get("name") or "起点")
+        end_name = str((route_request.get("end") or {}).get("name") or "终点")
+        mode_name = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
+            route_request.get("travel_mode"), "当前出行方式",
+        )
+        return _with_provenance({
+            "response_kind": "no_route",
+            "message": (f"按当前路网和已记录路况，从{start_name}到{end_name}"
+                        f"在{mode_name}条件下未找到可通行的完整路线。"
+                        "现场通行状态未单独核实。"),
+            "route": None, "route_kind": None,
+            "route_state": route_request,
+            "no_path_evidence": {"reason_code": "graph_no_path"},
+            "candidates": None, "clarify": None, "suggestions": None,
+            "turns": turns,
+        })
 
     if artifact_route:
         artifact_route["timings_ms"] = normalize_timings(

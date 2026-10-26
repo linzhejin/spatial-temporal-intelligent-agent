@@ -1991,7 +1991,17 @@ def _tool_plan_route(args, ctx):
     except BudgetSearchIncomplete as e:
         return {"error": "route_search_incomplete", "message": str(e)}, None
     except RouteNoPathError as e:
-        response = {"error": "route_not_found", "message": str(e)}
+        response = {
+            "error": "route_not_found", "reason_code": "graph_no_path",
+            "message": str(e),
+            "route_request": {
+                "start": {**(args.get("start") or {}), "name": start_name},
+                "end": {**(args.get("end") or {}), "name": end_name},
+                "travel_mode": mode,
+                "strategy": {"name": decision.name},
+                "hard_constraints": args.get("constraints") or {},
+            },
+        }
         # Exact OD evidence is recorded only for isolated synthetic replay.
         if (os.getenv("AGENT_REPLAY_ENABLE_LOCAL") == "1"
                 and os.getenv("AGENT_TOOL_TRACE_ENABLED") == "1"
@@ -2003,7 +2013,6 @@ def _tool_plan_route(args, ctx):
                            "mode": mode, "avoid_steps": avoid_steps}
                 encoded = json.dumps(request, sort_keys=True,
                                      separators=(",", ":")).encode("utf-8")
-                response["reason_code"] = "graph_no_path"
                 response["request_digest"] = hashlib.sha256(encoded).hexdigest()
         return response, None
     except ValueError as e:

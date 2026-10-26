@@ -18,6 +18,12 @@ python -m experiments.controlled_event_replay_v3_run --replay <投影结果.json
 
 输出中的 `projection_score_pass_count` 只表示所提供投影通过了规则，不代表 Agent 成功率。若输入由题目预期答案人工构造，须使用 `--observation-origin synthetic_projection`。当前入口不接受声称已核验的 Agent 来源。隔离服务须设置 `AMAP_POI_LOOKUP_ENABLED=false`，使实际起终点落点与冻结锚点一致；否则就绪检查拒绝运行。
 
-真实服务采集需在本地测试库环境设置 `AGENT_REPLAY_ENABLE_LOCAL=1`、`AGENT_TOOL_TRACE_ENABLED=1`、`AMAP_POI_LOOKUP_ENABLED=false`，并按每题的冻结路况文件配置 `ROAD_CONDITIONS_FILE`、`AGENT_REPLAY_EVENT_EPOCH` 与 `AGENT_REPLAY_EVENT_SHA256`。就绪接口会检查本地测试数据库、路况文件和时间。当前目录未提供一键启动器，也未产出可核验的真实 Agent 成绩。
+本地开发回放可用独立启动器运行；它为每题创建单独路况文件、Agent 进程和对话，先检查测试库、路况文件与冻结时间，再采集运行编号、工具轨迹和投影结果。经验及溯源旁路文件也写入对应题目的实验目录。启动器只从指定环境文件读取模型连接设置，不复制管理员密钥或高德密钥到子进程：
 
-正式实验仍需逐题隔离的本地测试 PostgreSQL、真实 Agent 运行记录及其采集元数据、盲测数据与独立判据。本包的自动生成预期结果只用于检查评分器，不能充当 Agent 表现。
+```powershell
+python -m experiments.run_local_event_pilot --run-id <唯一编号> --test-database-url postgresql://postgres@127.0.0.1:<本地端口>/<专用_test数据库> --env-file <本机模型配置文件>
+```
+
+必须使用仅供实验的本地 PostgreSQL 数据库。结果分别保存在 `output/experiments/event_replay/<唯一编号>/` 和 `output/experiments/controlled_event_pilot_v3/<唯一编号>/`；运行中断和超时记录保留，不覆盖同名结果。采集清单记录模型、提供方域名、源码与数据摘要、每题运行编号、用时和路况文件摘要，不记录模型密钥。评分器仍将投影标记为 `unverified_projection`，其规则通过数不是已核验的 Agent 成功率。
+
+正式实验还需对采集来源做独立核验，建立未见盲测数据与独立判据，并完成同条件基线对照。本包的自动生成预期结果只用于检查评分器，不能充当 Agent 表现；两道模拟题也不证明校园道路现场通行性。

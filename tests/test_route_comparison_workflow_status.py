@@ -1,4 +1,28 @@
 from agents.workflow import _agent_requirement_status
+from api.routes import _agent_response_to_legacy
+
+
+def test_confirmed_graph_no_path_is_a_completed_route_answer():
+    response = {
+        "response_kind": "no_route", "message": "当前路网下没有完整通路。",
+        "route": None, "no_path_evidence": {"reason_code": "graph_no_path"},
+        "route_state": {
+            "start": {"name": "梅园综合楼"},
+            "end": {"name": "武汉大学图书馆(总馆)"},
+            "travel_mode": "walk", "strategy": {"name": "shortest"},
+            "hard_constraints": {},
+        },
+    }
+
+    assert _agent_requirement_status(response, "route") == "satisfied"
+    public = _agent_response_to_legacy(response)
+    assert public["response_kind"] == "no_route"
+    assert public["message"] == response["message"]
+    assert public["route_state"] == response["route_state"]
+    assert public.get("recommended_edge_ids") is None
+
+    response["no_path_evidence"] = {"reason_code": "invalid_args"}
+    assert _agent_requirement_status(response, "route") == "failed"
 
 
 def _comparison(status, available, unavailable):

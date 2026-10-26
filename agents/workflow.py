@@ -98,6 +98,18 @@ def _agent_requirement_status(response: dict[str, Any], requirement_id: str) -> 
         return "satisfied" if _route_comparison_satisfies(response) else "failed"
     if requirement_id != "route":
         return "satisfied"
+    if response.get("response_kind") == "no_route":
+        evidence = response.get("no_path_evidence")
+        state = response.get("route_state")
+        return "satisfied" if (
+            response.get("route") is None
+            and isinstance(evidence, dict)
+            and evidence.get("reason_code") == "graph_no_path"
+            and isinstance(state, dict)
+            and isinstance(state.get("start"), dict)
+            and isinstance(state.get("end"), dict)
+            and state.get("travel_mode") in {"walk", "bike", "drive"}
+        ) else "failed"
     route = response.get("route")
     if (response.get("response_kind") == "route" and isinstance(route, dict)
             and isinstance(route.get("route_verification"), dict)

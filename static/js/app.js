@@ -3835,6 +3835,28 @@
                 return;
             }
 
+            if (result.response_kind === 'no_route') {
+                hideWelcomeElements();
+                updateChatBubble(thinkingBubble, result.reply || result.message || '当前条件下没有找到完整路线。');
+                if (turnId >= state.latestRouteTurnId) {
+                    state.latestRouteTurnId = turnId;
+                    clearRouteResult();
+                    state.latestRoute = null;
+                    state.mapPointRouteActive = false;
+                    if (state.routeStore) state.routeStore.replace(null);
+                    var rejectedRoute = result.route_state;
+                    state.pendingIntent = rejectedRoute && rejectedRoute.start && rejectedRoute.end ? {
+                        task_type: 'path_planning', start: rejectedRoute.start,
+                        end: rejectedRoute.end,
+                        constraints: rejectedRoute.hard_constraints || null,
+                        mode: rejectedRoute.travel_mode || state.travelMode,
+                    } : null;
+                    syncRouteStrategyUI();
+                }
+                addConversationTurn(query, result, turnId, false);
+                return;
+            }
+
             if (taskType === 'chat') {
                 hideWelcomeElements();
                 updateChatBubble(thinkingBubble, result.reply || result.message || '嗯…这个问题有点难，换个问法试试？');

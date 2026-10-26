@@ -155,8 +155,18 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
             ],
         },
     }
+    no_route_result = {
+        "task_type": "chat", "response_kind": "no_route",
+        "reply": "当前路网下没有可通行的完整路线。",
+        "route_state": {
+            "start": {"name": "梅园综合楼"},
+            "end": {"name": "武汉大学图书馆"},
+            "travel_mode": "walk", "hard_constraints": {},
+        },
+    }
     results = [clarify_result, candidate_result, route_result, clarify_result,
-               custom_ball_candidate_result, route_comparison_result]
+               custom_ball_candidate_result, route_comparison_result,
+               no_route_result]
 
     def json_response(route, payload, status=200):
         route.fulfill(
@@ -348,6 +358,13 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         assert page.locator("#recommended-distance").inner_text().strip() == route_distance_before_comparison
         assert page.locator("#estimated-duration").inner_text().strip() == route_duration_before_comparison
         assert len(messages) == 6
+
+        input_box.fill("从梅园综合楼到武汉大学图书馆，现在能走吗")
+        with page.expect_response(lambda response: "/api/runs/local-run-7?" in response.url):
+            page.locator("#submit-btn").click()
+        expect(page.locator("#chat-content")).to_contain_text("当前路网下没有可通行的完整路线。")
+        expect(page.locator("#results-section")).to_be_hidden()
+        assert len(messages) == 7
 
         context.close()
         browser.close()

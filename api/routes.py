@@ -887,6 +887,14 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             "place_request": resp.get("place_request"),
         }
 
+    if kind == "no_route":
+        return {
+            "task_type": "chat", "response_kind": "no_route",
+            "message": resp.get("message", ""), "reply": resp.get("message", ""),
+            "route_state": resp.get("route_state"),
+            "no_path_evidence": resp.get("no_path_evidence"),
+        }
+
     if kind == "clarify":
         clarify = resp.get("clarify") or {}
         out = {
