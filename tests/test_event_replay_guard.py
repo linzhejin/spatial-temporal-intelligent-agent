@@ -35,6 +35,7 @@ def _fixture(tmp_path, monkeypatch):
     monkeypatch.setenv("FLASK_ENV", "development")
     monkeypatch.setenv("AGENT_REPLAY_ENABLE_LOCAL", "1")
     monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    monkeypatch.setenv("AMAP_POI_LOOKUP_ENABLED", "false")
     monkeypatch.setenv("AGENT_REPLAY_EVENT_EPOCH", "150")
     monkeypatch.setenv("AGENT_REPLAY_EVENT_SHA256", digest)
     monkeypatch.setenv("ROAD_CONDITIONS_FILE", str(target))
@@ -58,7 +59,8 @@ def test_event_replay_guard_certifies_fixture_and_freezes_condition_time(tmp_pat
 
 @pytest.mark.parametrize("change", ["production", "missing_hash", "missing_epoch",
                                      "missing_trace", "changed_file",
-                                     "wrong_binding", "outside_root"])
+                                     "wrong_binding", "outside_root",
+                                     "online_poi_lookup"])
 def test_event_replay_guard_rejects_unisolated_or_mutated_fixture(
     tmp_path, monkeypatch, change,
 ):
@@ -72,6 +74,8 @@ def test_event_replay_guard_rejects_unisolated_or_mutated_fixture(
         monkeypatch.delenv("AGENT_REPLAY_EVENT_EPOCH")
     elif change == "missing_trace":
         monkeypatch.delenv("AGENT_TOOL_TRACE_ENABLED")
+    elif change == "online_poi_lookup":
+        monkeypatch.setenv("AMAP_POI_LOOKUP_ENABLED", "true")
     elif change == "changed_file":
         target.write_text(target.read_text(encoding="utf-8") + " ", encoding="utf-8")
     elif change == "wrong_binding":

@@ -822,6 +822,16 @@ def run_agent(query: str, context: dict = None, history: list = None,
                           else "success",
                 "artifact_kind": artifact_kind,
         }
+        if (name in {"plan_route", "plan_via_route", "plan_itinerary",
+                     "plan_tour", "plan_multimodal_route"}
+                and trace_item["outcome"] == "tool_error"
+                and isinstance(result, dict)
+                and result.get("error") == "route_not_found"
+                and result.get("reason_code") == "graph_no_path"
+                and isinstance(result.get("request_digest"), str)
+                and re.fullmatch(r"[0-9a-f]{64}", result["request_digest"])):
+            trace_item["error_code"] = "graph_no_path"
+            trace_item["request_digest"] = result["request_digest"]
         if (name == "list_road_conditions" and trace_item["outcome"] == "success"
                 and isinstance(result, dict)
                 and isinstance(result.get("conditions"), list)):

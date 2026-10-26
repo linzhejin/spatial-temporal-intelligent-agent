@@ -40,6 +40,10 @@ _MAX_CONSTRAINED_LABELS = 50000
 class BudgetSearchIncomplete(ValueError):
     """The bounded search could not establish whether a budgeted path exists."""
 
+
+class RouteNoPathError(ValueError):
+    """A completed graph search established no route under current filters."""
+
 _EDGE_ATTR_DEFAULTS = {
     "slope_level": 3,
     "scenery_level": 3,
@@ -1536,7 +1540,7 @@ def _weighted_avg_attr(G: nx.MultiDiGraph, path: list, attr: str,
 
 
 def _raise_no_path(G, start_node, end_node, filter_status, G_filtered, mode="walk"):
-    """不可达诊断：记录日志并抛出带友好提示的 ValueError。"""
+    """不可达诊断：记录日志并抛出类型明确的无路可走错误。"""
     mode = normalize_mode(mode)
     from spatial.network import get_node_coords
     try:
@@ -1553,27 +1557,27 @@ def _raise_no_path(G, start_node, end_node, filter_status, G_filtered, mode="wal
     is_road_blocked = "road_closure" in filter_status or "road_blocked" in filter_status
     if is_road_blocked:
         if mode == "drive":
-            raise ValueError(
+            raise RouteNoPathError(
                 "驾车路线因道路封闭/施工无法通行，建议切换骑行或步行，或选择其他路线～"
             )
         if mode == "bike":
-            raise ValueError(
+            raise RouteNoPathError(
                 "骑行路线因道路封闭/施工无法通行，建议切换步行，或选择其他路线～"
             )
-        raise ValueError(
+        raise RouteNoPathError(
             "该路线因道路封闭/施工暂时无法通行，建议选择附近的其他地点作为起终点，或稍后再试～"
         )
     if "slope_avoid" in filter_status:
-        raise ValueError("暂未找到满足避坡要求的路线，已保留避开陡坡的约束，请更换起终点。")
+        raise RouteNoPathError("暂未找到满足避坡要求的路线，已保留避开陡坡的约束，请更换起终点。")
     if mode == "drive":
-        raise ValueError(
+        raise RouteNoPathError(
             "驾车无法到达该地点（附近可能只有步行道/台阶），建议切换骑行或步行～"
         )
     if mode == "bike":
-        raise ValueError(
+        raise RouteNoPathError(
             "骑行无法到达该地点（附近可能只有台阶/陡坡），建议切换步行～"
         )
-    raise ValueError(
+    raise RouteNoPathError(
         f"该两点之间没有完全在校内的步行路线，"
         f"可能需要经过校外市政道路。"
         f"可试试选择附近的其他校门或地点作为起终点。"

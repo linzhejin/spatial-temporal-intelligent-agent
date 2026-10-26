@@ -209,6 +209,12 @@ def test_road_event_trace_persists_only_valid_ids_from_successful_condition_tool
             "outcome": "success", "artifact_kind": "route",
             "road_event_ids": ["injected_by_model"],
         })
+        tool_trace_callback({
+            "tool_name": "plan_route", "argument_keys": ["start", "end"],
+            "outcome": "tool_error", "artifact_kind": None,
+            "error_code": "graph_no_path", "request_digest": "a" * 64,
+            "raw_result": "private graph detail",
+        })
         return {"response_kind": "chat", "message": "路况已查询。"}
 
     workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent).invoke(
@@ -224,7 +230,10 @@ def test_road_event_trace_persists_only_valid_ids_from_successful_condition_tool
         "road_event_ids": ["simulated_1", "simulated_2"],
     }
     assert "road_event_ids" not in calls[1]
+    assert calls[2]["error_code"] == "graph_no_path"
+    assert calls[2]["request_digest"] == "a" * 64
     assert "private location" not in json.dumps(calls)
+    assert "private graph detail" not in json.dumps(calls)
 
 
 def test_clarification_answer_keeps_original_multitool_request(monkeypatch):

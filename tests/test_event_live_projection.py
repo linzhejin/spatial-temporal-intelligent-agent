@@ -70,3 +70,16 @@ def test_event_projection_maps_completed_no_route_without_inventing_edges():
     assert projected["route_edge_ids"] == []
     assert projected["road_event_ids"] == ["simulated_1"]
     assert "infeasibility_explanation" in projected["outputs"]
+
+
+def test_event_projection_requires_persisted_graph_no_path_evidence():
+    run = _run(kind="no_route", event_ids=["simulated_1"])
+    run["events"][-1]["payload"]["error_code"] = "graph_no_path"
+    run["events"][-1]["payload"]["request_digest"] = "a" * 64
+    projected = _project(run)
+    assert projected["tool_trace"][-1]["error_code"] == "graph_no_path"
+    assert projected["tool_trace"][-1]["request_digest"] == "a" * 64
+    assert "error_code" not in project_live_run(run, LOOKUP)["tool_trace"][-1]
+
+    run["events"][-1]["payload"]["error_code"] = "invalid_args"
+    assert "error_code" not in _project(run)["tool_trace"][-1]

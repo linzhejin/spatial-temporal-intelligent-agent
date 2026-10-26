@@ -109,6 +109,36 @@ def test_agent_direct_tool_returns_verified_route(monkeypatch):
     assert result["route_verification"]["paths"]["recommended"]["task_revision"] == 4
 
 
+def test_only_typed_graph_no_path_produces_no_path_evidence(monkeypatch):
+    monkeypatch.setenv("AGENT_REPLAY_ENABLE_LOCAL", "1")
+    monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    monkeypatch.setenv("FLASK_ENV", "development")
+    graph = _graph()
+    _patch_common(monkeypatch, graph)
+    context = {"query": "从起点到终点", "_route_graph_snapshot": graph,
+               "_route_conditions_snapshot": [], "_route_weather_snapshot": None}
+    args = {"start": {"name": "起点"}, "end": {"name": "终点"}}
+
+    def no_path(**_kwargs):
+        raise tools.RouteNoPathError("no graph path")
+
+    monkeypatch.setattr(tools, "compute_route", no_path)
+    result, artifact = tools.execute_tool("plan_route", args, context)
+    assert artifact is None
+    assert result["error"] == "route_not_found"
+    assert result["reason_code"] == "graph_no_path"
+    assert len(result["request_digest"]) == 64
+
+    def bad_argument(**_kwargs):
+        raise ValueError("max_duration_s must be positive")
+
+    monkeypatch.setattr(tools, "compute_route", bad_argument)
+    result, artifact = tools.execute_tool("plan_route", args, context)
+    assert artifact is None
+    assert result["error"] == "route_not_found"
+    assert "reason_code" not in result
+
+
 def test_verified_shortest_route_reuses_exact_path_after_off_path_closure(monkeypatch, mock_proof_identity):  # noqa: F811
     import app as app_module
 

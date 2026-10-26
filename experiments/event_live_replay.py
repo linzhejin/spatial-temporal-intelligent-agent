@@ -18,6 +18,8 @@ from experiments.scenario_live_adapter import (
 
 _EVENT_ID = re.compile(r"[A-Za-z0-9_.-]{1,80}\Z")
 _RUN_NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,79}\Z")
+_ROUTE_TOOLS = {"plan_route", "plan_via_route", "plan_itinerary",
+                "plan_tour", "plan_multimodal_route"}
 
 
 def project_event_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, Any]:
@@ -29,6 +31,21 @@ def project_event_run(run: dict[str, Any], lookup: dict[str, Any]) -> dict[str, 
                         for event in events)
     observed: list[list[str]] = []
     if trace_enabled and isinstance(projected.get("tool_trace"), list):
+        raw_calls = [event.get("payload") for event in events
+                     if isinstance(event, dict)
+                     and event.get("event_type") == "agent_tool_call"]
+        if len(raw_calls) == len(projected["tool_trace"]):
+            for call, raw in zip(projected["tool_trace"], raw_calls):
+                if (isinstance(raw, dict)
+                        and call.get("tool_name") == raw.get("tool_name")
+                        and call.get("outcome") == raw.get("outcome")
+                        and call.get("tool_name") in _ROUTE_TOOLS
+                        and call.get("outcome") == "tool_error"
+                        and raw.get("error_code") == "graph_no_path"
+                        and isinstance(raw.get("request_digest"), str)
+                        and re.fullmatch(r"[0-9a-f]{64}", raw["request_digest"])):
+                    call["error_code"] = "graph_no_path"
+                    call["request_digest"] = raw["request_digest"]
         for event in events:
             if not isinstance(event, dict) or event.get("event_type") != "agent_tool_call":
                 continue

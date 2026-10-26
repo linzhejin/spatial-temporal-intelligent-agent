@@ -268,6 +268,15 @@ def build_agent_workflow(
                                 for value in ids)
                         and len(set(ids)) == len(ids)):
                     trace_payload["road_event_ids"] = sorted(ids)
+                if (trace_payload["tool_name"] in {
+                        "plan_route", "plan_via_route", "plan_itinerary",
+                        "plan_tour", "plan_multimodal_route"}
+                        and outcome == "tool_error"
+                        and item.get("error_code") == "graph_no_path"
+                        and isinstance(item.get("request_digest"), str)
+                        and re.fullmatch(r"[0-9a-f]{64}", item["request_digest"])):
+                    trace_payload["error_code"] = "graph_no_path"
+                    trace_payload["request_digest"] = item["request_digest"]
                 _emit_agent_tool_trace(
                     state, runtime, database_url, "agent_tool_call", trace_payload,
                 )

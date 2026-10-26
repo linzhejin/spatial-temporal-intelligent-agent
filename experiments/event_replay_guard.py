@@ -34,7 +34,9 @@ def _certified_fixture(bound_path: str | Path) -> tuple[dict[str, object], list[
     """Read, hash and validate one immutable snapshot for both proof and routing."""
     if (os.getenv("FLASK_ENV", "development") == "production"
             or os.getenv("AGENT_REPLAY_ENABLE_LOCAL") != "1"
-            or os.getenv("AGENT_TOOL_TRACE_ENABLED") != "1"):
+            or os.getenv("AGENT_TOOL_TRACE_ENABLED") != "1"
+            or os.getenv("AMAP_POI_LOOKUP_ENABLED", "true").lower()
+            not in {"false", "0", "no"}):
         raise ValueError("event replay is disabled")
     assert_replay_database_target(os.getenv("DATABASE_URL"))
     epoch_text = os.getenv("AGENT_REPLAY_EVENT_EPOCH", "")

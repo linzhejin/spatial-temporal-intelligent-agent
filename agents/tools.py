@@ -8,10 +8,12 @@
   配合系统提示约束 LLM 不编造校内设施
 """
 
+import hashlib
 import json
 import logging
 import math
 import networkx as nx
+import os
 import re
 import time
 
@@ -28,7 +30,7 @@ from spatial.poi_taxonomy import (
 )
 from spatial.network import get_network, load_or_download_network, get_nearest_node, get_node_coords
 from spatial.routing import (
-    BudgetSearchIncomplete,
+    BudgetSearchIncomplete, RouteNoPathError,
     compute_route, compute_via_route, compute_tour_route,
     compute_budgeted_ordered_route, compute_budgeted_multimodal_route,
     rank_via_candidates,
@@ -1988,6 +1990,22 @@ def _tool_plan_route(args, ctx):
         )
     except BudgetSearchIncomplete as e:
         return {"error": "route_search_incomplete", "message": str(e)}, None
+    except RouteNoPathError as e:
+        response = {"error": "route_not_found", "message": str(e)}
+        # Exact OD evidence is recorded only for isolated synthetic replay.
+        if (os.getenv("AGENT_REPLAY_ENABLE_LOCAL") == "1"
+                and os.getenv("AGENT_TOOL_TRACE_ENABLED") == "1"
+                and os.getenv("FLASK_ENV", "development") != "production"):
+            constraints = args.get("constraints") or {}
+            avoid_steps = constraints.get("avoid_steps", False)
+            if isinstance(avoid_steps, bool):
+                request = {"start_node": int(start_node), "end_node": int(end_node),
+                           "mode": mode, "avoid_steps": avoid_steps}
+                encoded = json.dumps(request, sort_keys=True,
+                                     separators=(",", ":")).encode("utf-8")
+                response["reason_code"] = "graph_no_path"
+                response["request_digest"] = hashlib.sha256(encoded).hexdigest()
+        return response, None
     except ValueError as e:
         return {"error": "route_not_found", "message": str(e)}, None
 

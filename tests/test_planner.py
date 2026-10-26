@@ -535,6 +535,36 @@ class TestAgentLoop:
         assert trace[0]["outcome"] == "tool_error"
         assert "road_event_ids" not in trace[0]
 
+    def test_typed_no_path_trace_keeps_only_allowlisted_error_code(self):
+        client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("plan_route", {
+                "start": {"name": "起点"}, "end": {"name": "终点"},
+            })]),
+            _fake_response(content="当前无法到达。"),
+        ])
+        trace = []
+        with patch.object(planner.agent_tools, "execute_tool", return_value=({
+            "error": "route_not_found", "reason_code": "graph_no_path",
+            "request_digest": "a" * 64, "message": "private graph detail",
+        }, None)):
+            _run(client, tool_trace_callback=trace.append)
+        assert trace[0]["error_code"] == "graph_no_path"
+        assert trace[0]["request_digest"] == "a" * 64
+        assert "private graph detail" not in json.dumps(trace)
+
+        generic_trace = []
+        generic_client = FakeClient([
+            _fake_response(tool_calls=[_fake_tool_call("plan_route", {
+                "start": {"name": "起点"}, "end": {"name": "终点"},
+            })]),
+            _fake_response(content="路线参数有误。"),
+        ])
+        with patch.object(planner.agent_tools, "execute_tool", return_value=({
+            "error": "route_not_found", "message": "invalid budget",
+        }, None)):
+            _run(generic_client, tool_trace_callback=generic_trace.append)
+        assert "error_code" not in generic_trace[0]
+
     def test_manual_map_start_is_used_when_natural_language_omits_the_origin(self):
         selected_start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
         client = FakeClient([])
