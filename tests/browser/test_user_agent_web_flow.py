@@ -117,6 +117,9 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         },
         "strategy": {"name": "shortest", "weights": {"distance": 1, "slope": 0, "scenery": 0}},
         "route_verification": {"status": "pass", "field_truth_verified": False},
+        "road_conditions_applied": 2,
+        "route_events": [{"id": "local-notice", "action": "slowdown",
+                          "road_name": "科技路", "name": "人流较多"}],
         "explanation": "\u8def\u7ebf\u5df2\u89c4\u5212\uff0c\u672b\u7aef\u63a5\u9a73\u4ecd\u9700\u73b0\u573a\u786e\u8ba4\u3002",
     }
     custom_ball_candidate_result = {
@@ -313,6 +316,8 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         expect(page.locator("#chat-content")).to_contain_text(
             "\u672a\u5b9e\u5730\u786e\u8ba4\u9053\u8def\u5f53\u524d\u53ef\u901a\u884c",
         )
+        expect(page.locator("#chat-content")).to_contain_text("科技路")
+        expect(page.locator("#chat-content")).to_contain_text("人流较多")
         route_distance_before_comparison = page.locator("#recommended-distance").inner_text().strip()
         route_duration_before_comparison = page.locator("#estimated-duration").inner_text().strip()
 

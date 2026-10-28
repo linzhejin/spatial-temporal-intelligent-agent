@@ -55,3 +55,11 @@ def test_step_avoidance_explains_unverified_edges():
     assert len(text) <= 90
     assert "已避开路网中已标注的台阶" in text
     assert "其余路段是否有台阶尚未核实" in text
+
+
+def test_global_closure_is_not_described_as_a_cause_of_this_route():
+    text = _build_template_explanation(
+        {"mode": "walk", "filter_status": "road_closure"}, {}, None,
+    )
+    assert "规划时考虑了当前封闭路段" in text
+    assert "因封闭绕行" not in text

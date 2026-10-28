@@ -159,7 +159,7 @@ def _build_template_explanation(
             segments.append("按悠闲慢行偏好规划")
 
     if "road_closure" in filter_tokens:
-        segments.append("已避开封闭路段")
+        segments.append("规划时考虑了当前封闭路段")
     if "degraded_annotations" in filter_tokens or "no_annotations" in filter_tokens:
         segments.append("路况标注有限，结果仅供参考")
     if route_data.get("length_capped"):

@@ -60,11 +60,13 @@ from spatial.routing import (
     filter_graph_for_mode,
     build_turn_by_turn,
 )
+from spatial.routing_index import get_routing_index
 from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
 from spatial.result_verifier import verify_display_geometry, verify_route_result
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, add_condition, remove_condition, update_condition,
+    route_condition_notices,
     rebind_vision_condition_edge,
     purge_revoked_conditions, snap_to_edge, CONDITION_LABELS, CONDITION_EFFECTS,
     SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS,
@@ -862,7 +864,7 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
                   "recommended_length_m", "shortest_length_m", "length_capped", "degraded",
                   "hard_budget_fallback", "shortest_baseline_feasible",
                   "distance_m", "shortest_distance_m", "applied_weights", "mode",
-                  "road_conditions_applied",
+                  "road_conditions_applied", "route_events", "route_events_status",
                   "duration_min", "shortest_duration_min", "speed_kmh",
                   "legs", "via", "tour", "detour_ratio", "strategy", "route_state",
                   "endpoint_access", "timings_ms", "route_verification"):
@@ -1379,6 +1381,10 @@ def route():
     }
 
     response["route_verification"] = route_verification
+    response["route_events"], _ = route_condition_notices(
+        get_routing_index(G).for_mode(final_mode).graph, route_conditions, final_mode,
+        response["recommended_edge_ids"],
+    )
     response["route_state"] = route_reuse_module.issue_shortest_path_reuse_certificate(
         route_state, response, G, route_conditions, verified=True,
         proof_identity=route_reuse_module.authenticated_proof_identity(),
@@ -2001,6 +2007,10 @@ def chat():
         },
         "strategy": decision.as_dict(),
     }
+    result["route_events"], _ = route_condition_notices(
+        get_routing_index(G).for_mode(final_mode).graph, route_conditions, final_mode,
+        result["recommended_edge_ids"],
+    )
     result["route_state"] = build_route_state(
         route_kind="direct",
         original_query=query,

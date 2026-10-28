@@ -1925,7 +1925,7 @@
 
     function describeRoadConditionModeEffect(cond, mode, modeName) {
         var effect = getRoadConditionModeEffect(cond, mode);
-        if (effect.status === 'blocked') return '当前方式（' + modeName + '）禁止通行，路线会绕行';
+        if (effect.status === 'blocked') return '该路段当前方式（' + modeName + '）禁止通行';
         if (effect.status === 'slowdown') {
             return '当前方式（' + modeName + '）可通行，规划成本约 ×' + effect.costMultiplier;
         }
@@ -3238,10 +3238,11 @@
         var roadNoticeEl = document.getElementById('road-conditions-notice');
         if (roadNoticeEl) {
             var rcCount = data.road_conditions_applied || 0;
-            if (rcCount > 0) {
+            var alongRoute = routeEventsSummary(data);
+            if (alongRoute || rcCount > 0) {
                 roadNoticeEl.style.display = 'block';
-                roadNoticeEl.textContent = '⚠️ 已核对 ' + rcCount
-                    + ' 条当前路况信息；路线是否调整取决于封路或缓行是否影响本路线。';
+                roadNoticeEl.textContent = alongRoute || ('已核对 ' + rcCount
+                    + ' 条当前路况信息；路线是否调整取决于封路或缓行是否影响本路线。');
             } else {
                 roadNoticeEl.style.display = 'none';
             }
@@ -3953,6 +3954,10 @@
                     var reply = state.productMode === 'planning'
                         ? buildRouteSummary(result)
                         : appendRouteFieldTruthNotice(result.explanation || buildRouteSummary(result), result);
+                    if (state.productMode !== 'planning' && result.explanation) {
+                        var alongRoute = routeEventsSummary(result);
+                        if (alongRoute) reply += ' ' + alongRoute;
+                    }
                     var rankedCandidates = rankedRouteCandidatesSummary(result);
                     if (rankedCandidates) reply = rankedCandidates + ' ' + reply;
                     updateChatBubble(thinkingBubble, reply);
@@ -4217,6 +4222,30 @@
             + '。已规划到' + ranked[0].name.trim() + '。';
     }
 
+    function routeEventsSummary(data) {
+        if (data && data.route_events_status === 'unknown') {
+            return '部分分段的沿途路况暂未核实，请留意现场信息。';
+        }
+        var events = Array.isArray(data && data.route_events) ? data.route_events : [];
+        var applicable = events.filter(function (event) {
+            return event && (event.action === 'notice' || event.action === 'slowdown');
+        });
+        if (!applicable.length) return '';
+        var labels = applicable.slice(0, 3).map(function (event) {
+            var location = String(event.road_name || event.name || '沿途路段').trim() || '沿途路段';
+            var name = String(event.name || '').trim().slice(0, 40);
+            var detail = name && name !== location ? '：' + name : '';
+            var modes = Array.isArray(event.travel_modes) ? event.travel_modes : [];
+            var modeLabels = modes.map(function (mode) {
+                return ({ walk: '步行', bike: '骑行', drive: '驾车' })[mode] || '';
+            }).filter(Boolean);
+            var modeInfo = modeLabels.length ? modeLabels.join('、') + '段' : '';
+            return location + '（' + modeInfo + (event.action === 'slowdown' ? '缓行' : '提示') + detail + '）';
+        });
+        return '沿途路况：' + labels.join('；')
+            + (applicable.length > labels.length ? '等 ' + applicable.length + ' 条' : '') + '。';
+    }
+
     // 电脑端把路线信息合并成一条可读总览，避免统计卡与助手反馈重复报数。
     function buildRouteSummary(data) {
         data = data || {};
@@ -4279,6 +4308,8 @@
         var conditionCount = Number(data.road_conditions_applied || 0);
         if (conditionCount > 0) facts.push('已核对 ' + conditionCount + ' 条当前生效路况信息');
         if (facts.length) overview += ' ' + facts.join('；') + '。';
+        var alongRoute = routeEventsSummary(data);
+        if (alongRoute) overview += ' ' + alongRoute;
 
         var reason = conciseRouteReason(data.explanation);
         if (reason.length >= 4) overview += ' 路线特点：' + reason;

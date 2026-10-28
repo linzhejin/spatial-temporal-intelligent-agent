@@ -618,6 +618,27 @@ test('route overview separates road-network length from estimated unverified end
     assert.match(summary, /路网段.*237/);
     assert.match(summary, /接驳.*直线.*37.*未核实/);
 });
+
+test('route overview shows only explicitly supplied along-route notices and slowdowns', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '总图' }, end: { name: '桂园操场' }, mode: 'walk',
+        recommended_length_m: 640, duration_min: 9, road_conditions_applied: 3,
+        route_events: [
+            { action: 'slowdown', road_name: '科技路', name: '行人较多' },
+            { action: 'notice', road_name: '樱园路', name: '施工提示' },
+        ],
+    });
+    assert.match(summary, /沿途路况/);
+    assert.match(summary, /科技路.*缓行/);
+    assert.match(summary, /樱园路.*提示/);
+    assert.match(summary, /行人较多/);
+    assert.match(summary, /施工提示/);
+    const noRouteEvent = h.buildRouteSummary({mode: 'walk', road_conditions_applied: 1, route_events: []});
+    assert.doesNotMatch(noRouteEvent, /沿途路况/);
+    const unknown = h.buildRouteSummary({mode: 'walk', route_events_status: 'unknown'});
+    assert.match(unknown, /部分分段的沿途路况暂未核实/);
+});
 test('route overview states when route checks do not include field passability verification', () => {
     const h = harness();
     const summary = h.buildRouteSummary({
@@ -1530,7 +1551,8 @@ test('road-condition popup follows the published action and affected travel mode
     assert.equal(h.roadConditionEffect(unsupported, 'drive').status, 'unknown');
     assert.match(h.roadConditionEffectLabel(notice, 'walk', '步行'), /仅提示，不改变路线/);
     assert.match(h.roadConditionEffectLabel(slowdown, 'walk', '步行'), /规划成本约 ×1\.7/);
-    assert.match(h.roadConditionEffectLabel(closure, 'bike', '骑行'), /禁止通行，路线会绕行/);
+    assert.match(h.roadConditionEffectLabel(closure, 'bike', '骑行'), /该路段.*禁止通行/);
+    assert.doesNotMatch(h.roadConditionEffectLabel(closure, 'bike', '骑行'), /路线会绕行/);
 });
 
 test('road-condition marker style follows the effect on the current travel mode', () => {

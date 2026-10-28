@@ -1109,12 +1109,13 @@ def resolve_condition_effects(
     mode: str = "walk",
     *,
     strict: bool = False,
+    include_event_details: bool = False,
 ) -> tuple:
     """Resolve event effects without copying or mutating the supplied graph."""
     if conditions is None:
         conditions = list_conditions(strict=strict)
     if not conditions:
-        return {}, set(), 0
+        return ({}, set(), 0, []) if include_event_details else ({}, set(), 0)
 
     if strict and mode not in {"walk", "bike", "drive"}:
         raise RoadConditionBindingError("未知出行方式，无法校验路况影响")
@@ -1122,6 +1123,7 @@ def resolve_condition_effects(
     penalties = {}
     closed = set()
     applied = 0
+    details = []
     for cond in conditions:
         try:
             if strict:
@@ -1173,6 +1175,8 @@ def resolve_condition_effects(
                 raise RoadConditionBindingError("生效中的路况事件无法匹配当前路网，已停止路线规划")
             continue
         applied += 1
+        if include_event_details:
+            details.append((cond, keys))
         if effect is None:  # notice: report it without changing route costs
             continue
         if effect == "block":
@@ -1183,7 +1187,63 @@ def resolve_condition_effects(
                 if factor > penalties.get(key, 1.0):
                     penalties[key] = factor
 
-    return penalties, closed, applied
+    return (penalties, closed, applied, details) if include_event_details else (penalties, closed, applied)
+
+
+def route_condition_notices(G, conditions: list, mode: str, route_edges: list) -> tuple:
+    """Return active notice/slowdown events overlapping actual selected edges.
+
+    ``conditions`` must be the same already-filtered active snapshot used to
+    plan and verify the route. The returned count is global to that snapshot;
+    the events are limited to the selected edges and disclose no media paths.
+    """
+    if not isinstance(route_edges, list):
+        raise RoadConditionBindingError("路线缺少已核对的道路边序列")
+    try:
+        order = {tuple(int(value) for value in edge): index
+                 for index, edge in reversed(list(enumerate(route_edges)))}
+        if any(len(edge) != 3 for edge in order):
+            raise ValueError("invalid edge")
+    except (TypeError, ValueError):
+        raise RoadConditionBindingError("路线道路边序列无效") from None
+    _, _, applied, details = resolve_condition_effects(
+        G, conditions, mode, strict=True, include_event_details=True,
+    )
+    matches = []
+    for condition, keys in details:
+        if condition.get("action") not in {"notice", "slowdown"}:
+            continue
+        indices = [order[key] for key in keys if key in order]
+        if not indices:
+            continue
+        edge = condition.get("edge") if isinstance(condition.get("edge"), dict) else {}
+        source = condition.get("source") if isinstance(condition.get("source"), dict) else {}
+        description = condition.get("description")
+        public = {
+            "id": condition.get("id"),
+            "name": condition.get("name") or "路况提醒",
+            "action": condition["action"],
+            "road_name": edge.get("road_name") or "",
+            "description": description[:100] if isinstance(description, str) else "",
+            "start_time": condition.get("start_time"),
+            "end_time": condition.get("end_time"),
+            "observation_time": source.get("captured_at") or condition.get("created_at"),
+            "cost_multiplier": condition.get("cost_multiplier") if condition["action"] == "slowdown" else None,
+        }
+        matches.append((min(indices), public))
+    matches.sort(key=lambda item: item[0])
+    unique, seen = [], set()
+    for _, item in matches:
+        identifier = item["id"]
+        if not isinstance(identifier, (str, int)) or isinstance(identifier, bool):
+            identifier = None
+            item["id"] = None
+        if identifier is not None and identifier in seen:
+            continue
+        if identifier is not None:
+            seen.add(identifier)
+        unique.append(item)
+    return unique, applied
 
 
 def apply_conditions_to_graph(

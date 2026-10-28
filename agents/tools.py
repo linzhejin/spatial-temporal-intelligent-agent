@@ -41,6 +41,7 @@ from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, CONDITION_LABELS, apply_conditions_to_graph,
+    route_condition_notices,
     RoadConditionsUnavailableError,
 )
 from spatial.route_constraints import positive_budget
@@ -2039,6 +2040,9 @@ def _tool_plan_route(args, ctx):
     )
     if verification_error:
         return verification_error, None
+    payload["route_events"], _ = route_condition_notices(
+        G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+    )
     if reuse_assessment is not None:
         payload["execution_optimization"] = {
             "method": ("certified_exact_shortest_path_reuse"
@@ -2368,6 +2372,9 @@ def _tool_plan_via_route(args, ctx):
     )
     if verification_error:
         return verification_error, None
+    payload["route_events"], payload["road_conditions_applied"] = route_condition_notices(
+        G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+    )
     return payload, {"route": payload, "route_kind": "via"}
 
 
@@ -2817,6 +2824,27 @@ def _tool_plan_multimodal_route(args, ctx):
                 "route_verification": report}, None
     _merge_display_geometry_check(report)
     payload["route_verification"] = report
+    # Each segment has its own mode. A walk-only event must not be presented as
+    # affecting a bike segment, even when both use the same physical road.
+    all_notices, by_id = [], {}
+    for index, leg in enumerate(legs_payload, start=1):
+        leg_mode = leg["mode"]
+        leg["route_events"], leg["road_conditions_applied"] = route_condition_notices(
+            get_routing_index(G).for_mode(leg_mode).graph, conditions, leg_mode,
+            leg["recommended_edge_ids"],
+        )
+        for notice in leg["route_events"]:
+            identifier = notice.get("id")
+            merged = by_id.get(identifier) if identifier is not None else None
+            if merged is None:
+                merged = {**notice, "travel_modes": [], "leg_indices": []}
+                all_notices.append(merged)
+                if identifier is not None:
+                    by_id[identifier] = merged
+            if leg_mode not in merged["travel_modes"]:
+                merged["travel_modes"].append(leg_mode)
+            merged["leg_indices"].append(index)
+    payload["route_events"] = all_notices
     return payload, {"route": payload, "route_kind": "multimodal"}
 
 
@@ -3122,6 +3150,7 @@ def _tool_plan_tour(args, ctx):
         "distance_m": result["total_length_m"],
         "budget_fallback": bool(result.get("budget_fallback")),
         "budget_search_ms": result.get("budget_search_ms"),
+        "mode": mode,
         "strategy": decision.as_dict(),
         "endpoint_access": {
             "start": start_access,
@@ -3143,6 +3172,9 @@ def _tool_plan_tour(args, ctx):
     )
     if verification_error:
         return verification_error, None
+    payload["route_events"], payload["road_conditions_applied"] = route_condition_notices(
+        G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+    )
     return payload, {"route": payload, "route_kind": "tour"}
 
 

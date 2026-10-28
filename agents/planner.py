@@ -546,6 +546,37 @@ def _combined_place_route(legs: list[dict]) -> dict:
             "max_snap_m": legs[-1]["endpoint_access"].get("max_snap_m"),
         }
     states = [leg.get("route_state") for leg in legs]
+    event_versions = [(state.get("data_version"), state.get("road_condition_version"))
+                      for state in states if isinstance(state, dict)]
+    if (len(event_versions) == len(legs) and len(set(event_versions)) == 1
+            and all(isinstance(value, str) and value for value in event_versions[0])
+            and all(isinstance(leg.get("route_events"), list) for leg in legs)):
+        notices, seen = [], {}
+        for leg_index, leg in enumerate(legs, 1):
+            for event in leg["route_events"]:
+                if not isinstance(event, dict):
+                    continue
+                identifier = event.get("id")
+                if isinstance(identifier, (str, int)) and not isinstance(identifier, bool):
+                    if identifier in seen:
+                        existing = seen[identifier]
+                        mode = leg.get("mode")
+                        if mode in {"walk", "bike", "drive"} and mode not in existing["travel_modes"]:
+                            existing["travel_modes"].append(mode)
+                        if leg_index not in existing["leg_indices"]:
+                            existing["leg_indices"].append(leg_index)
+                        continue
+                entry = deepcopy(event)
+                entry["travel_modes"] = [leg["mode"]] if leg.get("mode") in {"walk", "bike", "drive"} else []
+                entry["leg_indices"] = [leg_index]
+                if isinstance(identifier, (str, int)) and not isinstance(identifier, bool):
+                    seen[identifier] = entry
+                notices.append(entry)
+        combined["route_events"] = notices
+        combined["route_events_status"] = "complete"
+    else:
+        combined.pop("route_events", None)
+        combined["route_events_status"] = "unknown"
     if all(isinstance(state, dict) for state in states):
         data_versions = {state.get("data_version") for state in states}
         road_versions = {state.get("road_condition_version") for state in states}

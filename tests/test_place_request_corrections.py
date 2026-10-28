@@ -223,3 +223,31 @@ def test_route_join_rejects_stale_versions_and_unconnected_geometry():
     mixed = planner._combined_place_route([first, different_constraints])
     assert "route_state" not in mixed
     assert mixed["route_state_unavailable"]
+
+
+def test_combined_route_merges_event_notices_only_for_the_same_snapshot():
+    from agents.route_state import build_route_state
+
+    state = build_route_state(route_kind="direct", original_query="测试",
+        start={"type": "poi", "name": "起点"}, end={"type": "poi", "name": "终点"},
+        travel_mode="walk", hard_constraints={}, strategy={"name": "shortest"},
+        data_version="data-1", road_condition_version="roads-1")
+    first = {"route_state": state, "mode": "walk", "route_events": [
+        {"id": "a", "action": "notice"}, {"id": "shared", "action": "slowdown"}]}
+    second = {"route_state": state, "mode": "bike", "route_events": [
+        {"id": "shared", "action": "slowdown"}, {"id": "b", "action": "notice"}]}
+    merged = planner._combined_place_route([first, second])
+    assert [event["id"] for event in merged["route_events"]] == ["a", "shared", "b"]
+    assert merged["route_events_status"] == "complete"
+    assert merged["route_events"][1]["travel_modes"] == ["walk", "bike"]
+    assert merged["route_events"][1]["leg_indices"] == [1, 2]
+
+    second_without_events = {"route_state": state}
+    unknown = planner._combined_place_route([first, second_without_events])
+    assert "route_events" not in unknown
+    assert unknown["route_events_status"] == "unknown"
+
+    second_stale = {"route_state": {**state, "road_condition_version": "roads-2"}, "route_events": []}
+    stale = planner._combined_place_route([first, second_stale])
+    assert "route_events" not in stale
+    assert stale["route_events_status"] == "unknown"
