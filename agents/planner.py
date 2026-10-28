@@ -2277,10 +2277,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
         mode_name = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
             route_request.get("travel_mode"), "当前出行方式",
         )
+        hard_constraints = route_request.get("hard_constraints")
+        avoid_steps = isinstance(hard_constraints, dict) and hard_constraints.get("avoid_steps") is True
+        conditions = f"{mode_name}且避开已标注台阶" if avoid_steps else mode_name
         return _with_provenance({
             "response_kind": "no_route",
             "message": (f"按当前路网和已记录路况，从{start_name}到{end_name}"
-                        f"在{mode_name}条件下未找到可通行的完整路线。"
+                        f"在{conditions}条件下未找到可通行的完整路线。"
                         "现场通行状态未单独核实。"),
             "route": None, "route_kind": None,
             "route_state": route_request,

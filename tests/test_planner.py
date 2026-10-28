@@ -89,6 +89,19 @@ def test_route_summary_names_the_ordered_intermediate_stop():
 
 
 class TestAgentLoop:
+    def test_no_path_reply_describes_user_step_constraint(self):
+        args = {"start": {"name": "梅园综合楼"}, "end": {"name": "图书馆"},
+                "mode": "walk", "constraints": {"avoid_steps": True}}
+        client = FakeClient([_fake_response(tool_calls=[_fake_tool_call("plan_route", args)])])
+        failure = {"error": "route_not_found", "reason_code": "graph_no_path",
+                   "route_request": {"start": args["start"], "end": args["end"],
+                                     "travel_mode": "walk", "hard_constraints": args["constraints"]}}
+        with patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)):
+            result = _run(client)
+        assert result["response_kind"] == "no_route"
+        assert "台阶" in result["message"]
+        assert "现场" in result["message"]
+
     def test_typed_graph_no_path_returns_complete_refusal_without_more_model_calls(self):
         args = {"start": {"name": "梅园综合楼"},
                 "end": {"name": "武汉大学图书馆(总馆)"}, "mode": "walk"}
