@@ -876,6 +876,8 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             out.setdefault("suggestions", [])
         if isinstance(resp.get("weather"), dict):
             out["weather"] = resp["weather"]
+        if isinstance(resp.get("recommendation_candidates"), list):
+            out["recommendation_candidates"] = resp["recommendation_candidates"]
         return out
 
     if kind == "candidates":
@@ -2516,6 +2518,14 @@ def create_road_condition():
     body = request.get_json(silent=True)
     if body is None:
         return _err("invalid_json", "请求体必须为合法 JSON", 400)
+
+    # Public manager events are live. Never silently discard a submitted
+    # simulation marker and turn the fixture into an ordinary manager report.
+    # Live vision sources use source_vision_job_id and are checked below.
+    if isinstance(body, dict) and any(key in body for key in (
+            "source", "simulation_location", "simulation_clock", "simulated",
+            "simulation_id", "experiment_id", "source_dataset")):
+        return _err("simulation_not_allowed", "模拟事件仅可在隔离的实验环境中使用。", 400)
 
     cond_type = body.get("type")
     name = (body.get("name") or "").strip()

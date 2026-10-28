@@ -294,7 +294,17 @@ def _save_conditions(conditions: list) -> None:
             json.dump(conditions, stream, ensure_ascii=False, indent=2)
             stream.flush()
             os.fsync(stream.fileno())
-        os.replace(temp_path, _CONDITIONS_FILE)
+        # Windows readers can temporarily hold the destination without delete
+        # sharing. Keep the atomic replacement and retry briefly; persistent
+        # permission errors still propagate without modifying the old snapshot.
+        for attempt in range(6):
+            try:
+                os.replace(temp_path, _CONDITIONS_FILE)
+                break
+            except PermissionError:
+                if os.name != "nt" or attempt == 5:
+                    raise
+                time.sleep(0.05 * (attempt + 1))
         temp_path = None
         with _lock:
             _cache = deepcopy(conditions)
@@ -1006,8 +1016,18 @@ def _expand_coincident_corridor_edges(G: nx.MultiDiGraph, keys: set, edge_info: 
             # mere contact at a junction is not enough to bind the crossing road.
             if overlap < min(8.0, candidate.length * 0.7):
                 continue
+            # A short stretch inside the buffer is not evidence that a long
+            # diagonal branch is the same road. Compare against the shorter
+            # geometry so a long duplicate edge can still cover a short closure.
+            comparable_length = min(candidate.length, corridor.length)
+            if overlap < comparable_length * 0.7:
+                continue
             along_span = abs(corridor.project(start) - corridor.project(end))
             if along_span < min(6.0, candidate.length * 0.7):
+                continue
+            # Reject oblique branches that remain near the junction but quickly
+            # diverge; projected travel along the corridor must dominate.
+            if along_span < comparable_length * math.cos(math.radians(30)):
                 continue
             matched.add((u, v, key))
             break

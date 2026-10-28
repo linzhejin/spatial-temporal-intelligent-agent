@@ -3953,6 +3953,8 @@
                     var reply = state.productMode === 'planning'
                         ? buildRouteSummary(result)
                         : appendRouteFieldTruthNotice(result.explanation || buildRouteSummary(result), result);
+                    var rankedCandidates = rankedRouteCandidatesSummary(result);
+                    if (rankedCandidates) reply = rankedCandidates + ' ' + reply;
                     updateChatBubble(thinkingBubble, reply);
                     if (result.needs_input && result._task_id
                             && Number.isInteger(result._task_revision)) {
@@ -4196,6 +4198,23 @@
         var notice = routeFieldTruthNotice(data);
         if (!notice || summary.indexOf(notice) !== -1) return summary;
         return summary ? summary + ' ' + notice : notice;
+    }
+
+    function rankedRouteCandidatesSummary(data) {
+        var candidates = data && data.recommendation_candidates;
+        if (!Array.isArray(candidates) || !candidates.length) return '';
+        var ranked = candidates.slice(0, 4).filter(function (candidate) {
+            return candidate && typeof candidate.name === 'string' && candidate.name.trim();
+        });
+        if (!ranked.length) return '';
+        var labels = ranked.map(function (candidate, index) {
+            var distance = candidate.distance_m;
+            var estimate = typeof distance === 'number' && Number.isFinite(distance) && distance >= 0
+                ? '（约 ' + Math.round(distance) + ' 米）' : '';
+            return (index + 1) + '. ' + candidate.name.trim() + estimate;
+        });
+        return '附近地点按路网与接驳估算从近到远：' + labels.join('；')
+            + '。已规划到' + ranked[0].name.trim() + '。';
     }
 
     // 电脑端把路线信息合并成一条可读总览，避免统计卡与助手反馈重复报数。
@@ -5050,7 +5069,12 @@
                 } else if (result.task_type === 'poi_query' && result.poi && state.map) {
                     focusPoiOnMap(result.poi);
                 }
-                updateChatBubble(bubble, result.explanation || result.reply || result.message || '任务已完成。');
+                var restoredReply = result.explanation || result.reply || result.message || '任务已完成。';
+                if (result.task_type === 'path_planning' && result.recommended && result.recommended.length) {
+                    var restoredCandidates = rankedRouteCandidatesSummary(result);
+                    if (restoredCandidates) restoredReply = restoredCandidates + ' ' + restoredReply;
+                }
+                updateChatBubble(bubble, restoredReply);
                 recordRestoredAssistant(active.query, result, active.task_id, turnId);
             }).catch(function (error) {
                 if (epoch !== state.conversationEpoch) return;

@@ -1161,6 +1161,22 @@ class TestRoadConditionAPI:
         assert response.get_json()["error"] == "route_effect_required"
         assert rc.list_conditions() == []
 
+    @pytest.mark.parametrize("metadata", [
+        {"source": {"kind": "research_simulated", "campus_truth": False}},
+        {"simulation_location": {"lng": 114.0, "lat": 30.0}},
+        {"simulation_clock": 1000},
+        {"simulated": True},
+    ])
+    def test_production_road_event_rejects_simulation_metadata(self, client, G, metadata):
+        gj = _mid_12_gcj(G)
+        response = client.post("/api/road-conditions", json={
+            "type": "closure", "name": "模拟事件", "lng": gj[0], "lat": gj[1],
+            "blocked_modes": ["walk"], **metadata,
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "simulation_not_allowed"
+        assert rc.list_conditions() == []
+
     @pytest.mark.parametrize("action", [["closure"], {"action": "closure"}])
     def test_post_rejects_non_string_action_as_client_error(self, client, G, action):
         gj = _mid_12_gcj(G)
@@ -1856,3 +1872,40 @@ class TestRoadConditionAPI:
         after = client.get("/api/road-conditions?version_only=1").get_json()["data"]
         assert after["active_event_version"] != before["active_event_version"]
         assert "conditions" not in after
+
+def test_store_replace_retries_transient_windows_sharing_violation(monkeypatch, G):
+    if os.name != "nt":
+        pytest.skip("Windows sharing violation behavior")
+    original_replace = rc.os.replace
+    attempts = []
+
+    def transient_replace(source, target):
+        attempts.append(1)
+        if len(attempts) < 3:
+            raise PermissionError(13, "temporary sharing violation")
+        return original_replace(source, target)
+
+    monkeypatch.setattr(rc.os, "replace", transient_replace)
+    monkeypatch.setattr(rc.time, "sleep", lambda _: None)
+    condition = _edge_condition(G, "accident")
+    assert condition["id"]
+    assert len(attempts) == 3
+
+def test_store_replace_persistent_permission_error_preserves_old_snapshot(monkeypatch, G):
+    if os.name != "nt":
+        pytest.skip("Windows sharing violation behavior")
+    first = _edge_condition(G, "accident")
+    old = Path(rc._CONDITIONS_FILE).read_bytes()
+    attempts = []
+
+    def denied(*_args):
+        attempts.append(1)
+        raise PermissionError(13, "persistent permission error")
+
+    monkeypatch.setattr(rc.os, "replace", denied)
+    monkeypatch.setattr(rc.time, "sleep", lambda _: None)
+    with pytest.raises(PermissionError):
+        rc.update_condition(first["id"], {"name": "changed"})
+    assert len(attempts) == 6
+    assert Path(rc._CONDITIONS_FILE).read_bytes() == old
+    assert not list(Path(rc._CONDITIONS_FILE).parent.glob(".road-conditions-*.json"))

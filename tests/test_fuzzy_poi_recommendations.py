@@ -154,6 +154,37 @@ def test_explicit_nearest_route_goes_to_nearest_network_ranked_candidate():
     assert route_args["end"] == {"type": "poi", "name": "附近食堂"}
 
 
+def test_nearest_route_keeps_requested_shortlist_in_route_response():
+    from api.routes import _agent_response_to_legacy
+
+    selected_start = {"lng": 114.36, "lat": 30.53, "name": "地图起点"}
+    candidates = [
+        {"poi_id": "canteen_a", "name": "附近食堂甲", "distance_m": 210},
+        {"poi_id": "canteen_b", "name": "附近食堂乙", "distance_m": 340},
+        {"poi_id": "canteen_c", "name": "附近食堂丙", "distance_m": 510},
+    ]
+    route = {"start_name": "地图起点", "end_name": "附近食堂甲",
+             "mode": "walk", "recommended": [[114.36, 30.53]],
+             "recommended_length_m": 210}
+    with patch.object(planner.agent_tools, "execute_tool", side_effect=[
+        ({"candidates": candidates}, {"candidates": candidates}),
+        (route, {"route": route, "route_kind": "direct"}),
+    ]):
+        response = planner.run_agent(
+            "推荐附近3个食堂，并直接给出到其中最近一个的完整步行最短路线",
+            coord_start=selected_start,
+        )
+
+    assert response["response_kind"] == "route"
+    assert [item["poi_id"] for item in response["recommendation_candidates"]] == [
+        "canteen_a", "canteen_b", "canteen_c",
+    ]
+    public = _agent_response_to_legacy(response)
+    assert [item["poi_id"] for item in public["recommendation_candidates"]] == [
+        "canteen_a", "canteen_b", "canteen_c",
+    ]
+
+
 def test_explicit_nearest_route_reports_routing_failure_instead_of_shortlist():
     selected_start = {"lng": 114.36, "lat": 30.53, "name": "地图起点"}
     candidate = {"name": "附近食堂", "distance_m": 210, "subcategory": "canteen"}

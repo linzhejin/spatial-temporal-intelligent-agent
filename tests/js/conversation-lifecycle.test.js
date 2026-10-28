@@ -582,6 +582,26 @@ test('desktop tour feedback identifies the loop and omits generic filler', async
     assert.match(reply, /返回/);
     assert.doesNotMatch(reply, /路线特点：已为你规划好/);
 });
+test('a recommended nearest route also tells the user which places were ranked', async () => {
+    const h = harness();
+    h.setApi(async () => h.context.reply);
+    h.context.reply = {
+        ...routeResult('nearest-canteen'),
+        recommended_length_m: 210, duration_min: 3, mode: 'walk',
+        recommendation_candidates: [
+            { poi_id: 'canteen_a', name: '食堂甲', distance_m: 210 },
+            { poi_id: 'canteen_b', name: '食堂乙', distance_m: 340 },
+            { poi_id: 'canteen_c', name: '食堂丙', distance_m: 510 },
+        ],
+    };
+
+    await h.submit('推荐附近3个食堂，并规划到最近的一个');
+
+    const reply = h.bubbles.at(-1).text;
+    assert.match(reply, /食堂甲.*210.*食堂乙.*340.*食堂丙.*510/);
+    assert.match(reply, /已规划到食堂甲/);
+    assert.match(reply, /路线总览/);
+});
 test('route overview separates road-network length from estimated unverified endpoint connectors', () => {
     const h = harness();
     const summary = h.buildRouteSummary({

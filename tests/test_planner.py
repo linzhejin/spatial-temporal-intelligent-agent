@@ -402,6 +402,142 @@ class TestAgentLoop:
         assert ctx["query"] == previous["original_query"]
         assert result["response_kind"] == "route"
 
+    def test_mode_and_endpoint_edit_keeps_other_route_conditions(self):
+        previous = {
+            "schema_version": 1, "route_id": "route-before", "route_kind": "via",
+            "original_query": "从玉兰2门经卓尔体育馆到樱顶，不走台阶",
+            "start": {"name": "玉兰2门", "type": "poi"},
+            "end": {"name": "樱顶", "type": "poi"},
+            "via": {"name": "卓尔体育馆", "type": "poi"},
+            "tour": None, "legs": [], "travel_mode": "walk",
+            "hard_constraints": {"avoid_steps": True},
+            "strategy": {"name": "shortest", "source": "explicit_nl"},
+            "data_version": "data-test", "road_condition_version": "roads-test",
+        }
+        route = {"recommended": [[1, 2]], "start_name": "玉兰2门",
+                 "end_name": "星湖园食堂", "mode": "bike"}
+        with patch.object(planner, "_make_client") as client, \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route, "route_kind": "via"})) as execute:
+            planner.run_agent(
+                "改成骑行，终点换成星湖园食堂；起点、原有约束和最短路径要求保持不变。",
+                context={"previous_route_state": previous}, travel_mode="walk",
+            )
+        client.assert_not_called()
+        _, args, _ = execute.call_args.args
+        assert args["start"]["name"] == "玉兰2门"
+        assert args["end"]["name"] == "星湖园食堂"
+        assert args["via_name"] == "卓尔体育馆"
+        assert args["constraints"] == {"avoid_steps": True}
+        assert args["strategy"] == "shortest"
+        assert args["mode"] == "bike"
+
+    def test_mode_and_both_endpoint_edits_do_not_drop_first_endpoint(self):
+        previous = {
+            "schema_version": 1, "route_id": "route-before", "route_kind": "direct",
+            "original_query": "从玉兰2门到樱顶，不走台阶",
+            "start": {"name": "玉兰2门", "type": "poi"},
+            "end": {"name": "樱顶", "type": "poi"}, "via": None,
+            "tour": None, "legs": [], "travel_mode": "walk",
+            "hard_constraints": {"avoid_steps": True},
+            "strategy": {"name": "shortest", "source": "explicit_nl"},
+            "data_version": "data-test", "road_condition_version": "roads-test",
+        }
+        route = {"recommended": [[1, 2]], "start_name": "总图",
+                 "end_name": "星湖园食堂", "mode": "bike"}
+        with patch.object(planner, "_make_client") as client, \
+             patch.object(planner.agent_tools, "execute_tool",
+                          return_value=(route, {"route": route})) as execute:
+            planner.run_agent("改成骑行，把起点换成总图，终点换成星湖园食堂。",
+                              context={"previous_route_state": previous}, travel_mode="walk")
+        client.assert_not_called()
+        _, args, _ = execute.call_args.args
+        assert args["start"]["name"] == "总图"
+        assert args["end"]["name"] == "星湖园食堂"
+        assert args["constraints"] == {"avoid_steps": True}
+        assert args["mode"] == "bike"
+
+    @pytest.mark.parametrize("weather", [
+        {"weather": "小雨", "temperature": 18},
+        {"error": "weather_unavailable", "message": "天气暂时获取不到"},
+    ])
+    def test_mode_followup_also_delivers_requested_weather(self, weather):
+        previous = {
+            "schema_version": 1, "route_id": "route-before", "route_kind": "via",
+            "original_query": "从玉兰2门经卓尔体育馆到樱顶，不走台阶",
+            "start": {"name": "玉兰2门", "type": "poi"},
+            "end": {"name": "樱顶", "type": "poi"},
+            "via": {"name": "卓尔体育馆", "type": "poi"},
+            "tour": None, "legs": [], "travel_mode": "walk",
+            "hard_constraints": {"avoid_steps": True},
+            "strategy": {"name": "shortest", "source": "explicit_nl"},
+            "data_version": "data-test", "road_condition_version": "roads-test",
+        }
+        route = {"recommended": [[1, 2]], "start_name": "玉兰2门",
+                 "end_name": "樱顶", "mode": "bike"}
+        def execute(name, args, _context):
+            if name == "get_weather":
+                return weather, None
+            return route, {"route": route, "route_kind": "via"}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=execute) as tool:
+            result = planner.run_agent("刚才路线改成骑行，顺便查天气",
+                                       context={"previous_route_state": previous})
+        assert [call.args[0] for call in tool.call_args_list] == ["get_weather", "plan_via_route"]
+        assert tool.call_args.args[1]["via_name"] == "卓尔体育馆"
+        assert tool.call_args.args[1]["constraints"] == {"avoid_steps": True}
+        assert result["response_kind"] == "route"
+        if "error" in weather:
+            assert "天气暂时获取不到" in result["message"]
+        else:
+            assert result["weather"] == weather
+            assert "小雨" in result["message"] and "18" in result["message"]
+
+    def test_named_via_route_also_delivers_requested_weather(self):
+        weather = {"weather": "晴", "temperature": 22}
+        route = {"recommended": [[1, 2]], "start_name": "玉兰2门",
+                 "end_name": "樱顶", "mode": "walk"}
+        def execute(name, args, _context):
+            if name == "get_weather":
+                return weather, None
+            return route, {"route": route, "route_kind": "via"}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=execute) as tool:
+            result = planner.run_agent("从玉兰2门经卓尔体育馆到樱顶，顺便查天气")
+        assert [call.args[0] for call in tool.call_args_list] == ["get_weather", "plan_via_route"]
+        assert result["weather"] == weather
+        assert "晴" in result["message"] and "22" in result["message"]
+
+    def test_named_via_failure_keeps_weather_in_visible_clarification(self):
+        weather = {"weather": "晴", "temperature": 22}
+        def execute(name, args, _context):
+            if name == "get_weather":
+                return weather, None
+            return {"error": "not_found", "message": "途经地点未找到"}, None
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+            result = planner.run_agent("从玉兰2门经卓尔体育馆到樱顶，顺便查天气")
+        assert result["response_kind"] == "clarify"
+        assert "途经地点未找到" in result["clarify"]["question"]
+        assert "晴" in result["clarify"]["question"] and "22" in result["clarify"]["question"]
+
+    def test_nearest_place_route_delivers_requested_weather(self):
+        start = {"lng": 114.31, "lat": 30.51, "name": "地图起点"}
+        weather = {"weather": "晴", "temperature": 22}
+        candidate = {"name": "星湖园食堂", "distance_m": 320, "subcategory": "canteen"}
+        route = {"recommended": [[114.31, 30.51]], "start_name": "地图起点",
+                 "end_name": "星湖园食堂", "mode": "walk"}
+        def execute(name, args, _context):
+            if name == "search_poi_candidates":
+                return {"start_name": "地图起点"}, {"candidates": [candidate]}
+            if name == "get_weather":
+                return weather, None
+            return route, {"route": route}
+        with patch.object(planner.agent_tools, "execute_tool", side_effect=execute) as tool:
+            result = planner.run_agent("带我去最近的食堂，顺便查天气", coord_start=start)
+        assert [call.args[0] for call in tool.call_args_list] == [
+            "search_poi_candidates", "get_weather", "plan_route",
+        ]
+        assert result["weather"] == weather
+        assert "晴" in result["message"] and "22" in result["message"]
+
     def test_via_first_request_without_start_asks_before_planning(self):
         with patch.object(planner, "_make_client") as client, \
              patch.object(planner.agent_tools, "execute_tool") as execute:

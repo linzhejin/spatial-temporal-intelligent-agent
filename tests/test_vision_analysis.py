@@ -21,6 +21,7 @@ def test_stabilized_video_with_many_stopped_tracked_vehicles_proposes_congestion
     candidate = next(item for item in result["candidates"] if item["kind"] == "possible_congestion")
     assert candidate["review_required"] is True
     assert candidate["evidence"]["summary"]["observed_duration_seconds"] == 15.0
+    assert candidate["evidence"]["summary"]["low_motion_duration_seconds"] == 15.0
 
 
 def test_congestion_duration_does_not_bridge_missing_road_observations():
@@ -69,6 +70,37 @@ def test_short_red_light_like_stop_at_dense_sampling_does_not_propose_congestion
     )
 
     assert all(item["kind"] != "possible_congestion" for item in result["candidates"])
+
+
+def test_repeated_short_vehicle_stops_do_not_turn_long_video_into_congestion():
+    # Each vehicle is observed for only three seconds; there is no continuous
+    # low-motion evidence across the points where the entire group changes.
+    frames = []
+    for index in range(21):
+        frame = frame_of_stopped_vehicles(count=6)
+        for item in frame:
+            item["track_id"] += (index // 3) * 6
+        frames.append(frame)
+    roi = [{"id": "lane", "kind": "vehicle_lane", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        frames, frame_width=640, frame_height=480, camera_stabilized=True, regions=roi,
+    )
+
+    assert all(item["kind"] != "possible_congestion" for item in result["candidates"])
+
+
+def test_real_low_motion_interval_is_kept_when_traffic_clears_later():
+    frames = [frame_of_stopped_vehicles(count=6) for _ in range(20)] + [[] for _ in range(20)]
+    roi = [{"id": "lane", "kind": "vehicle_lane", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}]
+
+    result = analyze_observations(
+        frames, frame_width=640, frame_height=480, camera_stabilized=True, regions=roi,
+    )
+
+    candidate = next(item for item in result["candidates"] if item["kind"] == "possible_congestion")
+    assert candidate["evidence"]["summary"]["low_motion_start_seconds"] == 0
+    assert candidate["evidence"]["summary"]["low_motion_end_seconds"] == 19
 
 
 def test_single_image_vehicle_count_never_claims_traffic_congestion():

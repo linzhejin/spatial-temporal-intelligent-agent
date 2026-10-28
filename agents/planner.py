@@ -875,6 +875,31 @@ def run_agent(query: str, context: dict = None, history: list = None,
             record_tool_result(name, args, result, artifact)
         return result, artifact
 
+    def route_weather(text):
+        """Fetch explicitly requested weather before route tools share the snapshot."""
+        if not re.search(r"天气|气温|现在.*(?:下雨|下雪)", text or ""):
+            return None
+        if re.search(r"(?:不用|无需|不要|不必)(?:再)?(?:查|看|问)?(?:天气|气温)", text or ""):
+            return None
+        result, _ = execute_tool("get_weather", {}, {"query": text, "uid": uid})
+        return result if isinstance(result, dict) else {"error": "weather_unavailable"}
+
+    def add_route_weather(response, weather):
+        if weather is None:
+            return response
+        if not weather.get("error") and isinstance(weather.get("weather"), str) and weather["weather"]:
+            description = weather["weather"]
+            temperature = weather.get("temperature")
+            if isinstance(temperature, (int, float)) and not isinstance(temperature, bool):
+                description += f"、{temperature:g}°C"
+            response["message"] += f" 天气参考：{description}。"
+            response["weather"] = weather
+        else:
+            response["message"] += " 天气暂时获取不到。"
+        if response.get("response_kind") == "clarify" and isinstance(response.get("clarify"), dict):
+            response["clarify"]["question"] = response["message"]
+        return response
+
     # 地图端已经把起点、终点和每个途经点解析成精确坐标，不应再让 LLM
     # 决定是否调用工具或重排用户选点。直接执行同一个 plan_via_route 工具，
     # 使地图多点规划不受模型超时、漏调工具或无工具文本回答影响。
@@ -896,31 +921,32 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 ],
                 "mode": travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
             }
+            weather = route_weather(query)
             result, artifact = execute_tool(
                 "plan_via_route", args, {"query": query, "uid": uid}
             )
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {
+                return add_route_weather({
                     "response_kind": "route",
                     "message": _build_route_message(route) + _road_condition_feedback(route, query),
                     "route": route,
                     "route_kind": (artifact or {}).get("route_kind", "via"),
                     "candidates": None, "clarify": None, "suggestions": None, "turns": 0,
-                }
+                }, weather)
             if isinstance(result, dict) and result.get("error") in {
                     "route_verification_failed", "route_verification_unknown"}:
                 # Explicit map points must not be altered by an LLM repair path.
-                return _route_verification_failure_response(
+                return add_route_weather(_route_verification_failure_response(
                     result, message="你选定的地图点路线未通过独立核验，没有显示路线。",
-                )
-            return {
+                ), weather)
+            return add_route_weather({
                 "response_kind": "chat",
                 "message": (result or {}).get("message", "多途经点路线暂时无法生成，请调整地点后重试。"),
                 "route": None, "route_kind": None, "candidates": None,
                 "clarify": None, "suggestions": None, "turns": 0,
-            }
+            }, weather)
 
     # Resolve a deictic continuation only within the same unfinished task.
     # Chat history or an unrelated old route must never supply this endpoint.
@@ -1058,15 +1084,39 @@ def run_agent(query: str, context: dict = None, history: list = None,
         query or "",
     )
     prior_route = (context or {}).get("previous_route_state")
+    # A mode edit may also replace an endpoint in the same utterance. Do not
+    # consume a broader request with the mode-only shortcut: doing so would
+    # silently retain the old endpoint or discard another requested change.
+    endpoint_edits = list(re.finditer(
+        r"(?:^|[，,；;])\s*(?:把|将)?(起点|终点)(?:改为|改成|换成|换为)\s*([^，,；;。]+)",
+        query or "",
+    ))
+    unsupported_route_edit = re.search(
+        r"(?:途经|途径|经过|台阶|楼梯|陡坡|策略|风景|平坦|最短).{0,8}"
+        r"(?:改为|改成|换成|换为|新增|添加|删除|取消|去掉)", query or "",
+    ) or re.search(
+        r"(?:新增|添加|删除|取消|去掉|避开|不走|允许).{0,8}"
+        r"(?:途经|途径|台阶|楼梯|陡坡)", query or "",
+    )
+    mentioned_endpoint_edits = list(re.finditer(
+        r"(?:起点|终点).{0,3}(?:改为|改成|换成|换为)", query or "",
+    ))
     if (mode_change and isinstance(prior_route, dict) and is_route_followup(query)
-            and not isinstance((context or {}).get("place_request"), dict)):
-        from agents.route_state import apply_change
+            and not isinstance((context or {}).get("place_request"), dict)
+            and not unsupported_route_edit
+            and len(mentioned_endpoint_edits) == len(endpoint_edits)):
+        from agents.route_state import apply_change, validate_route_state
         from api.routes import _replan_tool_request
 
         mode, explicit = detect_travel_mode(query)
         if explicit:
             requested = apply_change(prior_route, {"travel_mode": mode})
+            for edit in endpoint_edits:
+                field = "start" if edit.group(1) == "起点" else "end"
+                requested[field] = {"name": edit.group(2).strip(), "type": "poi"}
+            requested = validate_route_state(requested)
             tool_name, args = _replan_tool_request(requested)
+            weather = route_weather(query)
             result, artifact = execute_tool(
                 tool_name, args,
                 {"query": requested["original_query"], "uid": uid, "replan": True},
@@ -1074,19 +1124,19 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route",
+                return add_route_weather({"response_kind": "route",
                         "message": _build_route_message(route) + _road_condition_feedback(route, query),
                         "route": route, "route_kind": requested["route_kind"],
-                        "candidates": None, "clarify": None, "suggestions": None, "turns": 0}
+                        "candidates": None, "clarify": None, "suggestions": None, "turns": 0}, weather)
             if isinstance(result, dict) and result.get("error") in {
                     "route_verification_failed", "route_verification_unknown"}:
-                return _route_verification_failure_response(
+                return add_route_weather(_route_verification_failure_response(
                     result, message="切换出行方式后的路线未通过独立核验，没有显示路线。",
-                )
-            return {"response_kind": "chat",
+                ), weather)
+            return add_route_weather({"response_kind": "chat",
                     "message": (result or {}).get("message") or "这条路线暂时无法按新出行方式规划。",
                     "route": None, "route_kind": None, "candidates": None,
-                    "clarify": None, "suggestions": None, "turns": 0}
+                    "clarify": None, "suggestions": None, "turns": 0}, weather)
 
     # A spoken edit to an existing route must preserve its ordered stops and
     # untouched constraints. The LLM may otherwise issue a plausible direct
@@ -1097,26 +1147,27 @@ def run_agent(query: str, context: dict = None, history: list = None,
             from api.routes import _replan_tool_request
 
             tool_name, args = _replan_tool_request(requested)
+            weather = route_weather(query)
             result, artifact = execute_tool(
                 tool_name, args, {"query": query, "uid": uid, "replan": True},
             )
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-                return {"response_kind": "route",
+                return add_route_weather({"response_kind": "route",
                         "message": _build_route_message(route) + _road_condition_feedback(route, query),
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None,
-                        "turns": 0}
+                        "turns": 0}, weather)
             if isinstance(result, dict) and result.get("error") in {
                     "route_verification_failed", "route_verification_unknown"}:
-                return _route_verification_failure_response(
+                return add_route_weather(_route_verification_failure_response(
                     result, message="修改后的路线未通过独立核验，没有显示路线。",
-                )
-            return {"response_kind": "chat",
+                ), weather)
+            return add_route_weather({"response_kind": "chat",
                     "message": (result or {}).get("message") or "这条路线暂时无法按新要求规划。",
                     "route": None, "route_kind": None, "candidates": None,
-                    "clarify": None, "suggestions": None, "turns": 0}
+                    "clarify": None, "suggestions": None, "turns": 0}, weather)
 
     # Explicit "via X to Y" requests have a required stop. Resolve that
     # structure before the LLM can accidentally use X as the start and return
@@ -1159,28 +1210,29 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "via_points": [{"name": name, "type": "poi"} for name in via_names], "mode": mode}
         if constraints:
             args["constraints"] = constraints
+        weather = route_weather(full_request)
         result, artifact = execute_tool(
             "plan_via_route", args, {"query": full_request, "uid": uid}
         )
         route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
         if route:
             route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
-            return {"response_kind": "route",
+            return add_route_weather({"response_kind": "route",
                     "message": _build_route_message(route) + _road_condition_feedback(route, full_request),
                     "route": route, "route_kind": "via", "candidates": None,
-                    "clarify": None, "suggestions": None, "turns": 0}
+                    "clarify": None, "suggestions": None, "turns": 0}, weather)
         if isinstance(result, dict) and result.get("error") in {
                 "route_verification_failed", "route_verification_unknown"}:
             # Preserve the user's explicit stop order; fail closed rather than
             # asking the LLM to rewrite a deterministic named-via request.
-            return _route_verification_failure_response(
+            return add_route_weather(_route_verification_failure_response(
                 result, message="按你指定的途经顺序规划的路线未通过独立核验，没有显示路线。",
-            )
+            ), weather)
         question = (result or {}).get("message") or "途经点或终点暂时无法确认，请换个地点名称。"
-        return {"response_kind": "clarify", "message": question, "route": None,
+        return add_route_weather({"response_kind": "clarify", "message": question, "route": None,
                 "route_kind": None, "candidates": None,
                 "clarify": {"question": question, "options": []},
-                "suggestions": None, "turns": 0}
+                "suggestions": None, "turns": 0}, weather)
 
     # Activity choices and candidate IDs resume the same durable POI request.
     place_request = (context or {}).get("place_request") if isinstance(context, dict) else None
@@ -1771,6 +1823,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 route_args["weights"] = {"distance": 0.15, "slope": 0.15, "scenery": 0.7}
             if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", route_request):
                 route_args["constraints"] = {**route_args.get("constraints", {}), "avoid_steps": True}
+            weather = route_weather(route_request)
             route_result, route_artifact = execute_tool(
                 "plan_route", route_args, {"query": route_request, "uid": uid},
             )
@@ -1781,19 +1834,22 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 response = {"response_kind": "route",
                             "message": _build_route_message(route) + _road_condition_feedback(route, route_request),
                             "route": route, "route_kind": "direct", "candidates": None,
+                            "recommendation_candidates": candidates,
                             "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
                 saved_request = {**(place_request or {}), "mode": route_args["mode"],
                                  "constraints": {
                                      "avoid_steps": bool(route_args.get("constraints", {}).get("avoid_steps")),
                                      "avoid_slope": route_args.get("constraints", {}).get("slope") == "avoid",
                                  }}
-                return with_next_place_stage(response, selected_candidate, saved_request,
-                                             follow_up_requests)
+                return add_route_weather(
+                    with_next_place_stage(response, selected_candidate, saved_request,
+                                          follow_up_requests), weather,
+                )
             if route_result.get("error"):
-                return {"response_kind": "chat",
+                return add_route_weather({"response_kind": "chat",
                         "message": route_result.get("message") or "找到附近地点，但当前无法生成可靠路线。",
                         "route": None, "route_kind": None, "candidates": None,
-                        "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                        "clarify": None, "place_request": None, "suggestions": None, "turns": 0}, weather)
 
         first = candidates[0]
         start_name = result.get("start_name") or start_ref.get("name") or "你选定的起点"

@@ -514,3 +514,83 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
 
         context.close()
         browser.close()
+
+
+@pytest.mark.parametrize("mobile", [False, True], ids=["pc", "mobile-web"])
+def test_nearest_place_route_shows_ranked_places_and_route(static_site, mobile):
+    """The combined recommendation and route must both reach the user."""
+    result = {
+        "task_type": "path_planning", "response_kind": "route",
+        "route_kind": "direct", "mode": "walk",
+        "start": {"name": "信息学部"}, "end": {"name": "食堂甲"},
+        "recommended": [
+            {"lng": 114.361, "lat": 30.535},
+            {"lng": 114.362, "lat": 30.536},
+        ],
+        "shortest": [
+            {"lng": 114.361, "lat": 30.535},
+            {"lng": 114.362, "lat": 30.536},
+        ],
+        "recommended_length_m": 210, "shortest_length_m": 210,
+        "duration_min": 3, "shortest_duration_min": 3,
+        "strategy": {"name": "shortest"},
+        "recommendation_candidates": [
+            {"poi_id": "a", "name": "食堂甲", "distance_m": 210},
+            {"poi_id": "b", "name": "食堂乙", "distance_m": 340},
+            {"poi_id": "c", "name": "食堂丙", "distance_m": 510},
+        ],
+        "explanation": "步行路线已生成。 天气参考：晴、22°C。",
+        "weather": {"weather": "晴", "temperature": 22},
+    }
+
+    def handle_request(route):
+        request = route.request
+        parsed = urlsplit(request.url)
+        if parsed.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+            return
+        data = None
+        if parsed.path == "/api/conversations" and request.method == "POST":
+            data = {"conversation_id": "nearest-test"}
+        elif parsed.path.endswith("/messages") and request.method == "POST":
+            data = {"run_id": "nearest-run"}
+        elif parsed.path == "/api/runs/nearest-run":
+            data = {"run_id": "nearest-run", "status": "completed", "events": [],
+                    "task_id": "nearest-task", "current_task_revision": 1,
+                    "result": result}
+        elif parsed.path == "/api/weather":
+            data = {"weather": "晴", "temperature": 20}
+        elif parsed.path == "/api/road-conditions":
+            data = {"count": 0, "conditions": []}
+        elif parsed.path.startswith("/api/"):
+            data = {}
+        if data is not None:
+            route.fulfill(status=200, content_type="application/json; charset=utf-8",
+                          body=json.dumps({"data": data}, ensure_ascii=False))
+        else:
+            route.continue_()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        context = browser.new_context(
+            viewport={"width": 390 if mobile else 1440, "height": 844 if mobile else 1000},
+            is_mobile=mobile, has_touch=mobile,
+        )
+        context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page = context.new_page()
+        page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
+        page.route("**/*", handle_request)
+        page.goto(static_site, wait_until="domcontentloaded")
+        page.locator("#nl-input").fill("推荐附近3个食堂并规划到最近的一个，顺便查天气")
+        page.locator("#submit-btn").click()
+
+        chat = page.locator("#chat-content")
+        expect(chat).to_contain_text("食堂甲（约 210 米）", timeout=10000)
+        expect(chat).to_contain_text("食堂乙（约 340 米）")
+        expect(chat).to_contain_text("食堂丙（约 510 米）")
+        expect(chat).to_contain_text("已规划到食堂甲")
+        expect(chat).to_contain_text("晴")
+        expect(chat).to_contain_text("22")
+        expect(page.locator("#results-section")).to_be_visible()
+        context.close()
+        browser.close()

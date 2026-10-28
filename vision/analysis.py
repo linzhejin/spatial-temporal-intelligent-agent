@@ -672,31 +672,67 @@ def analyze_observations(
 
     vehicle_counts = [len(items) for items in vehicle_frames]
     diagonal = hypot(frame_width, frame_height)
+
+    def track_intervals(positions):
+        positions.sort(key=lambda value: value[2])
+        for left, right in zip(positions, positions[1:]):
+            if right[2] != left[2] + 1:
+                continue
+            elapsed_s = frame_times_s[right[2]] - frame_times_s[left[2]]
+            if elapsed_s <= 0 or elapsed_s > max(0.5, sample_interval_s * 1.5):
+                continue
+            matrix = (
+                [[1, 0, 0], [0, 1, 0], [0, 0, 1]] if camera_stabilized
+                else frame_transforms[right[2]]
+                if frame_transforms and right[2] < len(frame_transforms)
+                else None
+            )
+            predicted = _transform_point(matrix, (left[0], left[1]))
+            if predicted is not None:
+                speed = hypot(right[0] - predicted[0], right[1] - predicted[1]) / elapsed_s
+                yield left[2], right[2], speed / diagonal
+
     def speeds_for_tracks(track_groups):
         speeds = []
         for positions in track_groups.values():
-            positions.sort(key=lambda value: value[2])
-            residuals = []
-            for left, right in zip(positions, positions[1:]):
-                if right[2] != left[2] + 1:
-                    continue
-                elapsed_s = frame_times_s[right[2]] - frame_times_s[left[2]]
-                if elapsed_s <= 0 or elapsed_s > max(0.5, sample_interval_s * 1.5):
-                    continue
-                matrix = (
-                    [[1, 0, 0], [0, 1, 0], [0, 0, 1]] if camera_stabilized
-                    else frame_transforms[right[2]]
-                    if frame_transforms and right[2] < len(frame_transforms)
-                    else None
-                )
-                predicted = _transform_point(matrix, (left[0], left[1]))
-                if predicted is not None:
-                    residuals.append(
-                        hypot(right[0] - predicted[0], right[1] - predicted[1]) / elapsed_s
-                    )
+            residuals = [speed for _, _, speed in track_intervals(positions)]
             if len(residuals) >= 2:
-                speeds.append(mean(residuals) / diagonal)
+                speeds.append(mean(residuals))
         return speeds
+
+    def sustained_low_motion(track_groups, counts_by_frame):
+        """Find a contiguous interval supported by slow tracks, not ROI visibility."""
+        intervals = defaultdict(list)
+        for positions in track_groups.values():
+            for left, right, speed in track_intervals(positions):
+                intervals[(left, right)].append(speed)
+        best = []
+        current = []
+        for (left, right), speeds in sorted(intervals.items()):
+            slow_count = sum(speed <= 0.0025 for speed in speeds)
+            supported = (
+                len(speeds) >= 3
+                and slow_count / len(speeds) >= stationary_ratio_threshold
+                and counts_by_frame.get(left, 0) >= min_vehicle_count
+                and counts_by_frame.get(right, 0) >= min_vehicle_count
+            )
+            if not supported:
+                current = []
+                continue
+            if current and current[-1][1] != left:
+                current = []
+            current.append((left, right, slow_count, len(speeds)))
+            if not best or (frame_times_s[right] - frame_times_s[current[0][0]]
+                            > frame_times_s[best[-1][1]] - frame_times_s[best[0][0]]):
+                best = current.copy()
+        if not best:
+            return None
+        start, end = best[0][0], best[-1][1]
+        slow = sum(item[2] for item in best)
+        tracked = sum(item[3] for item in best)
+        return {"start_seconds": frame_times_s[start], "end_seconds": frame_times_s[end],
+                "duration_seconds": frame_times_s[end] - frame_times_s[start],
+                "stationary_ratio": slow / tracked, "supported_intervals": len(best)}
 
     track_speeds = speeds_for_tracks(track_positions)
     speeds_by_region = {
@@ -770,14 +806,16 @@ def analyze_observations(
         region_stationary_ratio = (
             region_stationary_count / len(region_speeds) if region_speeds else 0.0
         )
+        counts_by_frame = dict(zip(vehicle_observed_frames[region_id], counts))
+        low_motion = sustained_low_motion(track_positions_by_region[region_id], counts_by_frame)
         if (
             motion_compensation_ready and supporting_mapping_ratio >= 0.8
             and region_duration_s >= min_congestion_duration_s
-            and mean(counts) >= min_vehicle_count and len(region_speeds) >= 3
-            and region_stationary_ratio >= stationary_ratio_threshold
+            and low_motion is not None
+            and low_motion["duration_seconds"] >= min_congestion_duration_s
         ):
             candidates.append(_candidate(
-                "possible_congestion", min(0.95, 0.5 + region_stationary_ratio / 2),
+                "possible_congestion", min(0.95, 0.5 + low_motion["stationary_ratio"] / 2),
                 "多帧车辆在相机运动校正后仍呈低位移；请核实观察区域、道路位置和现场通行情况。",
                 {"summary": {
                     "region_id": region_id,
@@ -789,6 +827,11 @@ def analyze_observations(
                     "region_observed_duration_seconds": round(region_duration_s, 3),
                     "region_observed_span_seconds": round(region_observed_span_s, 3),
                     "minimum_duration_seconds": float(min_congestion_duration_s),
+                    "low_motion_start_seconds": round(low_motion["start_seconds"], 3),
+                    "low_motion_end_seconds": round(low_motion["end_seconds"], 3),
+                    "low_motion_duration_seconds": round(low_motion["duration_seconds"], 3),
+                    "low_motion_stationary_ratio": round(low_motion["stationary_ratio"], 3),
+                    "low_motion_supported_intervals": low_motion["supported_intervals"],
                     "camera_motion_compensated": bool(camera_stabilized or motion_compensation_ready),
                     "camera_stabilization_basis": "operator_declared" if camera_stabilized else "estimated_transforms",
                     "valid_motion_transition_ratio": round(valid_transition_ratio, 3),

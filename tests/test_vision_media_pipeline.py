@@ -313,6 +313,24 @@ def test_segment_merge_keeps_candidates_for_distinct_observation_regions_separat
     } == {"north-lane", "south-lane"}
 
 
+def test_congestion_evidence_clip_uses_actual_low_motion_window():
+    segment = {
+        "start_seconds": 0.0, "end_seconds": 40.0,
+        "metrics": {"frames_analyzed": 41},
+        "candidates": [{
+            "kind": "possible_congestion", "confidence": 0.8, "reason": "queue",
+            "evidence": {"summary": {"region_id": "lane",
+                                      "low_motion_start_seconds": 12.0,
+                                      "low_motion_end_seconds": 27.0}},
+        }],
+    }
+
+    result = _merge_segment_analyses([segment])
+    occurrence = result["candidates"][0]["evidence"]["segments"][0]
+    assert occurrence["start_seconds"] == 12.0
+    assert occurrence["end_seconds"] == 27.0
+
+
 def test_segment_merge_propagates_observation_region_reassociation_requirement():
     segment = {
         "start_seconds": 0.0,
@@ -530,8 +548,8 @@ def test_congestion_evidence_continues_across_video_segment_boundary(tmp_path, m
                   if item["kind"] == "possible_congestion"]
     assert len(candidates) == 1
     assert candidates[0]["evidence"]["summary"]["region_observed_duration_seconds"] >= 15
-    assert candidates[0]["evidence"]["segments"][0]["start_seconds"] == 4.0
-    assert candidates[0]["evidence"]["segments"][0]["end_seconds"] == 39.0
+    assert candidates[0]["evidence"]["segments"][0]["start_seconds"] == 12.0
+    assert candidates[0]["evidence"]["segments"][0]["end_seconds"] == 27.0
     assert result["video_coverage"]["sampled_frames"] == 40
 
 
@@ -976,8 +994,10 @@ def test_interrupted_video_resumes_after_last_completed_segment(tmp_path, monkey
     assert calls_before_resume == 450
 
 
-def test_video_checkpoint_is_discarded_when_detector_revision_changes(tmp_path, monkeypatch):
+@pytest.mark.parametrize("changed", ["detector", "analysis_algorithm"])
+def test_video_checkpoint_is_discarded_when_revision_changes(tmp_path, monkeypatch, changed):
     import config
+    import vision.engine as engine
 
     source = tmp_path / "campus.mp4"
     source.write_bytes(b"fake-video")
@@ -1001,7 +1021,11 @@ def test_video_checkpoint_is_discarded_when_detector_revision_changes(tmp_path, 
         )
 
     detector = FakeDetector()
-    detector.model_version = "fixture-v2"
+    if changed == "detector":
+        detector.model_version = "fixture-v2"
+    else:
+        monkeypatch.setattr(engine, "VIDEO_CHECKPOINT_ANALYSIS_REVISION",
+                            engine.VIDEO_CHECKPOINT_ANALYSIS_REVISION + 1)
     result = analyze_media(
         source, "video", None, camera_stabilized=True,
         detector=detector, resume_state=checkpoint,

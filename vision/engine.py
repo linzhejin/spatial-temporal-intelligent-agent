@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 MAX_PREVIEW_DETECTIONS = 250
 MAX_VIDEO_PREVIEW_FRAMES = 180
 # Bump this when detector/tracker/segment aggregation semantics change.
-VIDEO_CHECKPOINT_ANALYSIS_REVISION = 5
+VIDEO_CHECKPOINT_ANALYSIS_REVISION = 6
 VIDEO_TEMPORAL_CONTEXT_SECONDS = 15.0
 
 
@@ -491,16 +491,26 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
             region_id = str(region_id) if region_id is not None else None
             key = (candidate["kind"], region_id)
             groups = candidate_events.setdefault(key, [])
+            window_start = candidate.get("_candidate_window_start_seconds", segment.get(
+                "candidate_window_start_seconds", segment["start_seconds"],
+            ))
+            window_end = candidate.get("_candidate_window_end_seconds", segment.get(
+                "candidate_window_end_seconds", segment["end_seconds"],
+            ))
+            if candidate["kind"] == "possible_congestion" and isinstance(summary, dict):
+                low_start = summary.get("low_motion_start_seconds")
+                low_end = summary.get("low_motion_end_seconds")
+                if (isinstance(low_start, (int, float)) and not isinstance(low_start, bool)
+                        and isinstance(low_end, (int, float)) and not isinstance(low_end, bool)
+                        and math.isfinite(float(low_start)) and math.isfinite(float(low_end))
+                        and window_start <= low_start < low_end <= window_end):
+                    window_start, window_end = low_start, low_end
             occurrence = {
                 "confidence": candidate.get("confidence", 0.0),
                 "reason": candidate.get("reason", ""),
                 "evidence": evidence,
-                "start_seconds": candidate.get("_candidate_window_start_seconds", segment.get(
-                    "candidate_window_start_seconds", segment["start_seconds"],
-                )),
-                "end_seconds": candidate.get("_candidate_window_end_seconds", segment.get(
-                    "candidate_window_end_seconds", segment["end_seconds"],
-                )),
+                "start_seconds": window_start,
+                "end_seconds": window_end,
                 "segment_index": segment_index,
             }
             if groups and groups[-1][-1]["segment_index"] == segment_index - 1:
@@ -1120,8 +1130,11 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             current.get("evidence", {}).get("summary", {})
                             if current and isinstance(current.get("evidence"), dict) else {}
                         )
-                        current_duration = current_summary.get("region_observed_duration_seconds", 0)
-                        candidate_duration = summary.get("region_observed_duration_seconds", 0)
+                        duration_key = ("low_motion_duration_seconds"
+                                        if candidate.get("kind") == "possible_congestion"
+                                        else "region_observed_duration_seconds")
+                        current_duration = current_summary.get(duration_key, 0)
+                        candidate_duration = summary.get(duration_key, 0)
                         if (current is None or candidate_duration > current_duration
                                 or (candidate_duration == current_duration
                                     and candidate.get("confidence", 0) > current.get("confidence", 0))):
