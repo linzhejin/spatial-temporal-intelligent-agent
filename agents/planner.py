@@ -137,7 +137,29 @@ def _road_condition_feedback(route: dict, request: str) -> str:
         return " 本次算路未应用生效路况记录；未覆盖路段仍需现场确认。"
     mode_label = {"walk": "步行", "bike": "骑行", "drive": "驾车"}.get(
         route.get("mode"), "本次出行方式")
-    return f" 本次算路纳入 {applied} 条适用于{mode_label}的生效路况记录。"
+    mode_scope = "本次各段出行方式" if route.get("road_condition_scope") == "multi_mode" else mode_label
+    message = f" 本次算路纳入 {applied} 条适用于{mode_scope}的生效路况记录。"
+    overview = route.get("road_condition_overview")
+    if not isinstance(overview, list) or not overview:
+        return message
+    labels = {"closure": "封闭", "slowdown": "缓行", "notice": "提醒"}
+    items = []
+    for event in overview[:3]:
+        if not isinstance(event, dict):
+            continue
+        name = event.get("name") if isinstance(event.get("name"), str) else "未命名路况"
+        road = event.get("road_name") if isinstance(event.get("road_name"), str) else ""
+        action = labels.get(event.get("action"), "路况")
+        modes = event.get("travel_modes")
+        mode_text = "、".join({"walk": "步行", "bike": "骑行", "drive": "驾车"}[mode]
+                             for mode in modes if isinstance(mode, str)
+                             and mode in {"walk", "bike", "drive"}) if isinstance(modes, list) else ""
+        items.append(f"{name}（{road or '位置未标注'}，{action}{'，' + mode_text if mode_text else ''}）")
+    if items:
+        caveat = ("这些记录与无法规划之间的关系尚未确认。" if route.get("no_route")
+                  else "这些记录不一定影响本路线。")
+        message += " 当前记录：" + "；".join(items) + "。" + caveat
+    return message
 
 
 def _build_route_comparison_message(comparison: dict) -> str:
@@ -574,9 +596,32 @@ def _combined_place_route(legs: list[dict]) -> dict:
                 notices.append(entry)
         combined["route_events"] = notices
         combined["route_events_status"] = "complete"
+        if all(isinstance(leg.get("road_condition_overview"), list) for leg in legs):
+            overview = {}
+            for leg in legs:
+                for event in leg["road_condition_overview"]:
+                    if not isinstance(event, dict):
+                        continue
+                    key = event.get("id")
+                    if not isinstance(key, (str, int)) or isinstance(key, bool):
+                        key = (event.get("name"), event.get("road_name"), event.get("action"))
+                    if key not in overview:
+                        overview[key] = {**deepcopy(event), "travel_modes": []}
+                    mode = leg.get("mode")
+                    if mode in {"walk", "bike", "drive"} and mode not in overview[key]["travel_modes"]:
+                        overview[key]["travel_modes"].append(mode)
+            combined["road_condition_overview"] = list(overview.values())
+            combined["road_conditions_applied"] = len(overview)
+            if len({leg.get("mode") for leg in legs}) > 1:
+                combined["road_condition_scope"] = "multi_mode"
+        else:
+            combined.pop("road_condition_overview", None)
+            combined["road_conditions_applied"] = None
     else:
         combined.pop("route_events", None)
         combined["route_events_status"] = "unknown"
+        combined.pop("road_condition_overview", None)
+        combined["road_conditions_applied"] = None
     if all(isinstance(state, dict) for state in states):
         data_versions = {state.get("data_version") for state in states}
         road_versions = {state.get("road_condition_version") for state in states}
@@ -2280,11 +2325,17 @@ def run_agent(query: str, context: dict = None, history: list = None,
         hard_constraints = route_request.get("hard_constraints")
         avoid_steps = isinstance(hard_constraints, dict) and hard_constraints.get("avoid_steps") is True
         conditions = f"{mode_name}且避开已标注台阶" if avoid_steps else mode_name
+        feedback = _road_condition_feedback({
+            "no_route": True,
+            "mode": route_request.get("travel_mode"),
+            "road_conditions_applied": no_path_result.get("road_conditions_applied"),
+            "road_condition_overview": no_path_result.get("road_condition_overview"),
+        }, query)
         return _with_provenance({
             "response_kind": "no_route",
             "message": (f"按当前路网和已记录路况，从{start_name}到{end_name}"
                         f"在{conditions}条件下未找到可通行的完整路线。"
-                        "现场通行状态未单独核实。"),
+                        "现场通行状态未单独核实。" + feedback),
             "route": None, "route_kind": None,
             "route_state": route_request,
             "no_path_evidence": {"reason_code": "graph_no_path"},

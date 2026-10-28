@@ -41,7 +41,7 @@ from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, CONDITION_LABELS, apply_conditions_to_graph,
-    route_condition_notices,
+    route_condition_notices, active_condition_overview,
     RoadConditionsUnavailableError,
 )
 from spatial.route_constraints import positive_budget
@@ -1992,9 +1992,12 @@ def _tool_plan_route(args, ctx):
     except BudgetSearchIncomplete as e:
         return {"error": "route_search_incomplete", "message": str(e)}, None
     except RouteNoPathError as e:
+        overview, applied = active_condition_overview(G_mode, context["_route_conditions_snapshot"], mode)
         response = {
             "error": "route_not_found", "reason_code": "graph_no_path",
             "message": str(e),
+            "road_condition_overview": overview,
+            "road_conditions_applied": applied,
             "route_request": {
                 "start": {**(args.get("start") or {}), "name": start_name},
                 "end": {**(args.get("end") or {}), "name": end_name},
@@ -2040,8 +2043,9 @@ def _tool_plan_route(args, ctx):
     )
     if verification_error:
         return verification_error, None
-    payload["route_events"], _ = route_condition_notices(
+    payload["route_events"], _, payload["road_condition_overview"] = route_condition_notices(
         G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+        include_overview=True,
     )
     if reuse_assessment is not None:
         payload["execution_optimization"] = {
@@ -2372,8 +2376,9 @@ def _tool_plan_via_route(args, ctx):
     )
     if verification_error:
         return verification_error, None
-    payload["route_events"], payload["road_conditions_applied"] = route_condition_notices(
+    payload["route_events"], payload["road_conditions_applied"], payload["road_condition_overview"] = route_condition_notices(
         G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+        include_overview=True,
     )
     return payload, {"route": payload, "route_kind": "via"}
 
@@ -2826,13 +2831,22 @@ def _tool_plan_multimodal_route(args, ctx):
     payload["route_verification"] = report
     # Each segment has its own mode. A walk-only event must not be presented as
     # affecting a bike segment, even when both use the same physical road.
-    all_notices, by_id = [], {}
+    all_notices, by_id, overview_by_id = [], {}, {}
     for index, leg in enumerate(legs_payload, start=1):
         leg_mode = leg["mode"]
-        leg["route_events"], leg["road_conditions_applied"] = route_condition_notices(
+        leg["route_events"], leg["road_conditions_applied"], leg["road_condition_overview"] = route_condition_notices(
             get_routing_index(G).for_mode(leg_mode).graph, conditions, leg_mode,
             leg["recommended_edge_ids"],
+            include_overview=True,
         )
+        for event in leg["road_condition_overview"]:
+            key = event.get("id")
+            if not isinstance(key, (str, int)) or isinstance(key, bool):
+                key = (event.get("name"), event.get("road_name"), event.get("action"))
+            if key not in overview_by_id:
+                overview_by_id[key] = {**event, "travel_modes": []}
+            if leg_mode not in overview_by_id[key]["travel_modes"]:
+                overview_by_id[key]["travel_modes"].append(leg_mode)
         for notice in leg["route_events"]:
             identifier = notice.get("id")
             merged = by_id.get(identifier) if identifier is not None else None
@@ -2845,6 +2859,9 @@ def _tool_plan_multimodal_route(args, ctx):
                 merged["travel_modes"].append(leg_mode)
             merged["leg_indices"].append(index)
     payload["route_events"] = all_notices
+    payload["road_condition_overview"] = list(overview_by_id.values())
+    payload["road_conditions_applied"] = len(overview_by_id)
+    payload["road_condition_scope"] = "multi_mode"
     return payload, {"route": payload, "route_kind": "multimodal"}
 
 
@@ -3172,8 +3189,9 @@ def _tool_plan_tour(args, ctx):
     )
     if verification_error:
         return verification_error, None
-    payload["route_events"], payload["road_conditions_applied"] = route_condition_notices(
+    payload["route_events"], payload["road_conditions_applied"], payload["road_condition_overview"] = route_condition_notices(
         G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
+        include_overview=True,
     )
     return payload, {"route": payload, "route_kind": "tour"}
 

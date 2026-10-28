@@ -1190,7 +1190,29 @@ def resolve_condition_effects(
     return (penalties, closed, applied, details) if include_event_details else (penalties, closed, applied)
 
 
-def route_condition_notices(G, conditions: list, mode: str, route_edges: list) -> tuple:
+def _condition_overview(details: list) -> list:
+    """Describe resolved events without implying they affect the selected route."""
+    overview = []
+    for condition, _keys in details:
+        edge = condition.get("edge") if isinstance(condition.get("edge"), dict) else {}
+        name = condition.get("name")
+        road_name = edge.get("road_name")
+        overview.append({
+            "id": condition.get("id"),
+            "name": " ".join(name.split())[:60] if isinstance(name, str) and name.strip() else "未命名路况",
+            "road_name": " ".join(road_name.split())[:60] if isinstance(road_name, str) else "",
+            "action": condition.get("action") or "closure",
+        })
+    return overview
+
+
+def active_condition_overview(G, conditions: list, mode: str) -> tuple:
+    """Describe events applied to this mode in the supplied active snapshot."""
+    _, _, applied, details = resolve_condition_effects(G, conditions, mode, strict=True, include_event_details=True)
+    return _condition_overview(details), applied
+
+
+def route_condition_notices(G, conditions: list, mode: str, route_edges: list, *, include_overview: bool = False) -> tuple:
     """Return active notice/slowdown events overlapping actual selected edges.
 
     ``conditions`` must be the same already-filtered active snapshot used to
@@ -1243,7 +1265,7 @@ def route_condition_notices(G, conditions: list, mode: str, route_edges: list) -
         if identifier is not None:
             seen.add(identifier)
         unique.append(item)
-    return unique, applied
+    return (unique, applied, _condition_overview(details)) if include_overview else (unique, applied)
 
 
 def apply_conditions_to_graph(

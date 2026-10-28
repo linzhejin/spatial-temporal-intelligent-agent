@@ -607,7 +607,9 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
     assert [call["end"]["poi_id"] for call in route_calls] == ["poi_068", "poi_082"]
     assert [call.get("strategy") for call in route_calls] == [expected_strategy] * 2
     if "道路管制" in selection_query:
-        assert "纳入 1 条适用于步行的生效路况记录" in completed["message"]
+        # The mocked legs have no shared snapshot version, so their global
+        # event count cannot safely be presented as the whole itinerary's.
+        assert "未取得可核实的路况应用信息" in completed["message"]
 
 
 def test_textual_candidate_choice_respects_rejection_and_ambiguity():

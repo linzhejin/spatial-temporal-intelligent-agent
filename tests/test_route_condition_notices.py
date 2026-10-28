@@ -54,6 +54,8 @@ def test_direct_route_returns_only_active_matching_on_path_notice_and_slowdown(t
     assert artifact is not None, result
     assert {item["id"] for item in result["route_events"]} == {"notice-reverse", "slow"}
     assert result["road_conditions_applied"] == 3  # Includes neighbor, excludes bike and expired.
+    assert {item["id"] for item in result["road_condition_overview"]} == {"notice-reverse", "slow", "neighbor"}
+    assert "neighbor" not in {item["id"] for item in result["route_events"]}
     assert all(item["action"] in {"notice", "slowdown"} for item in result["route_events"])
 
 
@@ -71,6 +73,34 @@ def test_ordered_route_reports_events_on_all_legs_once():
     assert result["route_events"][0]["observation_time"] == 123456
     assert "private-media-path" not in json.dumps(result["route_events"])
     assert result["road_conditions_applied"] == 2
+    assert [item["id"] for item in result["road_condition_overview"]] == ["first", "second"]
+
+
+def test_no_path_exposes_mode_applicable_event_snapshot_without_inventing_cause():
+    value = graph()
+    snapshot = [event("closure", (1, 2), "closure"), event("bike-only", (2, 3), "closure", "bike")]
+    context = {"_route_graph_snapshot": value, "_route_conditions_snapshot": snapshot,
+               "_route_weather_snapshot": None}
+    result, artifact = tools._tool_plan_route({"start": coord(1, value), "end": coord(3, value),
+        "mode": "walk", "strategy": "shortest"}, context)
+    assert artifact is None and result["reason_code"] == "graph_no_path"
+    assert result["road_conditions_applied"] == 1
+    assert [(item["id"], item["action"]) for item in result["road_condition_overview"]] == [("closure", "closure")]
+
+
+def test_closed_road_is_in_global_overview_but_not_described_as_along_detour():
+    value = graph()
+    for a, b in [(1, 4), (5, 3)]:
+        value.add_edge(a, b, 0, length=100, highway="residential")
+        value.add_edge(b, a, 0, length=100, highway="residential")
+    context = {"_route_graph_snapshot": value,
+               "_route_conditions_snapshot": [event("closure", (1, 2), "closure")],
+               "_route_weather_snapshot": None}
+    result, artifact = tools._tool_plan_route({"start": coord(1, value), "end": coord(3, value),
+        "mode": "walk", "strategy": "shortest"}, context)
+    assert artifact is not None, result
+    assert result["route_events"] == []
+    assert [(item["id"], item["action"]) for item in result["road_condition_overview"]] == [("closure", "closure")]
 
 
 def test_crossing_road_does_not_become_an_along_route_event():
@@ -86,9 +116,11 @@ def test_crossing_road_does_not_become_an_along_route_event():
 
 def test_legacy_route_conversion_preserves_route_event_field():
     route = {"recommended": [{"lat": 30.53, "lng": 114.36}],
-             "route_events": [{"id": "a", "action": "notice"}]}
+             "route_events": [{"id": "a", "action": "notice"}],
+             "road_condition_overview": [{"id": "b", "action": "closure"}]}
     result = _agent_response_to_legacy({"response_kind": "route", "route": route})
     assert result["route_events"] == route["route_events"]
+    assert result["road_condition_overview"] == route["road_condition_overview"]
 
 
 def test_direct_route_api_returns_along_route_event(monkeypatch):
@@ -146,6 +178,12 @@ def test_multimodal_events_respect_the_mode_of_each_leg():
     assert found["bike-only"]["leg_indices"] == [2]
     assert [item["id"] for item in result["legs"][0]["route_events"]] == ["shared", "walk-only"]
     assert [item["id"] for item in result["legs"][1]["route_events"]] == ["bike-only"]
+    assert result["road_condition_scope"] == "multi_mode"
+    by_id = {item["id"]: item for item in result["road_condition_overview"]}
+    assert set(by_id) == {"shared", "walk-only", "bike-only", "wrong-mode"}
+    assert by_id["shared"]["travel_modes"] == ["walk", "bike"]
+    assert by_id["wrong-mode"]["travel_modes"] == ["walk"]
+    assert result["road_conditions_applied"] == 4
 
 
 def test_same_multimodal_event_merges_modes_and_segments():

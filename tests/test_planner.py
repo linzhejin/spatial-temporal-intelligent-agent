@@ -89,6 +89,18 @@ def test_route_summary_names_the_ordered_intermediate_stop():
 
 
 class TestAgentLoop:
+    def test_requested_road_condition_feedback_describes_records_without_claiming_route_impact(self):
+        route = {"mode": "walk", "road_conditions_applied": 2,
+                 "road_condition_overview": [
+                     {"name": "施工管制", "road_name": "桂园路", "action": "closure"},
+                     {"name": "临时提醒", "road_name": "", "action": "notice"},
+                 ]}
+        text = planner._road_condition_feedback(route, "先查当前路况再规划路线")
+        assert "桂园路" in text and "封闭" in text
+        assert "位置未标注" in text and "提醒" in text
+        assert "不一定影响" in text
+        assert "因此绕行" not in text
+
     def test_no_path_reply_describes_user_step_constraint(self):
         args = {"start": {"name": "梅园综合楼"}, "end": {"name": "图书馆"},
                 "mode": "walk", "constraints": {"avoid_steps": True}}
@@ -101,6 +113,22 @@ class TestAgentLoop:
         assert result["response_kind"] == "no_route"
         assert "台阶" in result["message"]
         assert "现场" in result["message"]
+
+    def test_no_path_reports_current_closure_without_claiming_its_cause(self):
+        args = {"start": {"name": "梅园综合楼"}, "end": {"name": "图书馆"}, "mode": "walk"}
+        client = FakeClient([_fake_response(tool_calls=[_fake_tool_call("plan_route", args)])])
+        failure = {"error": "route_not_found", "reason_code": "graph_no_path",
+                   "route_request": {"start": args["start"], "end": args["end"],
+                                     "travel_mode": "walk", "hard_constraints": {}},
+                   "road_conditions_applied": 1,
+                   "road_condition_overview": [{"name": "施工管制", "road_name": "桂园路", "action": "closure"}]}
+        with patch.object(planner.agent_tools, "execute_tool", return_value=(failure, None)), \
+                patch.object(planner, "_make_client", return_value=client):
+            result = planner.run_agent("请先查当前路况，从梅园综合楼到图书馆", history=[])
+        assert result["response_kind"] == "no_route"
+        assert "桂园路" in result["message"] and "封闭" in result["message"]
+        assert "关系尚未确认" in result["message"]
+        assert "因此无法" not in result["message"]
 
     def test_typed_graph_no_path_returns_complete_refusal_without_more_model_calls(self):
         args = {"start": {"name": "梅园综合楼"},
