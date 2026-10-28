@@ -19,6 +19,13 @@ def fake_api_key(monkeypatch):
     ("从南门先到图书馆再到实验楼最后到北门", "南门", ["图书馆", "实验楼"], "北门"),
     ("从南门出发，先到图书馆，然后到实验楼，最后北门", "南门", ["图书馆", "实验楼"], "北门"),
     ("从南门先到新材料再生中心，最后北门", "南门", ["新材料再生中心"], "北门"),
+    ("从梅园综合楼出发，先经过武汉大学国际教育学院(桂园楼)，再到武汉大学图书馆(总馆)，步行。",
+     "梅园综合楼", ["武汉大学国际教育学院(桂园楼)"], "武汉大学图书馆(总馆)"),
+    ("从梅园综合楼出发，先经过武汉大学国际教育学院(桂园楼)、武汉大学图书馆(总馆)，再到武汉大学图书馆工学分馆，步行。",
+     "梅园综合楼", ["武汉大学国际教育学院(桂园楼)", "武汉大学图书馆(总馆)"],
+     "武汉大学图书馆工学分馆"),
+    ("从南门出发，先经过图书馆再到北门", "南门", ["图书馆"], "北门"),
+    ("从南门出发，先途经图书馆、实验楼，再到北门", "南门", ["图书馆", "实验楼"], "北门"),
 ])
 def test_ordered_route_executes_all_stops_without_model_or_itinerary(
         monkeypatch, query, start, via, end):
@@ -41,6 +48,20 @@ def test_ordered_route_executes_all_stops_without_model_or_itinerary(
     assert [point["name"] for point in args["via_points"]] == via
     assert "time_budget_min" not in args
     assert "stop_duration_min" not in args
+
+
+def test_ordered_route_preserves_combined_mode_and_step_constraint(monkeypatch):
+    calls = []
+    monkeypatch.setattr(tools, "execute_tool", lambda name, args, ctx: (
+        calls.append((name, args)) or {"start_name": "南门", "end_name": "北门"},
+        {"route": {"start_name": "南门", "end_name": "北门"}, "route_kind": "via"},
+    ))
+    monkeypatch.setattr(planner, "_make_client", lambda: pytest.fail("ordered route called LLM"))
+    planner.run_agent("从南门出发，先经过图书馆，再到北门，步行且不要走台阶。")
+    name, args = calls[0]
+    assert name == "plan_via_route"
+    assert args["mode"] == "walk"
+    assert args["constraints"]["avoid_steps"] is True
 
 
 def test_named_via_route_answers_road_condition_question(monkeypatch):

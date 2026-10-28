@@ -103,7 +103,7 @@ def ordered_via_request(query: str) -> dict | None:
         return None
     match = re.fullmatch(
         r"(?:请|请帮我|帮我|带我)?\s*(?:从|由)(?P<start>[^，,。；;]+?)"
-        r"(?:出发)?\s*[，,]?\s*(?P<order>先(?:去|到)|依次(?:去|到|经过|途经))(?P<sequence>.+)", text,
+        r"(?:出发)?\s*[，,]?\s*(?P<order>先(?:经过|途经|去|到)|依次(?:去|到|经过|途经))(?P<sequence>.+)", text,
     )
     if not match:
         return None
@@ -117,14 +117,14 @@ def ordered_via_request(query: str) -> dict | None:
     if len(parts) > 1 and not re.fullmatch(
         r"(?:(?:步行|走路|骑行|骑车|开车|驾车|避坡|避开陡坡|"
         r"(?:避开|不走|不要走|绕开)(?:台阶|楼梯)|平坦优先|风景优先|最短(?:路径)?)"
-        r"\s*(?:[，,；;]\s*)?)+", parts[1],
+        r"\s*(?:(?:[，,；;]|并且|并|且)\s*)?)+", parts[1],
     ):
         return None
     sequence = parts[0]
-    separator = (r"\s*(?:、|[，,；;]\s*(?:再|然后|接着|最后)(?:去|到|前往)?\s*)"
-                 if match.group("order").startswith("依次") else
-                 r"\s*(?:[，,；;]\s*(?:再|然后|接着|最后)(?:去|到|前往)?"
-                 r"|(?:再|然后|接着|最后)(?:去|到|前往))\s*")
+    list_separator = "、|" if match.group("order").startswith("依次") or match.group("order") in ("先经过", "先途经") else ""
+    separator = (r"\s*(?:" + list_separator
+                 + r"[，,；;]\s*(?:再|然后|接着|最后)(?:去|到|前往|经过|途经)?"
+                 + r"|(?:再|然后|接着|最后)(?:去|到|前往|经过|途经))\s*")
     points = re.split(separator, sequence)
     points = [point.strip() for point in points]
     if (not 2 <= len(points) <= _MAX_VIA_POINTS + 1
