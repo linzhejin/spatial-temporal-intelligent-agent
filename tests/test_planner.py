@@ -101,6 +101,17 @@ class TestAgentLoop:
         assert "不一定影响" in text
         assert "因此绕行" not in text
 
+    def test_road_feedback_prioritizes_verified_on_route_notice_and_reports_omissions(self):
+        overview = [{"id": str(i), "name": f"事件{i}", "road_name": "", "action": "notice"}
+                    for i in range(4)]
+        route = {"mode": "walk", "road_conditions_applied": 4, "road_condition_overview": overview,
+                 "route_events": [{"id": "3", "action": "notice"}]}
+        for query in ("为什么绕行？", "路上有积水吗？", "当前路况如何？"):
+            message = planner._road_condition_feedback(route, query)
+            assert "事件3" in message and "沿途" in message
+            assert "另有 1 条" in message
+            assert "不一定影响" in message
+
     def test_no_path_reply_describes_user_step_constraint(self):
         args = {"start": {"name": "梅园综合楼"}, "end": {"name": "图书馆"},
                 "mode": "walk", "constraints": {"avoid_steps": True}}

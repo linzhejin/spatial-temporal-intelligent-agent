@@ -1,6 +1,14 @@
 from unittest.mock import patch
 
 from agents import planner
+from agents.route_state import build_route_state
+
+
+def _test_route_state(args):
+    return build_route_state(route_kind="direct", original_query="测试路线",
+        start=args["start"], end=args["end"], travel_mode=args.get("mode", "walk"),
+        hard_constraints=args.get("constraints") or {}, strategy={"name": args.get("strategy") or "shortest"},
+        data_version="test-data", road_condition_version="test-roads")
 
 
 def test_activity_answer_preserves_follow_up_and_applies_new_mode_and_constraint():
@@ -43,10 +51,10 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
     def first_stage(name, args, _ctx):
         if name == "plan_route":
             return {}, {"route": {"recommended": [[114.35, 30.54], [114.36, 30.54]],
-                                  "recommended_edge_ids": ["first-edge"],
+                                  "recommended_edge_ids": [[1, 2, 0]],
                                   "distance_m": 120, "duration_min": 2,
                                   "start_name": "工学部", "end_name": "工学部篮球场",
-                                  "mode": "walk"}}
+                                  "mode": "walk", "route_state": _test_route_state(args)}}
         assert name == "search_poi_candidates"
         assert args["activities"] == ["meal"]
         assert args["start"] == {"type": "poi", "name": "工学部篮球场"}
@@ -70,10 +78,10 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
         assert args["start"] == {"type": "poi", "name": "工学部篮球场"}
         assert args["end"]["poi_id"] == "poi_310"
         return {}, {"route": {"recommended": [[114.36, 30.54], [114.37, 30.54]],
-                              "recommended_edge_ids": ["second-edge"],
+                              "recommended_edge_ids": [[2, 3, 0]],
                               "distance_m": 260, "duration_min": 4,
                               "start_name": "工学部篮球场", "end_name": "工学部食堂",
-                              "mode": "walk"}}
+                              "mode": "walk", "route_state": _test_route_state(args)}}
 
     with patch.object(planner.agent_tools, "load_pois", return_value=[
         {"id": "poi_310", "name": "工学部食堂"},
@@ -87,12 +95,28 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
     assert routed_meal["route"]["recommended"] == [
         [114.35, 30.54], [114.36, 30.54], [114.37, 30.54],
     ]
-    assert routed_meal["route"]["recommended_edge_ids"] == ["first-edge", "second-edge"]
+    assert routed_meal["route"]["recommended_edge_ids"] == [[1, 2, 0], [2, 3, 0]]
     assert routed_meal["route"]["distance_m"] == 380
     assert routed_meal["route"]["duration_min"] == 6
     assert routed_meal["route"]["start_name"] == "工学部"
     assert routed_meal["route"]["end_name"] == "工学部食堂"
     assert len(routed_meal["route"]["legs"]) == 2
+
+    def changed_second_stage(name, args, ctx):
+        result, artifact = second_stage(name, args, ctx)
+        artifact["route"]["route_state"]["road_condition_version"] = "changed-roads"
+        return result, artifact
+
+    with patch.object(planner.agent_tools, "load_pois", return_value=[
+        {"id": "poi_310", "name": "工学部食堂"},
+    ]), patch.object(planner.agent_tools, "execute_tool", side_effect=changed_second_stage):
+        stale = planner.run_agent("去这个食堂", context={
+            "place_request": routed_sport["place_request"], "selected_poi_id": "poi_310",
+        })
+    assert stale["response_kind"] == "clarify"
+    assert stale["route"] is None and stale["needs_input"] is True
+    assert stale["place_request"]["completed_legs"]
+    assert "版本不同" in stale["message"]
 
 
 def test_nearest_first_stage_keeps_meal_follow_up_and_route_constraints():
@@ -200,8 +224,8 @@ def test_route_join_rejects_stale_versions_and_unconnected_geometry():
                     data_version="data-1", road_condition_version=version,
                 )}
 
-    first = leg("起点", "球场", [[114.35, 30.54], [114.36, 30.54]], "edge-one")
-    second = leg("球场", "食堂", [[114.36, 30.54], [114.37, 30.54]], "edge-two")
+    first = leg("起点", "球场", [[114.35, 30.54], [114.36, 30.54]], [1, 2, 0])
+    second = leg("球场", "食堂", [[114.36, 30.54], [114.37, 30.54]], [2, 3, 0])
     assert planner._place_route_join_issue([first, second]) is None
     combined = planner._combined_place_route([first, second])
     assert combined["route_state"]["route_kind"] == "via"
@@ -214,15 +238,25 @@ def test_route_join_rejects_stale_versions_and_unconnected_geometry():
     limited = planner._combined_place_route([first, second])
     assert limited["shortest_baseline_feasible"] is False
 
-    changed_roads = leg("球场", "食堂", second["recommended"], "edge-two", "roads-2")
+    changed_roads = leg("球场", "食堂", second["recommended"], [2, 3, 0], "roads-2")
     assert "版本不同" in planner._place_route_join_issue([first, changed_roads])
-    disconnected = leg("球场", "食堂", [[114.365, 30.54], [114.37, 30.54]], "edge-two")
+    disconnected = leg("球场", "食堂", [[114.365, 30.54], [114.37, 30.54]], [2, 3, 0])
     assert "未在同一位置接通" in planner._place_route_join_issue([first, disconnected])
-    different_constraints = leg("球场", "食堂", second["recommended"], "edge-two",
+    different_constraints = leg("球场", "食堂", second["recommended"], [2, 3, 0],
                                 constraints={"avoid_steps": True})
     mixed = planner._combined_place_route([first, different_constraints])
     assert "route_state" not in mixed
     assert mixed["route_state_unavailable"]
+
+
+def test_route_join_rejects_direction_mismatch_and_missing_snapshot():
+    state = {"data_version": "data-1", "road_condition_version": "roads-1"}
+    shared = [114.36, 30.54]
+    first = {"route_state": state, "recommended_edge_ids": [[1, 2, 0]], "recommended": [shared]}
+    reversed_join = {"route_state": state, "recommended_edge_ids": [[1, 3, 0]], "recommended": [shared]}
+    assert planner._place_route_join_issue([first, reversed_join]) is not None
+    missing = {"recommended_edge_ids": [[2, 3, 0]], "recommended": [shared]}
+    assert planner._place_route_join_issue([first, missing]) is not None
 
 
 def test_combined_route_merges_event_notices_only_for_the_same_snapshot():

@@ -128,7 +128,7 @@ def _build_route_message(route: dict) -> str:
 
 
 def _road_condition_feedback(route: dict, request: str) -> str:
-    if not re.search(r"路况|管制|封路|封闭|禁行|为何绕行|为什么绕路", request or ""):
+    if not re.search(r"路况|管制|封路|封闭|禁行|拥堵|积水|绕行|绕路|(?:能否|是否|能不能|可以).{0,4}(?:通行|走通)", request or ""):
         return ""
     applied = route.get("road_conditions_applied")
     if type(applied) is not int:
@@ -143,22 +143,40 @@ def _road_condition_feedback(route: dict, request: str) -> str:
     if not isinstance(overview, list) or not overview:
         return message
     labels = {"closure": "封闭", "slowdown": "缓行", "notice": "提醒"}
+    id_counts = {}
+    for event in overview:
+        if isinstance(event, dict) and isinstance(event.get("id"), (str, int)) and not isinstance(event.get("id"), bool):
+            identifier = event["id"]
+            id_counts[identifier] = id_counts.get(identifier, 0) + 1
+    along_ids = {event["id"] for event in route.get("route_events", [])
+                 if isinstance(event, dict) and isinstance(event.get("id"), (str, int))
+                 and not isinstance(event.get("id"), bool) and isinstance(event.get("action"), str)
+                 and event.get("action") in {"notice", "slowdown"}
+                 and id_counts.get(event["id"]) == 1} if isinstance(route.get("route_events"), list) else set()
+    def is_along(event):
+        identifier = event.get("id")
+        return (isinstance(identifier, (str, int)) and not isinstance(identifier, bool)
+                and identifier in along_ids and event.get("action") in ("notice", "slowdown"))
+    ordered = sorted((event for event in overview if isinstance(event, dict)),
+                     key=lambda event: 0 if is_along(event) else 1)
     items = []
-    for event in overview[:3]:
-        if not isinstance(event, dict):
-            continue
+    for event in ordered[:3]:
         name = event.get("name") if isinstance(event.get("name"), str) else "未命名路况"
         road = event.get("road_name") if isinstance(event.get("road_name"), str) else ""
-        action = labels.get(event.get("action"), "路况")
+        raw_action = event.get("action")
+        action = labels.get(raw_action, "路况") if isinstance(raw_action, str) else "路况"
         modes = event.get("travel_modes")
         mode_text = "、".join({"walk": "步行", "bike": "骑行", "drive": "驾车"}[mode]
                              for mode in modes if isinstance(mode, str)
                              and mode in {"walk", "bike", "drive"}) if isinstance(modes, list) else ""
-        items.append(f"{name}（{road or '位置未标注'}，{action}{'，' + mode_text if mode_text else ''}）")
+        along = "沿途，" if is_along(event) else ""
+        items.append(f"{name}（{along}{road or '位置未标注'}，{action}{'，' + mode_text if mode_text else ''}）")
     if items:
+        omitted = max(0, applied - len(items))
+        remainder = f"另有 {omitted} 条生效记录。" if omitted else ""
         caveat = ("这些记录与无法规划之间的关系尚未确认。" if route.get("no_route")
                   else "这些记录不一定影响本路线。")
-        message += " 当前记录：" + "；".join(items) + "。" + caveat
+        message += " 当前记录：" + "；".join(items) + "。" + remainder + caveat
     return message
 
 
@@ -473,20 +491,31 @@ def _join_leg_paths(legs: list[dict], field: str) -> list:
 
 def _place_route_join_issue(legs: list[dict]) -> str | None:
     states = [leg.get("route_state") for leg in legs]
-    if all(isinstance(state, dict) for state in states):
-        if len({state.get("data_version") for state in states}) > 1 or len({
-            state.get("road_condition_version") for state in states
-        }) > 1:
-            return "两段路线使用的路网或路况版本不同"
+    if not all(isinstance(state, dict)
+               and all(isinstance(state.get(key), str) and state.get(key)
+                       for key in ("data_version", "road_condition_version")) for state in states):
+        return "各段缺少可核实的路网或路况版本"
+    if len({state["data_version"] for state in states}) > 1 or len({
+        state["road_condition_version"] for state in states
+    }) > 1:
+        return "两段路线使用的路网或路况版本不同"
     for first, second in zip(legs, legs[1:]):
         if not all(isinstance(leg.get("recommended_edge_ids"), list)
                    and leg["recommended_edge_ids"] for leg in (first, second)):
             return "路段缺少可核对的实际边序列"
         last_edge = first["recommended_edge_ids"][-1]
         first_edge = second["recommended_edge_ids"][0]
-        if (isinstance(last_edge, (list, tuple)) and len(last_edge) >= 2
-                and isinstance(first_edge, (list, tuple)) and len(first_edge) >= 2
-                and not set(last_edge[:2]).intersection(first_edge[:2])):
+        if (not isinstance(last_edge, (list, tuple)) or len(last_edge) != 3
+                or not isinstance(first_edge, (list, tuple)) or len(first_edge) != 3):
+            return "路段缺少可核对的实际边序列"
+        try:
+            if any(not (type(value) is int or (isinstance(value, str) and re.fullmatch(r"-?\d+", value)))
+                   for value in (*last_edge, *first_edge)):
+                raise ValueError("invalid edge component")
+            last_end, next_start = int(last_edge[1]), int(first_edge[0])
+        except (TypeError, ValueError, OverflowError):
+            return "路段缺少可核对的实际边序列"
+        if last_end != next_start:
             return "相邻路段的路网节点没有接通"
         first_path, second_path = first.get("recommended"), second.get("recommended")
         if not first_path or not second_path:
@@ -543,8 +572,8 @@ def _combined_place_route(legs: list[dict]) -> dict:
     ]}
     combined["degraded"] = any(bool(leg.get("degraded")) for leg in legs)
     leg_proofs = [leg.get("route_verification") for leg in legs]
-    if all(isinstance(proof, dict) and proof.get("status") == "pass"
-           for proof in leg_proofs):
+    if (all(isinstance(proof, dict) and proof.get("status") == "pass" for proof in leg_proofs)
+            and _place_route_join_issue(legs) is None):
         combined["route_verification"] = {
             "status": "pass", "scope": "verified_legs_and_checked_join",
             "field_truth_verified": False,
@@ -1357,9 +1386,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "重新规划全程", pending_slot="follow_up", previous=saved_request,
                 )
                 pending["completed_legs"] = completed_legs
+                route_response["response_kind"] = "clarify"
+                route_response["route"] = None
+                route_response["route_kind"] = None
+                route_response["candidates"] = None
                 route_response["needs_input"] = True
                 route_response["place_request"] = pending
-                question = (f"第二段已单独规划，但{join_issue}，无法确认全程连通。"
+                question = (f"各段已单独规划，但{join_issue}，无法确认完整路线。"
                             "请重新提交完整需求，按当前路况规划全程。")
                 route_response["message"] = question
                 route_response["clarify"] = {"question": question, "options": []}
@@ -1426,10 +1459,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
             full_legs = completed_legs + [final_route]
             join_issue = _place_route_join_issue(full_legs)
             if join_issue:
-                return {**route_response, "response_kind": "chat", "route": None,
+                pending = _place_request_state("重新规划全程", pending_slot="follow_up", previous=saved_request)
+                pending["completed_legs"] = full_legs
+                message = f"各段路线已算出，但{join_issue}，无法确认完整路线，请按当前路况重新规划。"
+                return {**route_response, "response_kind": "clarify", "route": None,
                         "route_kind": None,
-                        "message": f"各段路线已算出，但{join_issue}，未显示不连续的全程路线。",
-                        "needs_input": False, "place_request": None}
+                        "message": message, "clarify": {"question": message, "options": []},
+                        "needs_input": True, "place_request": pending, "candidates": None}
             full_route = _combined_place_route(full_legs)
             return {**route_response, "response_kind": "route", "route": full_route,
                     "route_kind": "via", "message": _build_route_message(full_route) + _road_condition_feedback(

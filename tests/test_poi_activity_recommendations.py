@@ -3,9 +3,17 @@ from unittest.mock import patch
 import pytest
 
 from agents import planner, tools
+from agents.route_state import build_route_state
 from agents.state_models import PlaceRequestState
 from spatial.poi import _flatten_poi
 from spatial.poi_taxonomy import resolve_activity_query
+
+
+def _test_route_state(args):
+    return build_route_state(route_kind="direct", original_query="测试路线",
+        start=args["start"], end=args["end"], travel_mode=args.get("mode", "walk"),
+        hard_constraints=args.get("constraints") or {}, strategy={"name": args.get("strategy") or "shortest"},
+        data_version="test-data", road_condition_version="test-roads")
 
 
 @pytest.mark.parametrize("query,expected_slot", [
@@ -522,6 +530,7 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
             "duration_min": 2.0, "shortest_duration_min": 2.0,
             "steps": [], "pois": [], "timings_ms": {},
             "route_verification": {"status": "pass", "field_truth_verified": False},
+            "route_state": _test_route_state(args),
         }
         return route, {"route": route}
 
@@ -547,6 +556,21 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
     assert completed["route"]["route_verification"]["scope"] == "verified_legs_and_checked_join"
     assert [leg["end_name"] for leg in completed["route"]["legs"]] == ["测试食堂", "桂园食堂"]
     assert [call["end"]["name"] for call in route_calls] == ["测试食堂", "桂园食堂"]
+
+    def changed_execute(name, args, context):
+        result, artifact = execute(name, args, context)
+        if name == "plan_route" and args["end"]["name"] == "桂园食堂":
+            artifact["route"]["route_state"]["road_condition_version"] = "changed-roads"
+        return result, artifact
+
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", changed_execute)
+    stale = planner.run_agent("去这个地点", context={
+        "place_request": first["place_request"], "selected_poi_id": "poi_meal",
+    })
+    assert stale["response_kind"] == "clarify"
+    assert stale["route"] is None and stale["needs_input"] is True
+    assert stale["place_request"]["completed_legs"]
+    assert "版本不同" in stale["message"]
 
 
 @pytest.mark.parametrize("selection_query,expected_strategy", [
@@ -585,6 +609,7 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
             "steps": [], "pois": [], "timings_ms": {},
             "route_verification": {"status": "pass", "field_truth_verified": False},
             "road_conditions_applied": 1,
+            "route_state": _test_route_state(args),
         }
         return route, {"route": route}
 
@@ -633,10 +658,11 @@ def test_textual_candidate_choice_respects_rejection_and_ambiguity():
 
 def test_live_shaped_ordered_legs_join_at_the_same_point_with_undirected_edges():
     shared = {"lng": 114.363465, "lat": 30.53795}
+    state = {"data_version": "data-1", "road_condition_version": "roads-1"}
     legs = [
-        {"recommended_edge_ids": [[10, 20, 0]],
+        {"route_state": state, "recommended_edge_ids": [[10, 20, 0]],
          "recommended": [{"lng": 114.363, "lat": 30.537}, shared]},
-        {"recommended_edge_ids": [[20, 10, 0]],
+        {"route_state": state, "recommended_edge_ids": [[20, 10, 0]],
          "recommended": [shared, {"lng": 114.364, "lat": 30.538}]},
     ]
 
@@ -740,7 +766,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
         route_calls.append(args)
         start_name = args["start"]["name"]
         end_name = args["end"]["name"]
-        edge_id = {"工学部篮球场": (1, 2, 0), "测试食堂": (3, 2, 0),
+        edge_id = {"工学部篮球场": (1, 2, 0), "测试食堂": (2, 3, 0),
                    "武汉大学桂园6舍": (3, 4, 0)}[end_name]
         route = {
             "start_name": start_name, "end_name": end_name, "mode": "walk",
@@ -750,6 +776,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
             "recommended_length_m": 100.0, "shortest_length_m": 100.0,
             "duration_min": 2.0, "shortest_duration_min": 2.0,
             "steps": [], "pois": [], "timings_ms": {},
+            "route_state": _test_route_state(args),
         }
         return route, {"route": route}
 
