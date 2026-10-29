@@ -16,7 +16,7 @@ def test_new_recommendation_preserves_selected_mode_before_and_after_start_clari
     assert missing_start["place_request"]["pending_slot"] == "start"
     assert missing_start["place_request"]["mode"] == "bike"
 
-    candidate = {"poi_id": "poi_310", "name": "工学部食堂", "distance_m": 200}
+    candidate = {"poi_id": "poi_307", "name": "星湖园食堂", "distance_m": 200}
     with patch.object(planner.agent_tools, "execute_tool", return_value=(
         {"candidates": [candidate], "start_name": "工学部"}, {"candidates": [candidate]},
     )) as execute:
@@ -24,6 +24,19 @@ def test_new_recommendation_preserves_selected_mode_before_and_after_start_clari
             "place_request": missing_start["place_request"], "active_task_request": "找食堂",
         })
     assert answer["place_request"]["mode"] == "bike"
+    assert execute.call_args.args[1]["mode"] == "bike"
+
+    def plan_selected(name, args, _context):
+        assert name == "plan_route"
+        route = {"mode": args["mode"], "start_name": args["start"]["name"],
+                 "end_name": args["end"]["name"], "route_state": _test_route_state(args)}
+        return route, {"route": route}
+
+    with patch.object(planner.agent_tools, "execute_tool", side_effect=plan_selected) as execute:
+        result = planner.run_agent("就去这里", context={
+            "place_request": answer["place_request"], "selected_poi_id": "poi_307",
+        })
+    assert result["response_kind"] == "route"
     assert execute.call_args.args[1]["mode"] == "bike"
 
 
