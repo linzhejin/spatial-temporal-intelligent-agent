@@ -164,7 +164,8 @@ def test_explicit_road_conditions_query_with_empty_results_is_answered():
     replies = [_message(calls=[_call("list_road_conditions"), _call("plan_route")])]
     client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: replies.pop(0))))
     route = {"start_name": "总图", "end_name": "桂园", "mode": "walk",
-             "recommended_length_m": 500, "duration_min": 8}
+             "recommended_length_m": 500, "duration_min": 8,
+             "road_conditions_applied": 0, "road_condition_overview": []}
 
     def execute(name, _args, _context):
         if name == "list_road_conditions":
@@ -200,6 +201,20 @@ def test_empty_query_does_not_override_route_with_new_active_conditions():
         result = planner.run_agent("先查当前路况，再从总图到桂园。")
     assert "没有已生效的路况记录" not in result["message"]
     assert "路况" in result["message"] and "不一致" in result["message"]
+
+
+def test_empty_query_does_not_claim_current_state_when_route_snapshot_is_unknown():
+    replies = [_message(calls=[_call("list_road_conditions"), _call("plan_route")])]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: replies.pop(0))))
+    route = {"start_name": "总图", "end_name": "桂园", "mode": "walk"}
+    def execute(name, _args, _context):
+        return ({"conditions": [], "count": 0}, None) if name == "list_road_conditions" else (route, {"route": route})
+    with patch.object(planner.config, "DEEPSEEK_API_KEY", "test-key"), \
+         patch.object(planner, "_make_client", return_value=client), \
+         patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+        result = planner.run_agent("先查当前路况，再从总图到桂园。")
+    assert "没有已生效的路况记录" not in result["message"]
+    assert "无法核实" in result["message"]
 
 
 def test_mixed_route_conditions_and_candidates_keep_the_candidate_names():
