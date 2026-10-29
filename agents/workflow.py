@@ -412,7 +412,9 @@ def build_agent_workflow(
             else:
                 response["message"] = weather_text
         response.update({
-            "weather": weather,
+            "weather": weather if weather is not None else (
+                response.get("weather") if "weather" not in errors else None
+            ),
             "execution_status": execution_status,
             "requirement_results": requirement_results,
             "requirement_errors": errors,

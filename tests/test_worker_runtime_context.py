@@ -141,6 +141,25 @@ def test_opt_in_agent_tool_trace_records_safe_metadata_as_run_events(
     assert result["result"]["reply"] == "樱顶在珞珈山上。"
 
 
+def test_mixed_information_keeps_weather_returned_by_agent(monkeypatch):
+    from agents import workflow
+
+    monkeypatch.setattr(workflow, "append_run_event", lambda *_args, **_kwargs: {"stored": True})
+    monkeypatch.setattr(workflow, "get_run_input", lambda _url, _run: {
+        "query": "现在有什么路况，天气怎么样？", "history": [], "task": {},
+    })
+    weather = {"weather": "晴", "temperature": 22}
+    def fake_agent(*_args, **_kwargs):
+        return {"response_kind": "chat", "message": "暂无路况，天气晴。", "weather": weather}
+
+    result = workflow.build_agent_workflow(InMemorySaver(), agent=fake_agent).invoke(
+        {"run_id": "mixed-weather"}, {"configurable": {"thread_id": "mixed-weather"}},
+        context={"worker_id": "worker-a"},
+    )["result"]
+    assert result["weather"] == weather
+    assert "路况" in result["reply"]
+
+
 def test_opt_in_agent_tool_trace_records_direct_weather_execution(monkeypatch):
     from agents import workflow
 

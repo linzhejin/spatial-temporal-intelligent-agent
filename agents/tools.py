@@ -1608,6 +1608,9 @@ def _tool_get_place_details(args, ctx):
 
     place = _poi_public(poi, with_provenance=True)
     coordinates = poi.get("coordinates") or {}
+    opening_hours = poi.get("opening_hours")
+    if isinstance(opening_hours, str) and opening_hours.strip().lower() in {"", "unknown", "未知", "未登记"}:
+        opening_hours = None
     place.update({
         "poi_id": poi.get("id"),
         "aliases": list(poi.get("aliases") or []),
@@ -1615,8 +1618,8 @@ def _tool_get_place_details(args, ctx):
         "source_refs": list(poi.get("source_refs") or [])[:10],
         "verification_status": poi.get("verification_status") or "legacy_unverified",
         "coordinate_verification_status": poi.get("coordinate_verification_status") or "unknown",
-        "opening_hours": {"status": "known", "value": poi.get("opening_hours")}
-        if poi.get("opening_hours") else {"status": "unknown", "value": None},
+        "opening_hours": {"status": "known", "value": opening_hours}
+        if opening_hours else {"status": "unknown", "value": None},
         "accessibility": poi.get("accessibility") or "unknown",
         "location_crs": poi.get("coordinate_crs") or "GCJ-02",
         "data_source": "校园 POI 主数据；source_refs 标注其来源",

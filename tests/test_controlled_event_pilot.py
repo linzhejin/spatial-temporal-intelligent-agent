@@ -25,12 +25,17 @@ def _closed_sets(version, snapshot):
     return independent, product
 
 
-def test_historical_detour_fixture_closes_more_product_edges_than_gold():
+def test_historical_detour_fixture_omits_reverse_physical_edge():
     independent, product = _closed_sets("controlled_event_pilot_v1",
                                         "simulated_detour_001")
     assert len(independent) == 1
-    assert len(product) == 12
+    # Current binding closes the selected physical segment in both directions.
+    # V1's historical gold contains only the forward directed edge; it must
+    # not be silently treated as an accurate reference for current code.
+    assert len(product) == 2
     assert independent < product
+    u, v, key = next(iter(independent))
+    assert (v, u, key) in product
 
 
 def test_corrected_event_snapshots_match_product_road_closures():

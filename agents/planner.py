@@ -16,6 +16,7 @@ import re
 import time
 from collections.abc import Callable
 from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -487,6 +488,182 @@ def _join_leg_paths(legs: list[dict], field: str) -> list:
             part = part[1:]
         joined.extend(part)
     return joined
+
+
+def _vision_condition_summary(result: dict, query: str = "") -> str | None:
+    """Describe vision-linked road records from evidence, never model inference."""
+    conditions = result.get("conditions") if isinstance(result, dict) else None
+    if not isinstance(conditions, list) or not any(
+        isinstance(item, dict) and item.get("source_kind") != "manager_record" for item in conditions
+    ):
+        return None
+    def requested_event(event):
+        if not isinstance(event, dict):
+            return False
+        if any(isinstance(event.get(key), str) and len(event[key].strip()) >= 2
+               and event[key].strip() in query for key in ("road_name", "name", "type_label")):
+            return True
+        label = str(event.get("type_label") or "")
+        return any(term in query and term in label for term in ("积水", "事故", "拥堵", "施工"))
+
+    conditions = sorted(conditions, key=lambda event: not requested_event(event))
+    lines = []
+    mode_names = {"walk": "步行", "bike": "骑行", "drive": "驾车"}
+    for event in conditions[:5]:
+        if not isinstance(event, dict):
+            lines.append("有一条路况记录格式不完整，详情未知。")
+            continue
+        name = str(event.get("name") or "未命名事件")[:100]
+        location = str(event.get("location") or event.get("road_name") or "位置未记录")[:100]
+        status = event.get("status")
+        source = event.get("source_kind")
+        if status == "confirmed_active":
+            action = str(event.get("action_label") or "影响方式未记录")[:30]
+            affected = event.get("affected_modes")
+            modes = "、".join(mode_names[x] for x in affected if x in mode_names) if isinstance(affected, list) else ""
+            event_type = str(event.get("type_label") or "事件类型未记录")[:30]
+            detail = f"{name}（{location}，{event_type}）：{action}"
+            detail += f"，影响{modes}。" if modes else "，受影响的出行方式未记录。"
+            end_time = event.get("end_time")
+            if isinstance(end_time, (int, float)) and not isinstance(end_time, bool):
+                try:
+                    rendered_end = datetime.fromtimestamp(end_time, timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+                except (ValueError, OverflowError, OSError):
+                    rendered_end = "未能识别"
+                detail += f"记录结束时间：{rendered_end}。"
+            elif isinstance(end_time, str) and end_time.strip():
+                try:
+                    parsed_end = datetime.fromisoformat(end_time.strip().replace("Z", "+00:00"))
+                    if parsed_end.tzinfo is None:
+                        rendered_end = parsed_end.strftime("%Y-%m-%d %H:%M") + "（记录未注明时区）"
+                    else:
+                        rendered_end = parsed_end.astimezone(timezone(timedelta(hours=8))).strftime("%Y-%m-%d %H:%M")
+                except ValueError:
+                    rendered_end = "未能识别"
+                detail += f"记录结束时间：{rendered_end}。"
+            elif re.search(r"什么时候|何时|几点|多久|截止|结束时间|解封|解除", query):
+                detail += "结束时间未记录。"
+        else:
+            detail = f"{name}（{location}）：尚不能确认该记录已发布并生效。"
+        if source == "vision_job":
+            evidence = event.get("vision_evidence")
+            evidence = evidence if isinstance(evidence, dict) else {}
+            candidate = evidence.get("candidate_index")
+            has_review = (type(candidate) is int and candidate >= 0
+                          and bool(evidence.get("reviewed_at")) and bool(evidence.get("reviewed_by")))
+            if status == "confirmed_active" and has_review:
+                detail += "影像候选经管理端复核后发布，是否现场核实未知。"
+            elif status == "pending_review":
+                detail += "影像候选尚未复核，不能作为已发布路况。"
+            else:
+                detail += "该记录与影像有关，候选复核或发布情况未记录，无法确认是否经过复核。"
+        elif source == "manager_record":
+            detail += "来源：管理记录。"
+        elif source == "research_simulated":
+            detail += "来源：实验模拟事件，不是现场事实。"
+        else:
+            detail += "来源未记录或无法确认。"
+        lines.append(detail)
+    if len(conditions) > 5:
+        lines.append(f"另有 {len(conditions) - 5} 条记录未展开。")
+    return "当前路况记录：\n" + "\n".join(lines)
+
+
+def _mixed_evidence_summary(summary: str, *, route: dict | None, candidates: list | None,
+                            place_results: list, resolved_results: list, last_tool_results: dict,
+                            weather_result: dict | None, weather_failed: bool,
+                            tools_used: set, query: str) -> str:
+    """Deliver available tool evidence without retaining conflicting free-text road claims."""
+    parts = []
+    if route:
+        parts.append(_build_route_message(route))
+    if candidates:
+        names = []
+        for item in candidates:
+            if not isinstance(item, dict):
+                continue
+            name = item.get("name")
+            if not isinstance(name, str) or not name.strip():
+                continue
+            campus = item.get("campus")
+            label = name.strip()[:100]
+            if isinstance(campus, str) and campus.strip():
+                label += f"（{campus.strip()[:40]}）"
+            names.append(label)
+        if names:
+            parts.append("候选地点：" + "、".join(names) + "。")
+        else:
+            parts.append("已找到候选地点，但暂时无法整理名称。")
+    described_poi_ids = set()
+    for result in place_results:
+        if not isinstance(result, dict) or result.get("error"):
+            parts.append(str(result.get("message") or "地点详情暂时获取不到。")[:300]
+                         if isinstance(result, dict) else "地点详情暂时获取不到。")
+            continue
+        if result.get("found") is False:
+            parts.append(str(result.get("message") or "当前地点资料没有匹配结果。")[:300])
+            continue
+        place = result.get("place") if isinstance(result.get("place"), dict) else result
+        name = str(place.get("name") or "地点")[:100]
+        poi_id = place.get("poi_id") or place.get("id")
+        if poi_id:
+            described_poi_ids.add(str(poi_id))
+        details = []
+        for key, label in (("campus", "所在区域"), ("location", "位置"), ("description", "资料")):
+            value = place.get(key)
+            if isinstance(value, str) and value.strip():
+                details.append(f"{label}：{value.strip()[:200]}")
+        opening = place.get("opening_hours")
+        opening_value = opening.get("value") if isinstance(opening, dict) else None
+        if (isinstance(opening, dict) and opening.get("status") == "known" and opening_value
+                and str(opening_value).strip().lower() not in {"unknown", "未知", "未登记"}):
+            details.append(f"开放时间：{str(opening_value)[:100]}")
+        elif isinstance(opening, dict):
+            details.append("开放时间未登记")
+        if re.search(r"无障碍|轮椅|坡道", query):
+            access = place.get("accessibility")
+            if isinstance(access, str) and access.strip().lower() not in {"", "unknown", "未知", "未登记"}:
+                details.append(f"无障碍信息：{access.strip()[:100]}")
+            else:
+                details.append("无障碍情况未核实")
+        parts.append(f"{name}：" + "；".join(details) + "。" if details else f"{name}：暂无可核对的详情。")
+    for result in resolved_results:
+        if isinstance(result, dict) and result.get("found") and isinstance(result.get("poi"), dict):
+            poi = result["poi"]
+            name = str(poi.get("name") or "名称未记录")[:100]
+            poi_id = poi.get("poi_id") or poi.get("id")
+            if not poi_id or str(poi_id) not in described_poi_ids:
+                campus = str(poi.get("campus") or "")[:100]
+                parts.append(f"已找到地点：{name}" + (f"（{campus}）" if campus else "") + "。")
+                if poi_id:
+                    described_poi_ids.add(str(poi_id))
+        elif isinstance(result, dict):
+            parts.append(str(result.get("message") or "当前地点资料没有匹配结果。")[:300])
+    labels = {"plan_route": "路线规划", "plan_via_route": "途经路线规划", "plan_tour": "游览路线规划",
+              "plan_itinerary": "行程规划", "plan_multimodal_route": "分段路线规划",
+              "search_poi_candidates": "地点查找", "find_reachable_places": "地点查找"}
+    for (tool_name, _identity), result in last_tool_results.items():
+        if tool_name in labels and isinstance(result, dict) and result.get("error"):
+            parts.append(f"{labels[tool_name]}未完成：{str(result.get('message') or '服务暂不可用')[:200]}。")
+    if "get_weather" in tools_used:
+        if weather_result:
+            description = weather_result["weather"]
+            temperature = weather_result.get("temperature")
+            if isinstance(temperature, (int, float)) and not isinstance(temperature, bool):
+                description += f"、{temperature:g}°C"
+            parts.append(f"天气参考：{description}。")
+            advice = weather_result.get("advice")
+            if isinstance(advice, str) and advice.strip():
+                parts.append(advice.strip())
+        elif weather_failed:
+            parts.append("天气暂时获取不到。")
+    supported = {"list_road_conditions", "get_weather", "get_place_details", "resolve_poi", "suggest_followup",
+                 "plan_route", "plan_via_route", "plan_tour", "plan_itinerary", "plan_multimodal_route",
+                 "search_poi_candidates", "find_reachable_places"}
+    if tools_used - supported or (not parts and tools_used - {"list_road_conditions", "suggest_followup"}):
+        parts.append("其他查询结果暂无法可靠整理，请单独询问。")
+    parts.append(summary)
+    return "\n".join(parts)
 
 
 def _place_route_join_issue(legs: list[dict]) -> str | None:
@@ -2274,6 +2451,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
     artifact_suggestions = None
     weather_result = None
     weather_tool_failed = False
+    road_condition_result = None
+    road_condition_failed = False
+    place_detail_results = {}
+    resolved_poi_results = {}
+    last_tool_results = {}
+    weather_in_structured_answer = False
+    executed_tool_names = set()
     final_message = ""
     turns = 0
     agent_elapsed_ms = 0.0
@@ -2422,6 +2606,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             manual_start_applies = bool(
                 manual_start and (not explicit_start or explicit_start == manual_start["name"])
             )
+            args = {}
             try:
                 args = json.loads(tc.function.arguments or "{}")
             except json.JSONDecodeError:
@@ -2479,11 +2664,27 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 if tool_trace_callback:
                     record_tool_result(name, args, result, artifact)
 
+            executed_tool_names.add(name)
+            tool_identity = json.dumps(args, ensure_ascii=False, sort_keys=True, default=str)
+            last_tool_results[(name, tool_identity)] = result
+            if name == "get_place_details":
+                place_detail_results[tool_identity] = result
+            if name == "resolve_poi":
+                resolved_poi_results[tool_identity] = result
+            if name == "list_road_conditions":
+                if (isinstance(result, dict) and not result.get("error")
+                        and isinstance(result.get("conditions"), list)):
+                    road_condition_result, road_condition_failed = result, False
+                else:
+                    road_condition_result, road_condition_failed = None, True
+
             if name == "get_weather" and isinstance(result, dict):
                 if result.get("error"):
-                    weather_tool_failed = True
+                    weather_result, weather_tool_failed = None, True
                 elif isinstance(result.get("weather"), str) and result["weather"]:
-                    weather_result = result
+                    weather_result, weather_tool_failed = result, False
+                else:
+                    weather_result, weather_tool_failed = None, True
 
             if artifact:
                 if "route" in artifact:
@@ -2690,8 +2891,54 @@ def run_agent(query: str, context: dict = None, history: list = None,
         else:
             raise PlannerError("Agent 循环结束但没有产出任何结果")
 
-    delivered_weather = None
-    if artifact_route and re.search(r"天气|气温|现在.*(?:下雨|下雪)",
+    if road_condition_failed:
+        unavailable = "本次路况查询失败，无法确认最新路况，请稍后重试。"
+        pure_condition_query = (not artifact_route and not artifact_candidates
+                                and executed_tool_names <= {"list_road_conditions", "get_weather"})
+        final_message = (unavailable if pure_condition_query else _mixed_evidence_summary(
+            unavailable, route=artifact_route, candidates=artifact_candidates,
+            place_results=list(place_detail_results.values()), resolved_results=list(resolved_poi_results.values()),
+            last_tool_results=last_tool_results, weather_result=weather_result,
+            weather_failed=weather_tool_failed, tools_used=executed_tool_names, query=query))
+        weather_in_structured_answer = not pure_condition_query and "get_weather" in executed_tool_names
+        if pure_condition_query and "get_weather" in executed_tool_names:
+            if weather_result:
+                description = weather_result["weather"]
+                temperature = weather_result.get("temperature")
+                if isinstance(temperature, (int, float)) and not isinstance(temperature, bool):
+                    description += f"、{temperature:g}°C"
+                final_message += f"\n天气参考：{description}。"
+                advice = weather_result.get("advice")
+                if isinstance(advice, str) and advice.strip():
+                    final_message += f"{advice.strip()}。"
+            elif weather_tool_failed:
+                final_message += "\n天气暂时获取不到。"
+    elif road_condition_result is not None:
+        condition_summary = _vision_condition_summary(road_condition_result, query)
+        if condition_summary:
+            pure_condition_query = (not artifact_route and not artifact_candidates
+                                    and executed_tool_names <= {"list_road_conditions", "get_weather"})
+            final_message = (condition_summary if pure_condition_query else _mixed_evidence_summary(
+                condition_summary, route=artifact_route, candidates=artifact_candidates,
+                place_results=list(place_detail_results.values()), resolved_results=list(resolved_poi_results.values()),
+                last_tool_results=last_tool_results, weather_result=weather_result,
+                weather_failed=weather_tool_failed, tools_used=executed_tool_names, query=query))
+            weather_in_structured_answer = not pure_condition_query and "get_weather" in executed_tool_names
+            if pure_condition_query and "get_weather" in executed_tool_names:
+                if weather_result:
+                    description = weather_result["weather"]
+                    temperature = weather_result.get("temperature")
+                    if isinstance(temperature, (int, float)) and not isinstance(temperature, bool):
+                        description += f"、{temperature:g}°C"
+                    final_message += f"\n天气参考：{description}。"
+                    advice = weather_result.get("advice")
+                    if isinstance(advice, str) and advice.strip():
+                        final_message += f"{advice.strip()}。"
+                elif weather_tool_failed:
+                    final_message += "\n天气暂时获取不到。"
+
+    delivered_weather = weather_result if weather_in_structured_answer else None
+    if artifact_route and not weather_in_structured_answer and re.search(r"天气|气温|现在.*(?:下雨|下雪)",
                                     (active_task_request or "") + query):
         if weather_result:
             description = weather_result["weather"]
