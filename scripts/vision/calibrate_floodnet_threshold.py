@@ -12,7 +12,7 @@ from pathlib import Path, PurePosixPath, PureWindowsPath
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 
-from scripts.vision.evaluate_specialized import _align_rgb_to_mask_grid, _polygon_mask
+from scripts.vision.evaluate_specialized import _flood_valid_mask, _polygon_mask, _read_flood_pair
 from vision.specialized import OnnxFloodSegmenter
 from vision.specialized_evaluation import (
     select_probability_threshold_from_histograms,
@@ -45,7 +45,6 @@ def _dataset_path(root: Path, relative: str) -> Path:
 
 
 def main() -> int:
-    import cv2
     import numpy as np
 
     parser = argparse.ArgumentParser(description=__doc__)
@@ -90,15 +89,12 @@ def main() -> int:
     bin_edges = np.linspace(0.0, 1.0, args.bins + 1).tolist()
     positive_image_count = 0
     aligned_count = 0
+    valid_pixel_count = ignored_pixel_count = 0
     started = time.monotonic()
     for index, sample in enumerate(manifest["samples"], start=1):
         image_path = _dataset_path(root, sample["image"])
         mask_path = _dataset_path(root, sample["mask"])
-        frame = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-        truth_labels = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
-        if frame is None or truth_labels is None or truth_labels.ndim != 2:
-            raise ValueError(f"cannot decode validation image/mask pair: {sample['image']}")
-        frame, alignment = _align_rgb_to_mask_grid(frame, truth_labels)
+        frame, truth_labels, alignment = _read_flood_pair(image_path, mask_path)
         aligned_count += int(alignment == "image_resized_to_mask_grid")
         region = {"id": sample["group_id"], "kind": "road_surface",
                   "polygon": sample["road_surface_polygon"]}
@@ -106,7 +102,9 @@ def main() -> int:
         if prediction is None:
             raise ValueError(f"validation road ROI is empty: {sample['image']}")
         roi = _polygon_mask(frame.shape, sample["road_surface_polygon"])
-        valid = roi & (truth_labels >= 0) & (truth_labels <= 9)
+        valid = _flood_valid_mask(truth_labels, roi=roi)
+        valid_pixel_count += int(valid.sum())
+        ignored_pixel_count += int(roi.sum()) - int(valid.sum())
         actual_positive = valid & (truth_labels == int(sample.get("flooded_road_class_id", 3)))
         scores = prediction["flooded_road_probability"]
         positive_image_count += int(actual_positive.any())
@@ -130,6 +128,9 @@ def main() -> int:
         "model_sha256": _sha256(args.model.resolve()),
         "histogram_bins": args.bins,
         "image_mask_grid_resized_count": aligned_count,
+        "pixel_alignment_verified": False,
+        "valid_pixel_count": valid_pixel_count,
+        "ignored_pixel_count": ignored_pixel_count,
         "operating_point_selected_on_validation_pixels": selected,
         "selection_metric": "micro pixel IoU within annotated road region",
         "elapsed_seconds": round(time.monotonic() - started, 2),
@@ -137,6 +138,7 @@ def main() -> int:
             "Threshold was selected on validation only; evaluate the frozen threshold once on the separate test split.",
             "FloodNet splits are labeled image IDs, not flight/scene IDs; results do not establish independent-scene generalization.",
             "Public post-disaster imagery does not establish Wuhan University shallow-water performance or road-closure accuracy.",
+            "Matching dimensions and default EXIF orientation do not prove image/mask pixel registration.",
             "A probability threshold cannot repair missing visual features or domain shift; keep the model disabled unless held-out evaluation and campus validation pass.",
         ],
     }

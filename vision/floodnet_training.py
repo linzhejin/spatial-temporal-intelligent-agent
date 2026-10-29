@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import math
 import random
-from collections import Counter
 from pathlib import Path, PurePosixPath, PureWindowsPath
 from typing import Any
 
@@ -15,6 +14,16 @@ from vision.tiling import tile_windows
 
 
 _SPLITS = ("train", "validation", "test")
+
+
+def _require_unambiguous_geometry(image, mask) -> None:
+    """Reject unsupported inputs; matching headers alone do not prove alignment."""
+    if image.getexif().get(274, 1) != 1 or mask.getexif().get(274, 1) != 1:
+        raise ValueError("unresolved image or mask EXIF orientation; verify registration before use")
+    if image.size != mask.size:
+        raise ValueError("image and mask dimensions differ; verify registration before use")
+    if mask.mode not in {"L", "P", "I", "I;16"}:
+        raise ValueError("mask must contain class-index pixels")
 
 
 class FloodNetSegmentationDataset:
@@ -54,8 +63,6 @@ class FloodNetSegmentationDataset:
         self._cached_image = None
         self._cached_mask = None
         self.items = []
-        alignment_counts = Counter()
-        size_mappings = Counter()
         for index, sample in enumerate(samples):
             if not isinstance(sample, dict):
                 raise ValueError(f"sample {index} must be an object")
@@ -65,36 +72,18 @@ class FloodNetSegmentationDataset:
             mask_path = self._resolve(mask_rel)
             if not image_path.is_file() or not mask_path.is_file():
                 raise ValueError(f"sample {index} image or mask does not exist")
-            with Image.open(image_path) as image:
-                source_width, source_height = image.size
-            with Image.open(mask_path) as mask:
+            with Image.open(image_path) as image, Image.open(mask_path) as mask:
+                _require_unambiguous_geometry(image, mask)
                 width, height = mask.size
-                if mask.mode not in {"L", "P", "I", "I;16"}:
-                    raise ValueError(f"sample {index} mask must contain class-index pixels")
-            if (source_width, source_height) == (width, height):
-                alignment = "identity"
-            else:
-                # FloodNet Track 1's official evaluator maps prediction rasters
-                # to each 4000x3000 ground-truth mask grid. Mirror that benchmark
-                # convention on RGB inputs and keep the categorical mask intact.
-                alignment = "image_resized_to_mask_grid"
-                size_mappings[(source_width, source_height, width, height)] += 1
-            alignment_counts[alignment] += 1
             windows = ([(None, None)] if one_tile_per_sample else
                        tile_windows(width=width, height=height, tile_size=tile_size, overlap=overlap))
             for x, y in windows:
                 self.items.append((image_rel, mask_rel, width, height, x, y))
         self.alignment_report = {
-            "identity": alignment_counts["identity"],
-            "image_resized_to_mask_grid": alignment_counts["image_resized_to_mask_grid"],
-            "mappings": [
-                {"image_size": [source_width, source_height],
-                 "mask_grid": [target_width, target_height], "samples": count}
-                for (source_width, source_height, target_width, target_height), count
-                in sorted(size_mappings.items())
-            ],
-            "rule": "resize RGB to paired categorical-mask grid; never resize class-index masks",
-            "protocol_reference": "FloodNet Track 1 evaluator resizes predictions to the 4000x3000 ground-truth mask grid",
+            "identity": len(samples),
+            "image_resized_to_mask_grid": 0,
+            "mappings": [],
+            "rule": "matching dimensions and identity orientation only; pixel alignment not verified",
         }
 
     def _resolve(self, relative: str):
@@ -116,13 +105,12 @@ class FloodNetSegmentationDataset:
         image_rel, mask_rel, width, height, x, y = self.items[index]
         cache_key = (image_rel, mask_rel, width, height)
         if cache_key != self._cached_sample_key:
-            with Image.open(self._resolve(image_rel)) as source:
-                image = source.convert("RGB")
-                if image.size != (width, height):
-                    image = image.resize((width, height), resample=Image.Resampling.BILINEAR)
-                image = np.asarray(image, dtype=np.uint8)
-            with Image.open(self._resolve(mask_rel)) as source:
-                mask = np.array(source, copy=True)
+            with Image.open(self._resolve(image_rel)) as source, Image.open(self._resolve(mask_rel)) as label:
+                _require_unambiguous_geometry(source, label)
+                if source.size != (width, height):
+                    raise ValueError("image and mask dimensions changed after dataset inspection")
+                image = np.asarray(source.convert("RGB"), dtype=np.uint8)
+                mask = np.array(label, copy=True)
             self._cached_sample_key = cache_key
             self._cached_image = image
             self._cached_mask = mask

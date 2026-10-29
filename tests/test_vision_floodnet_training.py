@@ -2,7 +2,7 @@ import pytest
 from PIL import Image
 
 try:
-    import torch as _torch_probe
+    import torch as _torch_probe  # noqa: F401 - verify the optional training runtime can load
 except Exception as error:  # pragma: no cover - depends on the developer's isolated training runtime
     pytest.skip(
         f"FloodNet training tests require the isolated PyTorch environment: {type(error).__name__}",
@@ -105,38 +105,14 @@ def test_floodnet_dataset_reads_index_mask_and_returns_normalized_tensors(tmp_pa
     assert float(image.max()) <= 3.0
 
 
-def test_floodnet_dataset_maps_different_sized_image_to_official_mask_grid(tmp_path):
-    import numpy as np
-
-    # FloodNet Track 1's evaluator compares predictions on the 4000x3000 mask
-    # grid even when a source RGB image is 4592x3072. Preserve that grid
-    # explicitly instead of silently rejecting the pair or warping the mask.
-    image = np.zeros((8, 12, 3), dtype=np.uint8)
-    image[:, :6, 0] = 255
-    image[:, 6:, 2] = 255
-    Image.fromarray(image).save(tmp_path / "image.png")
-    mask = np.zeros((8, 8), dtype=np.uint8)
-    mask[:, 4:] = 3
-    Image.fromarray(mask).save(tmp_path / "mask.png")
+def test_floodnet_dataset_rejects_different_sized_image_and_mask(tmp_path):
+    # A mask-grid evaluator convention alone does not prove image registration.
+    Image.new("RGB", (12, 8)).save(tmp_path / "image.png")
+    Image.new("L", (8, 8)).save(tmp_path / "mask.png")
     sample = {"image": "image.png", "mask": "mask.png", "group_id": "id1", "split": "train"}
 
-    dataset = FloodNetSegmentationDataset(
-        tmp_path, [sample], tile_size=8, overlap=0,
-        one_tile_per_sample=True, random_crop_per_sample=False,
-    )
-    image_tensor, labels = dataset[0]
-
-    assert tuple(image_tensor.shape) == (3, 8, 8)
-    assert tuple(labels.shape) == (8, 8)
-    assert int((labels[:, :4] == 0).sum()) == 32
-    assert int((labels[:, 4:] == 3).sum()) == 32
-    assert image_tensor[0, 4, 1] > image_tensor[2, 4, 1]
-    assert image_tensor[2, 4, 6] > image_tensor[0, 4, 6]
-    assert dataset.alignment_report["identity"] == 0
-    assert dataset.alignment_report["image_resized_to_mask_grid"] == 1
-    assert dataset.alignment_report["mappings"] == [
-        {"image_size": [12, 8], "mask_grid": [8, 8], "samples": 1},
-    ]
+    with pytest.raises(ValueError, match="dimensions differ"):
+        FloodNetSegmentationDataset(tmp_path, [sample], tile_size=8, overlap=0)
 
 
 def test_floodnet_tiled_evaluation_reuses_decoded_source_image_and_mask(tmp_path):

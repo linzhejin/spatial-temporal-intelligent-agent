@@ -19,7 +19,9 @@ sys.path.insert(0, str(ROOT))
 
 import cv2
 import numpy as np
+from PIL import Image
 
+from vision.floodnet_training import _require_unambiguous_geometry
 from vision.specialized import AIDER_CLASSES, OnnxAiderClassifier, OnnxFloodSegmenter
 from vision.specialized_evaluation import (
     cluster_bootstrap_interval,
@@ -123,17 +125,52 @@ def _polygon_mask(frame_shape, polygon):
 
 
 def _align_rgb_to_mask_grid(frame, truth_labels):
-    """Match RGB input to the official categorical mask grid without altering labels."""
+    """Reject unequal grids; equal dimensions alone do not establish registration."""
     if frame is None or truth_labels is None or truth_labels.ndim != 2:
         raise ValueError("image must be RGB/BGR and ground truth must be a 2D class mask")
-    if frame.shape[:2] == truth_labels.shape:
-        return frame, "already_aligned"
-    aligned = cv2.resize(
-        frame,
-        (int(truth_labels.shape[1]), int(truth_labels.shape[0])),
-        interpolation=cv2.INTER_LINEAR,
-    )
-    return aligned, "image_resized_to_mask_grid"
+    if frame.shape[:2] != truth_labels.shape:
+        raise ValueError("image and mask dimensions differ; verify registration before evaluation")
+    return frame, "matching_dimensions"
+
+
+def _read_flood_pair(image_path: Path, mask_path: Path):
+    """Check headers before decoding; no inferred rotation, resize, or crop."""
+    with Image.open(image_path) as image, Image.open(mask_path) as mask:
+        _require_unambiguous_geometry(image, mask)
+    frame = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
+    truth_labels = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
+    if frame is None or truth_labels is None or truth_labels.ndim != 2:
+        raise ValueError("cannot decode image and grayscale class-index mask")
+    frame, alignment = _align_rgb_to_mask_grid(frame, truth_labels)
+    return frame, truth_labels, alignment
+
+
+def _flood_valid_mask(labels, *, roi=None):
+    """Use only documented FloodNet classes 0..9 in the requested ROI."""
+    labels = np.asarray(labels)
+    if labels.ndim != 2 or not np.issubdtype(labels.dtype, np.integer):
+        raise ValueError("label mask must be a 2D integer grid")
+    region = np.ones(labels.shape, dtype=bool) if roi is None else np.asarray(roi, dtype=bool)
+    if region.shape != labels.shape:
+        raise ValueError("ROI must share the image/mask grid")
+    valid = region & (labels >= 0) & (labels <= 9)
+    if not valid.any():
+        raise ValueError("road ROI contains no valid annotated pixels")
+    return valid
+
+
+def _flood_pixel_counts(prediction, labels, *, roi=None, positive_class_id=3):
+    """Score annotated FloodNet classes only, matching calibration's 0..9 mask."""
+    prediction, labels = np.asarray(prediction), np.asarray(labels)
+    valid = _flood_valid_mask(labels, roi=roi)
+    if prediction.shape != labels.shape:
+        raise ValueError("prediction and label mask must share a 2D grid")
+    valid_count = int(valid.sum())
+    predicted = prediction.astype(bool) & valid
+    actual = (labels == positive_class_id) & valid
+    return (int(np.logical_and(predicted, actual).sum()),
+            int(np.logical_and(predicted, ~actual & valid).sum()),
+            int(np.logical_and(~predicted, actual).sum()), valid_count)
 
 
 def _evaluate_flood(manifest, root: Path, model_path: Path, min_area_ratio: float,
@@ -143,19 +180,14 @@ def _evaluate_flood(manifest, root: Path, model_path: Path, min_area_ratio: floa
         flood_probability_threshold=flood_probability_threshold,
     )
     tp = fp = fn = 0
+    valid_pixel_count = ignored_pixel_count = 0
     group_counts = {}
     sample_iou = []
-    alignment_counts = {"already_aligned": 0, "image_resized_to_mask_grid": 0}
+    alignment_counts = {"matching_dimensions": 0, "image_resized_to_mask_grid": 0}
     for sample in manifest["samples"]:
         image_path = _dataset_path(root, sample["image"])
         mask_path = _dataset_path(root, sample["mask"])
-        frame = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-        truth_labels = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
-        if frame is None:
-            raise ValueError(f"cannot decode test image: {sample['image']}")
-        if truth_labels is None or truth_labels.ndim != 2:
-            raise ValueError(f"ground truth must be a grayscale class-index mask: {sample['mask']}")
-        frame, alignment = _align_rgb_to_mask_grid(frame, truth_labels)
+        frame, truth_labels, alignment = _read_flood_pair(image_path, mask_path)
         alignment_counts[alignment] += 1
         region = {
             "id": sample["group_id"], "kind": "road_surface",
@@ -165,11 +197,12 @@ def _evaluate_flood(manifest, root: Path, model_path: Path, min_area_ratio: floa
         if prediction is None:
             raise ValueError(f"road ROI is empty: {sample['image']}")
         roi = _polygon_mask(frame.shape, sample["road_surface_polygon"])
-        predicted = prediction["flooded_road_mask"].astype(bool) & roi
-        actual = (truth_labels == int(sample.get("flooded_road_class_id", 3))) & roi
-        sample_tp = int(np.logical_and(predicted, actual).sum())
-        sample_fp = int(np.logical_and(predicted, ~actual & roi).sum())
-        sample_fn = int(np.logical_and(~predicted, actual).sum())
+        sample_tp, sample_fp, sample_fn, sample_valid = _flood_pixel_counts(
+            prediction["flooded_road_mask"], truth_labels, roi=roi,
+            positive_class_id=int(sample.get("flooded_road_class_id", 3)),
+        )
+        valid_pixel_count += sample_valid
+        ignored_pixel_count += int(roi.sum()) - sample_valid
         tp += sample_tp
         fp += sample_fp
         fn += sample_fn
@@ -190,6 +223,9 @@ def _evaluate_flood(manifest, root: Path, model_path: Path, min_area_ratio: floa
         "flood_probability_threshold": segmenter.flood_probability_threshold,
         "sample_count": len(manifest["samples"]),
         "image_mask_grid_alignment": alignment_counts,
+        "pixel_alignment_verified": False,
+        "valid_pixel_count": valid_pixel_count,
+        "ignored_pixel_count": ignored_pixel_count,
         "mean_per_image_iou": round(
             sum(value for value in sample_iou if value is not None)
             / max(1, sum(value is not None for value in sample_iou)), 6,
@@ -227,17 +263,9 @@ def _evaluate_visible_water_road(manifest, root: Path, model_path: Path, *,
     for sample in manifest["samples"]:
         image_path = _dataset_path(root, sample["image"])
         mask_path = _dataset_path(root, sample["mask"])
-        frame = cv2.imread(str(image_path), cv2.IMREAD_COLOR)
-        truth_mask = cv2.imread(str(mask_path), cv2.IMREAD_UNCHANGED)
-        if frame is None:
-            raise ValueError(f"cannot decode test image: {sample['image']}")
-        if truth_mask is None or truth_mask.ndim != 2:
-            raise ValueError(f"ground truth must be a grayscale binary mask: {sample['mask']}")
+        frame, truth_mask, _ = _read_flood_pair(image_path, mask_path)
         if not np.isin(np.unique(truth_mask), (0, 255)).all():
             raise ValueError(f"ground truth mask must contain only 0 and 255: {sample['mask']}")
-        if frame.shape[:2] != truth_mask.shape:
-            raise ValueError(f"image/mask dimensions must match exactly: {sample['image']}")
-
         roi = _polygon_mask(frame.shape, sample["road_surface_polygon"])
         roi_pixels = int(roi.sum())
         if roi_pixels == 0:
@@ -311,6 +339,7 @@ def _evaluate_visible_water_road(manifest, root: Path, model_path: Path, *,
     negative_count = len(negative_sample_ratios)
     return {
         **summarize_binary_counts(tp=total[0], fp=total[1], fn=total[2]),
+        "pixel_alignment_verified": False,
         "model_class_count": 2,
         "visible_water_probability_threshold": float(probability_threshold),
         "sample_count": len(per_sample),
