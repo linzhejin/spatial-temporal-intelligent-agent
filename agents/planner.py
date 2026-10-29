@@ -2244,6 +2244,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     recommendation_query, activities=recommendation_activities,
                     subcategories=recommendation_categories, pending_slot="start",
                     follow_up_requests=follow_up_requests, previous=place_request,
+                    mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
                 )
                 question = "这个起点有多个匹配地点，请选一个。"
                 return {"response_kind": "clarify", "message": question, "route": None,
@@ -2276,6 +2277,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 recommendation_query, activities=recommendation_activities,
                 subcategories=recommendation_categories, pending_slot="start",
                 follow_up_requests=follow_up_requests, previous=place_request,
+                mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
             )
             return {"response_kind": "clarify", "message": question,
                     "route": None, "route_kind": None, "candidates": None,
@@ -2345,6 +2347,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 candidate_poi_ids=[item.get("poi_id") for item in candidates if item.get("poi_id")],
                 follow_up_requests=follow_up_requests,
                 previous=place_request,
+                mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
             )
             return {"response_kind": "candidates", "message": summary,
                     "route": None, "route_kind": None, "candidates": candidates,
@@ -2430,6 +2433,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             },
             candidate_poi_ids=[item.get("poi_id") for item in candidates if item.get("poi_id")],
             previous=place_request,
+            mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
         )
         return {"response_kind": "candidates", "message": summary,
                 "route": None, "route_kind": None, "candidates": candidates,
@@ -2445,6 +2449,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                                coord_waypoints=coord_waypoints)
 
     artifact_route, route_kind = None, None
+    multiple_route_artifacts = False
     artifact_candidates, artifact_clarify = None, None
     artifact_route_comparison = None
     no_path_result = None
@@ -2686,8 +2691,15 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 else:
                     weather_result, weather_tool_failed = None, True
 
+            if (name in route_tools and artifact_route is not None
+                    and isinstance(result, dict) and result.get("error")
+                    and re.search(r"(?:先|首先).*?(?:再|然后|接着|随后|最后)",
+                                  (active_task_request or "") + query)):
+                multiple_route_artifacts = True
             if artifact:
                 if "route" in artifact:
+                    if artifact_route is not None and artifact["route"] is not None:
+                        multiple_route_artifacts = True
                     artifact_route = artifact["route"]
                     route_kind = artifact.get("route_kind", "direct")
                 if "candidates" in artifact:
@@ -2837,6 +2849,15 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "no_path_evidence": {"reason_code": "graph_no_path"},
             "candidates": None, "clarify": None, "suggestions": None,
             "turns": turns,
+        })
+
+    if multiple_route_artifacts and verification_failure is None:
+        message = "完整行程暂未能确认，已计算的单段路线不会作为全程显示，请稍后重试。"
+        return _with_provenance({
+            "response_kind": "clarify", "message": message,
+            "route": None, "route_kind": None, "candidates": None,
+            "clarify": {"question": message, "options": []},
+            "needs_input": True, "suggestions": None, "turns": turns,
         })
 
     if artifact_route:

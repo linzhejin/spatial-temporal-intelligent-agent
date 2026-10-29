@@ -11,6 +11,22 @@ def _test_route_state(args):
         data_version="test-data", road_condition_version=current_road_condition_version([]))
 
 
+def test_new_recommendation_preserves_selected_mode_before_and_after_start_clarification():
+    missing_start = planner.run_agent("找食堂", travel_mode="bike")
+    assert missing_start["place_request"]["pending_slot"] == "start"
+    assert missing_start["place_request"]["mode"] == "bike"
+
+    candidate = {"poi_id": "poi_310", "name": "工学部食堂", "distance_m": 200}
+    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+        {"candidates": [candidate], "start_name": "工学部"}, {"candidates": [candidate]},
+    )) as execute:
+        answer = planner.run_agent("武汉大学图书馆(总馆)", context={
+            "place_request": missing_start["place_request"], "active_task_request": "找食堂",
+        })
+    assert answer["place_request"]["mode"] == "bike"
+    assert execute.call_args.args[1]["mode"] == "bike"
+
+
 def test_activity_answer_preserves_follow_up_and_applies_new_mode_and_constraint():
     first = planner.run_agent("我在工学部，想先打球再吃饭")
     assert first["response_kind"] == "clarify"

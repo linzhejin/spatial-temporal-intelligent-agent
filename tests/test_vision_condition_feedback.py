@@ -185,7 +185,45 @@ def test_mixed_route_conditions_and_candidates_keep_the_candidate_names():
     assert "甲食堂" in result["message"] and "乙食堂" in result["message"]
     assert "复核后发布" in result["message"]
     assert "自动发布" not in result["message"]
-    assert "复核后发布" in result["message"]
+
+
+def test_multiple_route_artifacts_do_not_silently_replace_first_route():
+    calls = [_call("plan_route"), _call("plan_route")]
+    replies = [_message(calls=calls)]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: replies.pop(0))))
+    routes = [
+        {"start_name": "总图", "end_name": "桂园", "mode": "walk", "recommended_length_m": 500},
+        {"start_name": "桂园", "end_name": "星湖", "mode": "walk", "recommended_length_m": 700},
+    ]
+
+    def execute(_name, _args, _context):
+        route = routes.pop(0)
+        return route, {"route": route}
+
+    with patch.object(planner.config, "DEEPSEEK_API_KEY", "test-key"), \
+         patch.object(planner, "_make_client", return_value=client), \
+         patch.object(planner.agent_tools, "execute_tool", side_effect=execute):
+        result = planner.run_agent("先到桂园，再去星湖。")
+    assert result.get("route") is None
+    assert result["response_kind"] != "route"
+    assert "完整" in result["message"]
+
+
+def test_later_route_failure_does_not_present_first_leg_as_full_route():
+    replies = [_message(calls=[_call("plan_route"), _call("plan_route")])]
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **_: replies.pop(0))))
+    results = [
+        ({"start_name": "总图", "end_name": "桂园"},
+         {"route": {"start_name": "总图", "end_name": "桂园", "mode": "walk"}}),
+        ({"error": "route_not_found", "reason_code": "graph_no_path"}, None),
+    ]
+    with patch.object(planner.config, "DEEPSEEK_API_KEY", "test-key"), \
+         patch.object(planner, "_make_client", return_value=client), \
+         patch.object(planner.agent_tools, "execute_tool", side_effect=lambda *_: results.pop(0)):
+        result = planner.run_agent("先到桂园，再去星湖。")
+    assert result.get("route") is None
+    assert result["response_kind"] != "route"
+    assert "完整" in result["message"]
 
 
 def test_road_end_time_remains_visible():
