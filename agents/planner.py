@@ -2939,6 +2939,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 final_message += "\n天气暂时获取不到。"
     elif road_condition_result is not None:
         condition_summary = _vision_condition_summary(road_condition_result, (active_task_request or "") + query)
+        if (condition_summary and road_condition_result.get("conditions") == []
+                and isinstance(artifact_route, dict)
+                and ((type(artifact_route.get("road_conditions_applied")) is int
+                      and artifact_route["road_conditions_applied"] > 0)
+                     or bool(artifact_route.get("road_condition_overview")))):
+            condition_summary = "查询与路线规划时的路况记录不一致，可能发生了变化，请重新查询。"
         if condition_summary:
             pure_condition_query = (not artifact_route and not artifact_candidates
                                     and executed_tool_names <= {"list_road_conditions", "get_weather"})
