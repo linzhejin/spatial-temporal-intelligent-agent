@@ -493,6 +493,9 @@ def _join_leg_paths(legs: list[dict], field: str) -> list:
 def _vision_condition_summary(result: dict, query: str = "") -> str | None:
     """Describe vision-linked road records from evidence, never model inference."""
     conditions = result.get("conditions") if isinstance(result, dict) else None
+    if (conditions == [] and type(result.get("count")) is int and result["count"] == 0
+            and re.search(r"路况|管制|封路|封闭|拥堵|积水|事故|施工", query)):
+        return "当前系统没有已生效的路况记录；未覆盖路段的现场通行情况仍需确认。"
     if not isinstance(conditions, list) or not any(
         isinstance(item, dict) and item.get("source_kind") != "manager_record" for item in conditions
     ):
@@ -2935,7 +2938,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             elif weather_tool_failed:
                 final_message += "\n天气暂时获取不到。"
     elif road_condition_result is not None:
-        condition_summary = _vision_condition_summary(road_condition_result, query)
+        condition_summary = _vision_condition_summary(road_condition_result, (active_task_request or "") + query)
         if condition_summary:
             pure_condition_query = (not artifact_route and not artifact_candidates
                                     and executed_tool_names <= {"list_road_conditions", "get_weather"})
