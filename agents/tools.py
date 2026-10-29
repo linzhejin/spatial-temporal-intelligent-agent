@@ -2135,9 +2135,12 @@ def _tool_plan_via_route(args, ctx):
                 normalized_ref = {"name": display, "type": "coord",
                                   "coordinates": normalized_coords}
             else:
-                poi, _ = find_poi_ambiguous(display)
+                poi = (next((item for item in load_pois() if item.get("id") == ref.get("poi_id")), None)
+                       if ref.get("poi_id") else find_poi_ambiguous(display)[0])
                 if poi:
                     via_info = _poi_public(poi)
+                if ref.get("poi_id"):
+                    normalized_ref["poi_id"] = ref["poi_id"]
             access_evidence = _endpoint_access_evidence(ref, node, G_mode, mode)
             via_entries.append({"node": node, "name": display, "info": via_info,
                                 "ref": normalized_ref, "access": access_evidence})

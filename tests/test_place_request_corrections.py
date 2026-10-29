@@ -1,14 +1,14 @@
 from unittest.mock import patch
 
 from agents import planner
-from agents.route_state import build_route_state
+from agents.route_state import build_route_state, current_road_condition_version
 
 
 def _test_route_state(args):
     return build_route_state(route_kind="direct", original_query="测试路线",
         start=args["start"], end=args["end"], travel_mode=args.get("mode", "walk"),
         hard_constraints=args.get("constraints") or {}, strategy={"name": args.get("strategy") or "shortest"},
-        data_version="test-data", road_condition_version="test-roads")
+        data_version="test-data", road_condition_version=current_road_condition_version([]))
 
 
 def test_activity_answer_preserves_follow_up_and_applies_new_mode_and_constraint():
@@ -33,7 +33,8 @@ def test_activity_answer_preserves_follow_up_and_applies_new_mode_and_constraint
     assert execute.call_args.args[1]["mode"] == "bike"
 
 
-def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes_after_second():
+def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes_after_second(monkeypatch):
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     first = planner.run_agent("我在工学部，想先打球再吃饭")
     sport = {"poi_id": "poi_206", "name": "工学部篮球场", "activities": ["basketball"],
              "subcategory": "field", "distance_m": 120}
@@ -57,7 +58,7 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
                                   "mode": "walk", "route_state": _test_route_state(args)}}
         assert name == "search_poi_candidates"
         assert args["activities"] == ["meal"]
-        assert args["start"] == {"type": "poi", "name": "工学部篮球场"}
+        assert args["start"] == {"type": "poi", "name": "工学部篮球场", "poi_id": "poi_206"}
         return {"candidates": [meal], "start_name": "工学部篮球场"}, {"candidates": [meal]}
 
     with patch.object(planner.agent_tools, "load_pois", return_value=[
@@ -71,11 +72,11 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
     assert routed_sport["needs_input"] is True
     assert [item["poi_id"] for item in routed_sport["candidates"]] == ["poi_310"]
     assert routed_sport["place_request"]["candidate_poi_ids"] == ["poi_310"]
-    assert routed_sport["place_request"]["start"] == {"type": "poi", "name": "工学部篮球场"}
+    assert routed_sport["place_request"]["start"] == {"type": "poi", "name": "工学部篮球场", "poi_id": "poi_206"}
 
     def second_stage(name, args, _ctx):
         assert name == "plan_route"
-        assert args["start"] == {"type": "poi", "name": "工学部篮球场"}
+        assert args["start"] == {"type": "poi", "name": "工学部篮球场", "poi_id": "poi_206"}
         assert args["end"]["poi_id"] == "poi_310"
         return {}, {"route": {"recommended": [[114.36, 30.54], [114.37, 30.54]],
                               "recommended_edge_ids": [[2, 3, 0]],
@@ -142,7 +143,7 @@ def test_nearest_first_stage_keeps_meal_follow_up_and_route_constraints():
     assert result["response_kind"] == "route"
     assert result["needs_input"] is True
     assert result["place_request"]["original_query"] == "吃饭"
-    assert result["place_request"]["start"] == {"type": "poi", "name": "工学部篮球场"}
+    assert result["place_request"]["start"] == {"type": "poi", "name": "工学部篮球场", "poi_id": "poi_206"}
     assert [candidate["poi_id"] for candidate in result["candidates"]] == ["poi_310"]
     assert calls[0][1]["constraints"]["avoid_steps"] is True
     assert calls[1][1]["constraints"]["avoid_steps"] is True

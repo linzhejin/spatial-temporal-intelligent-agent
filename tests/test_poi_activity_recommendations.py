@@ -10,10 +10,11 @@ from spatial.poi_taxonomy import resolve_activity_query
 
 
 def _test_route_state(args):
+    from agents.route_state import current_road_condition_version
     return build_route_state(route_kind="direct", original_query="测试路线",
         start=args["start"], end=args["end"], travel_mode=args.get("mode", "walk"),
         hard_constraints=args.get("constraints") or {}, strategy={"name": args.get("strategy") or "shortest"},
-        data_version="test-data", road_condition_version="test-roads")
+        data_version="test-data", road_condition_version=current_road_condition_version([]))
 
 
 @pytest.mark.parametrize("query,expected_slot", [
@@ -501,6 +502,7 @@ def test_three_stage_request_preserves_unspecified_dorm_and_steps_constraint():
 
 
 def test_named_destination_after_meal_selection_returns_the_full_ordered_route(monkeypatch):
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     meal = {"poi_id": "poi_meal", "name": "测试食堂", "activities": ["canteen_meal"],
             "subcategory": "canteen", "distance_m": 150}
     final = {"id": "poi_070", "name": "桂园食堂", "aliases": []}
@@ -580,6 +582,7 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
 def test_textual_meal_selection_keeps_named_non_activity_final_stop(
     monkeypatch, selection_query, expected_strategy,
 ):
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     meal = {"poi_id": "poi_068", "name": "桂园一食堂", "activities": ["canteen_meal"],
             "subcategory": "canteen", "distance_m": 150}
     route_calls = []
@@ -744,6 +747,7 @@ def test_map_overview_ball_then_food_clarification_reaches_real_candidates():
 
 
 def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     basketball = {"poi_id": "poi_206", "name": "工学部篮球场", "activities": ["basketball"],
                   "subcategory": "field", "distance_m": 120}
     canteen = {"poi_id": "poi_meal", "name": "测试食堂", "activities": ["canteen_meal"],

@@ -538,6 +538,178 @@ def _place_route_join_issue(legs: list[dict]) -> str | None:
     return None
 
 
+def _place_tool_constraints(requested: dict) -> dict:
+    if not isinstance(requested, dict):
+        raise ValueError("任务约束无法确认")
+    allowed = {"avoid_slope", "avoid_steps", "require_verified_accessibility", "max_distance_m",
+               "max_duration_s", "excluded_edge_ids"}
+    if any(key not in allowed and value for key, value in requested.items()):
+        raise ValueError("存在无法表达的任务约束")
+    result = {key: deepcopy(value) for key, value in requested.items()
+              if key in allowed and key != "avoid_slope" and value}
+    if requested.get("avoid_slope"):
+        result["slope"] = "avoid"
+    return result
+
+
+def _place_strategy_signature(strategy: dict):
+    if not isinstance(strategy, dict) or not strategy.get("name"):
+        raise ValueError("路线策略无法确认")
+    name = strategy["name"]
+    weights, cap = strategy.get("weights"), strategy.get("detour_cap")
+    if name == "shortest":
+        weights = weights if weights is not None else {"distance": 1.0, "slope": 0.0, "scenery": 0.0}
+        cap = cap if cap is not None else 1.0
+    return name, deepcopy(weights), cap
+
+
+def _place_route_constraint_issue(legs: list[dict], requested: dict) -> str | None:
+    try:
+        expected = _place_tool_constraints(requested)
+        states = [leg["route_state"] for leg in legs]
+        if any({key: value for key, value in state["hard_constraints"].items() if value} != expected
+               for state in states):
+            return "各段没有保留全部任务约束"
+        signature = _place_strategy_signature(states[0].get("strategy"))
+        if any(_place_strategy_signature(state.get("strategy")) != signature for state in states[1:]):
+            return "各段路线策略不同，无法确认全程策略"
+        distance_limit = positive_budget(expected, "max_distance_m")
+        time_limit = positive_budget(expected, "max_duration_s")
+        for limit, field, factor in ((distance_limit, "recommended_length_m", 1),
+                                     (time_limit, "duration_min", 60)):
+            if limit is not None:
+                values = [leg.get(field) for leg in legs]
+                if any(isinstance(value, bool) or not isinstance(value, (int, float))
+                       or not math.isfinite(value) or value < 0 for value in values):
+                    return "整程距离或时间约束无法核验"
+                if sum(values) * factor > limit + (0.15 if factor == 1 else 3):
+                    return "整程超过你设定的距离或时间上限"
+        return None
+    except (KeyError, TypeError, ValueError, IndexError):
+        return "整程约束或策略无法核验"
+
+
+def _place_route_snapshot_issue(legs: list[dict]) -> str | None:
+    from agents.route_state import current_road_condition_version
+
+    try:
+        version = current_road_condition_version(agent_tools.list_conditions(strict=True))
+    except Exception:
+        return "当前路况暂时无法确认"
+    if any(leg["route_state"].get("road_condition_version") != version for leg in legs):
+        return "当前路况已更新"
+    return None
+
+
+def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
+    """Replan equivalent ordered legs using one fresh snapshot, or fail closed."""
+    from agents.route_state import current_road_condition_version, validate_route_state
+
+    try:
+        states = [validate_route_state(leg.get("route_state")) for leg in legs]
+        if len(states) < 2 or any(state["route_kind"] not in {"direct", "via"} for state in states):
+            raise ValueError("暂不支持自动重算这种行程")
+        first = states[0]
+        if any(state["travel_mode"] != first["travel_mode"]
+               or state["hard_constraints"] != first["hard_constraints"]
+               or _place_strategy_signature(state["strategy"]) != _place_strategy_signature(first["strategy"])
+               or state.get("data_version") != first.get("data_version") for state in states):
+            raise ValueError("各段方式、约束、策略或路网版本不同，无法安全合并重算")
+        if "task_constraints" in context:
+            requested = context["task_constraints"]
+            expected_constraints = _place_tool_constraints(requested)
+            actual_constraints = {key: value for key, value in first["hard_constraints"].items() if value}
+            if expected_constraints != actual_constraints:
+                raise ValueError("路线没有保留全部任务约束")
+        pois = agent_tools.load_pois()
+
+        def endpoint(value):
+            if not isinstance(value, dict):
+                raise ValueError("地点信息不完整")
+            if value.get("type") == "coord":
+                point = value.get("coordinates") or value
+                lng, lat = float(point["lng"]), float(point["lat"])
+                if not (math.isfinite(lng) and math.isfinite(lat) and -180 <= lng <= 180 and -90 <= lat <= 90):
+                    raise ValueError("地点坐标无效")
+                return {"type": "coord", "name": value.get("name") or "地图选点",
+                        "coordinates": {"lng": lng, "lat": lat}}, ("coord", lng, lat)
+            selected = value.get("poi_id")
+            if selected:
+                found = [poi for poi in pois if poi.get("id") == selected]
+            else:
+                found = [poi for poi in pois if poi.get("name") == value.get("name")]
+            if len(found) != 1 or not found[0].get("id"):
+                raise ValueError("已选地点无法唯一确认，请重新选择")
+            poi = found[0]
+            return {"type": "poi", "name": poi["name"], "poi_id": poi["id"]}, ("poi", poi["id"])
+
+        ordered, identities = [], []
+        for index, state in enumerate(states):
+            start, start_id = endpoint(state["start"])
+            if index and start_id != identities[-1]:
+                raise ValueError("各段地点衔接无法确认")
+            if not index:
+                ordered.append(start)
+                identities.append(start_id)
+            if state["route_kind"] == "via":
+                via = state.get("via") or {}
+                points = via.get("points") if via.get("type") == "multi" else [via]
+                if not isinstance(points, list) or not points:
+                    raise ValueError("途经点信息不完整")
+                for point in points:
+                    item, identity = endpoint(point)
+                    ordered.append(item)
+                    identities.append(identity)
+            item, identity = endpoint(state["end"])
+            ordered.append(item)
+            identities.append(identity)
+        if any(a == b for a, b in zip(identities, identities[1:])):
+            raise ValueError("相邻地点重复，暂不能安全自动重算")
+        if len(ordered) - 2 > agent_tools._MAX_VIA_POINTS:
+            raise ValueError("途经点数量超过自动重算上限")
+
+        fresh, error = agent_tools._prepare_route_context({
+            key: context[key] for key in ("query", "uid") if key in context
+        })
+        if error:
+            return None, error.get("message") or "暂时无法获取当前路况"
+        snapshot = fresh["_route_conditions_snapshot"]
+        version = current_road_condition_version(snapshot)
+        data_version = agent_tools._data_version_for_graph(fresh["_route_graph_snapshot"])
+        if data_version == "unavailable":
+            raise ValueError("当前路网版本无法确认")
+        strategy = first["strategy"]
+        args = {"start": ordered[0], "end": ordered[-1], "via_points": ordered[1:-1],
+                "mode": first["travel_mode"], "constraints": deepcopy(first["hard_constraints"]),
+                "strategy": strategy["name"], "strategy_source": strategy.get("source", "explicit_nl")}
+        if strategy.get("weights") is not None:
+            args["weights"] = deepcopy(strategy["weights"])
+        result, artifact = agent_tools.execute_tool("plan_via_route", args, fresh)
+        route = artifact.get("route") if isinstance(artifact, dict) else None
+        if not isinstance(route, dict) or (route.get("route_verification") or {}).get("status") != "pass":
+            return None, (result or {}).get("message") or "当前条件下无法核验完整路线"
+        new_state = validate_route_state(route.get("route_state"))
+        actual_via = new_state.get("via") or {}
+        actual_points = actual_via.get("points") if actual_via.get("type") == "multi" else [actual_via]
+        actual_refs = [new_state["start"], *actual_points, new_state["end"]]
+        actual_ids = [endpoint(item)[1] for item in actual_refs]
+        if (actual_ids != identities or new_state.get("travel_mode") != first["travel_mode"]
+                or new_state.get("hard_constraints") != first["hard_constraints"]
+                or _place_strategy_signature(new_state["strategy"]) != _place_strategy_signature(strategy)
+                or new_state.get("data_version") != data_version
+                or new_state.get("road_condition_version") != version):
+            raise ValueError("重算结果与原行程或快照不一致")
+        if (current_road_condition_version(agent_tools.list_conditions(strict=True)) != version
+                or agent_tools._data_version_for_graph(fresh["_route_graph_snapshot"]) != data_version):
+            raise ValueError("路况或路网再次变化，请重试")
+        return route, None
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None, "无法确认各段地点、约束或最新路况，请保留原需求后重试。"
+    except Exception:
+        logger.exception("按最新快照重算完整行程失败")
+        return None, "当前无法可靠重算完整行程，请稍后重试。"
+
+
 def _combined_place_route(legs: list[dict]) -> dict:
     """Retain each chosen leg's actual geometry and edges in order."""
     from agents.route_state import build_route_state
@@ -572,8 +744,14 @@ def _combined_place_route(legs: list[dict]) -> dict:
     ]}
     combined["degraded"] = any(bool(leg.get("degraded")) for leg in legs)
     leg_proofs = [leg.get("route_verification") for leg in legs]
+    first_state = legs[0].get("route_state") or {}
+    combined_constraints = deepcopy(first_state.get("hard_constraints") or {})
+    if combined_constraints.get("slope") == "avoid":
+        combined_constraints.pop("slope")
+        combined_constraints["avoid_slope"] = True
     if (all(isinstance(proof, dict) and proof.get("status") == "pass" for proof in leg_proofs)
-            and _place_route_join_issue(legs) is None):
+            and _place_route_join_issue(legs) is None
+            and _place_route_constraint_issue(legs, combined_constraints) is None):
         combined["route_verification"] = {
             "status": "pass", "scope": "verified_legs_and_checked_join",
             "field_truth_verified": False,
@@ -659,7 +837,8 @@ def _combined_place_route(legs: list[dict]) -> dict:
             state.get("hard_constraints") == states[0].get("hard_constraints")
             for state in states
         )
-        if len(data_versions) == len(road_versions) == 1 and same_modes and same_constraints:
+        if (len(data_versions) == len(road_versions) == 1 and same_modes and same_constraints
+                and all(state.get("route_kind") in {"direct", "via"} for state in states)):
             constraints = states[0].get("hard_constraints") or {}
             try:
                 max_distance = positive_budget(constraints, "max_distance_m")
@@ -678,7 +857,17 @@ def _combined_place_route(legs: list[dict]) -> dict:
                     )
             except ValueError:
                 combined["shortest_baseline_feasible"] = False
-            via_points = [state["end"] for state in states[:-1]]
+            via_points = []
+            for index, state in enumerate(states):
+                if state.get("route_kind") == "via":
+                    via = state.get("via") or {}
+                    via_points.extend(via.get("points", []) if via.get("type") == "multi" else [via])
+                if index < len(states) - 1:
+                    via_points.append(state["end"])
+            if not via_points or len(via_points) > agent_tools._MAX_VIA_POINTS:
+                combined.pop("route_state", None)
+                combined["route_state_unavailable"] = "完整途经点超过可重算范围"
+                return combined
             first, last = states[0], states[-1]
             combined["route_state"] = build_route_state(
                 route_kind="via",
@@ -1381,9 +1570,21 @@ def run_agent(query: str, context: dict = None, history: list = None,
         completed_legs.append(deepcopy(route_response["route"]))
         if len(completed_legs) > 1:
             join_issue = _place_route_join_issue(completed_legs)
+            if not join_issue:
+                join_issue = _place_route_constraint_issue(completed_legs, (saved_request or {}).get("constraints") or {})
+            if not join_issue:
+                join_issue = _place_route_snapshot_issue(completed_legs)
+            refreshed_route = None
+            refresh_error = None
+            if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
+                refreshed_route, refresh_error = _replan_changed_place_route(
+                    completed_legs, {"query": str((saved_request or {}).get("original_query") or "") + " " + query,
+                                     "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
+                if refreshed_route is not None:
+                    join_issue = None
             if join_issue:
                 pending = _place_request_state(
-                    "重新规划全程", pending_slot="follow_up", previous=saved_request,
+                    "重新规划全程", pending_slot="route_retry", previous=saved_request,
                 )
                 pending["completed_legs"] = completed_legs
                 route_response["response_kind"] = "clarify"
@@ -1392,12 +1593,12 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 route_response["candidates"] = None
                 route_response["needs_input"] = True
                 route_response["place_request"] = pending
-                question = (f"各段已单独规划，但{join_issue}，无法确认完整路线。"
-                            "请重新提交完整需求，按当前路况规划全程。")
+                question = (f"各段已单独规划，但{join_issue}。{refresh_error or ''}无法确认完整路线。"
+                            "已保留你的行程，可以点击“重试”。")
                 route_response["message"] = question
-                route_response["clarify"] = {"question": question, "options": []}
+                route_response["clarify"] = {"question": question, "options": ["重试"]}
                 return route_response
-            route_response["route"] = _combined_place_route(completed_legs)
+            route_response["route"] = refreshed_route or _combined_place_route(completed_legs)
             route_response["route_kind"] = (
                 "multimodal" if len({leg.get("mode") for leg in completed_legs}) > 1
                 else "via"
@@ -1405,6 +1606,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route_response["message"] = _build_route_message(route_response["route"]) + _road_condition_feedback(
                 route_response["route"], str((saved_request or {}).get("original_query") or "") + " " + query,
             )
+            if refreshed_route is not None:
+                route_response["message"] += "路况发生变化，已按最新记录重新规划全程。"
             if route_response["route"].get("route_state_unavailable"):
                 route_response["message"] += "各段方式或约束不同，请在分段路线查看详情；全程暂不支持一键切换策略。"
         if not followups:
@@ -1433,12 +1636,16 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "mode": (saved_request or {}).get("mode") or route_response["route"].get("mode") or "walk",
             }
             saved_constraints = (saved_request or {}).get("constraints") or {}
-            if saved_constraints.get("avoid_steps") or saved_constraints.get("avoid_slope"):
-                final_args["constraints"] = {}
-                if saved_constraints.get("avoid_steps"):
-                    final_args["constraints"]["avoid_steps"] = True
-                if saved_constraints.get("avoid_slope"):
-                    final_args["constraints"]["slope"] = "avoid"
+            try:
+                final_constraints = _place_tool_constraints(saved_constraints)
+            except ValueError:
+                message = "任务约束无法确认，请保留需求后重试。"
+                return {**route_response, "response_kind": "clarify", "route": None,
+                        "route_kind": None, "message": message,
+                        "clarify": {"question": message, "options": ["重试"]},
+                        "needs_input": True, "place_request": saved_request, "candidates": None}
+            if final_constraints:
+                final_args["constraints"] = final_constraints
             first_strategy = ((route_response["route"].get("route_state") or {})
                               .get("strategy") or {}).get("name")
             final_strategy = first_strategy or (saved_request or {}).get("strategy") or detect_strategy_hint(
@@ -1452,30 +1659,49 @@ def run_agent(query: str, context: dict = None, history: list = None,
             final_route = ((final_artifact or {}).get("route")
                            if isinstance(final_artifact, dict) else None)
             if not final_route:
-                return {**route_response, "response_kind": "chat", "route": None,
-                        "route_kind": None, "message": (final_result or {}).get("message")
-                        or "终点路段暂时无法规划，未显示不完整的全程路线。",
-                        "needs_input": False, "place_request": None}
+                pending = _place_request_state("重试行程", pending_slot="selection", previous=saved_request)
+                pending["selected_poi_id"] = destination.get("id") or destination.get("poi_id")
+                if pending["selected_poi_id"] and pending["selected_poi_id"] not in pending["candidate_poi_ids"]:
+                    pending["candidate_poi_ids"].append(pending["selected_poi_id"])
+                message = (final_result or {}).get("message") or "终点路段暂时无法规划，未显示不完整的全程路线。"
+                return {**route_response, "response_kind": "clarify", "route": None,
+                        "route_kind": None, "message": message,
+                        "clarify": {"question": message, "options": ["重试"]},
+                        "needs_input": True, "place_request": pending, "candidates": None}
             full_legs = completed_legs + [final_route]
             join_issue = _place_route_join_issue(full_legs)
+            if not join_issue:
+                join_issue = _place_route_constraint_issue(full_legs, (saved_request or {}).get("constraints") or {})
+            if not join_issue:
+                join_issue = _place_route_snapshot_issue(full_legs)
+            refreshed_route = None
+            refresh_error = None
+            if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
+                refreshed_route, refresh_error = _replan_changed_place_route(
+                    full_legs, {"query": str((saved_request or {}).get("original_query") or "") + " " + query,
+                                "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
+                if refreshed_route is not None:
+                    join_issue = None
             if join_issue:
-                pending = _place_request_state("重新规划全程", pending_slot="follow_up", previous=saved_request)
+                pending = _place_request_state("重新规划全程", pending_slot="route_retry", previous=saved_request)
                 pending["completed_legs"] = full_legs
-                message = f"各段路线已算出，但{join_issue}，无法确认完整路线，请按当前路况重新规划。"
+                message = f"各段路线已算出，但{join_issue}。{refresh_error or ''}无法确认完整路线。已保留你的行程，可以点击“重试”。"
                 return {**route_response, "response_kind": "clarify", "route": None,
                         "route_kind": None,
-                        "message": message, "clarify": {"question": message, "options": []},
+                        "message": message, "clarify": {"question": message, "options": ["重试"]},
                         "needs_input": True, "place_request": pending, "candidates": None}
-            full_route = _combined_place_route(full_legs)
+            full_route = refreshed_route or _combined_place_route(full_legs)
             return {**route_response, "response_kind": "route", "route": full_route,
                     "route_kind": "via", "message": _build_route_message(full_route) + _road_condition_feedback(
-                        full_route, str((saved_request or {}).get("original_query") or "") + " " + query),
+                        full_route, str((saved_request or {}).get("original_query") or "") + " " + query)
+                        + ("路况发生变化，已按最新记录重新规划全程。" if refreshed_route is not None else ""),
                     "needs_input": False, "place_request": None, "clarify": None,
                     "suggestions": None}
         next_activities = list(next_request.get("activities") or [])
         next_categories = list(next_request.get("subcategories") or [])
         destination_name = str(destination.get("name") or "").strip()
-        next_start = {"type": "poi", "name": destination_name}
+        next_start = {"type": "poi", "name": destination_name,
+                      "poi_id": destination.get("id") or destination.get("poi_id")}
         previous = {**(saved_request or {}), "original_query": next_query or "下一站",
                     "selected_poi_id": None, "candidate_poi_ids": []}
         pending = _place_request_state(
@@ -1539,6 +1765,37 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "options": [] if candidates else ["重试查找"],
         }
         return route_response
+
+    if (place_request and place_request.get("pending_slot") == "route_retry"
+            and re.fullmatch(r"\s*(?:重试|重新规划|重新计算|重算)\s*[。！!]?\s*", query)):
+        old_legs = place_request.get("completed_legs") or []
+        route, error = _replan_changed_place_route(old_legs, {
+            "query": place_request.get("original_query") or query, "uid": uid,
+            "task_constraints": place_request.get("constraints") or {},
+        })
+        if not route:
+            message = error or "当前无法可靠重算完整行程，请稍后重试。"
+            return {"response_kind": "clarify", "message": message, "route": None,
+                    "route_kind": None, "candidates": None, "needs_input": True,
+                    "place_request": place_request, "clarify": {"question": message, "options": ["重试"]},
+                    "suggestions": None, "turns": 0}
+        end = (route.get("route_state") or {}).get("end") or {}
+        destination = next((poi for poi in agent_tools.load_pois() if poi.get("id") == end.get("poi_id")), None)
+        followups = list(place_request.get("follow_up_requests") or [])
+        if followups and not destination:
+            message = "已重算的终点无法与后续目标可靠关联，请重新选择地点。"
+            return {"response_kind": "clarify", "message": message, "route": None,
+                    "route_kind": None, "candidates": None, "needs_input": True,
+                    "place_request": place_request, "clarify": {"question": message, "options": ["重试"]},
+                    "suggestions": None, "turns": 0}
+        response = {"response_kind": "route", "message": _build_route_message(route)
+                    + "路况发生变化，已按最新记录重新规划全程。", "route": route, "route_kind": "via",
+                    "candidates": None, "clarify": None, "place_request": None,
+                    "needs_input": False, "suggestions": None, "turns": 0}
+        if not followups:
+            return response
+        resumed = {**place_request, "completed_legs": [], "pending_slot": None}
+        return with_next_place_stage(response, destination, resumed, followups)
 
     if place_request and place_request.get("pending_slot") == "destination" and not selected_poi_id:
         destination, alternatives = agent_tools.find_poi_ambiguous(query.strip())
@@ -1608,11 +1865,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                               "name": selected_poi.get("name", "")},
                       "mode": (place_request or {}).get("mode") or travel_mode or "walk"}
         saved_constraints = (place_request or {}).get("constraints") or {}
-        route_constraints = {}
-        if saved_constraints.get("avoid_steps"):
-            route_constraints["avoid_steps"] = True
-        if saved_constraints.get("avoid_slope"):
-            route_constraints["slope"] = "avoid"
+        try:
+            route_constraints = _place_tool_constraints(saved_constraints)
+        except ValueError:
+            return {"response_kind": "clarify", "message": "任务约束无法确认，请保留需求后重试。",
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": "任务约束无法确认，请保留需求后重试。", "options": []},
+                    "place_request": place_request, "needs_input": True, "suggestions": None, "turns": 0}
         if route_constraints:
             route_args["constraints"] = route_constraints
         full_request = str((place_request or {}).get("original_query") or "") + " " + str(query)

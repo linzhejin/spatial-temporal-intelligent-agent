@@ -137,7 +137,7 @@ class PlaceRequestState(Contract):
     subcategories: list[Identifier] = Field(default_factory=list, max_length=50)
     follow_up_requests: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
     completed_legs: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
-    pending_slot: Literal["activity", "start", "selection", "follow_up", "destination"] | None = None
+    pending_slot: Literal["activity", "start", "selection", "follow_up", "destination", "route_retry"] | None = None
     start: dict[str, Any] | None = None
     selected_poi_id: Identifier | None = None
     candidate_poi_ids: list[Identifier] = Field(default_factory=list, max_length=20)

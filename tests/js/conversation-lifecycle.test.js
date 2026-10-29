@@ -867,6 +867,23 @@ test('ball clarification renders all five choices and leaves other ball types fo
     assert.equal(focused, true);
     assert.match(input.placeholder, /补充球类/);
 });
+test('route retry button continues the pending task without choosing a POI', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'route-task';
+    h.state.pendingServerTaskRevision = 7;
+    h.state.pendingServerQuestion = '已保留你的行程，可以点击“重试”。';
+    let sent;
+    h.setApi(async (_url, body) => { sent = body; return routeResult('retried'); });
+    h.renderClarifyOptions(['重试'], 'route-task', 7);
+    const button = h.context.document.getElementById('chat-content').children[0].children[0].children[0];
+    button.onclick();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(sent.query, '重试');
+    assert.equal(sent.continuation_task_id, 'route-task');
+    assert.equal(sent.base_revision, 7);
+    assert.equal(sent.selected_poi_id, undefined);
+    assert.equal(h.requests.filter(item => String(item.url).includes('/api/pois')).length, 0);
+});
 test('follow-up suggestions render from the agent result and submit the selected query', () => {
     const h = harness();
     let submitted = 0;
