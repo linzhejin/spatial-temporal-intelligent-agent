@@ -153,8 +153,16 @@ def collect_git_facts() -> dict:
         if counts is None:
             gaps[remote] = "未 fetch"
             continue
-        behind = counts.split()[1]  # 右侧计数 = 远程落后本地的提交数
-        gaps[remote] = "同步" if behind == "0" else f"落后 {behind}"
+        # 左侧仅存在于远程引用，右侧仅存在于本地 HEAD；两个方向都要检查。
+        behind, ahead = map(int, counts.split())
+        if behind and ahead:
+            gaps[remote] = f"本地落后 {behind}，领先 {ahead}（已分叉）"
+        elif behind:
+            gaps[remote] = f"本地落后 {behind}"
+        elif ahead:
+            gaps[remote] = f"本地领先 {ahead}"
+        else:
+            gaps[remote] = "同步"
     return {"branch": branch, "commit": commit, "gaps": gaps}
 
 
@@ -241,7 +249,7 @@ def check_all(stable: dict[str, str]) -> list[str]:
     name_of = {key: name for key, name, _ in STABLE_FIELDS}
 
     if not DOC_PATH.exists():
-        failures.append(f"docs/当前事实.md: 文件不存在（运行 python scripts/docs/gen_facts.py 生成）")
+        failures.append("docs/当前事实.md: 文件不存在（运行 python scripts/docs/gen_facts.py 生成）")
     else:
         doc_values = parse_doc_values(DOC_PATH.read_text(encoding="utf-8"))
         for key, name, _ in STABLE_FIELDS:
