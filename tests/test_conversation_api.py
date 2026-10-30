@@ -107,7 +107,7 @@ def test_restore_returns_server_transcript_after_browser_state_is_lost(client):
 
 def test_restore_includes_active_runs_for_client_resume(client):
     from api.conversations import COOKIE_NAME
-    from storage.task_repository import create_task_run, get_conversation
+    from storage.task_repository import cancel_run, create_task_run, get_conversation
 
     conversation_id = client.post("/api/conversations", json={}).get_json()["data"]["conversation_id"]
     owner = get_conversation(DATABASE_URL, conversation_id,
@@ -117,13 +117,18 @@ def test_restore_includes_active_runs_for_client_resume(client):
         datetime.now(timezone.utc) + timedelta(minutes=2),
     )
 
-    restored = client.get(f"/api/conversations/{conversation_id}")
-    assert restored.status_code == 200
-    active = restored.get_json()["data"]["active_runs"]
-    assert len(active) == 1
-    assert active[0]["run_id"] == queued["run_id"]
-    assert active[0]["task_id"] == queued["task_id"]
-    assert active[0]["status"] == "queued"
-    assert active[0]["task_revision"] == queued["task_revision"]
-    assert active[0]["query"] == "恢复中的路线"
-    assert active[0]["deadline_at"]
+    try:
+        restored = client.get(f"/api/conversations/{conversation_id}")
+        assert restored.status_code == 200
+        active = restored.get_json()["data"]["active_runs"]
+        assert len(active) == 1
+        assert active[0]["run_id"] == queued["run_id"]
+        assert active[0]["task_id"] == queued["task_id"]
+        assert active[0]["status"] == "queued"
+        assert active[0]["task_revision"] == queued["task_revision"]
+        assert active[0]["query"] == "恢复中的路线"
+        assert active[0]["deadline_at"]
+    finally:
+        # This deliberately queued run must not leak into subsequent workers.
+        cancelled = cancel_run(DATABASE_URL, owner, queued["run_id"])
+    assert cancelled is not None and cancelled["status"] == "cancelled"

@@ -77,10 +77,15 @@ def test_trip_through_real_api_worker_and_graph(monkeypatch, tmp_path, mobile, c
         response = client.open(target, method=request.method, data=request.post_data,
                                content_type=request.headers.get("content-type", "application/json"))
         if parsed.path.endswith("/messages") and request.method == "POST" and response.status_code == 202:
+            expected_run_id = response.get_json()["data"]["run_id"]
             with PostgresSaver.from_conn_string(DATABASE_URL) as saver:
                 saver.setup()
                 workflow = build_agent_workflow(saver, agent=planner.run_agent, database_url=DATABASE_URL)
-                completed.append(process_next_run(DATABASE_URL, "isolated-graph-worker", workflow))
+                outcome = process_next_run(DATABASE_URL, "isolated-graph-worker", workflow)
+                assert outcome and outcome["run_id"] == expected_run_id, (
+                    "worker claimed an unrelated test run; check test queue isolation"
+                )
+                completed.append(outcome)
         route.fulfill(status=response.status_code, content_type=response.content_type or "application/json",
                       body=response.get_data())
 
