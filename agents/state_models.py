@@ -133,6 +133,7 @@ class PlaceRequestState(Contract):
 
     request_id: Identifier
     original_query: str = Field(min_length=1, max_length=2000)
+    root_query: str | None = Field(default=None, max_length=2000)
     activities: list[Identifier] = Field(default_factory=list, max_length=20)
     subcategories: list[Identifier] = Field(default_factory=list, max_length=50)
     follow_up_requests: list[dict[str, Any]] = Field(default_factory=list, max_length=10)

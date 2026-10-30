@@ -867,7 +867,8 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
                   "road_conditions_applied", "road_condition_overview", "road_condition_scope",
                   "route_events", "route_events_status",
                   "duration_min", "shortest_duration_min", "speed_kmh",
-                  "legs", "via", "tour", "detour_ratio", "strategy", "route_state",
+                  "legs", "via", "tour", "detour_ratio", "direct_reference_length_m",
+                  "direct_reference_verified", "strategy", "route_state",
                   "endpoint_access", "timings_ms", "route_verification"):
             if k in route:
                 out[k] = route[k]

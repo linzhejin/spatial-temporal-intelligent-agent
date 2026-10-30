@@ -125,7 +125,81 @@ def _build_route_message(route: dict) -> str:
             if shortest_dur is not None:
                 tail += f"、{shortest_dur:g} 分钟"
             tail += "，地图灰虚线可对比"
-    return head + "。" + (tail + "。" if tail else "")
+    state = route.get("route_state") if isinstance(route.get("route_state"), dict) else {}
+    return head + "。" + (tail + "。" if tail else "") + _detour_feedback(route, state.get("original_query", ""))
+
+
+def _detour_feedback(route: dict, request: str) -> str:
+    """Only compare with an independently verified direct route under the same snapshot."""
+    if not isinstance(route, dict) or not route.get("via") or not re.search(
+        r"(?:绕行|绕路|绕远|多走).{0,8}(?:多少|多远|距离|几米|多长)|(?:多少|多远|几米).{0,6}(?:绕行|绕路|多走)",
+        request or "",
+    ):
+        return ""
+    direct = route.get("direct_reference_length_m")
+    total = route.get("recommended_length_m")
+    if (route.get("direct_reference_verified") is not True
+            or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                   or not math.isfinite(value) or value <= 0 for value in (direct, total))):
+        return " 与不经途经点路线的距离差暂时无法核实。"
+    delta = total - direct
+    if abs(delta) < 0.5:
+        detail = "没有增加路网距离"
+    else:
+        detail = ("多走" if delta > 0 else "少走") + "约 " + _fmt_dist(abs(delta))
+    return f" 相比同条件下不经途经点的路线，{detail}；末端接驳距离未核实。"
+
+
+def _route_message_with_detour(route: dict, request: str) -> str:
+    message = _build_route_message(route)
+    feedback = _detour_feedback(route, request)
+    return message if not feedback or feedback in message else message + feedback
+
+
+def _add_combined_direct_reference(route: dict, legs: list[dict], request: str, uid) -> None:
+    """Add a verified comparison only if the current snapshot still matches both legs."""
+    if not _detour_feedback(route, request):
+        return
+    route.pop("direct_reference_length_m", None)
+    route.pop("direct_reference_verified", None)
+    try:
+        from agents.route_state import current_road_condition_version
+
+        first, last = legs[0]["route_state"], legs[-1]["route_state"]
+        if _place_route_join_issue(legs) or _place_route_constraint_issue(legs, first.get("hard_constraints") or {}):
+            return
+        fresh, error = agent_tools._prepare_route_context({"query": request, "uid": uid})
+        if error:
+            return
+        graph = fresh["_route_graph_snapshot"]
+        conditions = fresh["_route_conditions_snapshot"]
+        data_version = agent_tools._data_version_for_graph(graph)
+        event_version = current_road_condition_version(conditions)
+        if any(state.get("data_version") != data_version or state.get("road_condition_version") != event_version
+               for state in (first, last)):
+            return
+        strategy = first["strategy"]
+        args = {"start": deepcopy(first["start"]), "end": deepcopy(last["end"]),
+                "mode": first["travel_mode"], "constraints": deepcopy(first["hard_constraints"]),
+                "strategy": strategy["name"], "strategy_source": strategy.get("source", "explicit_nl")}
+        if strategy.get("weights") is not None:
+            args["weights"] = deepcopy(strategy["weights"])
+        result, artifact = agent_tools.execute_tool("plan_route", args, fresh)
+        direct = artifact.get("route") if isinstance(artifact, dict) else None
+        if not isinstance(direct, dict) or (direct.get("route_verification") or {}).get("status") != "pass":
+            return
+        state = direct.get("route_state") or {}
+        if (state.get("data_version") != data_version or state.get("road_condition_version") != event_version
+                or state.get("travel_mode") != first["travel_mode"]
+                or state.get("hard_constraints") != first["hard_constraints"]
+                or _place_strategy_signature(state.get("strategy")) != _place_strategy_signature(strategy)
+                or current_road_condition_version(agent_tools.list_conditions(strict=True)) != event_version
+                or agent_tools._data_version_for_graph(graph) != data_version):
+            return
+        route["direct_reference_length_m"] = direct.get("recommended_length_m")
+        route["direct_reference_verified"] = True
+    except Exception:
+        logger.warning("无法核实全程绕行比较", exc_info=True)
 
 
 def _road_condition_feedback(route: dict, request: str) -> str:
@@ -1105,9 +1179,14 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
                          mode="walk") -> dict:
     previous = previous if isinstance(previous, dict) else {}
     strategy = previous.get("strategy") or _explicit_place_strategy(query)
+    completed_legs = previous.get("completed_legs") or []
+    first_leg = completed_legs[0] if completed_legs and isinstance(completed_legs[0], dict) else {}
+    first_state = first_leg.get("route_state") if isinstance(first_leg.get("route_state"), dict) else {}
     return {
         "request_id": previous.get("request_id") or uuid4().hex,
         "original_query": previous.get("original_query") or query,
+        "root_query": (previous.get("root_query") or first_state.get("original_query")
+                       or previous.get("original_query") or query),
         "activities": list(activities if activities is not None else previous.get("activities") or []),
         "subcategories": list(subcategories if subcategories is not None else previous.get("subcategories") or []),
         "follow_up_requests": list(follow_up_requests if follow_up_requests is not None
@@ -1749,6 +1828,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
         completed_legs = list((saved_request or {}).get("completed_legs") or [])
         completed_legs.append(deepcopy(route_response["route"]))
         if len(completed_legs) > 1:
+            root_query = str((saved_request or {}).get("root_query") or
+                             (saved_request or {}).get("original_query") or "")
             join_issue = _place_route_join_issue(completed_legs)
             if not join_issue:
                 join_issue = _place_route_constraint_issue(completed_legs, (saved_request or {}).get("constraints") or {})
@@ -1758,7 +1839,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             refresh_error = None
             if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
                 refreshed_route, refresh_error = _replan_changed_place_route(
-                    completed_legs, {"query": str((saved_request or {}).get("original_query") or "") + " " + query,
+                    completed_legs, {"query": root_query + " " + query,
                                      "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
                 if refreshed_route is not None:
                     join_issue = None
@@ -1779,11 +1860,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 route_response["clarify"] = {"question": question, "options": ["重试"]}
                 return route_response
             route_response["route"] = refreshed_route or _combined_place_route(completed_legs)
+            if refreshed_route is None:
+                _add_combined_direct_reference(route_response["route"], completed_legs, root_query, uid)
             route_response["route_kind"] = (
                 "multimodal" if len({leg.get("mode") for leg in completed_legs}) > 1
                 else "via"
             )
-            route_response["message"] = _build_route_message(route_response["route"]) + _road_condition_feedback(
+            route_response["message"] = _route_message_with_detour(route_response["route"], root_query) + _road_condition_feedback(
                 route_response["route"], str((saved_request or {}).get("original_query") or "") + " " + query,
             )
             if refreshed_route is not None:
@@ -1849,6 +1932,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "clarify": {"question": message, "options": ["重试"]},
                         "needs_input": True, "place_request": pending, "candidates": None}
             full_legs = completed_legs + [final_route]
+            root_query = str((saved_request or {}).get("root_query") or
+                             (saved_request or {}).get("original_query") or "")
             join_issue = _place_route_join_issue(full_legs)
             if not join_issue:
                 join_issue = _place_route_constraint_issue(full_legs, (saved_request or {}).get("constraints") or {})
@@ -1858,7 +1943,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             refresh_error = None
             if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
                 refreshed_route, refresh_error = _replan_changed_place_route(
-                    full_legs, {"query": str((saved_request or {}).get("original_query") or "") + " " + query,
+                    full_legs, {"query": root_query + " " + query,
                                 "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
                 if refreshed_route is not None:
                     join_issue = None
@@ -1871,8 +1956,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "message": message, "clarify": {"question": message, "options": ["重试"]},
                         "needs_input": True, "place_request": pending, "candidates": None}
             full_route = refreshed_route or _combined_place_route(full_legs)
+            if refreshed_route is None:
+                _add_combined_direct_reference(full_route, full_legs, root_query, uid)
             return {**route_response, "response_kind": "route", "route": full_route,
-                    "route_kind": "via", "message": _build_route_message(full_route) + _road_condition_feedback(
+                    "route_kind": "via", "message": _route_message_with_detour(full_route, root_query) + _road_condition_feedback(
                         full_route, str((saved_request or {}).get("original_query") or "") + " " + query)
                         + ("路况发生变化，已按最新记录重新规划全程。" if refreshed_route is not None else ""),
                     "needs_input": False, "place_request": None, "clarify": None,
@@ -1882,7 +1969,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
         destination_name = str(destination.get("name") or "").strip()
         next_start = {"type": "poi", "name": destination_name,
                       "poi_id": destination.get("id") or destination.get("poi_id")}
-        previous = {**(saved_request or {}), "original_query": next_query or "下一站",
+        previous = {**(saved_request or {}),
+                    "root_query": ((saved_request or {}).get("root_query")
+                                   or (saved_request or {}).get("original_query")),
+                    "original_query": next_query or "下一站",
                     "selected_poi_id": None, "candidate_poi_ids": []}
         pending = _place_request_state(
             next_query or "下一站", activities=next_activities,
@@ -2988,6 +3078,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
             final_message += " 本次未取得天气信息；路线仅依据现有道路数据。"
 
     if artifact_route:
+        detour_feedback = _detour_feedback(artifact_route, (active_task_request or "") + " " + query)
+        if detour_feedback and detour_feedback not in final_message:
+            final_message += detour_feedback
         final_message += _road_condition_feedback(
             artifact_route, (active_task_request or "") + query,
         )

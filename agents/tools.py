@@ -2382,6 +2382,22 @@ def _tool_plan_via_route(args, ctx):
     )
     if verification_error:
         return verification_error, None
+    # The through-waypoint shortest route is not the direct start/end baseline.
+    # Only expose the comparison after independently checking that baseline
+    # against the same graph, road conditions, mode and hard constraints.
+    if re.search(
+        r"(?:绕行|绕路|绕远|多走).{0,8}(?:多少|多远|距离|几米|多长)|(?:多少|多远|几米).{0,6}(?:绕行|绕路|多走)",
+        str(context.get("query") or ""),
+    ):
+        try:
+            direct_payload = _route_payload(G, direct, start_name, end_name, mode)
+            _attach_route_state(direct_payload, "direct", args, context, G, decision,
+                                args["start"], args["end"], travel_mode=mode)
+            if _audit_tool_route(G, direct_payload, context, [start_node, end_node], "direct") is None:
+                payload["direct_reference_length_m"] = round(direct_length, 1)
+                payload["direct_reference_verified"] = True
+        except Exception:
+            logger.warning("无法核实不经途经点的路线参考", exc_info=True)
     payload["route_events"], payload["road_conditions_applied"], payload["road_condition_overview"] = route_condition_notices(
         G_mode, context["_route_conditions_snapshot"], mode, payload["recommended_edge_ids"],
         include_overview=True,
