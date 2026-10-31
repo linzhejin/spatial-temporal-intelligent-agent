@@ -71,10 +71,11 @@ def test_unknown_nonvision_source_is_not_treated_as_reviewed():
     assert response["message"].count("复核后发布") == 1
 
 
-def test_nonvision_only_road_info_keeps_existing_model_answer():
+def test_nonvision_only_road_info_uses_manager_record():
     event = _event(source_kind="manager_record", vision_evidence=None)
     response = _run([event], final="科技路禁止步行，请绕行。")
-    assert response["message"] == "科技路禁止步行，请绕行。"
+    assert "科技路" in response["message"] and "禁止通行" in response["message"]
+    assert "步行" in response["message"] and "管理记录" in response["message"]
 
 
 def test_unknown_source_alone_does_not_acquire_invented_origin():

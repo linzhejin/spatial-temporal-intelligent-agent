@@ -565,14 +565,30 @@ def _join_leg_paths(legs: list[dict], field: str) -> list:
 
 
 def _vision_condition_summary(result: dict, query: str = "") -> str | None:
-    """Describe vision-linked road records from evidence, never model inference."""
+    """Describe requested road records from evidence, never model inference."""
     conditions = result.get("conditions") if isinstance(result, dict) else None
+    road_query = bool(re.search(
+        r"路况|管制|封路|封闭|拥堵|积水|事故|施工|通行|能走|可以走|能不能走|"
+        r"能步行|能骑行|能驾车|可以步行|可以骑行|可以驾车|能通过|可以通过|解封|解除管制", query))
+    if not road_query:
+        # A road may have no matching event at all; do not rely on a recorded
+        # road name to recognize a question about its current condition.
+        road_query = bool(re.search(
+            r"(?:路|街|道|巷|桥|隧道).{0,12}(?:怎么样|如何|情况|能否|可否|能不能|可不可以)",
+            query,
+        ))
+    if not road_query and isinstance(conditions, list):
+        road_query = bool(re.search(r"怎么样|如何|情况|能否|可否|能不能|可不可以", query)) and any(
+            isinstance(event, dict) and isinstance(event.get("road_name"), str)
+            and len(event["road_name"].strip()) >= 2 and event["road_name"].strip() in query
+            for event in conditions
+        )
     if (conditions == [] and type(result.get("count")) is int and result["count"] == 0
-            and re.search(r"路况|管制|封路|封闭|拥堵|积水|事故|施工", query)):
+            and road_query):
         return "当前系统没有已生效的路况记录；未覆盖路段的现场通行情况仍需确认。"
-    if not isinstance(conditions, list) or not any(
-        isinstance(item, dict) and item.get("source_kind") != "manager_record" for item in conditions
-    ):
+    if not isinstance(conditions, list) or not conditions:
+        return None
+    if not road_query:
         return None
     def requested_event(event):
         if not isinstance(event, dict):
@@ -643,6 +659,8 @@ def _vision_condition_summary(result: dict, query: str = "") -> str | None:
         lines.append(detail)
     if len(conditions) > 5:
         lines.append(f"另有 {len(conditions) - 5} 条记录未展开。")
+    if road_query:
+        lines.append("未覆盖路段的现场通行情况仍需确认。")
     return "当前路况记录：\n" + "\n".join(lines)
 
 
@@ -666,6 +684,12 @@ def _mixed_evidence_summary(summary: str, *, route: dict | None, candidates: lis
             label = name.strip()[:100]
             if isinstance(campus, str) and campus.strip():
                 label += f"（{campus.strip()[:40]}）"
+            distance = item.get("distance_m")
+            if distance is None:
+                distance = item.get("network_distance_m")
+            if (isinstance(distance, (int, float)) and not isinstance(distance, bool)
+                    and math.isfinite(distance) and distance >= 0):
+                label += f"（估算距离约 {distance:.0f} 米）"
             names.append(label)
         if names:
             parts.append("候选地点：" + "、".join(names) + "。")
@@ -739,7 +763,8 @@ def _mixed_evidence_summary(summary: str, *, route: dict | None, candidates: lis
                  "search_poi_candidates", "find_reachable_places"}
     if tools_used - supported or (not parts and tools_used - {"list_road_conditions", "suggest_followup"}):
         parts.append("其他查询结果暂无法可靠整理，请单独询问。")
-    parts.append(summary)
+    if summary:
+        parts.append(summary)
     return "\n".join(parts)
 
 
@@ -1204,6 +1229,203 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
     }
 
 
+def _ordered_candidate_tail(query: str) -> tuple[str, str] | None:
+    """Only explicit subsequent travel is a new route; a catalog query is not."""
+    match = re.search(r"(?:然后|接着|随后|之后|最后|再)\s*(?:(?:请|帮我|带我|我)\s*)?"
+                      r"(?P<mode>步行|走路|骑行|骑车|驾车|开车)?\s*"
+                      r"(?:去|前往|到|导航到)(?P<tail>[^。！？!?]+)", str(query or ""))
+    if not match:
+        return None
+    return str(query)[:match.start()].strip(" ，,；;"), match.group("tail").strip(" ，,；;")
+
+
+def _ordered_spatial_reference_unverified(query: str) -> bool:
+    """A later place relative to another POI needs evidence we do not yet have."""
+    stages = re.split(r"(?:然后|接着|随后|之后|最后|再去|再)", str(query or ""))
+    for stage in stages[1:]:
+        text = re.sub(r"^(?:步行|走路|骑行|骑车|驾车|开车)?\s*"
+                      r"(?:去|到|前往|导航到)\s*", "", stage.strip(" ，,；;"))
+        if re.match(r"^.{2,30}?(?:旁边|附近|周边|边上|旁)(?:的)?[^，,。；;]+", text):
+            return True
+    return False
+
+
+def _verified_continuation_start(prefix: str, full_query: str, route: dict, coord_start, coord_end, travel_mode):
+    """Resolve the first leg only when it agrees with the requested endpoints."""
+    from agents.parser import detect_travel_mode
+    from agents.route_state import validate_route_state
+    from agents.state_models import HardConstraints
+
+    if not isinstance(route, dict) or (route.get("route_verification") or {}).get("status") != "pass":
+        raise ValueError("首段路线尚未独立核验")
+    state = validate_route_state(route.get("route_state"))
+    if state["route_kind"] not in {"direct", "via"} or not route.get("recommended_edge_ids"):
+        raise ValueError("首段行程无法可靠续接")
+    requested_mode, explicit_mode = detect_travel_mode(prefix)
+    requested_mode = requested_mode if explicit_mode else travel_mode
+    if requested_mode in {"walk", "bike", "drive"} and state["travel_mode"] != requested_mode:
+        raise ValueError("首段出行方式与需求不一致")
+
+    def resolve_ref(ref, requested_name, supplied_coord):
+        if ref.get("type") == "coord":
+            point = ref.get("coordinates") if isinstance(ref.get("coordinates"), dict) else ref
+            if not isinstance(supplied_coord, dict):
+                raise ValueError("地图选点无法确认")
+            try:
+                lng, lat = float(point["lng"]), float(point["lat"])
+                expected_lng, expected_lat = float(supplied_coord["lng"]), float(supplied_coord["lat"])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("地图选点无法确认") from None
+            if (not all(math.isfinite(x) for x in (lng, lat, expected_lng, expected_lat))
+                    or abs(lng - expected_lng) > 1e-7 or abs(lat - expected_lat) > 1e-7):
+                raise ValueError("路线与地图选点不一致")
+            return {"type": "coord", "name": ref.get("name") or "地图选点", "lng": lng, "lat": lat}
+        if not requested_name:
+            raise ValueError("用户指定的地点无法确认")
+        requested, ambiguous = agent_tools.find_poi_ambiguous(requested_name)
+        if not requested or ambiguous or not requested.get("id"):
+            raise ValueError("用户指定的地点无法唯一确认")
+        route_id = ref.get("poi_id")
+        if not route_id:
+            resolved, alternatives = agent_tools.find_poi_ambiguous(ref.get("name") or "")
+            if not resolved or alternatives:
+                raise ValueError("首段路线地点无法唯一确认")
+            route_id = resolved.get("id")
+        if route_id != requested["id"]:
+            raise ValueError("首段路线与用户指定地点不一致")
+        return {"type": "poi", "name": requested["name"], "poi_id": route_id}
+
+    start_name = _explicit_start_name(prefix)
+    start_name = re.sub(r"(?:步行|走路|骑行|骑车|驾车|开车)$", "", start_name or "").strip()
+    end_match = re.search(r"(?:到|前往)\s*([^，,。；;]+)", prefix)
+    end_name = re.sub(r"(?:的)?(?:路线|路径|导航).*$", "", end_match.group(1)).strip() if end_match else ""
+    resolve_ref(state["start"], start_name, coord_start)
+    next_start = resolve_ref(state["end"], end_name, coord_end)
+    raw = deepcopy(state["hard_constraints"])
+    if raw.get("slope") == "avoid":
+        raw.pop("slope")
+        raw["avoid_slope"] = True
+    # Unrecognized constraints cannot be silently dropped when continuing.
+    allowed = {"avoid_slope", "avoid_steps", "require_verified_accessibility", "max_distance_m",
+               "max_duration_s", "excluded_edge_ids"}
+    if set(raw) - allowed:
+        raise ValueError("首段任务约束无法完整保留")
+    constraints = HardConstraints.model_validate(raw).model_dump(mode="python")
+    excluded_phrases = re.finditer(
+        r"(?:避开|避让|绕开|绕过|别走|不走|不要走|不经过|不要经过|不经|不要从)(.*?)(?=然后|接着|随后|之后|最后|再去|[，,。；;！？!?]|$)",
+        full_query,
+    )
+    for match in excluded_phrases:
+        target = match.group(1).strip()
+        if target in {"楼梯", "台阶"} and not constraints["avoid_steps"]:
+            raise ValueError("首段没有保留避开台阶的要求")
+        if target in {"陡坡", "坡路", "坡道"} and not constraints["avoid_slope"]:
+            raise ValueError("首段没有保留避坡要求")
+        if target and target not in {"楼梯", "台阶", "陡坡", "坡路", "坡道"}:
+            raise ValueError("指定避让道路或区域尚无法与路线约束核验")
+    if re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)|无台阶|不能爬楼梯", full_query) and not constraints["avoid_steps"]:
+        raise ValueError("首段没有保留避开台阶的要求")
+    if re.search(r"避坡|少爬坡|不想爬坡|(?:避开|绕开|不走)(?:陡坡|坡路|坡道)", full_query) and not constraints["avoid_slope"]:
+        raise ValueError("首段没有保留避坡要求")
+    # Nearby search does not verify accessibility of the road-to-POI access,
+    # even when the route's graph-level accessibility flag is set.
+    if re.search(r"轮椅|无障碍", full_query):
+        raise ValueError("候选地点的无障碍接驳条件尚未核实")
+    if re.search(r"(?:不超过|不大于|最多|上限|以内).{0,12}\d|\d.{0,12}(?:以内|以下|上限)", full_query):
+        raise ValueError("整程距离或时间上限需要重新确认")
+    strategy = (state.get("strategy") or {}).get("name")
+    if strategy not in {"shortest", "recommended", "scenery", "flat"}:
+        raise ValueError("首段路线策略无法可靠续接")
+    return state, next_start, constraints, strategy
+
+
+def _recheck_route_candidate_stage(query, route, coord_start, coord_end, travel_mode, uid, execute_tool):
+    """Make a pending next stop only from an explicit ordered travel request."""
+    ordered = _ordered_candidate_tail(query)
+    if not ordered:
+        return None
+    prefix, tail = ordered
+    state, start, constraints, strategy = _verified_continuation_start(
+        prefix, query, route, coord_start, coord_end, travel_mode,
+    )
+    suffix_modes = re.finditer(r"(?:然后|接着|随后|之后|最后|再)\s*(?:(?:请|帮我|带我|我)\s*)?"
+                               r"(步行|走路|骑行|骑车|驾车|开车)\s*(?:去|前往|到|导航到)", query)
+    for suffix_mode in suffix_modes:
+        requested = {"步行": "walk", "走路": "walk", "骑行": "bike", "骑车": "bike",
+                     "驾车": "drive", "开车": "drive"}[suffix_mode.group(1)]
+        if requested != state["travel_mode"]:
+            raise ValueError("后续路段出行方式不同，需要重新确认完整行程")
+    stages = [part.strip(" ，,。；;、") for part in
+              re.split(r"(?:然后|接着|随后|之后|最后|再去|再)", tail)
+              if part.strip(" ，,。；;、")]
+    parsed = []
+    for stage in stages:
+        if re.search(r"室内|室外|露天|开放中|正在开放|营业中|营业时间|营业的|开门|关门|空调|"
+                     r"24\s*小时|二十四小时|全天营业|预约|免费|收费", stage, re.IGNORECASE):
+            raise ValueError("后续地点的开放、场地或预约等条件尚无法核实")
+        # A POI is concrete only on exact name or alias match. Fuzzy matching a
+        # generic word such as “超市” may silently select a particular store.
+        name = re.sub(r"^(?:去|到|前往|导航到)\s*", "", re.split(r"[，,；;]", stage)[0]).strip()
+        matches = [poi for poi in agent_tools.load_pois()
+                   if name and name in [poi.get("name"), *(poi.get("aliases") or [])]]
+        if len(matches) > 1:
+            raise ValueError("后续指定地点存在歧义，完整顺序无法确认")
+        if matches:
+            parsed.append({"query": stage, "destination_poi_id": matches[0]["id"],
+                           "activities": [], "subcategories": []})
+            continue
+        stage_intent = agent_tools.resolve_activity_query(stage)
+        if not stage_intent or stage_intent.get("status") != "resolved":
+            raise ValueError("后续多站需求无法完整确认")
+        parsed.append({"query": stage, "activities": list(stage_intent.get("activities") or []),
+                       "subcategories": list(stage_intent.get("subcategories") or [])})
+    if not parsed or parsed[0].get("destination_poi_id"):
+        raise ValueError("后续指定地点与其他目标的完整顺序无法确认")
+    intent = parsed[0]
+    activities = list(intent.get("activities") or [])
+    categories = list(intent.get("subcategories") or [])
+    if not activities and not categories:
+        raise ValueError("下一站的地点用途无法确认")
+    followups = parsed[1:]
+    pending = _place_request_state(tail, activities=activities, subcategories=categories,
+        pending_slot="selection", start=start, constraints=constraints, mode=state["travel_mode"],
+        follow_up_requests=followups, previous={"root_query": query, "strategy": strategy})
+    pending["completed_legs"] = [deepcopy(route)]
+    args = {"start": start, "activities": activities, "subcategories": categories,
+            "mode": state["travel_mode"], "constraints": _place_tool_constraints(constraints),
+            "max_distance_m": 10000, "limit": 4}
+    result, artifact = execute_tool("search_poi_candidates", args, {"query": tail, "uid": uid})
+    candidates = artifact.get("candidates") if isinstance(artifact, dict) else None
+    if not isinstance(result, dict) or result.get("error") or not isinstance(candidates, list) or not candidates:
+        pending["pending_slot"] = "follow_up"
+        reason = (result.get("message") if isinstance(result, dict) else None) or "下一站候选暂时无法核验"
+        return pending, None, str(reason)[:200]
+    master = {poi.get("id"): poi for poi in agent_tools.load_pois() if poi.get("id")}
+    verified, seen = [], set()
+    for candidate in candidates:
+        if not isinstance(candidate, dict):
+            raise ValueError("下一站候选资料无法确认")
+        identifier = candidate.get("poi_id")
+        poi = master.get(identifier)
+        distance = candidate.get("distance_m")
+        if distance is None:
+            distance = candidate.get("network_distance_m")
+        if (not isinstance(identifier, str) or not re.fullmatch(r"poi_\d{3,}", identifier)
+                or identifier in seen or not poi or not isinstance(poi.get("name"), str)
+                or (activities and not agent_tools.matches_activities(poi, activities))
+                or isinstance(distance, bool) or not isinstance(distance, (int, float))
+                or not math.isfinite(distance) or distance < 0):
+            raise ValueError("下一站候选用途或距离无法确认")
+        seen.add(identifier)
+        verified.append({**candidate, "poi_id": identifier, "place_id": identifier,
+                         "name": poi["name"], "distance_m": distance})
+    if any(first["distance_m"] > second["distance_m"]
+           for first, second in zip(verified, verified[1:])):
+        raise ValueError("下一站候选距离顺序无法确认")
+    pending["candidate_poi_ids"] = [item["poi_id"] for item in verified]
+    return pending, verified, None
+
+
 def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str]) -> str | None:
     """Accept a clear spoken choice only from the current candidate list."""
     candidate_ids = set(candidate_poi_ids)
@@ -1452,6 +1674,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if response.get("response_kind") == "clarify" and isinstance(response.get("clarify"), dict):
             response["clarify"]["question"] = response["message"]
         return response
+
+    if _ordered_spatial_reference_unverified(query):
+        question = "后续地点与参照地点的空间关系暂无法核实，无法确认完整行程；请提供具体地点。"
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None,
+                "clarify": {"question": question, "options": []},
+                "needs_input": True, "place_request": None, "suggestions": None, "turns": 0}
 
     # 地图端已经把起点、终点和每个途经点解析成精确坐标，不应再让 LLM
     # 决定是否调用工具或重排用户选点。直接执行同一个 plan_via_route 工具，
@@ -1825,8 +2054,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     def with_next_place_stage(route_response: dict, destination: dict,
                               saved_request: dict | None, followups: list[dict]) -> dict:
+        current_leg = deepcopy(route_response["route"])
         completed_legs = list((saved_request or {}).get("completed_legs") or [])
-        completed_legs.append(deepcopy(route_response["route"]))
+        completed_legs.append(current_leg)
         if len(completed_legs) > 1:
             root_query = str((saved_request or {}).get("root_query") or
                              (saved_request or {}).get("original_query") or "")
@@ -1880,6 +2110,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         named_final_id = next_request.get("destination_poi_id")
         if named_final_id:
             if named_final_id == (destination.get("id") or destination.get("poi_id")):
+                if len(followups) > 1:
+                    return with_next_place_stage({**route_response, "route": current_leg},
+                                                 destination, saved_request, followups[1:])
                 route_response["message"] += "你选的前一地点就是指定终点，无须再走第二段。"
                 route_response["needs_input"] = False
                 route_response["place_request"] = None
@@ -1931,6 +2164,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "route_kind": None, "message": message,
                         "clarify": {"question": message, "options": ["重试"]},
                         "needs_input": True, "place_request": pending, "candidates": None}
+            if len(followups) > 1:
+                previous = {**(saved_request or {}), "completed_legs": completed_legs}
+                return with_next_place_stage({**route_response, "route": final_route},
+                                             final_poi, previous, followups[1:])
             full_legs = completed_legs + [final_route]
             root_query = str((saved_request or {}).get("root_query") or
                              (saved_request or {}).get("original_query") or "")
@@ -2181,9 +2418,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "suggestions": suggestions, "turns": 0}
             return with_next_place_stage(response, selected_poi, place_request,
                                          follow_up_requests)
-        return {"response_kind": "chat", "message": (result or {}).get("message") or "这条路线暂时无法生成。",
+        message = (result or {}).get("message") or "这条路线暂时无法生成。"
+        pending = _place_request_state(query, pending_slot="selection", start=start_ref,
+                                       previous=place_request, selected_poi_id=selected_poi_id,
+                                       candidate_poi_ids=(place_request or {}).get("candidate_poi_ids") or [selected_poi_id])
+        return {"response_kind": "clarify", "message": message,
                 "route": None, "route_kind": None, "candidates": None,
-                "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                "clarify": {"question": message, "options": ["重试"]}, "needs_input": True,
+                "place_request": pending, "suggestions": None, "turns": 0}
 
     if place_request and place_request.get("pending_slot") == "follow_up":
         original_request = place_request.get("original_query") or original_request
@@ -2993,6 +3235,54 @@ def run_agent(query: str, context: dict = None, history: list = None,
             turns=turns,
         ))
 
+    pending_place_request = None
+    continuation_clarify = None
+    compound_query = (active_task_request or "") + " " + query
+    route_state = artifact_route.get("route_state") if isinstance(artifact_route, dict) else None
+    ordered_tail = _ordered_candidate_tail(compound_query)
+    ordered_direct = (ordered_tail if not isinstance(route_state, dict)
+                      or route_state.get("route_kind") == "direct" else None)
+    if artifact_route and (artifact_candidates or ordered_direct or executed_tool_names & {"search_poi_candidates", "find_reachable_places"}):
+        if ordered_direct:
+            try:
+                prefix, _ = ordered_direct
+                _verified_continuation_start(prefix, compound_query, artifact_route,
+                                             coord_start, coord_end, travel_mode)
+            except Exception as exc:
+                question = "首段路线未能核验或不符合你的条件，未展示路线；请重新确认需求后重试。"
+                if isinstance(exc, ValueError) and re.search(r"[\u4e00-\u9fff]", str(exc)):
+                    question = f"{str(exc)[:100]}，未展示首段路线；请重新确认需求后重试。"
+                return _with_provenance({
+                    "response_kind": "clarify", "message": question,
+                    "route": None, "route_kind": None, "candidates": None,
+                    "clarify": {"question": question, "options": []}, "needs_input": True,
+                    "place_request": None, "suggestions": None, "turns": turns,
+                })
+            try:
+                pending_place_request, artifact_candidates, failure = _recheck_route_candidate_stage(
+                    compound_query, artifact_route, coord_start, coord_end, travel_mode, uid, execute_tool,
+                )
+            except (ValueError, KeyError, TypeError) as exc:
+                artifact_candidates = None
+                failure = str(exc) or "下一站无法可靠确认"
+            except Exception:
+                artifact_candidates = None
+                failure = "下一站检索暂时不可用"
+            if failure:
+                question = f"首段路线已生成，但{failure}；请重新确认或稍后重试。"
+                continuation_clarify = {"question": question, "options": []}
+            else:
+                continuation_clarify = {"question": "请选择下一站，继续规划完整行程。", "options": []}
+        # Preserve only the verified route and actual candidate evidence; the
+        # model's free text can describe stale candidates from its first search.
+        final_message = _mixed_evidence_summary(
+            continuation_clarify["question"] if continuation_clarify else "",
+            route=artifact_route, candidates=artifact_candidates,
+            place_results=list(place_detail_results.values()), resolved_results=list(resolved_poi_results.values()),
+            last_tool_results=last_tool_results, weather_result=weather_result,
+            weather_failed=weather_tool_failed, tools_used=executed_tool_names, query=query,
+        )
+
     # 防御：LLM 直出文本里若混入 DSML 标记，剥掉
     final_message = _sanitize_message(final_message)
 
@@ -3085,6 +3375,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
             artifact_route, (active_task_request or "") + query,
         )
 
+    if continuation_clarify and continuation_clarify["question"] not in final_message:
+        final_message += "\n" + continuation_clarify["question"]
+
     response_kind = "chat"
     if artifact_route:
         response_kind = "route"
@@ -3098,7 +3391,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         "weather": delivered_weather,
         "route_kind": route_kind,
         "candidates": artifact_candidates,
-        "clarify": None,
+        "clarify": continuation_clarify,
+        "needs_input": bool(continuation_clarify),
+        "place_request": pending_place_request,
         "suggestions": artifact_suggestions,
         "turns": turns,
     })

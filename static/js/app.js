@@ -3805,10 +3805,18 @@
             }
 
             if (result.response_kind === 'clarify') {
-                if (setPendingServerClarification(
+                var acceptedClarification = setPendingServerClarification(
                     result._task_id, result._task_revision,
                     result.clarify && result.clarify.question, turnId
-                )) saveContext();
+                );
+                if (acceptedClarification) {
+                    saveContext();
+                } else {
+                    var staleClarificationMessage = '这个问题已过期，请继续最新任务。';
+                    updateChatBubble(thinkingBubble, staleClarificationMessage);
+                    addConversationTurn(query, { task_type: 'chat', reply: staleClarificationMessage }, turnId, false);
+                    return;
+                }
             } else if (requestBody.continuation_task_id
                     && requestBody.continuation_task_id === state.pendingServerTaskId) {
                 if (clearPendingServerClarification(requestBody.continuation_task_id, turnId)) saveContext();
@@ -3916,11 +3924,19 @@
                 updateChatBubble(thinkingBubble, result.message || (cands.length ? '帮你找到这些地点，点一个我帮你规划路线～' : '校内没找到匹配的地点，换个说法试试？'));
                 // 候选本身也是一个待完成任务：保留任务版本，点选时把
                 // 稳定 poi_id 续回后端，避免按名称重新匹配到别的地点。
-                if (setPendingServerClarification(
+                var acceptedCandidatePending = setPendingServerClarification(
                     result._task_id, result._task_revision,
                     cands.length ? '请选择一个地点继续规划路线。' : null, turnId
-                )) saveContext();
-                if (cands.length) renderCandidateCards(cands, result._task_id, result._task_revision);
+                );
+                if (acceptedCandidatePending) {
+                    saveContext();
+                    if (cands.length) renderCandidateCards(cands, result._task_id, result._task_revision);
+                } else {
+                    var staleCandidateMessage = '这组地点选择已过期，请继续最新任务。';
+                    updateChatBubble(thinkingBubble, staleCandidateMessage);
+                    addConversationTurn(query, { task_type: 'chat', reply: staleCandidateMessage }, turnId, false);
+                    return;
+                }
                 addConversationTurn(query, result, turnId);
                 return;
             }
@@ -3945,7 +3961,8 @@
 
             // path_planning → 渲染路线 + 对话反馈
             if (result.recommended && result.recommended.length > 0) {
-                if (turnId >= state.latestRouteTurnId) {
+                if (turnId >= state.latestRouteTurnId
+                        && (!state.pendingServerTaskId || turnId >= state.pendingServerTaskTurnId)) {
                     state.latestRouteTurnId = turnId;
                     syncModeFromServer(result);
                     renderRoute(result);
@@ -3964,15 +3981,18 @@
                     if (result.needs_input && result._task_id
                             && Number.isInteger(result._task_revision)) {
                         var nextQuestion = result.clarify && result.clarify.question;
-                        if (setPendingServerClarification(
+                        var acceptedRoutePending = setPendingServerClarification(
                             result._task_id, result._task_revision, nextQuestion, turnId
-                        )) saveContext();
-                        if (nextQuestion) showChatBubble('', nextQuestion);
-                        if (Array.isArray(result.candidates) && result.candidates.length) {
-                            renderCandidateCards(result.candidates, result._task_id, result._task_revision);
-                        } else if (result.clarify && Array.isArray(result.clarify.options)) {
-                            renderClarifyOptions(result.clarify.options,
-                                result._task_id, result._task_revision);
+                        );
+                        if (acceptedRoutePending) {
+                            saveContext();
+                            if (nextQuestion) showChatBubble('', nextQuestion);
+                            if (Array.isArray(result.candidates) && result.candidates.length) {
+                                renderCandidateCards(result.candidates, result._task_id, result._task_revision);
+                            } else if (result.clarify && Array.isArray(result.clarify.options)) {
+                                renderClarifyOptions(result.clarify.options,
+                                    result._task_id, result._task_revision);
+                            }
                         }
                     }
                     addConversationTurn(query, result, turnId);
@@ -4182,10 +4202,14 @@
         var text = String(explanation || '').trim();
         if (!text) return '';
         return text
+            // Only discard a complete, standard route-summary sentence.
+            // Other distances/times can describe detours, connectors or wait
+            // times and must not be stripped from the user's answer.
+            .replace(/^(?:(?:已为你|已为您|为你|为您)?规划(?:好了|好|完成)?从[^。；;！？!?]{1,160}?到[^。；;！？!?]{1,160}?的(?:步行|骑行|驾车)?路线)(?:[，,]\s*约\s*\d+(?:[.,]\d+)?\s*(?:公里|km|米|m)(?:[、,，]\s*\d+(?:[.,]\d+)?\s*分钟)?)?[。；;]\s*/i, '')
+            .replace(/^(?:(?:已为你|已为您|为你|为您)?规划(?:好了|好|完成)?(?:一条)?(?:步行|骑行|驾车)?路线)(?:[，,]\s*约\s*\d+(?:[.,]\d+)?\s*(?:公里|km|米|m)(?:[、,，]\s*\d+(?:[.,]\d+)?\s*分钟)?)?[。；;]\s*/i, '')
             .replace(/^(?:(?:已为你|已为您|为你|为您)?规划(?:好|好了|完成)?从.+?到(?:终点|目的地)的(?:步行|骑行|驾车)?路线)[，,。；;\s]*/g, '')
             .replace(/^(?:路线已规划|路线规划完成)[，,。；;\s]*/g, '')
             .replace(/^(?:(?:已为你|已为您|为你|为您)?规划(?:好了|好|完成)?(?:一条)?(?:步行|骑行|驾车)?路线)[，,。；;\s]*/g, '')
-            .replace(/(?:步行|骑行|驾车)?\s*(?:约)?\s*\d+(?:[.,]\d+)?\s*(?:公里|km|米|m|分钟)/gi, '')
             .replace(/(?:最短路径|风景优先|平坦优先|综合推荐|个性化路线|优先较短路线)(?:策略)?/g, '')
             .replace(/按(?:默认|快捷|当前|您的|用户)?偏好[，,、]*/g, '')
             .replace(/^[，,、；;。\s]+|[，,、；;。\s]+$/g, '')
@@ -5063,16 +5087,28 @@
             var messageSequence = Number(active.message_seq) || (userMessage && userMessage._seq) || 0;
             pollRun(active.run_id, conversationId, bubble, epoch).then(function (result) {
                 if (!result || epoch !== state.conversationEpoch) return;
-                var isAtLeastAsNewAsTranscript = !messageSequence || !state.latestRouteSequence
-                    || messageSequence >= state.latestRouteSequence;
+                var isAtLeastAsNewAsTranscript = !state.latestRouteSequence
+                    || (messageSequence > 0 && messageSequence >= state.latestRouteSequence);
+                var isAtLeastAsNewAsPending = !state.pendingServerTaskId || turnId >= state.pendingServerTaskTurnId;
                 if (result.task_type === 'path_planning' && result.recommended && result.recommended.length
-                        && isAtLeastAsNewAsTranscript && turnId >= state.latestRouteTurnId) {
+                        && isAtLeastAsNewAsTranscript && isAtLeastAsNewAsPending
+                        && turnId >= state.latestRouteTurnId) {
                     if (turnId) state.latestRouteTurnId = turnId;
                     state.latestRouteSequence = Math.max(state.latestRouteSequence, messageSequence);
                     syncModeFromServer(result);
                     renderRoute(result);
                     showResults(result);
                     trackRouteShown();
+                }
+                var hasPendingSelection = result.response_kind === 'clarify'
+                    || result.response_kind === 'candidates'
+                    || (result.response_kind === 'route' && result.needs_input);
+                if (hasPendingSelection && (!isAtLeastAsNewAsTranscript || !isAtLeastAsNewAsPending)) {
+                    var staleRestoredMessage = '这项较早任务的选择已过期，请继续当前任务。';
+                    updateChatBubble(bubble, staleRestoredMessage);
+                    recordRestoredAssistant(active.query, { task_type: 'chat', reply: staleRestoredMessage },
+                        active.task_id, turnId);
+                    return;
                 }
                 if (result.response_kind === 'clarify') {
                     var acceptedPending = setPendingServerClarification(
@@ -5097,10 +5133,32 @@
                         saveContext();
                         renderCandidateCards(result.candidates, candidateTaskId, candidateRevision);
                     }
+                } else if (result.response_kind === 'route' && result.needs_input
+                        && result.task_type === 'path_planning' && result.recommended && result.recommended.length
+                        && isAtLeastAsNewAsTranscript && isAtLeastAsNewAsPending && turnId >= state.latestRouteTurnId) {
+                    var routeTaskId = result._task_id || active.task_id;
+                    var routeRevision = Number.isInteger(result._task_revision)
+                        ? result._task_revision : active.task_revision;
+                    var routeQuestion = (result.clarify && result.clarify.question) || '请选择一个地点继续规划路线。';
+                    if (routeTaskId && Number.isInteger(routeRevision) && setPendingServerClarification(
+                        routeTaskId, routeRevision, routeQuestion, turnId
+                    )) {
+                        saveContext();
+                        if (Array.isArray(result.candidates) && result.candidates.length) {
+                            renderCandidateCards(result.candidates, routeTaskId, routeRevision);
+                        } else if (result.clarify && Array.isArray(result.clarify.options)) {
+                            renderClarifyOptions(result.clarify.options, routeTaskId, routeRevision);
+                        }
+                    }
                 } else if (result.task_type === 'poi_query' && result.poi && state.map) {
                     focusPoiOnMap(result.poi);
                 }
                 var restoredReply = result.explanation || result.reply || result.message || '任务已完成。';
+                if (result.response_kind === 'route' && result.needs_input && result.clarify
+                        && typeof result.clarify.question === 'string' && result.clarify.question
+                        && restoredReply.indexOf(result.clarify.question) === -1) {
+                    restoredReply += '\n' + result.clarify.question;
+                }
                 if (result.task_type === 'path_planning' && result.recommended && result.recommended.length) {
                     var restoredCandidates = rankedRouteCandidatesSummary(result);
                     if (restoredCandidates) restoredReply = restoredCandidates + ' ' + restoredReply;

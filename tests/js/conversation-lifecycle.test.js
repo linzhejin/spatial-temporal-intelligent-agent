@@ -7,7 +7,7 @@ const routeState = require('../../static/js/route-state.js');
 // Run the real app control flow. Only DOM/map/network boundaries are replaced;
 // exposing lexical functions here avoids shipping test hooks in the application.
 function harness(storage = new Map()) {
-    const bubbles = [], rendered = [], candidateRenders = [], comparisonRenders = [], requests = [], userBubbles = [];
+    const bubbles = [], rendered = [], candidateRenders = [], clarifyRenders = [], comparisonRenders = [], requests = [], userBubbles = [];
     let clears = 0, stopped = 0, locationCalls = 0, reloads = 0;
     const localStorage = {
         getItem: k => storage.get(k) ?? null,
@@ -41,6 +41,7 @@ function harness(storage = new Map()) {
             stopNavigation: () => { stopped++; },
             renderRoute: r => { rendered.push(r); context.app.state.routeStore.replace(r.route_state || null); },
             renderCandidateCards: (candidates, taskId, revision) => candidateRenders.push({ candidates, taskId, revision }),
+            renderClarifyOptions: (options, taskId, revision) => clarifyRenders.push({ options, taskId, revision }),
             renderRouteComparison: comparison => comparisonRenders.push(comparison),
             ensureUserLocation: async () => {
                 locationCalls++;
@@ -79,6 +80,7 @@ function harness(storage = new Map()) {
         stopNavigation = boundaries.stopNavigation;
         renderRoute = boundaries.renderRoute;
         renderCandidateCards = boundaries.renderCandidateCards;
+        renderClarifyOptions = boundaries.renderClarifyOptions;
         renderRouteComparisonCard = boundaries.renderRouteComparison;
         ensureUserLocation = boundaries.ensureUserLocation;
         apiRequest = boundaries.apiRequest;
@@ -115,7 +117,7 @@ function harness(storage = new Map()) {
             focus: focusPoiOnMap };
     })();`, context);
     context.app.state.productMode = 'planning';
-    return { ...context.app, context, bubbles, rendered, candidateRenders, comparisonRenders, requests, userBubbles, storage,
+    return { ...context.app, context, bubbles, rendered, candidateRenders, clarifyRenders, comparisonRenders, requests, userBubbles, storage,
         clearCount: () => clears, stopCount: () => stopped, locationCount: () => locationCalls,
         reloadCount: () => reloads };
 }
@@ -557,6 +559,28 @@ test('desktop route feedback gives one useful overview with endpoints, strategy,
     assert.match(reply, /4 处地点/);
     assert.doesNotMatch(reply, /沿途地点一|沿途地点二/);
     assert.doesNotMatch(reply, /已为你规划好步行路线/);
+});
+test('route overview preserves the verified detour distance while removing duplicate route boilerplate', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '桂园食堂' }, end: { name: '樱顶' }, mode: 'walk',
+        recommended_length_m: 821, duration_min: 16, route_kind: 'via',
+        via: { points: [{ name: '咖啡馆' }] },
+        explanation: '已为你规划好从桂园食堂经咖啡馆到樱顶的步行路线，约 821 米、16 分钟。' +
+            ' 相比同条件下不经途经点的路线，多走约 144 米；末端接驳距离未核实。',
+    });
+    assert.match(summary, /多走约\s*144\s*米/);
+    assert.equal((summary.match(/821\s*米/g) || []).length, 1);
+});
+test('route overview keeps other numerical facts that are not the route total', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '甲地' }, end: { name: '乙地' }, mode: 'walk',
+        recommended_length_m: 600, duration_min: 8,
+        explanation: '沿河边前行约 50 米，预计等待 3 分钟。',
+    });
+    assert.match(summary, /50\s*米/);
+    assert.match(summary, /3\s*分钟/);
 });
 test('desktop tour feedback identifies the loop and omits generic filler', async () => {
     const h = harness();
@@ -1551,6 +1575,141 @@ test('resumed clarification continuation appends its result after the latest use
     ]);
 });
 
+test('restoring a route with a pending candidate selection restores its cards and task revision', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [{ task_id: 'same-task', role: 'user', content: '先去球场再吃饭', seq: 1 }],
+            tasks: [], active_runs: [{ run_id: 'running-route', task_id: 'same-task',
+                query: '先去球场再吃饭', message_seq: 1, status: 'running' }],
+        };
+        if (url.includes('/api/runs/running-route?')) return {
+            status: 'needs_input', task_id: 'same-task', current_task_revision: 3, events: [],
+            result: { ...routeResult('partial-route'), needs_input: true,
+                candidates: [{ poi_id: 'poi_001', name: '食堂甲' }] },
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.state.routeStore.current().route_id, 'partial-route');
+    assert.equal(h.state.pendingServerTaskId, 'same-task');
+    assert.equal(h.state.pendingServerTaskRevision, 3);
+    assert.equal(h.candidateRenders.length, 1);
+    assert.equal(h.candidateRenders[0].taskId, 'same-task');
+    assert.equal(h.candidateRenders[0].revision, 3);
+});
+
+test('restoring a route with a clarification restores the question and task revision', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [{ task_id: 'same-task', role: 'user', content: '先去球场再吃饭', seq: 1 }],
+            tasks: [], active_runs: [{ run_id: 'running-route', task_id: 'same-task',
+                query: '先去球场再吃饭', message_seq: 1, status: 'running' }],
+        };
+        if (url.includes('/api/runs/running-route?')) return {
+            status: 'needs_input', task_id: 'same-task', current_task_revision: 3, events: [],
+            result: { ...routeResult('partial-route'), needs_input: true,
+                clarify: { question: '下一站怎么去？', options: ['重试', '修改地点'] }, candidates: [] },
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.state.pendingServerTaskId, 'same-task');
+    assert.equal(h.state.pendingServerTaskRevision, 3);
+    assert.equal(h.state.pendingServerQuestion, '下一站怎么去？');
+    assert.equal(h.clarifyRenders.length, 1);
+    assert.deepEqual(Array.from(h.clarifyRenders[0].options), ['重试', '修改地点']);
+});
+
+test('a restored older route cannot resurrect stale candidate cards after a newer route', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1',
+            messages: [
+                { task_id: 'newer-task', role: 'user', content: '新路线', seq: 48 },
+                { task_id: 'newer-task', role: 'assistant', content: '新路线完成', seq: 49,
+                    metadata: { task_type: 'path_planning', source_message_seq: 48,
+                        route_state: { ...existingRoute(), route_id: 'newer-route' } } },
+            ], tasks: [], active_runs: [{ run_id: 'older-run', task_id: 'older-task',
+                query: '旧路线', message_seq: 2, status: 'running' }],
+        };
+        if (url.includes('/api/runs/older-run?')) return {
+            status: 'needs_input', task_id: 'older-task', current_task_revision: 1, events: [],
+            result: { ...routeResult('old-route'), needs_input: true,
+                candidates: [{ poi_id: 'poi_001', name: '旧食堂' }] },
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.equal(h.state.routeStore.current().route_id, 'newer-route');
+    assert.equal(h.candidateRenders.length, 0);
+    assert.notEqual(h.state.pendingServerTaskId, 'older-task');
+});
+
+for (const kind of ['clarify', 'candidates']) {
+    test('a restored old ' + kind + ' cannot replace a newer route task', async () => {
+        const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+        h.setQueuedApi(async url => {
+            if (url === '/api/conversations/server-c1') return {
+                conversation_id: 'server-c1', messages: [
+                    { task_id: 'newer-task', role: 'user', content: '新路线', seq: 48 },
+                    { task_id: 'newer-task', role: 'assistant', content: '新路线完成', seq: 49,
+                        metadata: { task_type: 'path_planning', source_message_seq: 48,
+                            route_state: { ...existingRoute(), route_id: 'newer-route' } } },
+                ], tasks: [], active_runs: [{ run_id: 'older-run', task_id: 'older-task',
+                    query: '旧任务', message_seq: 2, status: 'running' }],
+            };
+            if (url.includes('/api/runs/older-run?')) return {
+                status: 'needs_input', task_id: 'older-task', current_task_revision: 1, events: [],
+                result: kind === 'clarify'
+                    ? { task_type: 'path_planning', response_kind: 'clarify',
+                        clarify: { question: '旧问题？', options: ['旧选项'] } }
+                    : { task_type: 'path_planning', response_kind: 'candidates',
+                        candidates: [{ poi_id: 'poi_001', name: '旧地点' }] },
+            };
+            throw new Error('unexpected request ' + url);
+        });
+        await h.init();
+        await new Promise(resolve => setTimeout(resolve, 5));
+        assert.equal(h.state.routeStore.current().route_id, 'newer-route');
+        assert.notEqual(h.state.pendingServerTaskId, 'older-task');
+        assert.equal(h.clarifyRenders.length, 0);
+        assert.equal(h.candidateRenders.length, 0);
+    });
+}
+
+test('a restored selection without source ordering cannot supersede an existing route', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            conversation_id: 'server-c1', messages: [
+                { task_id: 'newer-task', role: 'user', content: '新路线', seq: 48 },
+                { task_id: 'newer-task', role: 'assistant', content: '新路线完成', seq: 49,
+                    metadata: { task_type: 'path_planning', source_message_seq: 48,
+                        route_state: { ...existingRoute(), route_id: 'newer-route' } } },
+            ], tasks: [], active_runs: [{ run_id: 'unknown-run', task_id: 'unknown-task',
+                query: '待选地点', status: 'running' }],
+        };
+        if (url.includes('/api/runs/unknown-run?')) return {
+            status: 'needs_input', task_id: 'unknown-task', current_task_revision: 1, events: [],
+            result: { task_type: 'path_planning', response_kind: 'candidates',
+                candidates: [{ poi_id: 'poi_001', name: '地点' }] },
+        };
+        throw new Error('unexpected request ' + url);
+    });
+    await h.init();
+    await new Promise(resolve => setTimeout(resolve, 5));
+    assert.notEqual(h.state.pendingServerTaskId, 'unknown-task');
+    assert.equal(h.candidateRenders.length, 0);
+});
+
 test('road-condition popup follows the published action and affected travel modes', () => {
     const h = harness();
     const notice = { type: 'closure', action: 'notice', affected_modes: ['walk'] };
@@ -1736,4 +1895,49 @@ test('route with next-stage place choices keeps the same task open', async () =>
     assert.equal(h.candidateRenders[0].taskId, 'task-composite');
     assert.equal(h.state.pendingServerTaskId, 'task-composite');
     assert.equal(h.state.pendingServerTaskRevision, 3);
+});
+
+test('a rejected older pending route does not render its candidate cards', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'newer-task';
+    h.state.pendingServerTaskRevision = 8;
+    h.state.pendingServerTaskTurnId = 5;
+    h.setApi(async () => ({ ...routeResult('older-partial'), needs_input: true,
+        _task_id: 'older-task', _task_revision: 1,
+        clarify: { question: '请选择地点', options: [] },
+        candidates: [{ poi_id: 'poi_310', name: '旧候选' }],
+    }));
+    await h.submit('旧任务');
+    assert.equal(h.candidateRenders.length, 0);
+    assert.equal(h.rendered.length, 0);
+    assert.equal(h.state.pendingServerTaskId, 'newer-task');
+    assert.equal(h.state.pendingServerTaskRevision, 8);
+});
+
+test('a rejected older candidate result does not render stale cards', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'newer-task';
+    h.state.pendingServerTaskRevision = 8;
+    h.state.pendingServerTaskTurnId = 5;
+    h.setApi(async () => ({ task_type: 'path_planning', response_kind: 'candidates',
+        _task_id: 'older-task', _task_revision: 1,
+        candidates: [{ poi_id: 'poi_310', name: '旧候选' }], message: '请选择地点' }));
+    await h.submit('旧任务');
+    assert.equal(h.candidateRenders.length, 0);
+    assert.equal(h.state.pendingServerTaskId, 'newer-task');
+    assert.match(h.bubbles.at(-1).text, /过期/);
+});
+
+test('a rejected older clarification does not show stale options', async () => {
+    const h = harness();
+    h.state.pendingServerTaskId = 'newer-task';
+    h.state.pendingServerTaskRevision = 8;
+    h.state.pendingServerTaskTurnId = 5;
+    h.setApi(async () => ({ task_type: 'path_planning', response_kind: 'clarify',
+        _task_id: 'older-task', _task_revision: 1,
+        clarify: { question: '旧问题？', options: ['旧选项'] } }));
+    await h.submit('旧任务');
+    assert.equal(h.clarifyRenders.length, 0);
+    assert.equal(h.state.pendingServerTaskId, 'newer-task');
+    assert.match(h.bubbles.at(-1).text, /过期/);
 });
