@@ -1,0 +1,204 @@
+{
+  "campus": {
+    "planned_timed_executions": 756,
+    "actual_timed_executions": 756,
+    "actual_operation_probes": 252,
+    "audit_counts": {
+      "timed": {
+        "full_recompute": {
+          "pass": 378,
+          "fail": 0,
+          "unknown": 0
+        },
+        "conservative_reuse": {
+          "pass": 378,
+          "fail": 0,
+          "unknown": 0
+        }
+      },
+      "operation_probe": {
+        "full_recompute": {
+          "pass": 126,
+          "fail": 0,
+          "unknown": 0
+        },
+        "conservative_reuse": {
+          "pass": 126,
+          "fail": 0,
+          "unknown": 0
+        }
+      }
+    },
+    "missing_executions": [],
+    "duplicate_execution_keys": 0,
+    "execution_policy_failures": [],
+    "semantic_mismatches_across_repeats_and_probes": [],
+    "input_hashes_unchanged": true,
+    "terminal_error": null,
+    "acceptance_passed": true,
+    "completed_utc": "2026-11-02T15:43:32.208280+00:00",
+    "execution_history": {
+      "completion_kind": "completed_after_documented_interruption",
+      "parent_batch": "e3_product_full_20261102_02",
+      "continuation_batch": "e3_product_continuation_20261102_01",
+      "parent_terminal_error": {
+        "type": "TimeoutError",
+        "message": "timed out"
+      },
+      "preserved_parent_records": 910,
+      "added_missing_records": 98,
+      "additional_diagnostic_records": 6,
+      "interrupted_operation_probe_attempts": 1,
+      "note": "New process after system standby; strategy pairs share a segment and original shuffle order."
+    }
+  },
+  "counterexamples": {
+    "planned_timed_executions": 18,
+    "planned_operation_probes": 6,
+    "actual_timed_executions": 18,
+    "actual_operation_probes": 6,
+    "accounted_planned_records": 24,
+    "input_hashes_unchanged": true,
+    "fatal_error": null,
+    "probe_comparisons": [
+      {
+        "case_id": "reopen_shortcut",
+        "strategy": "full_recompute",
+        "matches_all_timed_repeats": true
+      },
+      {
+        "case_id": "reopen_shortcut",
+        "strategy": "conservative_reuse",
+        "matches_all_timed_repeats": true
+      },
+      {
+        "case_id": "off_path_cost_decrease",
+        "strategy": "full_recompute",
+        "matches_all_timed_repeats": true
+      },
+      {
+        "case_id": "off_path_cost_decrease",
+        "strategy": "conservative_reuse",
+        "matches_all_timed_repeats": true
+      },
+      {
+        "case_id": "flat_weight_change",
+        "strategy": "full_recompute",
+        "matches_all_timed_repeats": true
+      },
+      {
+        "case_id": "flat_weight_change",
+        "strategy": "conservative_reuse",
+        "matches_all_timed_repeats": true
+      }
+    ],
+    "per_case": [
+      {
+        "case_id": "reopen_shortcut",
+        "strategy": "full_recompute",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 338.54140000767075
+      },
+      {
+        "case_id": "reopen_shortcut",
+        "strategy": "conservative_reuse",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 509.0046999976039
+      },
+      {
+        "case_id": "off_path_cost_decrease",
+        "strategy": "full_recompute",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 376.6940000059549
+      },
+      {
+        "case_id": "off_path_cost_decrease",
+        "strategy": "conservative_reuse",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 382.7197999926284
+      },
+      {
+        "case_id": "flat_weight_change",
+        "strategy": "full_recompute",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 269.88120000169147
+      },
+      {
+        "case_id": "flat_weight_change",
+        "strategy": "conservative_reuse",
+        "planned_timed_runs": 3,
+        "completed_timed_runs": 3,
+        "median_request_ms": 268.84429999336135
+      }
+    ],
+    "timed_audit_counts": {
+      "pass": 18,
+      "fail": 0,
+      "unknown": 0
+    },
+    "operation_probe_audit_counts": {
+      "pass": 6,
+      "fail": 0,
+      "unknown": 0
+    },
+    "weak_listener_false_reuse_case_ids": [
+      "flat_weight_change",
+      "off_path_cost_decrease",
+      "reopen_shortcut"
+    ],
+    "completed_successfully": true,
+    "completed_utc": "2026-11-02T10:45:04.137360+00:00"
+  },
+  "campus_fixed_conditions": 126,
+  "campus_families": 6,
+  "campus_timed_pairs": 378,
+  "campus_probe_pairs": 126,
+  "reused_timed_pairs": 126,
+  "reused_pairs_delta_ms_p50": 960.5493000053684,
+  "reused_pairs_ratio_p50": 1.2141211953410678,
+  "outcome_disagreements": 0,
+  "cost_comparable_pairs": 476,
+  "cost_comparable_timed_pairs": 357,
+  "cost_comparable_probe_pairs": 119,
+  "cost_not_applicable_pairs": 28,
+  "optimal_cost_disagreements": 0,
+  "statistics": "descriptive paired repeats; six related OD families, no independent-sample significance claim",
+  "derivation": {
+    "script": "scripts\\research\\summarize_e3_product.py",
+    "script_sha256": "d361ac0aa46de1393dd1ca0f46005e6f772592c9228e835c0069af008a7d70ba",
+    "input_batches": [
+      "e3_product_complete_20261102",
+      "e3_counterexamples_20261102_02"
+    ],
+    "argv": [
+      "scripts/research/summarize_e3_product.py",
+      "--campus",
+      "output/experiments/e3_product_complete_20261102",
+      "--include-diagnostic",
+      "output/experiments/e3_product_full_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_continuation_20261102_01",
+      "--counterexamples",
+      "output/experiments/e3_counterexamples_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_full_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_counterexamples_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_oracle_contract_20261102",
+      "--include-diagnostic",
+      "output/experiments/e3_product_smoke_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_product_smoke_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_all_variants_20261102_01",
+      "--output",
+      "research/e3/20261102"
+    ]
+  }
+}

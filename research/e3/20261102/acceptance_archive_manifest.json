@@ -1,0 +1,100 @@
+{
+  "archive_sha256": "bc40fe3277d99fa312e6dcb23444fc0ca3446f10b26da7916c6d5f87c8fbb384",
+  "files": [
+    {
+      "path": "acceptance/acceptance_commands.json",
+      "bytes": 3512,
+      "sha256": "b4bbfc3f52c3c6f6a64ec77ae724c299e5e48cc5d0a4364a6fadacb3f5c78841"
+    },
+    {
+      "path": "acceptance/aggregate.log",
+      "bytes": 6458,
+      "sha256": "cef9c3badd7a57e2a54179edafd8564cde6756200c929db19eb01eebac766f53"
+    },
+    {
+      "path": "acceptance/completed.json",
+      "bytes": 125,
+      "sha256": "2ffc1b29d4d7e9eb0d9cf6fb8d89f1e3e45c090c76cd6eaf36e38b5166bdb893"
+    },
+    {
+      "path": "acceptance/copied_files_manifest.json",
+      "bytes": 4717,
+      "sha256": "369e4d600322af5a37a5fabc8c66df083c71bf0fe17fdaf697d5b37381408969"
+    },
+    {
+      "path": "acceptance/diff_check.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "acceptance/environment.json",
+      "bytes": 33391,
+      "sha256": "090c9244644af2363cde4a7a4a3b0e6318dc31e4613467a3ccd7a4ffee6b4a53"
+    },
+    {
+      "path": "acceptance/final_independent_audit.json",
+      "bytes": 7518,
+      "sha256": "e90e94115dd68593978c81070f46d8905ac1fbdfac9358ff8988547b0fe2dad8"
+    },
+    {
+      "path": "acceptance/final_package_checks.json",
+      "bytes": 252,
+      "sha256": "9f0fc456877ee0189c4ff9c14c3849e7f948db82d357260697b9c22bae2ec09d"
+    },
+    {
+      "path": "acceptance/javascript_lifecycle.log",
+      "bytes": 9457,
+      "sha256": "d013e689c041ffa3cef0756812db5dc84dbf432f38a5d5ff46c6c4ec31a8a677"
+    },
+    {
+      "path": "acceptance/package_acceptance.py",
+      "bytes": 7696,
+      "sha256": "d04b165bebe9a3c58bdc21317cbdb76c21d29a6bde6cb35a5e0e5ad10ec55626"
+    },
+    {
+      "path": "acceptance/packaging_checks.json",
+      "bytes": 615,
+      "sha256": "38928464a1112ece10b6a3cd788cc0a5af3c313dae3ac053ec7fae9e338f9c27"
+    },
+    {
+      "path": "acceptance/power_events_during_batch.json",
+      "bytes": 1055,
+      "sha256": "b8f1590fb13b04f9f88d9a56d4b29976b7a10be9b6bf9225fa38490dd9eabd99"
+    },
+    {
+      "path": "acceptance/python_regression.log",
+      "bytes": 2120,
+      "sha256": "f684a63594cd1604e0919003aefcd8e3eb09cdeec859443a6ffcfd35d2fb4c62"
+    },
+    {
+      "path": "acceptance/regression.xml",
+      "bytes": 33357,
+      "sha256": "f42b6dd5904b780ff60969fd285a3ad139fad7a915177afcb59a0c9771ec861b"
+    },
+    {
+      "path": "acceptance/regression_counts.json",
+      "bytes": 71,
+      "sha256": "6635410387a130a8c8f7148e05057d87a5256417a9d1123071a89f5236d42e00"
+    },
+    {
+      "path": "acceptance/resume_selection.json",
+      "bytes": 150888,
+      "sha256": "96e58f83e873bddda6e3c30b63b3379bfeceab819364e0dc344a5ec5857f5c02"
+    },
+    {
+      "path": "acceptance/ruff.log",
+      "bytes": 19,
+      "sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18"
+    },
+    {
+      "path": "acceptance/run_acceptance.py",
+      "bytes": 7000,
+      "sha256": "39aadf60634dd8ac9a354dd1189b17f0b2dc06f5f8bbfa959806905560129a88"
+    },
+    {
+      "path": "acceptance/run_acceptance_initial.py",
+      "bytes": 6223,
+      "sha256": "a831e756a8342e834648a7c7d9a0729596fe3a0259a8ae06330db49bdf30ed56"
+    }
+  ]
+}

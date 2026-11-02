@@ -1,0 +1,15 @@
+﻿strategy,phase,update_flows,calls,inclusive_ms_p50,inclusive_ms_p95
+conservative_reuse,dijkstra,378,234,4.1558,29.57068
+conservative_reuse,path_search,378,234,4.30275,29.843594999999993
+conservative_reuse,proof_issue,378,303,44.225049999999996,148.320115
+conservative_reuse,proof_read,378,270,37.8682,141.71516999999997
+conservative_reuse,reuse_assessment,378,270,870.82025,5394.48411
+conservative_reuse,route_compute,378,378,41.74735,4630.662005
+conservative_reuse,verification,378,288,2113.8770999999997,21249.01963
+full_recompute,dijkstra,378,360,12.430399999999999,35.386455
+full_recompute,path_search,378,360,12.65445,35.655809999999995
+full_recompute,proof_issue,378,303,43.31555,152.32991999999996
+full_recompute,proof_read,378,0,0.0,0.0
+full_recompute,reuse_assessment,378,0,0.0,0.0
+full_recompute,route_compute,378,378,46.922349999999994,4680.447444999999
+full_recompute,verification,378,288,2158.9101499999997,21475.096429999998

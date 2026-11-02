@@ -1,0 +1,32 @@
+[
+  {
+    "time_utc": "2026-11-02T15:06:46.7228131Z",
+    "Id": 507,
+    "Message": "系统正在退出新型待机状态 \r\n\r\n原因: Lid。"
+  },
+  {
+    "time_utc": "2026-11-02T15:06:40.3766775Z",
+    "Id": 506,
+    "Message": "系统正在进入新型待机状态 \r\n\r\n原因: AC/DC Display Burst Suppressed。"
+  },
+  {
+    "time_utc": "2026-11-02T15:06:40.3749413Z",
+    "Id": 507,
+    "Message": "系统正在退出新型待机状态 \r\n\r\n原因: AC/DC Display Burst Suppressed。"
+  },
+  {
+    "time_utc": "2026-11-02T14:54:07.0671709Z",
+    "Id": 506,
+    "Message": "系统正在进入新型待机状态 \r\n\r\n原因: Austerity Battery Drain Budget Exceeded。"
+  },
+  {
+    "time_utc": "2026-11-02T14:54:07.0651538Z",
+    "Id": 507,
+    "Message": "系统正在退出新型待机状态 \r\n\r\n原因: Austerity Battery Drain Budget Exceeded。"
+  },
+  {
+    "time_utc": "2026-11-02T14:35:49.4906598Z",
+    "Id": 506,
+    "Message": "系统正在进入新型待机状态 \r\n\r\n原因: Lid。"
+  }
+]

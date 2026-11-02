@@ -1,0 +1,236 @@
+{
+  "schema": "e3-final-independent-data-audit-v1",
+  "audited_utc": "2026-11-02T15:48:16.281322+00:00",
+  "scope": "Read-only source provenance, fixed-key coverage, pairing, RNG sequence, semantic continuity and recorded score verification. No route recomputation, database access or regression execution.",
+  "passed": true,
+  "checks": [
+    {
+      "name": "complete_protocol_key_coverage",
+      "passed": true,
+      "planned": 1008,
+      "actual": 1008,
+      "missing": [],
+      "unexpected": [],
+      "duplicates": []
+    },
+    {
+      "name": "declared_dimensions",
+      "passed": true,
+      "cases": 126,
+      "od_families": 6,
+      "repeats": 3,
+      "probe_repeats": 1
+    },
+    {
+      "name": "probe_labels_and_denominators",
+      "passed": true,
+      "timed": 756,
+      "probes": 252
+    },
+    {
+      "name": "selection_is_fixed_parent_precedence",
+      "passed": true,
+      "parent_records": 910,
+      "continuation_records": 104,
+      "selected_parent": 910,
+      "selected_continuation": 98,
+      "diagnostic_only": 6,
+      "diagnostic_keys": [
+        [
+          "od_06__other_mode",
+          "conservative_reuse",
+          1
+        ],
+        [
+          "od_06__other_mode",
+          "conservative_reuse",
+          2
+        ],
+        [
+          "od_06__other_mode",
+          "conservative_reuse",
+          3
+        ],
+        [
+          "od_06__other_mode",
+          "full_recompute",
+          1
+        ],
+        [
+          "od_06__other_mode",
+          "full_recompute",
+          2
+        ],
+        [
+          "od_06__other_mode",
+          "full_recompute",
+          3
+        ]
+      ]
+    },
+    {
+      "name": "selection_has_only_six_duplicate_timed_diagnostics",
+      "passed": true
+    },
+    {
+      "name": "selection_metadata_hashes",
+      "passed": true
+    },
+    {
+      "name": "selection_copy_unchanged",
+      "passed": true
+    },
+    {
+      "name": "predeclared_before_continuation",
+      "passed": true,
+      "selection_created_utc": "2026-11-02T15:20:47.229353+00:00",
+      "continuation_started_utc": "2026-11-02T15:21:40.985095+00:00"
+    },
+    {
+      "name": "every_line_exact_source_bytes_and_sha256",
+      "passed": true,
+      "checked_lines": 1008,
+      "errors": [],
+      "selected_by_batch": {
+        "e3_product_full_20261102_02": 910,
+        "e3_product_continuation_20261102_01": 98
+      }
+    },
+    {
+      "name": "paired_strategies_share_segment",
+      "passed": true,
+      "pairs": 504,
+      "cross_segment_pairs": []
+    },
+    {
+      "name": "all_504_strategy_orders_match_original_seed",
+      "passed": true,
+      "seed": 20261102,
+      "paired_shuffle_steps": 504
+    },
+    {
+      "name": "continuation_resumes_after_452_shuffles",
+      "passed": true,
+      "skip_shuffle_steps": 452,
+      "first_tail_case": "od_06__other_mode",
+      "continuation_pairs": 52
+    },
+    {
+      "name": "frozen_case_and_protocol_equality",
+      "passed": true
+    },
+    {
+      "name": "same_frozen_sources_and_execution_environment",
+      "passed": true,
+      "frozen_source_files": 145,
+      "base_commit": "c9aa0f3f90e6a89c1e0856bd6ac1e8d059de9c37"
+    },
+    {
+      "name": "protocol_bytes_match_frozen_manifest",
+      "passed": true
+    },
+    {
+      "name": "other_mode_cross_segment_semantic_equality",
+      "passed": true,
+      "case_id": "od_06__other_mode",
+      "source_observations": 14,
+      "observations_by_strategy": {
+        "conservative_reuse": 7,
+        "full_recompute": 7
+      },
+      "compared_fields": "status, mode, strategy, exact edges, length, ETA, route events, event overview/count, task fields and environment versions; proof IDs and timing excluded"
+    },
+    {
+      "name": "selected_repeats_and_probes_semantically_consistent",
+      "passed": true,
+      "groups": 252,
+      "mismatch_groups": []
+    },
+    {
+      "name": "merged_setup_and_expected_files_match_selected_segment",
+      "passed": true,
+      "initial_count": 504,
+      "expected_count": 126,
+      "recovery_count": 24,
+      "mismatches": [],
+      "missing": [],
+      "extra": []
+    },
+    {
+      "name": "stored_independent_scores_and_policy_checks_all_pass",
+      "passed": true,
+      "records": 1008
+    },
+    {
+      "name": "measurement_values_and_probe_eligibility",
+      "passed": true
+    },
+    {
+      "name": "summary_counts_match_raw_records",
+      "passed": true
+    }
+  ],
+  "outcomes": {
+    "timed": {
+      "flows": 756,
+      "by_policy_audit": {
+        "full_recompute": {
+          "pass": 378
+        },
+        "conservative_reuse": {
+          "pass": 378
+        }
+      },
+      "final_http_status": {
+        "200": 714,
+        "404": 42
+      },
+      "audit_outcomes": {
+        "route_delivery": 714,
+        "correct_unreachable": 42
+      },
+      "intermediate_http_409": 36,
+      "actual_reuses": 126
+    },
+    "probes": {
+      "flows": 252,
+      "by_policy_audit": {
+        "full_recompute": {
+          "pass": 126
+        },
+        "conservative_reuse": {
+          "pass": 126
+        }
+      },
+      "final_http_status": {
+        "200": 238,
+        "404": 14
+      },
+      "audit_outcomes": {
+        "route_delivery": 238,
+        "correct_unreachable": 14
+      },
+      "intermediate_http_409": 12,
+      "actual_reuses": 42
+    }
+  },
+  "file_hashes": {
+    "e3_product_full_20261102_02/protocol.json": "3169549d2f0456045c4e0d0200c316a9c01b7944bd03a27b245a6b0dfba431dd",
+    "e3_product_full_20261102_02/executions.jsonl": "56af87a27cc65c0cdddf3f49a86a2f154dc0b04dab0bc73bfa7c66a87d1edee6",
+    "e3_product_full_20261102_02/source_manifest.json": "b46458b45e6833724bf8338705c9f37013a875dc634a77e8982dc100fe150cdd",
+    "e3_product_full_20261102_02/summary.json": "a95c6fc91535d317753793f3908237281657c3d0c96dc76d3666066ee708b2ff",
+    "e3_product_continuation_20261102_01/protocol.json": "c338c0e0405185809754492a28e8fa30152e95088f6b5c7e65ceb4dc94e96edb",
+    "e3_product_continuation_20261102_01/executions.jsonl": "1ef82c045f7828eaa7f23b9a1417f6bf72332ddae9232420b7de48fea088de34",
+    "e3_product_continuation_20261102_01/source_manifest.json": "8360d2441a310f92396d77ead51b4948090fa8250d93643c0bc78934588f1a4c",
+    "e3_product_continuation_20261102_01/summary.json": "f6a42cbff008273ec5b6897773f2965b33c5085e7f08ed9bd761b7f2f9d6edc1",
+    "e3_product_complete_20261102/protocol.json": "3169549d2f0456045c4e0d0200c316a9c01b7944bd03a27b245a6b0dfba431dd",
+    "e3_product_complete_20261102/executions.jsonl": "8a225ec688665d3edf18584eea2b894f045944684d1788d501b1fb3ad8e3f555",
+    "e3_product_complete_20261102/source_manifest.json": "b46458b45e6833724bf8338705c9f37013a875dc634a77e8982dc100fe150cdd",
+    "e3_product_complete_20261102/summary.json": "b236bca59462a5d485dccd7f9cbef93bb74cfe620cc49b27b63b5132f4e13625"
+  },
+  "limitations": [
+    "This audit verifies stored scores and metadata, not an independent rerun of the route solver/scorer.",
+    "The batch completed across two processes after a documented interruption; it is not uninterrupted timing. Each strategy pair remains within one process segment.",
+    "Regression acceptance, database proof checks, archive validation, report completion and publication are handled separately by the root agent."
+  ]
+}

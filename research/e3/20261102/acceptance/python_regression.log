@@ -1,0 +1,29 @@
+============================= test session starts =============================
+platform win32 -- Python 3.13.9, pytest-8.4.2, pluggy-1.5.0
+rootdir: C:\Users\HUAWEI\.codex\worktrees\e3-route-maintenance\campus-spatial-intelligence-agent
+configfile: pytest.ini
+plugins: anyio-4.10.0, langsmith-0.14.1
+collected 238 items
+
+tests\test_e3_product_cases.py .........                                 [  3%]
+tests\test_e3_product_runner.py ....                                     [  5%]
+tests\test_e3_independent_audit.py ..................................... [ 21%]
+.....                                                                    [ 23%]
+tests\test_e3_measurement.py .........                                   [ 26%]
+tests\test_e3_counterexamples.py .........                               [ 30%]
+tests\test_e3_result_summary.py ..........                               [ 34%]
+tests\test_e3_resume.py ....                                             [ 36%]
+tests\test_route_reuse.py .....                                          [ 38%]
+tests\test_execution_dependencies.py ............                        [ 43%]
+tests\test_route_proof_integration.py ..............................     [ 56%]
+tests\test_route_proof_repository.py ..............                      [ 62%]
+tests\test_route_proof_repository_unit.py .............................. [ 74%]
+...                                                                      [ 76%]
+tests\test_route_proof_worker.py ...                                     [ 77%]
+tests\test_task_repository.py ....................                       [ 85%]
+tests\test_run_worker.py ........                                        [ 89%]
+tests\test_task_patch.py ........................                        [ 99%]
+tests\browser\test_route_candidate_resume_e2e.py ..                      [100%]
+
+- generated xml file: C:\Users\HUAWEI\.codex\worktrees\e3-route-maintenance\campus-spatial-intelligence-agent\output\experiments\e3_acceptance_20261102\regression.xml -
+======================= 238 passed in 69.80s (0:01:09) ========================

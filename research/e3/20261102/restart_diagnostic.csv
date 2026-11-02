@@ -1,0 +1,7 @@
+﻿case_id,strategy,attempt,parent_ms,continuation_ms,difference_ms,included_in_main_statistics
+od_06__other_mode,conservative_reuse,1,4565.484299993841,4304.7527000017,-260.7315999921411,False
+od_06__other_mode,full_recompute,1,4172.520100008114,3295.0158000021474,-877.5043000059668,False
+od_06__other_mode,conservative_reuse,2,4488.214799988782,3806.4366999897175,-681.7780999990646,False
+od_06__other_mode,full_recompute,2,4423.6055000073975,2952.30669999728,-1471.2988000101177,False
+od_06__other_mode,full_recompute,3,4373.547499999404,2944.27559999167,-1429.271900007734,False
+od_06__other_mode,conservative_reuse,3,4584.821800002828,3868.974500001059,-715.8473000017693,False

@@ -1,0 +1,92 @@
+{
+  "completed.json": {
+    "source": "output/experiments/e3_acceptance_20261102/completed.json",
+    "source_sha256": "2ffc1b29d4d7e9eb0d9cf6fb8d89f1e3e45c090c76cd6eaf36e38b5166bdb893",
+    "copied_sha256": "2ffc1b29d4d7e9eb0d9cf6fb8d89f1e3e45c090c76cd6eaf36e38b5166bdb893",
+    "bytes": 125
+  },
+  "acceptance_commands.json": {
+    "source": "output/experiments/e3_acceptance_20261102/acceptance_commands.json",
+    "source_sha256": "b4bbfc3f52c3c6f6a64ec77ae724c299e5e48cc5d0a4364a6fadacb3f5c78841",
+    "copied_sha256": "b4bbfc3f52c3c6f6a64ec77ae724c299e5e48cc5d0a4364a6fadacb3f5c78841",
+    "bytes": 3512
+  },
+  "regression.xml": {
+    "source": "output/experiments/e3_acceptance_20261102/regression.xml",
+    "source_sha256": "f42b6dd5904b780ff60969fd285a3ad139fad7a915177afcb59a0c9771ec861b",
+    "copied_sha256": "f42b6dd5904b780ff60969fd285a3ad139fad7a915177afcb59a0c9771ec861b",
+    "bytes": 33357
+  },
+  "regression_counts.json": {
+    "source": "output/experiments/e3_acceptance_20261102/regression_counts.json",
+    "source_sha256": "6635410387a130a8c8f7148e05057d87a5256417a9d1123071a89f5236d42e00",
+    "copied_sha256": "6635410387a130a8c8f7148e05057d87a5256417a9d1123071a89f5236d42e00",
+    "bytes": 71
+  },
+  "python_regression.log": {
+    "source": "output/experiments/e3_acceptance_20261102/python_regression.log",
+    "source_sha256": "f684a63594cd1604e0919003aefcd8e3eb09cdeec859443a6ffcfd35d2fb4c62",
+    "copied_sha256": "f684a63594cd1604e0919003aefcd8e3eb09cdeec859443a6ffcfd35d2fb4c62",
+    "bytes": 2120
+  },
+  "javascript_lifecycle.log": {
+    "source": "output/experiments/e3_acceptance_20261102/javascript_lifecycle.log",
+    "source_sha256": "d013e689c041ffa3cef0756812db5dc84dbf432f38a5d5ff46c6c4ec31a8a677",
+    "copied_sha256": "d013e689c041ffa3cef0756812db5dc84dbf432f38a5d5ff46c6c4ec31a8a677",
+    "bytes": 9457
+  },
+  "ruff.log": {
+    "source": "output/experiments/e3_acceptance_20261102/ruff.log",
+    "source_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "copied_sha256": "82b3e6a6c090a57601d22943bd23fca9218d1031dbe5a7b754092f9a156b4f18",
+    "bytes": 19
+  },
+  "diff_check.log": {
+    "source": "output/experiments/e3_acceptance_20261102/diff_check.log",
+    "source_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "copied_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "bytes": 0
+  },
+  "aggregate.log": {
+    "source": "output/experiments/e3_acceptance_20261102/aggregate.log",
+    "source_sha256": "cef9c3badd7a57e2a54179edafd8564cde6756200c929db19eb01eebac766f53",
+    "copied_sha256": "cef9c3badd7a57e2a54179edafd8564cde6756200c929db19eb01eebac766f53",
+    "bytes": 6458
+  },
+  "run_acceptance.py": {
+    "source": "output/experiments/e3_acceptance_20261102/run_acceptance.py",
+    "source_sha256": "39aadf60634dd8ac9a354dd1189b17f0b2dc06f5f8bbfa959806905560129a88",
+    "copied_sha256": "39aadf60634dd8ac9a354dd1189b17f0b2dc06f5f8bbfa959806905560129a88",
+    "bytes": 7000
+  },
+  "package_acceptance.py": {
+    "source": "output/experiments/e3_acceptance_20261102/package_acceptance.py",
+    "source_sha256": "d04b165bebe9a3c58bdc21317cbdb76c21d29a6bde6cb35a5e0e5ad10ec55626",
+    "copied_sha256": "d04b165bebe9a3c58bdc21317cbdb76c21d29a6bde6cb35a5e0e5ad10ec55626",
+    "bytes": 7696
+  },
+  "run_acceptance_initial.py": {
+    "source": "output/experiments/e3_acceptance_20261102/run_acceptance_initial.py",
+    "source_sha256": "a831e756a8342e834648a7c7d9a0729596fe3a0259a8ae06330db49bdf30ed56",
+    "copied_sha256": "a831e756a8342e834648a7c7d9a0729596fe3a0259a8ae06330db49bdf30ed56",
+    "bytes": 6223
+  },
+  "power_events_during_batch.json": {
+    "source": "output/experiments/e3_acceptance_20261102/power_events_during_batch.json",
+    "source_sha256": "b8f1590fb13b04f9f88d9a56d4b29976b7a10be9b6bf9225fa38490dd9eabd99",
+    "copied_sha256": "b8f1590fb13b04f9f88d9a56d4b29976b7a10be9b6bf9225fa38490dd9eabd99",
+    "bytes": 1055
+  },
+  "resume_selection.json": {
+    "source": "output/experiments/e3_acceptance_20261102/resume_selection.json",
+    "source_sha256": "96e58f83e873bddda6e3c30b63b3379bfeceab819364e0dc344a5ec5857f5c02",
+    "copied_sha256": "96e58f83e873bddda6e3c30b63b3379bfeceab819364e0dc344a5ec5857f5c02",
+    "bytes": 150888
+  },
+  "final_independent_audit.json": {
+    "source": "output/experiments/e3_acceptance_20261102/final_independent_audit.json",
+    "source_sha256": "e90e94115dd68593978c81070f46d8905ac1fbdfac9358ff8988547b0fe2dad8",
+    "copied_sha256": "e90e94115dd68593978c81070f46d8905ac1fbdfac9358ff8988547b0fe2dad8",
+    "bytes": 7518
+  }
+}

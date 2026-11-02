@@ -1,0 +1,109 @@
+[
+  {
+    "label": "python_regression",
+    "command": [
+      "D:\\miniconda\\python.exe",
+      "-m",
+      "pytest",
+      "-q",
+      "-p",
+      "no:cacheprovider",
+      "--junitxml=C:\\Users\\HUAWEI\\.codex\\worktrees\\e3-route-maintenance\\campus-spatial-intelligence-agent\\output\\experiments\\e3_acceptance_20261102\\regression.xml",
+      "tests/test_e3_product_cases.py",
+      "tests/test_e3_product_runner.py",
+      "tests/test_e3_independent_audit.py",
+      "tests/test_e3_measurement.py",
+      "tests/test_e3_counterexamples.py",
+      "tests/test_e3_result_summary.py",
+      "tests/test_e3_resume.py",
+      "tests/test_route_reuse.py",
+      "tests/test_execution_dependencies.py",
+      "tests/test_route_proof_integration.py",
+      "tests/test_route_proof_repository.py",
+      "tests/test_route_proof_repository_unit.py",
+      "tests/test_route_proof_worker.py",
+      "tests/test_task_repository.py",
+      "tests/test_run_worker.py",
+      "tests/test_task_patch.py",
+      "tests/browser/test_route_candidate_resume_e2e.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 73.03092622756958
+  },
+  {
+    "label": "javascript_lifecycle",
+    "command": [
+      "node",
+      "--test",
+      "tests/js/conversation-lifecycle.test.js"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 3.5749623775482178
+  },
+  {
+    "label": "ruff",
+    "command": [
+      "D:\\miniconda\\python.exe",
+      "-m",
+      "ruff",
+      "check",
+      "experiments/e3_product_cases.py",
+      "experiments/e3_product_runner.py",
+      "experiments/e3_independent_audit.py",
+      "experiments/e3_measurement.py",
+      "experiments/e3_counterexamples.py",
+      "scripts/research/summarize_e3_product.py",
+      "scripts/research/resume_e3_product.py",
+      "tests/test_e3_product_cases.py",
+      "tests/test_e3_product_runner.py",
+      "tests/test_e3_independent_audit.py",
+      "tests/test_e3_measurement.py",
+      "tests/test_e3_counterexamples.py",
+      "tests/test_e3_result_summary.py",
+      "tests/test_e3_resume.py"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.14126014709472656
+  },
+  {
+    "label": "diff_check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 0.09571027755737305
+  },
+  {
+    "label": "aggregate",
+    "command": [
+      "D:\\miniconda\\python.exe",
+      "scripts/research/summarize_e3_product.py",
+      "--campus",
+      "output/experiments/e3_product_complete_20261102",
+      "--include-diagnostic",
+      "output/experiments/e3_product_full_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_continuation_20261102_01",
+      "--counterexamples",
+      "output/experiments/e3_counterexamples_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_full_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_counterexamples_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_oracle_contract_20261102",
+      "--include-diagnostic",
+      "output/experiments/e3_product_smoke_20261102_01",
+      "--include-diagnostic",
+      "output/experiments/e3_product_smoke_20261102_02",
+      "--include-diagnostic",
+      "output/experiments/e3_product_all_variants_20261102_01",
+      "--output",
+      "research/e3/20261102"
+    ],
+    "exit_code": 0,
+    "elapsed_seconds": 7.351006507873535
+  }
+]

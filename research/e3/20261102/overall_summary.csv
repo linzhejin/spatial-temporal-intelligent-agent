@@ -1,0 +1,3 @@
+﻿group,label,strategy,timed_executions,operation_probes,audit_pass,route_deliveries_200,correct_no_route_404,update_http_requests,version_rejections_409,rejected_then_rebuilt_flows,cost_comparable_pairs,cost_equivalent_pairs,cost_not_applicable_pairs,path_reused,request_ms_p50,request_ms_p95,timed_dijkstra_calls,probe_dijkstra_calls,probe_dijkstra_adjacency_expansions,probe_weight_evaluations,paired_reuse_minus_full_ms_p50,paired_reuse_over_full_ratio_p50
+all,all,full_recompute,378,126,378,357,21,396,18,18,357,357,21,0,4371.766800002661,36319.37966500699,360,120,174379,501804,813.8810999953421,1.14502921703124
+all,all,conservative_reuse,378,126,378,357,21,396,18,18,357,357,21,126,5085.274550001486,40913.12144999464,234,78,108364,309828,813.8810999953421,1.14502921703124

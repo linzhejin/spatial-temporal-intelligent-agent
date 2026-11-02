@@ -1,0 +1,6130 @@
+{
+  "rule": "parent records take precedence; fill missing keys only; retain duplicates as diagnostics",
+  "resume_case_ids": [
+    "od_06__other_mode",
+    "od_06__on_path_slowdown",
+    "od_06__off_path_slowdown",
+    "od_06__mixed",
+    "od_06__notice",
+    "od_06__mode_change",
+    "od_06__start_change",
+    "od_06__end_change",
+    "od_06__constraint_change",
+    "od_06__joint_change",
+    "od_06__graph_cost_decrease",
+    "od_06__unreachable",
+    "od_06__recovery"
+  ],
+  "shuffle_steps": 452,
+  "selected_from_parent": [
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_01__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_02__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_03__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_04__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_05__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__unchanged",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__off_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__on_path_closure",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__reopen",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__expiry",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__revocation",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__future_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__expired_event",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    }
+  ],
+  "selected_from_continuation": [
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__on_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__off_path_slowdown",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__mixed",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__notice",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__mode_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__start_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__end_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__constraint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__joint_change",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__graph_cost_decrease",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__unreachable",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "full_recompute",
+      "attempt": 4,
+      "operation_probe": true
+    },
+    {
+      "case_id": "od_06__recovery",
+      "strategy": "conservative_reuse",
+      "attempt": 4,
+      "operation_probe": true
+    }
+  ],
+  "diagnostic_only_continuation": [
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 1,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 2,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "full_recompute",
+      "attempt": 3,
+      "operation_probe": false
+    },
+    {
+      "case_id": "od_06__other_mode",
+      "strategy": "conservative_reuse",
+      "attempt": 3,
+      "operation_probe": false
+    }
+  ],
+  "parent_batch": "output\\experiments\\e3_product_full_20261102_02",
+  "continuation_batch": "output\\experiments\\e3_product_continuation_20261102_01",
+  "created_utc": "2026-11-02T15:20:47.229353+00:00",
+  "parent_records_sha256": "56af87a27cc65c0cdddf3f49a86a2f154dc0b04dab0bc73bfa7c66a87d1edee6",
+  "parent_protocol_sha256": "3169549d2f0456045c4e0d0200c316a9c01b7944bd03a27b245a6b0dfba431dd",
+  "orchestrator_sha256": "7c9afc24b8b5079867da8272075afef0de26e75cb682e0acd546d447869acd93",
+  "argv": [
+    "scripts/research/resume_e3_product.py",
+    "--parent",
+    "output/experiments/e3_product_full_20261102_02",
+    "--continuation",
+    "output/experiments/e3_product_continuation_20261102_01",
+    "--selection",
+    "output/experiments/e3_acceptance_20261102/resume_selection.json",
+    "--merged",
+    "output/experiments/e3_product_complete_20261102"
+  ],
+  "interruption": {
+    "type": "TimeoutError",
+    "message": "timed out"
+  }
+}

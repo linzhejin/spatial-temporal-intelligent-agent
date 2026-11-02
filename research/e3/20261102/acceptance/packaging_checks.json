@@ -1,0 +1,24 @@
+{
+  "completed_utc": "2026-11-02T15:46:03.874376+00:00",
+  "frozen_file_count": 145,
+  "source_archive_file_count": 351,
+  "source_archive_crc_and_hashes_passed": true,
+  "reporter_matches_aggregation_hash": true,
+  "acceptance_copies_verified": 14,
+  "stored_proof_checks": {
+    "e3_product_complete_20261102": {
+      "initial_proofs_checked": 504,
+      "stored_rows": 1323
+    },
+    "e3_counterexamples_20261102_02": {
+      "initial_proofs_checked": 12,
+      "stored_rows": 28
+    }
+  },
+  "regression": {
+    "tests": 238,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
+}
