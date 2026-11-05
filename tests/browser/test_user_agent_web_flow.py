@@ -376,7 +376,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
 
 
 def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
-    """Exercise actual error, manual retry, cancel, and clean-session behavior."""
+    """Exercise automatic retry after a transient error, cancel, and clean-session behavior."""
     submissions = []
     created_conversations = []
     cancelled_runs = set()
@@ -403,7 +403,7 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
             return
         if parsed.path.endswith("/messages") and request.method == "POST":
             body = request.post_data_json
-            submissions.append((parsed.path.split("/")[3], body["query"]))
+            submissions.append((parsed.path.split("/")[3], body["query"], body["request_id"]))
             if fail_once["value"]:
                 fail_once["value"] = False
                 json_response(route, {
@@ -480,20 +480,13 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
         with page.expect_response(lambda response: response.url.endswith("/messages") and response.request.method == "POST"):
             submit.click()
         expect(page.locator("#chat-content")).to_contain_text(
-            "\u51fa\u4e86\u70b9\u5c0f\u95ee\u9898\uff0c\u7a0d\u7b49\u4e00\u4e0b\u518d\u8bd5\u5c31\u597d",
-            timeout=10000,
+            "\u91cd\u8bd5\u5df2\u6210\u529f",
+            timeout=15000,
         )
         assert input_box.input_value() == ""
-
-        input_box.fill("\u7b2c\u4e00\u6b21\u63d0\u4ea4")
-        with page.expect_response(lambda response: response.url.endswith("/messages") and response.request.method == "POST"):
-            submit.click()
-        expect(page.locator("#chat-content")).to_contain_text(
-            "\u91cd\u8bd5\u5df2\u6210\u529f",
-            timeout=10000,
-        )
         assert len(submissions) == 2
-        assert submissions[0] == submissions[1]
+        assert submissions[0][:2] == submissions[1][:2]
+        assert submissions[0][2] == submissions[1][2]
         assert submissions[0][0] == "local-conversation-1"
 
         input_box.fill("\u5904\u7406\u4e2d")
@@ -513,8 +506,8 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
             timeout=10000,
         )
         assert len(submissions) == 4
-        assert submissions[2] == ("local-conversation-1", "\u5904\u7406\u4e2d")
-        assert submissions[-1] == ("local-conversation-2", "\u65b0\u4f1a\u8bdd")
+        assert submissions[2][:2] == ("local-conversation-1", "\u5904\u7406\u4e2d")
+        assert submissions[-1][:2] == ("local-conversation-2", "\u65b0\u4f1a\u8bdd")
         assert "\u7b2c\u4e00\u6b21\u63d0\u4ea4" not in page.locator("#chat-content").inner_text()
 
         context.close()
