@@ -6,6 +6,7 @@ must agree before a provider entrance can be used for a known destination.
 import math
 import os
 import re
+from datetime import datetime, timezone
 
 import httpx
 
@@ -48,8 +49,162 @@ def normalize_poi(raw):
             'navigation_coordinates': entrance, 'coordinate_system': 'GCJ-02',
             'parent_id': _text(raw.get('parent')), 'navi_poiid': _text(raw.get('navi_poiid')),
             'type_code': _text(raw.get('typecode')), 'type_name': _text(raw.get('type')),
-            'description': _text(raw.get('address')), 'source': 'AMap online',
+            'description': _text(raw.get('address')), 'source': 'amap_online',
             'verification_status': 'provider_only'}
+
+
+def _dining_subcategory(raw):
+    name = _text(raw.get('name'))
+    type_code = _text(raw.get('typecode'))
+    type_name = _text(raw.get('type'))
+    if '食堂' in name or '食堂' in type_name:
+        return 'canteen'
+    if type_code.startswith('0503') or any(token in type_name for token in ('快餐', '小吃')):
+        return 'fastfood'
+    if type_code.startswith('0505') or '咖啡' in type_name:
+        return 'coffee'
+    if type_code.startswith('0506') or any(token in type_name for token in ('茶饮', '奶茶')):
+        return 'tea_drink'
+    if type_code.startswith(('0501', '0502', '0504')) or any(
+            token in type_name for token in ('中餐', '外国餐厅', '休闲餐饮')):
+        return 'restaurant'
+    return 'other'
+
+
+def _nearby_pages(client, params, pages):
+    response = client.get('https://restapi.amap.com/v3/place/around',
+                          params={**params, 'page': 1})
+    response.raise_for_status()
+    body = response.json()
+    if str(body.get('status')) != '1':
+        return None, int(body.get('count') or 0), str(body.get('infocode') or '')[:16]
+    reported_count = int(body.get('count') or 0)
+    raw_rows = list(body.get('pois') or [])
+    for page in range(2, pages + 1):
+        if len(raw_rows) < 25 or len(raw_rows) >= reported_count:
+            break
+        response = client.get('https://restapi.amap.com/v3/place/around',
+                              params={**params, 'page': page})
+        response.raise_for_status()
+        body = response.json()
+        if str(body.get('status')) != '1':
+            return None, reported_count, str(body.get('infocode') or '')[:16]
+        raw_rows.extend(body.get('pois') or [])
+    return raw_rows, reported_count, None
+
+
+def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None):
+    """Search nearby dining from a worker or request without retaining provider state."""
+    location = _coord(f"{center.get('lng')},{center.get('lat')}") if isinstance(center, dict) else None
+    if location is None:
+        return {'status': 'invalid_center', 'candidates': []}
+    try:
+        radius_m = int(radius_m)
+        pages = int(pages)
+    except (ValueError, TypeError, OverflowError):
+        return {'status': 'invalid_query', 'candidates': []}
+    if not 100 <= radius_m <= 5000 or not 1 <= pages <= 3:
+        return {'status': 'invalid_query', 'candidates': []}
+    key = os.getenv('AMAP_WEB_KEY') or os.getenv('AMAP_KEY')
+    if not key:
+        return {'status': 'missing_key', 'candidates': []}
+
+    params = {
+        'key': key,
+        'location': f"{location['lng']},{location['lat']}",
+        'radius': radius_m,
+        'types': '050000',
+        'offset': 25,
+        'extensions': 'all',
+    }
+    if _text(keywords):
+        params['keywords'] = _text(keywords)[:80]
+
+    candidates = []
+    reported_count = 0
+    try:
+        if client is None:
+            with httpx.Client(timeout=httpx.Timeout(3, connect=2)) as request_client:
+                raw_rows, reported_count, provider_error = _nearby_pages(
+                    request_client, params, pages,
+                )
+        else:
+            raw_rows, reported_count, provider_error = _nearby_pages(client, params, pages)
+        if provider_error is not None:
+            return {'status': 'provider_error', 'provider_code': provider_error,
+                    'candidates': []}
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        # Never include exception text: provider request URLs can contain the key.
+        return {'status': 'network_error', 'candidates': []}
+
+    observed_at = datetime.now(timezone.utc).isoformat()
+    seen = set()
+    for raw in raw_rows:
+        if not isinstance(raw, dict):
+            continue
+        poi = normalize_poi(raw)
+        if not poi or poi['id'] == 'amap:' or poi['id'] in seen:
+            continue
+        try:
+            distance = float(raw.get('distance'))
+        except (TypeError, ValueError):
+            distance = _distance(location, poi['coordinates'])
+        if not math.isfinite(distance) or distance < 0 or distance > radius_m:
+            continue
+        seen.add(poi['id'])
+        poi.update({
+            'type': 'dining',
+            'category': 'dining',
+            'subcategory': _dining_subcategory(raw),
+            'campus': '',
+            'distance_m': round(distance),
+            'distance_basis': 'amap_provider_distance_from_search_center',
+            'search_center': location,
+            'search_radius_m': radius_m,
+            'source': 'amap_online',
+            'observed_at': observed_at,
+        })
+        candidates.append(poi)
+    candidates.sort(key=lambda row: (row['distance_m'], row['name']))
+    return {
+        'status': 'ok',
+        'candidates': candidates,
+        'count': len(candidates),
+        'provider_count': max(reported_count, len(candidates)),
+        'has_more': max(reported_count, len(candidates)) > len(candidates),
+        'observed_at': observed_at,
+        'search_center': location,
+        'search_radius_m': radius_m,
+    }
+
+
+def lookup_by_id(poi_id, client=None):
+    """Refresh one provider POI by its stable AMap ID before routing to it."""
+    value = _text(poi_id)
+    if value.startswith('amap:'):
+        value = value[5:]
+    if not re.fullmatch(r'[A-Za-z0-9_-]{3,80}', value):
+        return None
+    key = os.getenv('AMAP_WEB_KEY') or os.getenv('AMAP_KEY')
+    if not key:
+        return None
+    params = {'key': key, 'id': value, 'extensions': 'all'}
+    try:
+        if client is None:
+            with httpx.Client(timeout=httpx.Timeout(3, connect=2)) as request_client:
+                response = request_client.get('https://restapi.amap.com/v3/place/detail',
+                                              params=params)
+        else:
+            response = client.get('https://restapi.amap.com/v3/place/detail', params=params)
+        response.raise_for_status()
+        body = response.json()
+        if str(body.get('status')) != '1':
+            return None
+        matches = [row for row in body.get('pois') or []
+                   if isinstance(row, dict) and _text(row.get('id')) == value]
+        return normalize_poi(matches[0]) if len(matches) == 1 else None
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        return None
 
 
 def choose_match(name, rows, known=None):
@@ -86,7 +241,18 @@ def lookup(name, known=None, client=None):
         body = response.json()
         if str(body.get('status')) != '1':
             return None
-        rows = [normalize_poi(x) for x in body.get('pois') or [] if isinstance(x, dict)]
+        rows = []
+        for raw in body.get('pois') or []:
+            if not isinstance(raw, dict):
+                continue
+            row = normalize_poi(raw)
+            if not row:
+                continue
+            row.update({'type': 'dining', 'category': 'dining',
+                        'subcategory': _dining_subcategory(raw), 'campus': '',
+                        'source': 'amap_online',
+                        'observed_at': datetime.now(timezone.utc).isoformat()})
+            rows.append(row)
         return choose_match(name, rows, known)
     except (httpx.HTTPError, ValueError, TypeError, AttributeError):
         # HTTP exception strings can contain the key-bearing request URL.

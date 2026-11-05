@@ -10136,6 +10136,8 @@
   {
    "id": "poi_346",
    "name": "鱼你在一起(梅园店)",
+   "recommendation_status": "reported_absent_pending_review",
+   "recommendation_review": {"source": "user_report", "date": "2026-11-05", "note": "用户反馈该店在所示位置不存在，暂不推荐，待复核。"},
    "aliases": [
     "鱼你在一起梅园店"
    ],
@@ -10193,6 +10195,8 @@
   {
    "id": "poi_348",
    "name": "麦当劳(梅园店)",
+   "recommendation_status": "reported_absent_pending_review",
+   "recommendation_review": {"source": "user_report", "date": "2026-11-05", "note": "用户反馈该店在所示位置不存在，暂不推荐，待复核。"},
    "aliases": [
     "麦当劳武大店",
     "麦当劳武汉大学店"
@@ -10278,6 +10282,8 @@
   {
    "id": "poi_351",
    "name": "蔬三时轻食(武大校内店)",
+   "recommendation_status": "reported_absent_pending_review",
+   "recommendation_review": {"source": "user_report", "date": "2026-11-05", "note": "用户反馈该店在所示位置不存在，暂不推荐，待复核。"},
    "aliases": [
     "蔬三时轻食"
    ],

@@ -31,6 +31,9 @@ def case(monkeypatch):
     monkeypatch.setattr(routes, "_ensure_network", lambda: (graph, None))
     monkeypatch.setattr(routes, "get_nearest_node", lambda _g, lng, _lat: 1 if lng < 114.361 else 4)
     monkeypatch.setattr(routes, "_current_data_version", lambda _graph=None: current_data_version(graph))
+    # The worker's publication guard must compare the same synthetic graph
+    # used by the route tool and the API in this test, not the campus graph.
+    monkeypatch.setattr("agents.route_state.current_data_version", lambda _graph=None: current_data_version(graph))
     monkeypatch.setattr(routes, "_weather_snapshot", lambda: None)
     monkeypatch.setattr(routes, "list_conditions", lambda **_kw: [])
     monkeypatch.setattr(routes, "_find_pois_along_route", lambda *_a, **_kw: [])

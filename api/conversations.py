@@ -228,7 +228,8 @@ def submit_message(conversation_id: str):
         base_revision = body.get("base_revision")
         selected_poi_id = body.get("selected_poi_id")
         if selected_poi_id is not None:
-            if not isinstance(selected_poi_id, str) or not re.fullmatch(r"poi_\d{3,}", selected_poi_id):
+            if not isinstance(selected_poi_id, str) or not re.fullmatch(
+                    r"(?:poi_\d{3,}|amap:[A-Za-z0-9_-]{3,80})", selected_poi_id):
                 raise ValueError("selected_poi_id 格式无效")
             if continuation_task_id is None:
                 raise ValueError("selected_poi_id 只能用于续接当前候选任务")

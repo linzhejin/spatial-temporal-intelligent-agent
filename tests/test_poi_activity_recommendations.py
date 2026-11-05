@@ -17,6 +17,20 @@ def _test_route_state(args):
         data_version="test-data", road_condition_version=current_road_condition_version([]))
 
 
+def _test_candidate_versions():
+    from agents.route_state import current_road_condition_version
+
+    return {"data_version": "test-data", "road_condition_version": current_road_condition_version([])}
+
+
+@pytest.fixture
+def current_recommendation_snapshot(monkeypatch):
+    """Give mocked searches the same current graph/event identity as the guard."""
+    monkeypatch.setattr("agents.route_state.current_data_version", lambda: "test-data")
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
+    monkeypatch.setattr(planner.config, "RESULT_MAINTENANCE_POLICY", "conservative")
+
+
 @pytest.mark.parametrize("query,expected_slot", [
     ("我在工学部排球场附近，找个运动的地方。", "needs_clarification"),
     ("我在信息学部游泳池附近，找个运动的地方。", "needs_clarification"),
@@ -345,13 +359,15 @@ def test_basketball_catalog_tool_filters_by_explicit_query_without_model_activit
     )
 
     assert {row["poi_id"] for row in result["candidates"]} == {
-        "poi_083", "poi_206", "poi_262",
+        "poi_083", "poi_206",
     }
     assert all("basketball" in row["activities"] for row in result["candidates"])
 
 
 def test_catalog_tool_reports_total_matches_when_result_limit_truncates(monkeypatch):
-    places = [{"id": f"poi-{index}", "name": f"食堂{index}", "subcategory": "canteen"}
+    places = [{"id": f"poi-{index}", "name": f"食堂{index}", "subcategory": "canteen",
+               "source_refs": [{"source": "test", "id": str(index)}],
+               "verification_status": "source_only"}
               for index in range(25)]
     monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: places)
 
@@ -365,9 +381,159 @@ def test_catalog_tool_reports_total_matches_when_result_limit_truncates(monkeypa
     assert result["has_more"] is True
 
 
+def test_live_dining_search_filters_to_requested_category_and_records_gcj_center(monkeypatch):
+    from spatial.coord_transform import wgs84_to_gcj02
+
+    captured = {}
+    expected_center = wgs84_to_gcj02(114.36, 30.53)
+
+    def lookup(center, *, radius_m, pages):
+        captured.update({"center": center, "radius_m": radius_m, "pages": pages})
+        return {"status": "ok", "candidates": [
+            {"id": "amap:restaurant", "name": "餐厅甲", "subcategory": "restaurant",
+             "coordinates": {"lng": 114.36, "lat": 30.53}},
+            {"id": "amap:fastfood", "name": "快餐乙", "subcategory": "fastfood",
+             "coordinates": {"lng": 114.36, "lat": 30.53}},
+        ]}
+
+    monkeypatch.setattr(tools, "_endpoint_target_wgs",
+                        lambda *_: (114.36, 30.53, "总图", None))
+    monkeypatch.setattr(tools.amap_poi, "search_nearby", lookup)
+    monkeypatch.setattr(tools, "filter_reported_absent_provider_results", lambda rows: rows)
+
+    result = tools._search_amap_dining_for_start(
+        {"type": "poi", "name": "总图"}, "walk", ["restaurant"], radius_m=1000,
+    )
+
+    assert result["status"] == "ok"
+    assert [row["id"] for row in result["candidates"]] == ["amap:restaurant"]
+    assert captured["center"] == {"lng": expected_center[0], "lat": expected_center[1]}
+    assert captured["radius_m"] == 1000
+
+
+def test_live_dining_failure_is_preserved_and_does_not_enable_legacy_merchants(monkeypatch):
+    monkeypatch.setattr(tools, "_endpoint_target_wgs",
+                        lambda *_: (114.36, 30.53, "总图", None))
+    monkeypatch.setattr(tools.amap_poi, "search_nearby",
+                        lambda *_args, **_kwargs: {"status": "provider_error", "candidates": []})
+    monkeypatch.setattr(tools, "filter_reported_absent_provider_results",
+                        lambda rows: rows)
+
+    result = tools._search_amap_dining_for_start(
+        {"type": "poi", "name": "总图"}, "walk", ["restaurant"], radius_m=1000,
+    )
+
+    assert result["status"] == "provider_error"
+    assert result["candidates"] == []
+
+
+def test_category_balanced_recommendation_is_separate_from_explicit_distance_order():
+    candidates = [
+        {"name": "餐厅近", "subcategory": "restaurant", "network_distance_m": 100},
+        {"name": "餐厅远", "subcategory": "restaurant", "network_distance_m": 200},
+        {"name": "食堂", "subcategory": "canteen", "network_distance_m": 250},
+        {"name": "快餐", "subcategory": "fastfood", "network_distance_m": 300},
+    ]
+
+    balanced = tools._diversify_candidate_categories(
+        candidates, ["canteen", "restaurant", "fastfood"],
+    )
+    distance_first = tools._diversify_candidate_categories(
+        candidates, ["canteen", "restaurant", "fastfood"], distance_first=True,
+    )
+
+    assert [row["name"] for row in balanced] == ["食堂", "餐厅近", "快餐", "餐厅远"]
+    assert [row["name"] for row in distance_first] == ["餐厅近", "餐厅远", "食堂", "快餐"]
+
+
+def test_amap_candidate_selection_keeps_origin_separate_from_search_anchor(monkeypatch,
+                                                                             current_recommendation_snapshot):
+    candidate = {
+        "id": "amap:B0MEIYUAN01", "name": "肯德基(武大校园店)",
+        "aliases": ["肯德基"], "coordinates": {"lng": 114.365149, "lat": 30.536069},
+        "lon": 114.365149, "lat": 30.536069,
+    }
+    snapshot = {
+        "poi_id": candidate["id"], "name": candidate["name"],
+        "aliases": candidate["aliases"], "source": "amap_online",
+        "coordinates": candidate["coordinates"], "coordinate_system": "GCJ-02",
+    }
+    pending = planner._place_request_state(
+        "我在信图，想去总图附近干饭", activities=["meal"],
+        subcategories=["canteen", "restaurant", "fastfood"],
+        pending_slot="selection", start={"type": "poi", "name": "信息学部图书馆"},
+        search_anchor={"type": "poi", "name": "武汉大学图书馆(总馆)"},
+        candidate_poi_ids=[candidate["id"]], candidate_places=[snapshot],
+        previous={"result_dependencies": {"data_version": "test-data",
+                                           "road_condition_version": "roads-current"}},
+    )
+    calls = []
+
+    monkeypatch.setattr(planner.agent_tools, "load_pois", lambda: [])
+    monkeypatch.setattr(planner.agent_tools.amap_poi, "lookup_by_id", lambda _id: candidate)
+    monkeypatch.setattr("agents.result_maintenance.candidate_snapshot_is_current",
+                        lambda _snapshot: True)
+
+    def execute(name, args, _context):
+        calls.append((name, args))
+        return {"error": "test_stop", "message": "stop after route args"}, None
+
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
+    result = planner.run_agent("去这个地点", context={
+        "place_request": pending, "selected_poi_id": candidate["id"],
+    })
+
+    route = next(args for name, args in calls if name == "plan_route")
+    assert route["start"] == {"type": "poi", "name": "信息学部图书馆"}
+    assert route["end"]["poi_id"] == candidate["id"]
+    assert result["route"] is None
+
+
+def test_legacy_named_merchant_routes_from_live_provider_coordinates(monkeypatch):
+    from spatial.coord_transform import gcj02_to_wgs84
+
+    provider = {
+        "id": "amap:KFCMEIYUAN01", "name": "肯德基(梅园店)",
+        "aliases": ["KFC梅园"], "subcategory": "fastfood",
+        "coordinates": {"lng": 114.3661, "lat": 30.5366},
+        "navigation_coordinates": None, "coordinate_system": "GCJ-02",
+    }
+    monkeypatch.setattr(tools, "_amap_live_lookup_enabled", lambda: True)
+    monkeypatch.setattr(tools.amap_poi, "lookup", lambda _name, known=None: provider)
+    monkeypatch.setattr(tools.amap_poi, "search_nearby", lambda *_args, **_kwargs: {
+        "status": "ok", "candidates": [],
+    })
+
+    result = tools._endpoint_target_wgs({"type": "poi", "poi_id": "poi_347"}, "walk")
+    expected = gcj02_to_wgs84(114.3661, 30.5366)
+    assert result[3] is None
+    assert result[:2] == pytest.approx(expected)
+    assert result[2] == "肯德基(梅园店)"
+
+
+def test_reported_absent_amap_candidate_cannot_be_used_as_route_endpoint(monkeypatch):
+    from spatial.poi import _load_from_json
+
+    reported = next(row for row in _load_from_json() if row.get("id") == "poi_346")
+    coords = reported["coordinates"]
+    provider = {
+        "id": "amap:FISH_MEIYUAN01", "name": reported["name"],
+        "aliases": [], "coordinates": dict(coords),
+        "navigation_coordinates": None,
+    }
+    monkeypatch.setattr(tools.amap_poi, "lookup_by_id", lambda _poi_id: provider)
+    result = tools._endpoint_target_wgs(
+        {"type": "poi", "poi_id": provider["id"], "name": provider["name"]}, "walk",
+    )
+    assert result[:3] == (None, None, None)
+    assert result[3]["error"] == "online_poi_reported_absent"
+
+
 def test_catalog_tool_applies_inferred_categories_without_model_category_arg(monkeypatch):
     captured = {}
-    places = [{"id": "library", "name": "图书馆", "subcategory": "library"}]
+    places = [{"id": "library", "name": "图书馆", "subcategory": "library",
+               "source_refs": [{"source": "test", "id": "library"}],
+               "verification_status": "source_only"}]
 
     def search(subcategories, poi_type, keyword, season, include_minor, *, activities=None):
         captured.update({"subcategories": subcategories, "activities": activities})
@@ -438,7 +604,7 @@ def test_reachability_tool_keeps_explicit_activity_for_catalog_query(monkeypatch
     }
 
 
-def test_composite_sport_then_meal_keeps_the_second_request_through_route_selection():
+def test_composite_sport_then_meal_keeps_the_second_request_through_route_selection(current_recommendation_snapshot):
     initial = planner.run_agent("我在工学部，想先打球再吃饭")
     assert initial["response_kind"] == "clarify"
     assert initial["place_request"]["follow_up_requests"] == [{
@@ -451,7 +617,7 @@ def test_composite_sport_then_meal_keeps_the_second_request_through_route_select
         "activities": ["basketball"], "distance_m": 120,
     }
     with patch.object(planner.agent_tools, "execute_tool", return_value=(
-        {"candidates": [candidate], "count": 1, "start_name": "工学部"},
+        {"candidates": [candidate], "count": 1, "start_name": "工学部", **_test_candidate_versions()},
         {"candidates": [candidate]},
     )):
         selected_sport = planner.run_agent(
@@ -462,20 +628,26 @@ def test_composite_sport_then_meal_keeps_the_second_request_through_route_select
 
     route = {"recommended": [[114.36, 30.54]], "start_name": "工学部",
              "end_name": "工学部篮球场", "mode": "walk"}
+    meal = {"poi_id": "poi_068", "name": "桂园一食堂", "subcategory": "canteen", "distance_m": 200}
+
+    def execute_tool(name, _args, _ctx):
+        if name == "plan_route":
+            return route, {"route": route}
+        assert name == "search_poi_candidates"
+        return {"candidates": [meal], **_test_candidate_versions()}, {"candidates": [meal]}
+
     with patch.object(planner.agent_tools, "load_pois", return_value=[{
         "id": "poi_206", "name": "工学部篮球场",
-    }]), patch.object(planner.agent_tools, "execute_tool", return_value=(
-        route, {"route": route},
-    )) as execute:
+    }]), patch.object(planner.agent_tools, "execute_tool", side_effect=execute_tool) as execute:
         completed = planner.run_agent("去这个地点", context={
             "place_request": selected_sport["place_request"],
             "selected_poi_id": "poi_206",
         })
 
     assert completed["response_kind"] == "route"
-    assert completed["suggestions"] == [{
-        "label": "下一步：找餐饮", "query": "从工学部篮球场出发找吃饭",
-    }]
+    assert completed["place_request"]["pending_slot"] == "selection"
+    assert completed["place_request"]["activities"] == ["meal"]
+    assert completed["candidates"][0]["poi_id"] == meal["poi_id"]
     route_args = next(call.args[1] for call in execute.call_args_list
                       if call.args[0] == "plan_route")
     assert route_args["end"]["poi_id"] == "poi_206"
@@ -501,7 +673,7 @@ def test_three_stage_request_preserves_unspecified_dorm_and_steps_constraint():
     assert execute.call_args.args[1]["constraints"]["avoid_steps"] is True
 
 
-def test_named_destination_after_meal_selection_returns_the_full_ordered_route(monkeypatch):
+def test_named_destination_after_meal_selection_returns_the_full_ordered_route(monkeypatch, current_recommendation_snapshot):
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     meal = {"poi_id": "poi_meal", "name": "测试食堂", "activities": ["canteen_meal"],
             "subcategory": "canteen", "distance_m": 150}
@@ -515,7 +687,7 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
 
     def execute(name, args, _ctx):
         if name == "search_poi_candidates":
-            return {"candidates": [meal], "start_name": "武汉大学科技门"}, {
+            return {"candidates": [meal], "start_name": "武汉大学科技门", **_test_candidate_versions()}, {
                 "candidates": [dict(meal)],
             }
         assert name == "plan_route"
@@ -533,6 +705,7 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
             "steps": [], "pois": [], "timings_ms": {},
             "route_verification": {"status": "pass", "field_truth_verified": False},
             "route_state": _test_route_state(args),
+            "weather_input_sha256": "a" * 64,
         }
         return route, {"route": route}
 
@@ -577,10 +750,10 @@ def test_named_destination_after_meal_selection_returns_the_full_ordered_route(m
 
 @pytest.mark.parametrize("selection_query,expected_strategy", [
     ("就去桂园一食堂，当前有无道路管制？然后到刚才说的终点；请按顺序给出全程步行路线。", "flat"),
-    ("改成风景优先，就去桂园一食堂，然后到刚才说的终点；请按顺序给出全程步行路线。", "scenery"),
+    ("改成全程风景优先，就去桂园一食堂，然后到刚才说的终点；请按顺序给出全程步行路线。", "scenery"),
 ])
 def test_textual_meal_selection_keeps_named_non_activity_final_stop(
-    monkeypatch, selection_query, expected_strategy,
+    monkeypatch, selection_query, expected_strategy, current_recommendation_snapshot,
 ):
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     meal = {"poi_id": "poi_068", "name": "桂园一食堂", "activities": ["canteen_meal"],
@@ -594,7 +767,7 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
 
     def execute(name, args, _context):
         if name == "search_poi_candidates":
-            return {"candidates": [meal], "start_name": "武汉大学文理学部教3楼"}, {
+            return {"candidates": [meal], "start_name": "武汉大学文理学部教3楼", **_test_candidate_versions()}, {
                 "candidates": [dict(meal)],
             }
         assert name == "plan_route"
@@ -613,6 +786,7 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
             "route_verification": {"status": "pass", "field_truth_verified": False},
             "road_conditions_applied": 1,
             "route_state": _test_route_state(args),
+            "weather_input_sha256": "a" * 64,
         }
         return route, {"route": route}
 
@@ -746,7 +920,7 @@ def test_map_overview_ball_then_food_clarification_reaches_real_candidates():
     assert selected["place_request"]["follow_up_requests"][0]["activities"]
 
 
-def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
+def test_third_dorm_stage_survives_two_selected_routes(monkeypatch, current_recommendation_snapshot):
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     basketball = {"poi_id": "poi_206", "name": "工学部篮球场", "activities": ["basketball"],
                   "subcategory": "field", "distance_m": 120}
@@ -763,7 +937,8 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     def execute(name, args, _ctx):
         if name == "search_poi_candidates":
             candidate = basketball if "basketball" in args.get("activities", []) else canteen
-            return {"candidates": [candidate], "start_name": args.get("start", {}).get("name")}, {
+            return {"candidates": [candidate], "start_name": args.get("start", {}).get("name"),
+                    **_test_candidate_versions()}, {
                 "candidates": [dict(candidate)],
             }
         assert name == "plan_route"
@@ -781,6 +956,7 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
             "duration_min": 2.0, "shortest_duration_min": 2.0,
             "steps": [], "pois": [], "timings_ms": {},
             "route_state": _test_route_state(args),
+            "route_verification": {"status": "pass"}, "weather_input_sha256": "a" * 64,
         }
         return route, {"route": route}
 
@@ -794,12 +970,13 @@ def test_third_dorm_stage_survives_two_selected_routes(monkeypatch):
     first = planner.run_agent("去这个地点", context={
         "place_request": initial["place_request"], "selected_poi_id": basketball["poi_id"],
     })
+    identity = {"owner_id": "test-owner", "task_id": "test-trip", "task_revision": 1}
     second = planner.run_agent("吃饭选测试食堂；请从刚才的起点出发，先到选好的篮球场，再到这家吃饭的地方", context={
         "place_request": first["place_request"], "selected_poi_id": canteen["poi_id"],
-    })
+    }, proof_identity=identity)
     third = planner.run_agent("桂园6舍", context={
         "place_request": second["place_request"],
-    })
+    }, proof_identity=identity)
 
     assert first["candidates"][0]["poi_id"] == canteen["poi_id"]
     assert second["route_kind"] == "via"
@@ -872,7 +1049,7 @@ def test_mode_change_during_dorm_clarification_keeps_pending_destination(monkeyp
     assert response["place_request"]["constraints"]["avoid_steps"] is True
 
 
-def test_selected_place_honors_current_turn_origin_mode_and_steps_constraint():
+def test_selected_place_honors_current_turn_origin_mode_and_steps_constraint(current_recommendation_snapshot):
     saved = {
         "request_id": "req-1", "original_query": "从工学部找篮球场，再去吃饭",
         "activities": ["basketball"], "subcategories": ["field"],
@@ -881,6 +1058,7 @@ def test_selected_place_honors_current_turn_origin_mode_and_steps_constraint():
         "pending_slot": "selection", "start": {"type": "poi", "name": "工学部"},
         "candidate_poi_ids": ["poi_206"], "mode": "walk",
         "constraints": {"avoid_steps": False},
+        "result_dependencies": {"candidate_snapshot": _test_candidate_versions()},
     }
     route = {"recommended": [[114.36, 30.54]], "start_name": "信息学部图书馆",
              "end_name": "工学部篮球场", "mode": "bike"}

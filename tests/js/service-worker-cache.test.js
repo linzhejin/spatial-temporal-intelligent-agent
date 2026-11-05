@@ -25,7 +25,9 @@ test('deployed app bundle uses a fresh and consistent service-worker cache key',
   assert.notEqual(htmlStylesheet[2], '20261009a');
   assert.notEqual(htmlAsset[2], '20261003a');
   assert.notEqual(htmlAsset[2], '20261007a');
-  assert.ok(Number(cacheVersion[1]) > 84);
+  assert.notEqual(htmlAsset[2], '20261104-repeat-dining-v9');
+  assert.notEqual(htmlStylesheet[2], '20261104-legend-v4');
+  assert.ok(Number(cacheVersion[1]) > 109);
 });
 
 function loadWorker(overrides = {}) {

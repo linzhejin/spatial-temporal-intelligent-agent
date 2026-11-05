@@ -13,7 +13,7 @@ from datetime import datetime, timezone
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 try:
     from playwright.sync_api import expect, sync_playwright
@@ -50,7 +50,10 @@ class ManagerEventControlsTest(unittest.TestCase):
         print(f"Manager screenshots: {cls.qa_dir}")
 
     def setUp(self):
-        mobile = self._testMethodName == "test_mobile_controls_fit_and_custom_time_can_be_typed"
+        mobile = self._testMethodName in {
+            "test_mobile_controls_fit_and_custom_time_can_be_typed",
+            "test_mobile_direction_controls_and_preview_fit",
+        }
         self.context = self.browser.new_context(
             timezone_id="America/New_York", is_mobile=mobile, has_touch=mobile,
             viewport={"width": 390, "height": 844} if mobile else {"width": 1280, "height": 1000},
@@ -60,6 +63,10 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.posts = []
         self.rebind_requests = []
         self.snap_requests = []
+        self.hold_snap_direction = None
+        self.fail_snap_direction = None
+        self.changed_snap_direction = None
+        self.pending_snap_requests = []
         self.road_conditions = []
         self.pending_posts = []
         self.hold_posts = False
@@ -94,16 +101,28 @@ class ManagerEventControlsTest(unittest.TestCase):
             data = {"conditions": self.road_conditions}
         elif path == "/api/road-conditions/snap":
             self.snap_requests.append(route.request.url)
+            direction = parse_qs(urlsplit(route.request.url).query).get("direction", ["both"])[0]
+            token = {"both": "b", "forward": "f", "reverse": "a"}[direction] * 64
+            if direction == self.fail_snap_direction:
+                route.fulfill(status=503, json={"message": "方向预览暂不可用"})
+                return
             data = {"snap": {
                 "u": 1, "v": 2, "key": 0, "road_name": "测试路",
                 "dist_m": 2, "chain_length_m": 100,
                 "snap_lng_gcj": 114.363, "snap_lat_gcj": 30.5365,
                 "geometry_gcj": [[114.363, 30.5365], [114.364, 30.5365]],
+                "binding_token": token,
             }, "impact_preview": {
                 "road_name": "测试路", "affected_road_segments": 1,
                 "affected_length_m": 100, "active_event_count": 0,
+                "direction": direction,
                 "effects_by_mode": {}, "sample_routes": {},
             }}
+            if direction == self.changed_snap_direction:
+                data["snap"]["geometry_gcj"].reverse()
+            if direction == self.hold_snap_direction:
+                self.pending_snap_requests.append((route, data))
+                return
         elif path.startswith("/api/road-conditions/") and route.request.method == "PATCH":
             self.rebind_requests.append(route.request.post_data_json)
             if self.road_conditions:
@@ -128,9 +147,77 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.context.close()
         self.assertEqual(self.errors, [], "manager must not raise browser errors")
 
-    def open_manager(self):
+    def open_manager(self, *, open_analysis=True):
         self.page.goto(self.url, wait_until="networkidle")
         expect(self.page.locator("#workspace")).to_be_visible()
+        if open_analysis:
+            disclosure = self.page.locator(".vision-new-analysis")
+            if not disclosure.evaluate("element => element.open"):
+                disclosure.locator("summary").click()
+
+    def test_vision_workspace_starts_with_task_list_and_collapsed_new_analysis(self):
+        self.open_manager(open_analysis=False)
+        disclosure = self.page.locator(".vision-new-analysis")
+        expect(disclosure.locator("summary")).to_have_text("新建影像分析")
+        self.assertFalse(disclosure.evaluate("element => element.open"))
+        self.assertLess(
+            self.page.locator("#vision-jobs").evaluate("element => getComputedStyle(element).order"),
+            self.page.locator("#vision-upload-card").evaluate("element => getComputedStyle(element).order"),
+        )
+        self.page.locator("#vision-workspace").scroll_into_view_if_needed()
+        self.page.screenshot(path=str(self.qa_dir / "vision-workspace-desktop.png"))
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.page.locator("#vision-workspace").scroll_into_view_if_needed()
+        self.page.screenshot(path=str(self.qa_dir / "vision-workspace-mobile.png"))
+
+    def test_event_history_filters_by_name_status_and_beijing_date(self):
+        from datetime import datetime, timezone
+
+        self.road_conditions = [
+            {"id": "event-active", "status": "active", "name": "珞珈山路施工",
+             "start_time": datetime(2026, 11, 5, 4, tzinfo=timezone.utc).timestamp(),
+             "end_time": datetime(2026, 11, 5, 5, tzinfo=timezone.utc).timestamp(),
+             "type": "construction", "type_label": "施工", "action": "slowdown",
+             "edge": {"road_name": "珞珈山路", "geometry_gcj": []}},
+            {"id": "event-scheduled", "status": "scheduled", "name": "梅园临时活动",
+             "start_time": datetime(2026, 11, 6, 4, tzinfo=timezone.utc).timestamp(),
+             "end_time": datetime(2026, 11, 6, 5, tzinfo=timezone.utc).timestamp(),
+             "type": "event", "type_label": "活动", "action": "notice",
+             "edge": {"road_name": "梅园路", "geometry_gcj": []}},
+            {"id": "event-expired", "status": "expired", "name": "工学部旧管制",
+             "start_time": datetime(2026, 11, 4, 4, tzinfo=timezone.utc).timestamp(),
+             "end_time": datetime(2026, 11, 4, 5, tzinfo=timezone.utc).timestamp(),
+             "type": "closure", "type_label": "道路封闭", "action": "closure",
+             "edge": {"road_name": "工学部路", "geometry_gcj": []}},
+        ]
+        self.open_manager()
+        self.page.locator(".workflow-nav a[href='#event-history']").click()
+        rows = self.page.locator("#event-list .event-row")
+        expect(rows).to_have_count(3)
+
+        self.page.locator("#event-search").fill("珞珈山路")
+        expect(rows).to_have_count(1)
+        expect(rows.first).to_contain_text("珞珈山路施工")
+
+        self.page.locator("#event-search").fill("")
+        self.page.locator("#event-status-filter").select_option("scheduled")
+        expect(rows).to_have_count(1)
+        expect(rows.first).to_contain_text("梅园临时活动")
+
+        self.page.locator("#event-status-filter").select_option("all")
+        self.page.locator("#event-date-filter").fill("2026-11-05")
+        expect(rows).to_have_count(1)
+        expect(rows.first).to_contain_text("珞珈山路施工")
+
+        self.page.locator("#clear-event-filters").click()
+        expect(rows).to_have_count(3)
+
+    def test_required_viewport_widths_fit_without_horizontal_page_scroll(self):
+        self.open_manager(open_analysis=False)
+        for width, height in [(360, 800), (390, 844), (430, 932), (1280, 1000), (1440, 1000)]:
+            self.page.set_viewport_size({"width": width, "height": height})
+            actual = self.page.evaluate("document.documentElement.scrollWidth")
+            self.assertLessEqual(actual, width, f"viewport {width}px has document width {actual}px")
 
     def test_legacy_road_report_requires_selected_effect_before_publishing(self):
         self.page.add_init_script("try { localStorage.setItem('whu_welcome_seen', 'true'); } catch (_) {}")
@@ -210,6 +297,57 @@ class ManagerEventControlsTest(unittest.TestCase):
             "element => getComputedStyle(element).backgroundImage"))
         self.assertIn("rgb(217, 119, 6)", self.page.locator("#legend-slow-item .legend-line").evaluate(
             "element => getComputedStyle(element).backgroundImage"))
+
+    def test_public_map_shows_direction_and_the_corresponding_endpoints(self):
+        self.page.add_init_script("try { localStorage.setItem('whu_welcome_seen', 'true'); } catch (_) {}")
+        self.road_conditions = [{
+            "id": "directional", "type": "closure", "action": "closure",
+            "affected_modes": ["walk"], "direction": "reverse", "name": "单方向封闭",
+            "edge": {"snap": {"lng": 114.3635, "lat": 30.5365},
+                     "geometry_gcj": [[114.363, 30.5365], [114.364, 30.5365]]},
+        }]
+        self.page.goto(self.app_url, wait_until="networkidle")
+        expect(self.page.locator(".whu-road-direction-endpoint")).to_have_count(2)
+        expect(self.page.locator(".whu-road-direction-endpoint")).to_have_text(["A", "B"])
+        self.page.locator(".whu-map-pill").filter(has_text="单方向封闭").click()
+        expect(self.page.locator(".leaflet-popup-content")).to_contain_text("B → A")
+
+    def test_historical_replay_separates_real_source_from_simulation_and_blocks_transfer(self):
+        job_id = "12345678-1234-4234-8234-123456789abc"
+        self.vision_jobs = [{
+            "job_id": job_id, "status": "needs_review", "media_kind": "video",
+            "original_name": "公开素材.mp4", "captured_at": "2026-11-04T00:00:00Z",
+            "anchor_gcj": {"lng": 114.363, "lat": 30.5365},
+            "candidate_reviews": {"0": {"status": "confirmed", "reviewed_by": "web"}},
+            "result": {"research_replay": {"original_location": "Songdo",
+                                             "original_capture_time": None,
+                                             "simulated_location": "校园测试路",
+                                             "simulated_clock": "2026-11-04T00:00:00Z",
+                                             "review_origin": "scripted"},
+                       "candidates": [{"kind": "possible_congestion", "confidence": 0.74}]},
+        }]
+        self.vision_jobs.append({
+            "job_id": "12345678-1234-4234-8234-123456789abd", "status": "completed", "media_kind": "image",
+            "original_name": "空候选回放.png", "result": {"research_replay": False, "candidates": []},
+        })
+        self.open_manager()
+        card = self.page.locator(".vision-job").filter(has_text="公开素材.mp4")
+        expect(card).to_contain_text("原素材地点：Songdo")
+        expect(card).to_contain_text("原拍摄时间：未知")
+        expect(card).to_contain_text("模拟校园道路：校园测试路")
+        expect(card).to_contain_text("实验时钟（模拟）")
+        expect(card).to_contain_text("脚本模拟审核，非人工复核")
+        expect(card.locator(".vision-job-state")).to_have_text("脚本模拟审核")
+        expect(card).to_contain_text("不能发布为当前路况")
+        expect(card).not_to_contain_text("校园位置已标注")
+        expect(card.locator(".transfer-button")).to_have_count(0)
+        empty = self.page.locator(".vision-job").filter(has_text="空候选回放.png")
+        expect(empty).to_contain_text("原素材地点：未知")
+        expect(empty).to_contain_text("是否存在道路异常未知")
+        expect(empty).not_to_contain_text("现场核实后确认道路受影响")
+        expect(empty.locator("img.vision-preview")).to_have_attribute("alt", "公开素材历史回放影像")
+        expect(empty.locator(".transfer-button")).to_have_count(0)
+        card.screenshot(path=str(self.qa_dir / "historical-replay-label.png"))
 
     def test_video_detection_overlays_follow_source_and_evidence_time(self):
         job_id = "12345678-1234-4234-8234-123456789abc"
@@ -300,6 +438,90 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.assertLess(abs((datetime.now(timezone.utc) - start).total_seconds()), 10)
         expect(self.page.locator("#event-name")).to_have_value("")
         expect(self.page.get_by_role("checkbox", name="步行", exact=True)).not_to_be_checked()
+        expect(self.page.locator("#publish-event")).to_be_disabled()
+
+    def test_direction_preview_marks_endpoints_and_publishes_the_selected_binding(self):
+        self.open_manager()
+        self.prepare_event()
+        expect(self.page.locator("#event-direction")).to_have_value("both")
+        expect(self.page.locator(".road-direction-marker")).to_have_count(2)
+        self.page.locator("#event-direction").select_option("forward")
+        expect(self.page.locator("#impact-preview")).to_contain_text("A → B")
+        expect(self.page.locator("#publish-event")).to_be_enabled()
+        self.page.locator("#publish-event").click()
+        expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
+        self.assertEqual(self.posts[0]["direction"], "forward")
+        self.assertEqual(self.posts[0]["binding_token"], "f" * 64)
+        self.assertTrue(any("direction=forward" in url for url in self.snap_requests))
+
+    def test_mobile_direction_controls_and_preview_fit(self):
+        self.page.set_viewport_size({"width": 390, "height": 844})
+        self.open_manager()
+        self.prepare_event()
+        self.page.locator("#event-direction").select_option("reverse")
+        expect(self.page.locator("#impact-preview")).to_contain_text("B → A")
+        expect(self.page.locator(".road-direction-marker")).to_have_count(2)
+        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
+        self.page.locator(".form-card").screenshot(path=str(self.qa_dir / "mobile-direction-form.png"))
+        self.page.locator("#publish-event").click()
+        expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
+        self.assertEqual(self.posts[0]["direction"], "reverse")
+        self.assertEqual(self.posts[0]["binding_token"], "a" * 64)
+
+    def test_old_direction_preview_cannot_replace_newer_direction(self):
+        self.open_manager()
+        self.prepare_event()
+        self.hold_snap_direction = "forward"
+        self.page.locator("#event-direction").select_option("forward")
+        expect(self.page.locator("#publish-event")).to_be_disabled()
+        expect(self.page.locator("#publish-guidance")).to_contain_text("方向预览")
+        self.assertEqual(len(self.pending_snap_requests), 1)
+        self.page.locator("#event-direction").select_option("reverse")
+        expect(self.page.locator("#impact-preview")).to_contain_text("B → A")
+        expect(self.page.locator("#publish-event")).to_be_enabled()
+        stale, data = self.pending_snap_requests.pop()
+        stale.fulfill(json={"data": data})
+        self.page.wait_for_timeout(100)
+        expect(self.page.locator("#impact-preview")).to_contain_text("B → A")
+        self.page.locator("#publish-event").click()
+        expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
+        self.assertEqual(self.posts[0]["direction"], "reverse")
+        self.assertEqual(self.posts[0]["binding_token"], "a" * 64)
+
+    def test_changing_affected_modes_waits_for_updated_direction_preview(self):
+        self.open_manager()
+        self.prepare_event()
+        self.page.locator("#event-direction").select_option("forward")
+        expect(self.page.locator("#publish-event")).to_be_enabled()
+        self.hold_snap_direction = "forward"
+        self.page.locator("#event-mode-bike").check()
+        expect(self.page.locator("#publish-event")).to_be_disabled()
+        expect(self.page.locator("#publish-guidance")).to_contain_text("方向预览")
+        self.assertEqual(len(self.pending_snap_requests), 1)
+        pending, data = self.pending_snap_requests.pop()
+        pending.fulfill(json={"data": data})
+        expect(self.page.locator("#publish-event")).to_be_enabled()
+
+    def test_failed_direction_preview_can_be_retried_before_publication(self):
+        self.open_manager()
+        self.prepare_event()
+        self.fail_snap_direction = "forward"
+        self.page.locator("#event-direction").select_option("forward")
+        expect(self.page.locator("#impact-preview")).to_contain_text("方向预览暂不可用")
+        expect(self.page.locator("#impact-preview")).to_contain_text("A → B")
+        expect(self.page.locator("#publish-event")).to_be_disabled()
+        self.fail_snap_direction = None
+        self.page.locator("#retry-direction-preview").click()
+        expect(self.page.locator("#impact-preview")).to_contain_text("A → B")
+        expect(self.page.locator("#publish-event")).to_be_enabled()
+
+    def test_changed_road_binding_requires_reselecting_the_road(self):
+        self.open_manager()
+        self.prepare_event()
+        self.changed_snap_direction = "forward"
+        self.page.locator("#event-direction").select_option("forward")
+        expect(self.page.locator("#selected-road")).to_contain_text("尚未选择道路")
+        expect(self.page.locator("#form-message")).to_contain_text("道路匹配已变化")
         expect(self.page.locator("#publish-event")).to_be_disabled()
 
     def test_scheduled_custom_time_uses_beijing_and_rejects_reverse_range(self):
@@ -406,7 +628,48 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.assertNotEqual(positions["first"], positions["second"], "video playback time must update the map hint")
         self.assertTrue(positions["hidden"], "a time far from the subtitle must not retain a stale GPS marker")
         self.page.set_viewport_size({"width": 320, "height": 844})
-        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+        overflow = self.page.evaluate("""() => ({
+          width: document.documentElement.scrollWidth,
+          visionChain: (() => {
+            const chain = [];
+            let element = document.getElementById('vision-upload-card');
+            while (element) {
+              const rect = element.getBoundingClientRect();
+              const style = getComputedStyle(element);
+              chain.push({
+                tag: element.tagName,
+                id: element.id,
+                className: typeof element.className === 'string' ? element.className : '',
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+                minWidth: style.minWidth,
+                display: style.display,
+                gridTemplateColumns: style.gridTemplateColumns,
+              });
+              element = element.parentElement;
+            }
+            return chain;
+          })(),
+          offenders: [...document.querySelectorAll('body *')]
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                tag: element.tagName,
+                id: element.id,
+                className: typeof element.className === 'string' ? element.className : '',
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+                scrollWidth: element.scrollWidth,
+                clientWidth: element.clientWidth,
+              };
+            })
+            .filter((element) => element.width && (element.left < -1 || element.right > innerWidth + 1))
+            .sort((left, right) => right.right - left.right)
+            .slice(0, 12),
+        })""")
+        self.assertLessEqual(overflow["width"], 320, overflow)
         self.page.set_viewport_size({"width": 1280, "height": 1000})
         self.page.screenshot(path=str(self.qa_dir / "dji-track-preview.png"), full_page=True)
         self.assertEqual(self.snap_requests, [], "showing aircraft position must not bind it to a road")
@@ -458,7 +721,27 @@ class ManagerEventControlsTest(unittest.TestCase):
         expect(self.page.locator("#publish-event")).to_be_enabled()
         self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 390)
         self.page.set_viewport_size({"width": 320, "height": 844})
-        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+        overflow = self.page.evaluate("""() => ({
+          width: document.documentElement.scrollWidth,
+          offenders: [...document.querySelectorAll('body *')]
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                tag: element.tagName,
+                id: element.id,
+                className: typeof element.className === 'string' ? element.className : '',
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+                scrollWidth: element.scrollWidth,
+                clientWidth: element.clientWidth,
+              };
+            })
+            .filter((element) => element.width && (element.left < -1 || element.right > innerWidth + 1))
+            .sort((left, right) => right.right - left.right)
+            .slice(0, 12),
+        })""")
+        self.assertLessEqual(overflow["width"], 320, overflow)
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.page.locator(".form-card").screenshot(path=str(self.qa_dir / "mobile-form.png"))
         self.page.set_viewport_size({"width": 1440, "height": 1100})
@@ -582,7 +865,27 @@ class ManagerEventControlsTest(unittest.TestCase):
         expect(self.page.locator("#show-dji-track")).to_be_hidden()
         self.assertEqual(self.snap_requests, [])
         self.page.set_viewport_size({"width": 320, "height": 844})
-        self.assertLessEqual(self.page.evaluate("document.documentElement.scrollWidth"), 320)
+        overflow = self.page.evaluate("""() => ({
+          width: document.documentElement.scrollWidth,
+          offenders: [...document.querySelectorAll('body *')]
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return {
+                tag: element.tagName,
+                id: element.id,
+                className: typeof element.className === 'string' ? element.className : '',
+                left: Math.round(rect.left),
+                right: Math.round(rect.right),
+                width: Math.round(rect.width),
+                scrollWidth: element.scrollWidth,
+                clientWidth: element.clientWidth,
+              };
+            })
+            .filter((element) => element.width && (element.left < -1 || element.right > innerWidth + 1))
+            .sort((left, right) => right.right - left.right)
+            .slice(0, 12),
+        })""")
+        self.assertLessEqual(overflow["width"], 320, overflow)
 
 
 if __name__ == "__main__":

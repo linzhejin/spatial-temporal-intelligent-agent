@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta name="theme-color" content="#8B3A3A">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="theme-color" content="#176B5B">
     <meta name="description" content="珞珈智行 — 武大校园智能路径规划助手">
     <title>珞珈智行 · WHU-Walker</title>
 
@@ -19,12 +19,9 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="apple-mobile-web-app-title" content="珞珈智行">
 
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@500;600;700&display=swap" rel="stylesheet">
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261019-routeverify1">
+    <link rel="stylesheet" href="/css/style.css?v=20261105-campus-map-v1">
 </head>
 <body>
 
@@ -134,8 +131,8 @@
         <div class="mobile-panel-resizer" id="mobile-panel-resizer"
              role="separator" aria-orientation="horizontal"
              aria-label="调整地图与对话面板高度" aria-controls="map-panel chat-content"
-             aria-valuemin="28" aria-valuemax="76" aria-valuenow="55"
-             aria-valuetext="地图约 55%，对话约 45%" tabindex="0">
+             aria-valuemin="28" aria-valuemax="76" aria-valuenow="35"
+             aria-valuetext="地图约 35%，对话约 65%" tabindex="0">
             <span aria-hidden="true"></span>
         </div>
 
@@ -166,7 +163,11 @@
                 <button type="button" class="travel-mode-btn" data-travel-mode="bike" aria-pressed="false">🚴 骑行</button>
                 <button type="button" class="travel-mode-btn" data-travel-mode="drive" aria-pressed="false">🚗 驾车</button>
             </div>
-            <div class="route-strategy-switch" id="route-strategy-switch" role="group" aria-label="路线偏好切换" hidden>
+            <div class="route-strategy-heading">
+                <span>路线偏好</span>
+                <span id="route-strategy-hint" aria-live="polite">可先选择，也可在路线生成后切换</span>
+            </div>
+            <div class="route-strategy-switch" id="route-strategy-switch" role="group" aria-label="路线偏好切换">
                 <button type="button" class="route-strategy-btn" data-route-strategy="shortest" aria-pressed="false">最短路径</button>
                 <button type="button" class="route-strategy-btn" data-route-strategy="scenery" aria-pressed="false">风景优先</button>
                 <button type="button" class="route-strategy-btn" data-route-strategy="flat" aria-pressed="false">平坦优先</button>
@@ -272,8 +273,8 @@
                 <div class="explanation-box" id="explanation-box">
                     <p id="explanation-text">—</p>
                     <p id="road-conditions-notice" class="road-conditions-notice" style="display:none;"></p>
-                    <p id="road-condition-update-notice" class="road-condition-update-notice" hidden aria-live="polite"></p>
                 </div>
+                <p id="road-condition-update-notice" class="road-condition-update-notice" hidden aria-live="polite"></p>
 
                 <!-- 跟进建议 -->
                 <div class="suggestions-area" id="suggestions-area" hidden>
@@ -585,6 +586,6 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261031-detour-feedback"></script>
+    <script src="/js/app.js?v=20261105-campus-map-v1"></script>
 </body>
 </html>

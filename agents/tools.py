@@ -21,7 +21,8 @@ from agents import route_state as route_state_module
 from agents import route_reuse as route_reuse_module
 from spatial.poi import (
     find_poi_ambiguous, search_by_category, search_pois,
-    load_pois, importance_score, _flatten_poi,
+    load_pois, importance_score, _flatten_poi, source_refs_for_poi,
+    filter_reported_absent_provider_results, has_source_backed_record,
 )
 from spatial.poi_taxonomy import (
     ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi,
@@ -38,6 +39,7 @@ from spatial.routing import (
 )
 from spatial.routing_index import get_routing_index
 from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
+from spatial import amap_poi
 from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, CONDITION_LABELS, apply_conditions_to_graph,
@@ -662,11 +664,20 @@ def _poi_public(poi: dict, with_coords: bool = True, with_provenance: bool = Fal
     if with_provenance:
         out.update({
             "poi_id": poi.get("id"),
-            "source_refs": list(poi.get("source_refs") or [])[:5],
-            "verification_status": poi.get("verification_status") or "legacy_unverified",
+            "source_refs": source_refs_for_poi(poi)[:5],
+            "verification_status": (poi.get("verification_status")
+                                    if poi.get("verification_status") not in (None, "legacy_unverified")
+                                    else "source_only" if source_refs_for_poi(poi)
+                                    else "legacy_unverified"),
             "coordinate_verification_status": poi.get("coordinate_verification_status") or "unknown",
             "opening_hours": poi.get("opening_hours") or "unknown",
+            "source": poi.get("source") or "campus_catalog",
+            "observed_at": poi.get("observed_at"),
+            "coordinate_system": poi.get("coordinate_system") or "GCJ-02",
+            "provider_distance_m": poi.get("distance_m") if poi.get("source") == "amap_online" else None,
         })
+        if poi.get("aliases"):
+            out["aliases"] = list(poi.get("aliases") or [])[:8]
     return out
 
 
@@ -755,8 +766,15 @@ def is_poi_catalog_query(query: str) -> bool:
     return bool(re.search(r"有哪些|都有哪些|列出|列一下|名单|清单|全部|所有|一共有多少|有多少", text))
 
 
-def recommendation_origin_from_text(query: str) -> str | None:
-    """提取用户本轮明确说出的推荐起点，不从上一条路线推断。"""
+def recommendation_near_reference_from_text(query: str) -> str | None:
+    """Identify the named center of a nearby search, independent of trip origin."""
+    text = str(query or "").strip()
+    match = re.search(r"(?:在|去|到|前往)\s*([^，,。；;！？?]{1,40}?)(?:附近|周边|旁边|一带)", text)
+    return match.group(1).strip() if match and match.group(1).strip() else None
+
+
+def recommendation_explicit_origin_from_text(query: str) -> str | None:
+    """提取明确的出发地，不把“去某处附近”视为出发地。"""
     text = str(query or "").strip()
     patterns = (
         r"我(?:现在)?在\s*([^，,。；;]+)",
@@ -773,6 +791,12 @@ def recommendation_origin_from_text(query: str) -> str | None:
                 and not is_deictic_origin(name):
             return name
     return None
+
+
+def recommendation_origin_from_text(query: str) -> str | None:
+    """兼容旧调用：优先明确出发地，否则使用明确的附近参照点。"""
+    return (recommendation_explicit_origin_from_text(query)
+            or recommendation_near_reference_from_text(query))
 
 
 def is_deictic_origin(name: str) -> bool:
@@ -893,6 +917,103 @@ def _search_poi_categories(subcategories: list[str] | None, poi_type: str | None
     return unique
 
 
+_ONLINE_DINING_SUBCATEGORIES = {"restaurant", "fastfood", "coffee", "tea_drink"}
+
+
+def _search_amap_dining_for_start(start_ref: dict, mode: str,
+                                  subcategories: list[str] | None,
+                                  *, radius_m: int = 1000) -> dict:
+    """Fetch only the currently requested merchant categories around a server-resolved anchor."""
+    requested = set(subcategories or []) & _ONLINE_DINING_SUBCATEGORIES
+    if not requested:
+        return {"status": "not_requested", "candidates": []}
+    lng_wgs, lat_wgs, _name, error = _endpoint_target_wgs(start_ref, mode)
+    if error or lng_wgs is None or lat_wgs is None:
+        return {"status": "center_unavailable", "candidates": []}
+    lng_gcj, lat_gcj = wgs84_to_gcj02(float(lng_wgs), float(lat_wgs))
+    radius = max(100, min(int(radius_m), 5000))
+    result = amap_poi.search_nearby(
+        {"lng": lng_gcj, "lat": lat_gcj}, radius_m=radius, pages=3,
+    )
+    if not isinstance(result, dict) or result.get("status") != "ok":
+        return {**(result if isinstance(result, dict) else {}),
+                "status": (result or {}).get("status") if isinstance(result, dict) else "provider_error",
+                "candidates": []}
+    rows = [row for row in result.get("candidates", [])
+            if isinstance(row, dict) and row.get("subcategory") in requested]
+    rows = filter_reported_absent_provider_results(rows)
+    return {**result, "candidates": rows, "count": len(rows),
+            "has_more": bool(result.get("has_more"))}
+
+
+def _diversify_candidate_categories(candidates: list[dict], subcategories: list[str] | None,
+                                   *, distance_first: bool = False) -> list[dict]:
+    """Balance an unspecified meal shortlist across categories while keeping each category near-first."""
+    ordered = sorted(candidates, key=lambda row: (
+        float(row.get("network_distance_m", row.get("distance_m", float("inf")))),
+        str(row.get("name") or ""),
+    ))
+    if distance_first:
+        return ordered
+    categories = list(dict.fromkeys(
+        value for value in (subcategories or []) if value in _ONLINE_DINING_SUBCATEGORIES | {"canteen"}
+    ))
+    if len(categories) < 2:
+        return ordered
+    groups = {category: [row for row in ordered if row.get("subcategory") == category]
+              for category in categories}
+    result, used = [], set()
+    while True:
+        added = False
+        for category in categories:
+            group = groups[category]
+            while group and id(group[0]) in used:
+                group.pop(0)
+            if group:
+                row = group.pop(0)
+                used.add(id(row))
+                result.append(row)
+                added = True
+        if not added:
+            break
+    result.extend(row for row in ordered if id(row) not in used)
+    return result
+
+
+def _amap_live_lookup_enabled() -> bool:
+    if os.getenv("AMAP_POI_LOOKUP_ENABLED", "true").lower() in {"false", "0", "no"}:
+        return False
+    try:
+        from flask import current_app, has_app_context
+        return not (has_app_context() and current_app.testing)
+    except (ImportError, RuntimeError):
+        return True
+
+
+_LOCAL_MERCHANT_SUBCATEGORIES = {"restaurant", "fastfood", "coffee", "tea_drink"}
+
+
+def _live_merchant_match(name: str, known: dict | None = None):
+    """Refresh a legacy merchant name against AMap without trusting its old pin."""
+    rows = []
+    direct = amap_poi.lookup(name, known=None)
+    if direct:
+        rows.append(direct)
+    if known:
+        center = known.get("coordinates") or {
+            "lng": known.get("lon"), "lat": known.get("lat"),
+        }
+        nearby = amap_poi.search_nearby(
+            center, keywords=name, radius_m=1000, pages=2,
+        ) if center.get("lng") is not None and center.get("lat") is not None else {}
+        rows.extend(nearby.get("candidates") or [])
+    unique = {row.get("id"): row for row in rows if row and row.get("id")}
+    matches = filter_reported_absent_provider_results(list(unique.values()))
+    if known:
+        return amap_poi.choose_match(name, matches, known=None)
+    return amap_poi.choose_match(name, matches)
+
+
 def _endpoint_target_wgs(ref: dict, mode: str):
     """解析地点/坐标的 WGS-84 目标坐标，不在此处执行路网吸附。"""
     if not isinstance(ref, dict):
@@ -919,9 +1040,49 @@ def _endpoint_target_wgs(ref: dict, mode: str):
         return None, None, None, {"error": "invalid_coord", "message": "缺少有效坐标"}
     selected_id = str(ref.get("poi_id") or "").strip()
     if selected_id:
+        if selected_id.startswith("amap:"):
+            provider_poi = amap_poi.lookup_by_id(selected_id)
+            if provider_poi is None:
+                return None, None, None, {
+                    "error": "online_poi_unavailable",
+                    "message": "这个在线地点暂时无法重新核验，请重新搜索后选择。",
+                }
+            if not filter_reported_absent_provider_results([provider_poi]):
+                return None, None, None, {
+                    "error": "online_poi_reported_absent",
+                    "message": "这个门店位置已收到错误反馈，暂不用于规划。请重新搜索附近地点。",
+                }
+            if name and amap_poi.choose_match(name, [provider_poi]) is None:
+                return None, None, None, {
+                    "error": "online_poi_identity_changed",
+                    "message": "在线地点身份发生变化，请重新搜索后选择。",
+                }
+            coords = (provider_poi.get("navigation_coordinates")
+                      or provider_poi.get("coordinates") or {})
+            try:
+                lng_wgs, lat_wgs = gcj02_to_wgs84(float(coords["lng"]), float(coords["lat"]))
+            except (KeyError, TypeError, ValueError):
+                return None, None, None, {
+                    "error": "online_poi_unavailable",
+                    "message": "在线地点坐标暂时无法核验，请重新搜索后选择。",
+                }
+            return lng_wgs, lat_wgs, provider_poi.get("name") or name or selected_id, None
         poi = next((item for item in load_pois() if item.get("id") == selected_id), None)
         if poi is None:
             return None, None, None, {"error": "poi_not_found", "message": "候选地点已不在当前主数据中"}
+        if _amap_live_lookup_enabled() and poi.get("subcategory") in _LOCAL_MERCHANT_SUBCATEGORIES:
+            provider_poi = _live_merchant_match(poi.get("name") or name, known=poi)
+            if provider_poi is None:
+                return None, None, None, {
+                    "error": "online_poi_unavailable",
+                    "message": "暂时无法在线核验这家商户的位置，请重试或选择其他地点。",
+                }
+            coords = provider_poi.get("navigation_coordinates") or provider_poi.get("coordinates") or {}
+            try:
+                lng_wgs, lat_wgs = gcj02_to_wgs84(float(coords["lng"]), float(coords["lat"]))
+            except (KeyError, TypeError, ValueError):
+                return None, None, None, {"error": "online_poi_unavailable", "message": "在线商户坐标暂时无法核验。"}
+            return lng_wgs, lat_wgs, provider_poi.get("name") or poi.get("name"), None
         lng_wgs, lat_wgs = navigation_wgs(poi, mode)
         return lng_wgs, lat_wgs, poi.get("name") or name or selected_id, None
     if not name:
@@ -933,6 +1094,19 @@ def _endpoint_target_wgs(ref: dict, mode: str):
             "message": f"校内没找到「{name}」",
             "candidates": [_poi_public(a, with_coords=False) for a in (alts or [])][:5],
         }
+    if _amap_live_lookup_enabled() and poi.get("subcategory") in _LOCAL_MERCHANT_SUBCATEGORIES:
+        provider_poi = _live_merchant_match(poi.get("name") or name, known=poi)
+        if provider_poi is None:
+            return None, None, None, {
+                "error": "online_poi_unavailable",
+                "message": "暂时无法在线核验这家商户的位置，请重试或搜索附近地点。",
+            }
+        coords = provider_poi.get("navigation_coordinates") or provider_poi.get("coordinates") or {}
+        try:
+            lng_wgs, lat_wgs = gcj02_to_wgs84(float(coords["lng"]), float(coords["lat"]))
+        except (KeyError, TypeError, ValueError):
+            return None, None, None, {"error": "online_poi_unavailable", "message": "在线商户坐标暂时无法核验。"}
+        return lng_wgs, lat_wgs, provider_poi.get("name") or poi.get("name"), None
     lng_wgs, lat_wgs = navigation_wgs(poi, mode)
     return lng_wgs, lat_wgs, poi["name"], None
 
@@ -1192,6 +1366,14 @@ def _refresh_multimodal_composites(legs_payload):
 def _tool_resolve_poi(args, ctx):
     poi, alts = find_poi_ambiguous(args.get("name", ""))
     if poi:
+        if _amap_live_lookup_enabled() and poi.get("subcategory") in _LOCAL_MERCHANT_SUBCATEGORIES:
+            provider_poi = _live_merchant_match(poi.get("name") or args.get("name", ""), known=poi)
+            if provider_poi is None:
+                return {"found": False, "online_lookup_status": "unavailable",
+                        "message": "本地旧商户位置不作为导航依据，在线核验暂不可用，请重试。"}, None
+            provider_poi.update({"poi_id": provider_poi.get("id"), "source": "amap_online"})
+            return {"found": True, "poi": _poi_public(provider_poi, with_provenance=True),
+                    "online_lookup_status": "ok"}, None
         return {"found": True, "poi": _poi_public(poi)}, None
     return {
         "found": False,
@@ -1255,6 +1437,12 @@ def _tool_search_poi_candidates(args, ctx):
             "clarify": {"question": question, "options": ["地图上选起点", "告诉我所在地点"]}
         }
 
+    if not start_ref and not near_name and set(subcategories) & _ONLINE_DINING_SUBCATEGORIES:
+        question = "餐饮商户按实时位置查询。请告诉我搜索中心，例如“总图附近”或“梅园附近”。"
+        return {"question": question, "options": ["总图附近", "梅园附近", "文理学部附近"]}, {
+            "clarify": {"question": question, "options": ["总图附近", "梅园附近", "文理学部附近"]}
+        }
+
     if start_ref:
         reachable_args = {
             "start": start_ref,
@@ -1267,7 +1455,9 @@ def _tool_search_poi_candidates(args, ctx):
             "include_minor": include_minor,
             "mode": args.get("mode") or "walk",
             "constraints": args.get("constraints") or {},
-            "max_distance_m": args.get("max_distance_m") or 10000,
+            "max_distance_m": args.get("max_distance_m") or (
+                1000 if set(subcategories) & (set(_ONLINE_DINING_SUBCATEGORIES) | {"canteen"}) else 10000
+            ),
             "limit": limit,
         }
         result, artifact = _tool_find_reachable_places(reachable_args, context)
@@ -1277,23 +1467,37 @@ def _tool_search_poi_candidates(args, ctx):
         for candidate in candidates:
             candidate["distance_m"] = candidate.get("network_distance_m")
             candidate["distance_basis"] = result.get("reachability_basis")
+            candidate["distance_reference_name"] = result.get("start_name") or "本次搜索中心"
         result["candidate_count"] = len(candidates)
         result["count"] = len(candidates)
         result["candidates"] = candidates
-        result["message"] = (
-            "已按当前路网距离排序；起点和地点到道路的末端接驳均为直线估算，尚未核实通行。"
-            if candidates else result.get("message", "校内没有找到符合条件的附近地点。")
-        )
+        if candidates:
+            if result.get("online_dining_status") not in (None, "ok", "not_requested"):
+                result["message"] = (
+                    "在线商户查询暂不可用；以下只列出有来源依据的校内食堂，本次没有用旧商户表补位。"
+                )
+            elif result.get("recommendation_order") == "category_balanced":
+                result["message"] = (
+                    "综合推荐先看本次路网估算距离并兼顾餐饮类别；距离是搜索中心到地点的估算，"
+                    "起终点接入道路的末端通道未现场核实。"
+                )
+            else:
+                result["message"] = (
+                    "已按本次搜索中心的路网估算距离排序；起点和地点到道路的末端接驳均为直线估算，尚未核实通行。"
+                )
+        else:
+            result["message"] = result.get("message", "校内没有找到符合条件的附近地点。")
         return result, {"candidates": candidates}
 
     results = _search_poi_categories(
         subcategories or None, poi_type, keyword, season, include_minor, activities=activities,
     )
+    results = [poi for poi in results if has_source_backed_record(poi)]
     results.sort(key=importance_score, reverse=True)
     total_count = len(results)
     results = results[:limit]
     if not results:
-        return {"candidates": [], "message": "校内暂无匹配的地点，可换个类别或关键词试试"}, None
+        return {"candidates": [], "message": "本地目录中没有可核对来源的匹配地点；这不代表校园里不存在。"}, None
 
     candidates = [_poi_public(p, with_provenance=True) for p in results]
     return {
@@ -1352,7 +1556,7 @@ def _tool_find_reachable_places(args, ctx):
         logger.exception("读取路况失败，拒绝按错误的可达范围推荐地点")
         return {"error": "road_conditions_unavailable", "message": "当前路况暂时无法确认，附近地点候选暂不可核实。"}, None
     try:
-        mode_graph, _, _, conditions_applied = apply_conditions_to_graph(
+        mode_graph, road_penalties, _, conditions_applied = apply_conditions_to_graph(
             mode_graph, active_conditions, mode, strict=True,
         )
     except RoadConditionsUnavailableError:
@@ -1366,6 +1570,17 @@ def _tool_find_reachable_places(args, ctx):
     if ("avoid_steps" in constraints
             and not isinstance(constraints["avoid_steps"], bool)):
         return {"error": "invalid_constraints", "message": "avoid_steps 必须是布尔值"}, None
+    if ("require_verified_accessibility" in constraints
+            and not isinstance(constraints["require_verified_accessibility"], bool)):
+        return {"error": "invalid_constraints", "message": "无障碍核验要求必须是布尔值。"}, None
+    if constraints.get("require_verified_accessibility"):
+        return {"error": "accessibility_unverified",
+                "message": "地点与道路的接驳及全程无障碍信息尚未核实，暂不能确认满足该要求。"}, None
+    try:
+        route_distance_limit = positive_budget(constraints, "max_distance_m")
+        route_duration_limit = positive_budget(constraints, "max_duration_s")
+    except ValueError:
+        return {"error": "invalid_constraints", "message": "路线距离或时间上限无效。"}, None
     filtered_graph, filter_status, _ = _filter_by_constraints(mode_graph, constraints)
     tagged_steps_before = {
         (u, v, k) for u, v, k, data in mode_graph.edges(keys=True, data=True)
@@ -1391,11 +1606,54 @@ def _tool_find_reachable_places(args, ctx):
         return {"error": "start_access_unavailable",
                 "message": "起点到可规划道路的接驳距离暂时无法核实，附近地点候选暂不可用。"}, None
 
+    from spatial.routing import _edge_duration_min
+
+    # A time-limited request needs a fastest path, not a distance cutoff at the
+    # nominal speed. For distance-limited requests preserve the existing
+    # shortest-distance ranking, but estimate time along that same path.
+    by_time = max_time is not None
+    meters_per_minute = MODE_SPEEDS_KMH[mode] * 1000.0 / 60.0
+
+    def selected_edge_metrics(u, v, edges, prefer_time=None):
+        choices = []
+        for key, data in edges.items():
+            length = float(data["length"])
+            duration = _edge_duration_min(data, mode, road_penalties.get((u, v, key)))
+            if not math.isfinite(length) or length < 0 or not math.isfinite(duration) or duration < 0:
+                raise ValueError("invalid edge length or duration")
+            choices.append((length, duration))
+        if not choices:
+            raise ValueError("missing road edge")
+        if prefer_time is None:
+            prefer_time = by_time
+        return min(choices, key=(lambda item: (item[1], item[0])) if prefer_time else
+                   (lambda item: (item[0], item[1])))
+
+    def path_weight(u, v, edges):
+        length, duration = selected_edge_metrics(u, v, edges)
+        return duration if by_time else length
+
+    def satisfies_route_budget(distance, duration):
+        # Match the route verifier's distance and displayed-time tolerances.
+        return ((route_distance_limit is None or distance <= route_distance_limit + 0.15)
+                and (route_duration_limit is None or round(duration, 1) * 60 <= route_duration_limit + 3))
+
+    start_access_time = start_access_distance / meters_per_minute
+    cutoff = max(0.0, (max_time - start_access_time) if by_time
+                 else (max_distance - start_access_distance))
     try:
-        distances = nx.single_source_dijkstra_path_length(
-            filtered_graph, start_node, cutoff=max_distance, weight="length",
+        _costs, paths = nx.single_source_dijkstra(
+            filtered_graph, start_node, cutoff=cutoff, weight=path_weight,
         )
-    except (nx.NodeNotFound, nx.NetworkXError) as exc:
+        fastest_bounds = (nx.single_source_dijkstra_path_length(
+            filtered_graph, start_node, cutoff=(route_duration_limit + 6) / 60,
+            weight=lambda u, v, edges: selected_edge_metrics(u, v, edges, True)[1],
+        ) if not by_time and route_duration_limit is not None else None)
+        shortest_bounds = (nx.single_source_dijkstra_path_length(
+            filtered_graph, start_node, cutoff=route_distance_limit + 0.15,
+            weight=lambda u, v, edges: selected_edge_metrics(u, v, edges, False)[0],
+        ) if by_time and route_distance_limit is not None else None)
+    except (nx.NodeNotFound, nx.NetworkXError, KeyError, TypeError, ValueError, RuntimeError) as exc:
         logger.warning("可达地点搜索失败: %s", exc, exc_info=True)
         return {"error": "reachability_failed", "message": "附近地点暂时查不到，请稍后重试"}, None
 
@@ -1433,6 +1691,15 @@ def _tool_find_reachable_places(args, ctx):
     places = _search_poi_categories(
         subcategories or None, poi_type, keyword, season, include_minor, activities=activities,
     )
+    places = [poi for poi in places if has_source_backed_record(poi)]
+    online_dining = {"status": "not_requested", "candidates": []}
+    if set(subcategories) & _ONLINE_DINING_SUBCATEGORIES:
+        local_canteens = [poi for poi in places if poi.get("subcategory") == "canteen"
+                          and has_source_backed_record(poi)]
+        online_dining = _search_amap_dining_for_start(
+            start_ref, mode, subcategories, radius_m=min(int(max_distance), 5000),
+        )
+        places = local_canteens + list(online_dining.get("candidates") or [])
 
     reachable = []
     excluded_long_access = 0
@@ -1443,18 +1710,85 @@ def _tool_find_reachable_places(args, ctx):
             poi_lat_gcj = float(coords.get("lat", poi.get("lat")))
             poi_lng_wgs, poi_lat_wgs = gcj02_to_wgs84(poi_lng_gcj, poi_lat_gcj)
             node = get_nearest_node(filtered_graph, poi_lng_wgs, poi_lat_wgs)
-            if node not in distances:
+            if node not in paths:
+                continue
+            if ((fastest_bounds is not None and node not in fastest_bounds)
+                    or (shortest_bounds is not None and node not in shortest_bounds)):
                 continue
             node_lng, node_lat = get_node_coords(filtered_graph, node)
             access_distance = _haversine(poi_lat_wgs, poi_lng_wgs, node_lat, node_lng)
             if access_distance > _REACHABILITY_MAX_ACCESS_SNAP_M:
                 excluded_long_access += 1
                 continue
-            network_path_distance = float(distances[node])
-            network_distance = start_access_distance + network_path_distance + access_distance
         except (TypeError, ValueError, KeyError, RuntimeError):
             continue
-        if network_distance > max_distance:
+        try:
+            path = paths[node]
+            path_metrics = [selected_edge_metrics(u, v, filtered_graph.get_edge_data(u, v))
+                            for u, v in zip(path, path[1:])]
+            network_path_distance = sum(item[0] for item in path_metrics)
+            network_path_time = sum(item[1] for item in path_metrics)
+            constrained = route_distance_limit is not None or route_duration_limit is not None
+            if constrained and not satisfies_route_budget(network_path_distance, network_path_time):
+                if ((not by_time and route_distance_limit is not None
+                     and network_path_distance > route_distance_limit + 0.15)
+                        or (by_time and route_duration_limit is not None
+                            and round(network_path_time, 1) * 60 > route_duration_limit + 3)):
+                    continue
+                # The shortest-distance and fastest paths may be different. A
+                # candidate is eligible only if one path meets both limits.
+                from spatial.routing import _budgeted_path
+
+                access_distance_total = start_access_distance + access_distance
+                graph_distance_limit = (None if by_time else max_distance - access_distance_total)
+                graph_duration_limit = ((max_time - access_distance_total / meters_per_minute) * 60
+                                        if by_time else None)
+                if route_distance_limit is not None:
+                    graph_distance_limit = min(graph_distance_limit, route_distance_limit) if graph_distance_limit is not None else route_distance_limit
+                if route_duration_limit is not None:
+                    graph_duration_limit = min(graph_duration_limit, route_duration_limit) if graph_duration_limit is not None else route_duration_limit
+                if ((graph_distance_limit is not None and graph_distance_limit < 0)
+                        or (graph_duration_limit is not None and graph_duration_limit < 0)):
+                    continue
+                def path_result(edges):
+                    metrics = [selected_edge_metrics(u, v, {key: filtered_graph[u][v][key]})
+                               for u, v, key in edges]
+                    distance = sum(item[0] for item in metrics)
+                    duration = sum(item[1] for item in metrics)
+                    if (satisfies_route_budget(distance, duration)
+                            and (by_time or distance + access_distance_total <= max_distance + 1e-9)
+                            and (not by_time or duration + access_distance_total / meters_per_minute <= max_time + 1e-9)):
+                        return distance, duration
+                    return None
+
+                search_args = {"mode": mode, "penalty_map": road_penalties,
+                               "duration_penalty_map": road_penalties, "edge_weight": path_weight,
+                               "max_distance_m": graph_distance_limit, "max_duration_s": graph_duration_limit}
+                first = _budgeted_path(filtered_graph, start_node, node, **search_args)
+                if first is None:
+                    continue
+                first_result = path_result(first[1])
+                if first_result is not None:
+                    feasible = [first_result]
+                else:
+                    frontier = _budgeted_path(filtered_graph, start_node, node, return_frontier=True, **search_args)
+                    feasible = [value for candidate_path in frontier
+                                if (value := path_result(candidate_path["edges"])) is not None]
+                if not feasible:
+                    continue
+                network_path_distance, network_path_time = min(
+                    feasible, key=(lambda item: (item[1], item[0])) if by_time else
+                    (lambda item: (item[0], item[1])),
+                )
+            network_distance = start_access_distance + network_path_distance + access_distance
+            estimated_time = network_path_time + (start_access_distance + access_distance) / meters_per_minute
+        except BudgetSearchIncomplete:
+            return {"error": "reachability_incomplete", "message": "路线约束下的地点尚无法完整核验，请缩小范围后重试。"}, None
+        except (AttributeError, TypeError, ValueError, KeyError, RuntimeError):
+            logger.warning("可达地点路径信息发生变化，拒绝返回部分候选", exc_info=True)
+            return {"error": "reachability_failed", "message": "附近地点暂时查不到，请稍后重试"}, None
+        if ((by_time and estimated_time > max_time + 1e-9)
+                or (not by_time and network_distance > max_distance + 1e-9)):
             continue
         public = _poi_public(poi, with_provenance=True)
         public["network_path_distance_m"] = round(network_path_distance)
@@ -1468,10 +1802,13 @@ def _tool_find_reachable_places(args, ctx):
         public["start_access_link_verified"] = False
         if avoid_steps_requested:
             public["step_access_status"] = "known_tagged_steps_filtered_unknown_edges_unverified"
-        public["estimated_duration_min"] = estimate_duration_min(network_distance, mode)
+        public["estimated_duration_min"] = round(estimated_time, 1)
         reachable.append(public)
 
-    reachable.sort(key=lambda place: (place["network_distance_m"], place["name"]))
+    distance_first = bool(re.search(r"最近|距离优先|离.{0,12}最近|最短距离", query))
+    reachable = _diversify_candidate_categories(
+        reachable, subcategories, distance_first=distance_first,
+    )
     total_count = len(reachable)
     limit = max(1, min(int(args.get("limit", 8) or 8), 20))
     reachable = reachable[:limit]
@@ -1483,6 +1820,8 @@ def _tool_find_reachable_places(args, ctx):
         "has_more": total_count > len(reachable),
         "candidates": reachable,
         "reachability_basis": "network_path_plus_unverified_straight_line_access_estimate",
+        "path_selection_basis": "minimum_estimated_duration" if by_time else "minimum_network_distance",
+        "route_budget_scope": "current_leg_only" if (route_distance_limit is not None or route_duration_limit is not None) else None,
         "start_access": start_access,
         "max_distance_m": round(max_distance),
         "max_time_min": round(max_time, 1) if max_time is not None else None,
@@ -1499,12 +1838,27 @@ def _tool_find_reachable_places(args, ctx):
         "data_version": _data_version_for_graph(graph),
         "road_condition_version": current_road_condition_version(active_conditions),
         "data_source": "校园 POI 主数据与当前交通方式可用的已标记路网",
+        "recommendation_order": "distance_first" if distance_first else "category_balanced",
         "geometry_crs": "GCJ-02",
         "access_link_note": "起点和地点到最近路网节点的末端接驳只按直线距离估算，未核实是否存在实际步行通道；地点接驳距离超过 80 米的不列为候选。候选地点应再用路线工具核查。",
-        "estimate_note": "距离由起点接驳、路网路径和地点接驳组成；两端接驳均为未核实的直线估算。时间按该出行方式平均速度估算，不等同导航实时 ETA。",
+        "estimate_note": ("距离由起点接驳、路网路径和地点接驳组成；两端接驳均为未核实的直线估算。"
+                          "时间按该路径的出行方式、已标注坡度、台阶和有效缓行估算，未计入天气，不等同导航实时 ETA。"
+                          + ("时间范围使用估算时间最短的路网路径，显示距离对应此路径，不一定是最短距离。"
+                             if by_time else "距离范围使用符合当前路段约束的最短距离路径，显示时间对应此路径。")
+                          + ("路线距离和时间上限只核对当前路段；多段行程还需核验整程。"
+                             if route_distance_limit is not None or route_duration_limit is not None else "")),
     }
+    if online_dining.get("status") != "not_requested":
+        result["online_dining_status"] = online_dining.get("status")
+        result["online_dining_observed_at"] = online_dining.get("observed_at")
+        result["online_dining_has_more"] = bool(online_dining.get("has_more"))
     if not reachable:
-        result["message"] = "当前路网估算范围内没有找到候选地点；地点入口与末端通道尚未逐一核实，可扩大范围或换个类别。"
+        if online_dining.get("status") in {"missing_key", "provider_error", "network_error"}:
+            result["message"] = "在线餐饮查询暂时不可用，请稍后重试；此次没有用旧商户记录补位。"
+        elif online_dining.get("status") == "ok":
+            result["message"] = "本次在线查询没有返回当前范围内可核对的餐饮结果；这不代表附近没有店。"
+        else:
+            result["message"] = "当前路网估算范围内没有找到候选地点；地点入口与末端通道尚未逐一核实，可扩大范围或换个类别。"
     return result, {"candidates": reachable}
 
 
@@ -2007,6 +2361,10 @@ def _tool_plan_route(args, ctx):
                 "travel_mode": mode,
                 "strategy": {"name": decision.name},
                 "hard_constraints": args.get("constraints") or {},
+                "data_version": _data_version_for_graph(G),
+                "road_condition_version": current_road_condition_version(
+                    context["_route_conditions_snapshot"]
+                ),
             },
         }
         # Exact OD evidence is recorded only for isolated synthetic replay.
@@ -2026,6 +2384,8 @@ def _tool_plan_route(args, ctx):
         return {"error": "route_not_found", "message": str(e)}, None
 
     payload = _route_payload(G, result, start_name, end_name, mode)
+    from agents.result_maintenance import weather_input_fingerprint
+    payload["weather_input_sha256"] = weather_input_fingerprint(weather_info)
     payload["timings_ms"]["graph_prepare"] = round(
         payload["timings_ms"]["graph_prepare"] + common_graph_ms, 3
     )
@@ -2360,6 +2720,10 @@ def _tool_plan_via_route(args, ctx):
         "degraded": any(bool(leg.get("degraded")) for leg in legs),
         "length_capped": any(bool(leg.get("length_capped")) for leg in legs),
     }
+    from agents.result_maintenance import weather_input_fingerprint
+    payload["weather_input_sha256"] = weather_input_fingerprint(weather_info)
+    for leg in legs:
+        leg["weather_input_sha256"] = payload["weather_input_sha256"]
     payload["endpoint_access"] = {
         "start": _endpoint_access_evidence(args.get("start"), start_node, G_mode, mode),
         "via": [
@@ -3275,6 +3639,13 @@ def _tool_list_road_conditions(args, ctx):
                 "cost_multiplier": c.get("cost_multiplier"),
             },
         }
+        direction = c.get("direction", "both")
+        condition["direction"] = direction
+        condition["direction_label"] = {
+            "both": "双向", "forward": "地图 A → B", "reverse": "地图 B → A",
+        }.get(direction, "方向待核实")
+        if direction != "both":
+            condition["route_effect"]["direction"] = direction
         if source.get("kind") == "vision_job":
             condition["vision_evidence"] = {
                 "job_id": source.get("job_id"),

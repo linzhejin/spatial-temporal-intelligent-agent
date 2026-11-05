@@ -1219,6 +1219,30 @@ class TestRoadConditionAPI:
         assert public["action"] == "slowdown"
         assert public["affected_modes"] == ["walk"]
 
+    @pytest.mark.parametrize("replay_marker", [None, False, {}, {"original_location": "Songdo"}])
+    def test_marked_historical_replay_cannot_be_published_as_current_road_condition(self, client, G, monkeypatch, replay_marker):
+        from storage import database, vision_repository
+
+        job_id = "a6f6c6b1-d237-43fa-8ae2-b01ae48a3e8e"
+        job = {"job_id": job_id, "status": "needs_review", "review_status": "confirmed",
+               "review_candidate_index": 0, "captured_at": time.time(),
+               "result": {"research_replay": replay_marker,
+                          "candidates": [{"kind": "vehicle_cluster_review",
+                                          "review_required": True, "auto_publish": False}]}}
+        monkeypatch.setattr(database, "initialize", lambda *_args: None)
+        monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
+        lng, lat = _mid_12_gcj(G)
+        response = client.post("/api/road-conditions", json={
+            "type": "event", "name": "历史影像模拟事件", "lng": lng, "lat": lat,
+            "action": "notice", "affected_modes": ["walk"],
+            "source_vision_job_id": job_id,
+            "field_confirmation": "这是测试用的模拟复核记录，不代表现场。",
+            "end_time": time.time() + 1800,
+        }, headers={"X-Admin-Token": "test-token-xyz"})
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "simulation_not_allowed"
+        assert rc.list_conditions() == []
+
     def test_confirmed_vision_requires_field_evidence_before_road_publication(self, client, G, monkeypatch):
         import api.routes as routes
         from storage import database, vision_repository

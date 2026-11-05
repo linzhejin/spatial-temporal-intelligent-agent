@@ -69,8 +69,9 @@ from spatial.road_conditions import (
     route_condition_notices,
     rebind_vision_condition_edge,
     purge_revoked_conditions, snap_to_edge, CONDITION_LABELS, CONDITION_EFFECTS,
-    SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS,
-    RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
+    SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS, CONDITION_DIRECTIONS,
+    RoadConditionBindingError, RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
+    _directional_corridor_edges,
 )
 from spatial import weather as weather_mod
 from storage import vision_scene_repository
@@ -1429,6 +1430,11 @@ def _replan_tool_request(state):
         if via.get("type") == "multi":
             args["via_points"] = via.get("points", [])
             return "plan_via_route", args
+        if via.get("poi_id"):
+            # Passing only a name drops the selected stable identity and the
+            # audited result can no longer match the original route state.
+            args["via_points"] = [via]
+            return "plan_via_route", args
         coords = via.get("coordinates") if isinstance(via, dict) else None
         if coords:
             args["via_coord"] = coords
@@ -1591,6 +1597,15 @@ def replan_route():
     payload = artifact.get("route") if isinstance(artifact, dict) else None
     if not _replan_result_matches_request(requested, payload):
         return _err("route_verification_failed", "重算路线与原任务、路况或核验记录不一致，未替换当前路线。", 503)
+    try:
+        latest_data_version = _current_data_version()
+        latest_event_version = _current_road_condition_version(list_conditions(strict=True))
+    except RoadConditionsUnavailableError:
+        logger.exception("重规划完成后无法复核路况快照")
+        return _err("road_conditions_unavailable", "当前路况无法确认，未替换原路线，请稍后重试。", 503)
+    if (latest_data_version != requested["data_version"]
+            or latest_event_version != requested["road_condition_version"]):
+        return _err("route_state_version_conflict", "规划期间路网或路况发生变化，请重新更新路线。", 409)
     payload["timings_ms"] = normalize_timings(payload.get("timings_ms"), agent=0.0)
     return _ok(payload)
 
@@ -2341,6 +2356,15 @@ def get_road_conditions():
     })
 
 
+def _road_binding_token(graph, snap: dict, direction: str) -> str:
+    """Identify the road, direction and graph a user saw before publishing."""
+    payload = {name: snap.get(name) for name in ("u", "v", "key", "edges", "geometry_gcj")}
+    payload["data_version"] = current_data_version(graph)
+    payload["direction"] = direction
+    raw = json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
+
+
 @api_bp.route("/road-conditions/snap", methods=["GET"])
 def snap_road_condition():
     """GET /api/road-conditions/snap?lng=&lat= — 管理员选点预览：把点击点吸附到最近路段。
@@ -2353,6 +2377,9 @@ def snap_road_condition():
     cond_type = (request.args.get("type") or "").strip()
     if cond_type and cond_type not in CONDITION_EFFECTS:
         return _err("invalid_type", f"未知路况类型: {cond_type}", 400)
+    direction = request.args.get("direction", "both")
+    if direction not in CONDITION_DIRECTIONS:
+        return _err("invalid_direction", "请选择有效的道路影响方向。", 400)
     action = (request.args.get("action") or "").strip() or None
     affected_modes = [item for item in request.args.get("modes", "").split(",") if item]
     try:
@@ -2383,6 +2410,13 @@ def snap_road_condition():
             f"点击位置离最近道路超过 {int(SNAP_MAX_DIST_M)} 米，请放大地图点在道路上",
             400,
         )
+    if direction != "both":
+        try:
+            if not _directional_corridor_edges(G, snap, direction):
+                return _err("direction_unavailable", "所选方向没有可确认的路网路段，请重新核对。", 422)
+        except RoadConditionBindingError:
+            return _err("direction_unverifiable", "无法可靠确认所选方向，请重新选路段。", 422)
+    snap["binding_token"] = _road_binding_token(G, snap, direction)
     response = {"snap": snap, "max_dist_m": SNAP_MAX_DIST_M}
     if cond_type:
         requested_modes = request.args.getlist("blocked_modes")
@@ -2390,7 +2424,7 @@ def snap_road_condition():
         try:
             response["impact_preview"] = _build_road_condition_impact_preview(
                 G, snap, cond_type, action=action, affected_modes=affected_modes,
-                cost_multiplier=cost_multiplier, blocked_modes=blocked_modes,
+                cost_multiplier=cost_multiplier, blocked_modes=blocked_modes, direction=direction,
             )
         except RoadConditionsUnavailableError:
             logger.exception("路况预览无法读取有效事件快照")
@@ -2402,7 +2436,7 @@ def snap_road_condition():
 
 def _build_road_condition_impact_preview(
     G, snap: dict, cond_type: str, *, action=None, affected_modes=None,
-    cost_multiplier=1.5, blocked_modes=None,
+    cost_multiplier=1.5, blocked_modes=None, direction="both",
 ) -> dict:
     """Preview effects and a local before/after route sample; never publishes an event."""
     active_conditions = list_conditions(strict=True)
@@ -2452,6 +2486,8 @@ def _build_road_condition_impact_preview(
         "geometry_gcj": snap.get("geometry_gcj") or [],
     }
     condition = {"id": "preview-only", "type": cond_type, "edge": edge_record}
+    if direction != "both":
+        condition["direction"] = direction
     if action:
         condition.update({
             "action": action,
@@ -2460,6 +2496,15 @@ def _build_road_condition_impact_preview(
         })
     else:
         condition["blocked_modes"] = list(selected_modes)
+    sample_start, sample_end = edge_record["u"], edge_record["v"]
+    if direction != "both":
+        main_edge = (edge_record["u"], edge_record["v"], edge_record["key"])
+        if main_edge not in _directional_corridor_edges(G, edge_record, "forward"):
+            if main_edge not in _directional_corridor_edges(G, edge_record, "reverse"):
+                raise ValueError("无法确认预览路段与 A、B 方向的对应关系")
+            sample_start, sample_end = sample_end, sample_start
+        if direction == "reverse":
+            sample_start, sample_end = sample_end, sample_start
     sample_routes = {}
     for mode in TRAVEL_MODES:
         common = {
@@ -2469,9 +2514,9 @@ def _build_road_condition_impact_preview(
             "road_conditions": active_conditions,
         }
         try:
-            before = compute_route(G, edge_record["u"], edge_record["v"], **common)
+            before = compute_route(G, sample_start, sample_end, **common)
             after = compute_route(
-                G, edge_record["u"], edge_record["v"],
+                G, sample_start, sample_end,
                 **{**common, "road_conditions": [*active_conditions, condition]},
             )
             before_m = float(before["recommended_length_m"])
@@ -2494,6 +2539,7 @@ def _build_road_condition_impact_preview(
 
     return {
         "type": cond_type,
+        "direction": direction,
         "road_name": edge_record["road_name"],
         "affected_road_segments": len(edge_record["edges"]),
         "affected_length_m": round(float(edge_record["chain_length_m"] or 0)),
@@ -2547,6 +2593,10 @@ def create_road_condition():
     affected_modes = body.get("affected_modes")
     cost_multiplier = body.get("cost_multiplier")
     blocked_modes = body.get("blocked_modes")
+    direction = body.get("direction", "both")
+
+    if not isinstance(direction, str) or direction not in CONDITION_DIRECTIONS:
+        return _err("invalid_direction", "请选择有效的道路影响方向。", 400)
 
     if not cond_type or not name or lng is None or lat is None:
         return _err("missing_fields", "type, name, lng, lat 必填", 400)
@@ -2573,6 +2623,9 @@ def create_road_condition():
         except Exception:
             logger.exception("影像来源验证暂时不可用")
             return _err("vision_storage_unavailable", "影像任务暂时无法核对，请稍后重试。", 503)
+        source_result = source_job.get("result") if source_job else None
+        if isinstance(source_result, dict) and "research_replay" in source_result:
+            return _err("simulation_not_allowed", "历史回放只能在隔离实验中使用，不能发布为当前路况。", 400)
         candidates = (source_job.get("result") or {}).get("candidates") if source_job else None
         if not source_job or not isinstance(candidates, list):
             return _err("vision_source_not_confirmed", "该影像任务没有可用的待复核候选。", 409)
@@ -2731,6 +2784,20 @@ def create_road_condition():
                 400,
             )
 
+        if direction != "both":
+            supplied_token = body.get("binding_token")
+            expected_token = _road_binding_token(G, snap, direction)
+            if (not isinstance(supplied_token, str) or not re.fullmatch(r"[0-9a-f]{64}", supplied_token)
+                    or not hmac.compare_digest(supplied_token, expected_token)):
+                return _err("road_binding_changed", "道路绑定已变化，请重新选路段并核对方向。", 409)
+            try:
+                if not _directional_corridor_edges(G, snap, direction):
+                    return _err("direction_unavailable", "所选方向没有可确认的路网路段，请重新核对。", 422)
+            except RoadConditionBindingError:
+                return _err("direction_unverifiable", "无法可靠确认所选方向，请重新选路段。", 422)
+            if not hmac.compare_digest(supplied_token, _road_binding_token(G, snap, direction)):
+                return _err("road_binding_changed", "道路数据在核对期间发生变化，请重新选路段。", 409)
+
         if source is not None:
             source["associated_edge"] = {
                 "u": int(snap["u"]), "v": int(snap["v"]),
@@ -2752,6 +2819,7 @@ def create_road_condition():
             affected_modes=affected_modes,
             cost_multiplier=cost_multiplier,
             blocked_modes=blocked_modes,
+            direction=direction,
         )
         condition["type_label"] = CONDITION_LABELS.get(cond_type, cond_type)
         return _ok({"condition": condition, "snap": snap}, status=201)

@@ -203,3 +203,10 @@ def test_replan_preserves_multiple_via_points():
     tool_name, args = routes._replan_tool_request(_route_state(via))
     assert tool_name == "plan_via_route"
     assert args["via_points"] == via["points"]
+
+
+def test_replan_preserves_stable_id_for_single_via_point():
+    via = {"name": "武汉大学老斋舍", "type": "poi", "poi_id": "poi_161"}
+    tool_name, args = routes._replan_tool_request(_route_state(via))
+    assert tool_name == "plan_via_route"
+    assert args["via_points"] == [via]

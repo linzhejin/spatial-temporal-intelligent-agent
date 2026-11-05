@@ -44,6 +44,7 @@
         recommendedLine: null,
         shortestLine: null,
         poiMarkers: [],
+        activeCandidateMarkerClear: null,
         roadConditionMarkers: [],  // 路况事件标记
         loading: false,
         sessionId: null,
@@ -56,6 +57,7 @@
         pendingServerQuestion: null,
         pendingServerTaskTurnId: 0,
         conversationHistory: [],
+        diningCandidatePages: new Map(), // 当前对话内相同餐饮搜索的浏览位置，不持久化
         pendingIntent: null,  // 尚未补全的路线意图；成功路线统一由 routeStore 持有
         activeMode: null,
         loadingTimer: null,  // 轮播加载语定时器
@@ -244,18 +246,46 @@
         if (!selector) return;
         var results = document.getElementById('results-section');
         var hasDisplayedRoute = !!current && !!state.latestRoute && !!results && !results.hidden;
-        selector.hidden = !hasDisplayedRoute;
-        selector.classList.toggle('is-drive', !!current && current.travel_mode === 'drive');
-        var strategyName = current && current.strategy ? current.strategy.name : null;
+        var canReplan = hasDisplayedRoute && !state.pendingServerTaskId;
+        selector.hidden = false;
+        var input = document.getElementById('nl-input');
+        var draft = input && String(input.value || '').match(/(?:^|[，,；;])\s*全程(风景优先|平坦优先|最短路径)(?=$|[，,；;])/);
+        var draftStrategy = draft && { '风景优先': 'scenery', '平坦优先': 'flat', '最短路径': 'shortest' }[draft[1]];
+        var strategyName = canReplan && current.strategy ? current.strategy.name : draftStrategy;
+        var hint = document.getElementById('route-strategy-hint');
+        if (hint) hint.textContent = canReplan ? '点击后更新当前路线' :
+            draftStrategy ? '已加入输入框，发送后生效' : '可先选择，也可在路线生成后切换';
         document.querySelectorAll('.route-strategy-btn').forEach(function (btn) {
             var active = btn.getAttribute('data-route-strategy') === strategyName;
             btn.classList.toggle('active', active);
             btn.setAttribute('aria-pressed', active ? 'true' : 'false');
+            var disabled = btn.getAttribute('data-route-strategy') === 'flat' && state.travelMode === 'drive';
+            btn.disabled = disabled;
+            btn.title = disabled ? '驾车暂不支持平坦优先' : '';
         });
         state.activeMode = strategyToShortcutMode(strategyName);
         document.querySelectorAll('.quick-chip').forEach(function (chip) {
             chip.classList.toggle('active', chip.getAttribute('data-mode') === state.activeMode);
         });
+    }
+
+    function stageRouteStrategy(strategyName) {
+        var phrase = { shortest: '全程最短路径', scenery: '全程风景优先', flat: '全程平坦优先' }[strategyName];
+        var input = document.getElementById('nl-input');
+        if (!phrase || !input) return;
+        var previous = String(input.value || '').replace(
+            /(^|[，,；;])\s*全程(?:风景优先|平坦优先|最短路径)\s*(?=$|[，,；;])/g, '$1'
+        ).replace(/^[，,；;\s]+|[，,；;\s]+$/g, '');
+        var next = previous ? previous + '，' + phrase : phrase + '，';
+        if (next.length > 200) {
+            showError('输入内容太长', '请精简需求后再添加路线偏好。');
+            return;
+        }
+        input.value = next;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.focus();
+        input.setSelectionRange(input.value.length, input.value.length);
+        syncRouteStrategyUI();
     }
 
     function adoptRouteState(data) {
@@ -282,6 +312,7 @@
         state.travelMode = mode;
         persistTravelMode();
         syncTravelModeUI();
+        syncRouteStrategyUI();
         if (state.map) loadAndRenderRoadConditions(state.roadConditionAdminView);
     }
 
@@ -670,17 +701,15 @@
         }
     }
 
-    function addConversationTurn(query, result, turnId, acceptRouteState) {
+    function addConversationTurn(query, result, turnId, acceptRouteState, displayedText) {
         // 对话历史：真实的用户/助手消息流（含回复内容与涉及地点，供指代消解）
         turnId = Number.isFinite(turnId) ? turnId : ++state.nextConversationTurnId;
         state.nextConversationTurnId = Math.max(state.nextConversationTurnId, turnId);
         var pair = [{ role: 'user', content: query, _turnId: turnId }];
-        var replyText = result.explanation || result.reply || result.message || '';
-        // 候选列表注入：让下一轮 Agent 知道用户刚看了哪些候选
-        if (result.response_kind === 'candidates' && result.candidates && result.candidates.length) {
-            var candNames = result.candidates.slice(0, 6).map(function (c) { return c.name; }).join('、');
-            replyText = (replyText || '') + '（候选：' + candNames + '）';
-        }
+        var replyText = typeof displayedText === 'string'
+            ? displayedText : (result.explanation || result.reply || result.message || '');
+        // Candidate cards are paged separately; the raw shortlist is not a
+        // record of which candidates were actually visible to the user.
         pair.push({
             role: 'assistant',
             content: replyText,
@@ -910,6 +939,9 @@
     function setPendingServerClarification(taskId, revision, question, turnId) {
         var turn = Number.isInteger(turnId) ? turnId : 0;
         if (turn < state.pendingServerTaskTurnId) return false;
+        if (taskId !== state.pendingServerTaskId || revision !== state.pendingServerTaskRevision) {
+            clearActiveCandidateMarkers();
+        }
         state.pendingServerTaskId = taskId || null;
         state.pendingServerTaskRevision = Number.isInteger(revision) ? revision : null;
         state.pendingServerQuestion = question || null;
@@ -920,6 +952,7 @@
     function clearPendingServerClarification(taskId, turnId) {
         var turn = Number.isInteger(turnId) ? turnId : 0;
         if (taskId !== state.pendingServerTaskId || turn < state.pendingServerTaskTurnId) return false;
+        clearActiveCandidateMarkers();
         state.pendingServerTaskId = null;
         state.pendingServerTaskRevision = null;
         state.pendingServerQuestion = null;
@@ -1462,7 +1495,7 @@
     function clampMobileMapHeight(viewportHeight, requestedHeight) {
         var height = Math.max(1, Number(viewportHeight) || 1);
         var requested = Number(requestedHeight);
-        if (!isFinite(requested)) requested = height * 0.55;
+        if (!isFinite(requested)) requested = height * 0.35;
         var minimum = Math.min(180, Math.max(100, height * 0.28));
         var maximum = Math.max(minimum, Math.min(height * 0.76, height - 240));
         return Math.round(Math.max(minimum, Math.min(maximum, requested)));
@@ -2062,6 +2095,16 @@
             var line = L.polyline(lineLatLngs, lineOpt);
             line.addTo(state.map);
             layers.push(line);
+            if (cond.direction === 'forward' || cond.direction === 'reverse') {
+                [0, lineLatLngs.length - 1].forEach(function (index, number) {
+                    var endpoint = number ? 'B' : 'A';
+                    var point = divMarker(lineLatLngs[index],
+                        '<div class="whu-road-direction-endpoint">' + endpoint + '</div>',
+                        [24, 24], [12, 12], '道路端点 ' + endpoint);
+                    point.addTo(state.map);
+                    layers.push(point);
+                });
+            }
         } else if (cond.radius_m) {
             // 兼容旧版半径圆数据
             var circle = L.circle(latlng, {
@@ -2100,6 +2143,10 @@
             };
             var rows = [];
             if (edge.road_name) rows.push('<div style="font-size:12px;">📍 路段：<b>' + escapeHTML(edge.road_name) + '</b></div>');
+            if (cond.direction === 'forward' || cond.direction === 'reverse') {
+                rows.push('<div style="font-size:12px;">影响方向：'
+                    + (cond.direction === 'forward' ? 'A → B' : 'B → A') + '（见地图端点）</div>');
+            }
             if (edge.chain_length_m) {
                 rows.push('<div style="color:#888;font-size:12px;">影响长度：约 '
                     + Math.round(edge.chain_length_m) + ' 米（两端路口之间整段）</div>');
@@ -2827,6 +2874,7 @@
         // 1. 清空路线、路线途经标记和手动选点
         stopPointPick();
         clearMapPoints();
+        clearActiveCandidateMarkers();
         clearMap();
         // 2. 复位地图视角（GCJ 中心点转 WGS-84）
         if (state.map) {
@@ -2855,6 +2903,7 @@
         if (suggestions) suggestions.hidden = true;
         // 6. 清空多轮对话上下文
         state.conversationHistory = [];
+        state.diningCandidatePages.clear();
         state.pendingIntent = null;
         state.pendingServerTaskId = null;
         state.pendingServerTaskRevision = null;
@@ -3231,7 +3280,7 @@
             });
         }
 
-        var explanation = data.explanation || '已为您规划好路线';
+        var explanation = appendRouteStepNotice(data.explanation || '已为您规划好路线', data);
         document.getElementById('explanation-text').textContent = explanation;
 
         // 路况提示：若有生效的路况事件，在解释下方显示提醒
@@ -3522,8 +3571,27 @@
         var requestId = makeRequestId();
         var payload = Object.assign({ query: query, request_id: requestId }, requestBody || {});
         var accepted;
+        async function postWithRecovery() {
+            var failures = 0;
+            while (epoch === state.conversationEpoch) {
+                try {
+                    return await apiRequest('/api/conversations/' + encodeURIComponent(conversationId) + '/messages', payload);
+                } catch (err) {
+                    if (epoch !== state.conversationEpoch) return null;
+                    var transient = err && (err.code === 'request_timeout' || err.code === 'internal_error'
+                        || /网络请求失败|服务器响应格式错误/.test(err.message || ''));
+                    if (!transient) throw err;
+                    failures++;
+                    updateChatBubble(replyBubble, '连接暂时中断，正在恢复任务…');
+                    // Keep the same payload and request_id: the server may have
+                    // accepted the previous POST even if its response was lost.
+                    await waitForNextPoll(Math.min(5000, 900 * failures));
+                }
+            }
+            return null;
+        }
         try {
-            accepted = await apiRequest('/api/conversations/' + encodeURIComponent(conversationId) + '/messages', payload);
+            accepted = await postWithRecovery();
         } catch (err) {
             if (!err || err.code !== 'conversation_not_found') throw err;
             // Do not let one stale response invalidate a newer conversation that
@@ -3536,8 +3604,9 @@
             conversationId = await ensureServerConversation(epoch);
             if (epoch !== state.conversationEpoch) return null;
             payload.request_id = makeRequestId();
-            accepted = await apiRequest('/api/conversations/' + encodeURIComponent(conversationId) + '/messages', payload);
+            accepted = await postWithRecovery();
         }
+        if (!accepted && epoch !== state.conversationEpoch) return null;
         var runId = accepted && accepted.run_id;
         if (!runId) throw new Error('任务没有进入处理队列，请重试。');
         state.activeRuns[runId] = { conversationId: conversationId, epoch: epoch };
@@ -3644,6 +3713,18 @@
         if (!state.pendingServerTaskId || !Number.isInteger(state.pendingServerTaskRevision)) return false;
         var text = String(query || '').trim();
         if (!text) return false;
+        // Explicit food edits belong to the active food shortlist even when
+        // phrased as "想要". Scope this to the current task and revision so an
+        // unrelated new search does not inherit an old selection.
+        var foodGroups = document.querySelectorAll('.candidate-cards[data-dining-selection="true"]');
+        var activeFoodGroup = Array.prototype.some.call(foodGroups, function (group) {
+            return group.getAttribute('data-task-id') === state.pendingServerTaskId
+                && Number(group.getAttribute('data-task-revision')) === state.pendingServerTaskRevision;
+        });
+        var compactText = text.replace(/\s+/g, '');
+        if (activeFoodGroup && /^(?:我)?(?:不想|不愿意|不吃|不去|不选|不要|别去|别吃)(?:去|吃|选|找|在)?(?:食堂|餐厅|快餐)/.test(compactText)) {
+            return true;
+        }
         // An origin plus "take me there" answers the pending origin question;
         // an added weather request must not detach it from the saved destination.
         if (/(起点|出发|从哪里|在哪儿|在哪里)/.test(state.pendingServerQuestion || '')
@@ -3921,7 +4002,8 @@
             if (result.response_kind === 'candidates') {
                 hideWelcomeElements();
                 var cands = result.candidates || [];
-                updateChatBubble(thinkingBubble, result.message || (cands.length ? '帮你找到这些地点，点一个我帮你规划路线～' : '校内没找到匹配的地点，换个说法试试？'));
+                var candidateMessage = result.message || (cands.length ? '帮你找到这些地点，点一个我帮你规划路线～' : '校内没找到匹配的地点，换个说法试试？');
+                updateChatBubble(thinkingBubble, candidateMessage);
                 // 候选本身也是一个待完成任务：保留任务版本，点选时把
                 // 稳定 poi_id 续回后端，避免按名称重新匹配到别的地点。
                 var acceptedCandidatePending = setPendingServerClarification(
@@ -3930,14 +4012,22 @@
                 );
                 if (acceptedCandidatePending) {
                     saveContext();
-                    if (cands.length) renderCandidateCards(cands, result._task_id, result._task_revision);
+                    if (cands.length) {
+                        var presentation = renderCandidateCards(cands, result._task_id, result._task_revision, {
+                            query: query, newSearch: !requestBody.continuation_task_id,
+                        });
+                        if (presentation && presentation.initialPage > 0) {
+                            candidateMessage += ' 本次先展示另一批，可点击“上一批”查看前面的地点。';
+                            updateChatBubble(thinkingBubble, candidateMessage);
+                        }
+                    }
                 } else {
                     var staleCandidateMessage = '这组地点选择已过期，请继续最新任务。';
                     updateChatBubble(thinkingBubble, staleCandidateMessage);
                     addConversationTurn(query, { task_type: 'chat', reply: staleCandidateMessage }, turnId, false);
                     return;
                 }
-                addConversationTurn(query, result, turnId);
+                addConversationTurn(query, result, turnId, undefined, candidateMessage);
                 return;
             }
 
@@ -4222,11 +4312,31 @@
         return '提示：本次核对的是路网和路线约束，未实地确认道路当前可通行。';
     }
 
+    function appendRouteStepNotice(text, data) {
+        var summary = String(text || '').trim();
+        var route = data && data.route_state || {};
+        var constraints = route.hard_constraints || {};
+        var statuses = String(data && data.filter_status || '').split(';').filter(Boolean);
+        var tokens = statuses.map(function (status) { return status.split('+'); });
+        var unverified = tokens.some(function (items) { return items.indexOf('steps_unverified') !== -1; });
+        if (!unverified && constraints.avoid_steps !== true) return summary;
+        if (/(?:台阶|楼梯).{0,20}(?:尚未|未完全|无法|不能).{0,8}(?:核实|确认|验证)/.test(summary)) {
+            return summary;
+        }
+        var allFiltered = tokens.length > 0 && tokens.every(function (items) {
+            return items.indexOf('steps_avoid') !== -1;
+        });
+        var notice = allFiltered
+            ? '提示：已排除路网中标注的台阶，其余路段是否有台阶尚未核实。'
+            : '提示：路线中是否有台阶尚未核实。';
+        return summary ? summary + ' ' + notice : notice;
+    }
+
     function appendRouteFieldTruthNotice(text, data) {
         var summary = String(text || '').trim();
         var notice = routeFieldTruthNotice(data);
-        if (!notice || summary.indexOf(notice) !== -1) return summary;
-        return summary ? summary + ' ' + notice : notice;
+        if (notice && summary.indexOf(notice) === -1) summary = summary ? summary + ' ' + notice : notice;
+        return appendRouteStepNotice(summary, data);
     }
 
     function rankedRouteCandidatesSummary(data) {
@@ -4264,7 +4374,9 @@
                 return ({ walk: '步行', bike: '骑行', drive: '驾车' })[mode] || '';
             }).filter(Boolean);
             var modeInfo = modeLabels.length ? modeLabels.join('、') + '段' : '';
-            return location + '（' + modeInfo + (event.action === 'slowdown' ? '缓行' : '提示') + detail + '）';
+            var direction = event.direction === 'forward' ? 'A → B 方向' :
+                event.direction === 'reverse' ? 'B → A 方向' : '';
+            return location + '（' + modeInfo + direction + (event.action === 'slowdown' ? '缓行' : '提示') + detail + '）';
         });
         return '沿途路况：' + labels.join('；')
             + (applicable.length > labels.length ? '等 ' + applicable.length + ' 条' : '') + '。';
@@ -4304,9 +4416,15 @@
         var connectorDisclosure = hasConnectorEstimate
             ? '端点接驳另按直线估算约 ' + Math.round(connectorMeters) + ' 米，尚未核实实际通行。'
             : '';
+        var via = (current && current.via) || data.via;
+        var viaPoints = Array.isArray(via) ? via : (via && Array.isArray(via.points) ? via.points : (via ? [via] : []));
+        var namedVia = routeKind === 'via' ? viaPoints.map(function (point) {
+            return typeof point === 'string' ? point.trim() : String((point && point.name) || '').trim();
+        }).filter(Boolean) : [];
+        var overviewStops = [start].concat(namedVia, [end]);
         var overview = routeKind === 'tour' && tour.loop !== false
             ? '游览环线：从' + start + '出发，游览后返回' + start + '。' + distancePhrase
-            : '路线总览：' + start + ' → ' + end + '。' + distancePhrase;
+            : '路线总览：' + overviewStops.join(' → ') + '。' + distancePhrase;
         if (duration !== '—') overview += '，预计用时约 ' + duration;
         overview += '；采用' + strategyLabel + '策略。';
         if (data.hard_budget_fallback) overview += ' 原偏好路线超过上限，已采用符合上限的最短路线。';
@@ -4351,103 +4469,313 @@
             : '去' + name;
     }
 
+    function clearActiveCandidateMarkers() {
+        var clear = state.activeCandidateMarkerClear;
+        state.activeCandidateMarkerClear = null;
+        if (typeof clear === 'function') clear();
+    }
+
+    function repeatDiningSearchKey(candidates, options, pageSize) {
+        var query = options && options.newSearch && String(options.query || '').trim();
+        if (!query || query.length > 200 || candidates.length <= pageSize
+                || !/(餐|食|饭|吃|干饭|宵夜)/.test(query)
+                || /(最近|最靠近|距离最短|就近|(?:按|依|按照).{0,6}距离|从近到远|距离优先|越近越好)/.test(query)) return null;
+        var diningTypes = ['canteen', 'restaurant', 'fastfood'];
+        if (!candidates.every(function (place) {
+            return place && diningTypes.indexOf(place.subcategory) >= 0
+                && typeof (place.poi_id || place.place_id) === 'string'
+                && (place.poi_id || place.place_id).length > 0;
+        })) return null;
+        var ids = candidates.map(function (place) { return place.poi_id || place.place_id; });
+        if (new Set(ids).size !== ids.length) return null;
+        var ordered = candidates.map(function (place, index) {
+            return [ids[index], Number.isFinite(place.distance_m) ? place.distance_m : null];
+        });
+        return JSON.stringify([query.replace(/\s+/g, '').toLowerCase(), ordered]);
+    }
+
     // 候选 POI 卡片（response_kind=candidates）：点击时沿用文字起点或当前选定位置
-    function renderCandidateCards(candidates, taskId, taskRevision) {
+    function renderCandidateCards(candidates, taskId, taskRevision, options) {
         var chatContent = document.getElementById('chat-content');
         if (!chatContent || !candidates.length) return;
+        clearActiveCandidateMarkers();
         var followLatest = chatIsNearLatest(chatContent);
 
         var row = document.createElement('div');
         row.className = 'chat-bubble-row';
         var wrap = document.createElement('div');
         wrap.className = 'candidate-cards';
+        if (taskId) wrap.setAttribute('data-candidate-task-id', taskId);
+        if (Number.isInteger(taskRevision)) {
+            wrap.setAttribute('data-candidate-task-revision', String(taskRevision));
+        }
+        var diningTypes = ['canteen', 'restaurant', 'fastfood'];
+        if (candidates.every(function (place) { return diningTypes.indexOf(place.subcategory) >= 0; })) {
+            wrap.setAttribute('data-dining-selection', 'true');
+            wrap.setAttribute('data-task-id', taskId || '');
+            wrap.setAttribute('data-task-revision', Number.isInteger(taskRevision) ? String(taskRevision) : '');
+        }
         row.appendChild(wrap);
         chatContent.appendChild(row);
 
-        candidates.slice(0, 6).forEach(function (p) {
-            var btn = document.createElement('button');
-            btn.type = 'button';
-            btn.className = 'candidate-card';
+        var pageSize = 4;
+        var browseKey = repeatDiningSearchKey(candidates, options, pageSize);
+        var previousPage = browseKey ? state.diningCandidatePages.get(browseKey) : undefined;
+        var pageIndex = Number.isInteger(previousPage)
+            ? (previousPage + 1) % Math.ceil(candidates.length / pageSize) : 0;
+        var groupMarkers = [];
+        var mapZoomHandler = null;
+        var locked = false;
 
-            var nameEl = document.createElement('span');
-            nameEl.className = 'candidate-name';
-            nameEl.textContent = p.name || '';
-            btn.appendChild(nameEl);
-
-            var placeName = String(p.name || '');
-            var activityLabels = Array.isArray(p.activity_labels) ? p.activity_labels : [];
-            var cat = activityLabels.length
-                ? activityLabels.filter(function (label) {
-                    return label && !placeName.includes(String(label));
-                }).join('、')
-                : (p.category_label || p.subcategory_label || p.subcategory || '');
-            if (cat && placeName.includes(String(cat))) cat = '';
-            if (cat) {
-                var catEl = document.createElement('span');
-                catEl.className = 'candidate-cat';
-                catEl.textContent = cat;
-                btn.appendChild(catEl);
-            }
-
-            if (p.campus && !placeName.includes(String(p.campus))) {
-                var campusEl = document.createElement('span');
-                campusEl.className = 'candidate-campus';
-                campusEl.textContent = p.campus;
-                btn.appendChild(campusEl);
-            }
-
-            if (p.distance_m != null) {
-                var distEl = document.createElement('span');
-                distEl.className = 'candidate-dist';
-                distEl.textContent = p.distance_m >= 1000
-                    ? '约 ' + (p.distance_m / 1000).toFixed(1) + ' km'
-                    : '约 ' + Math.round(p.distance_m) + ' m';
-                btn.appendChild(distEl);
-            }
-
-            btn.addEventListener('click', function () {
-                // 防连点：点击后整组卡片禁用
-                wrap.querySelectorAll('.candidate-card').forEach(function (b) { b.disabled = true; });
-                trackEvent('candidate_click', { name: p.name, subcategory: p.subcategory || null });
-                var continuation = taskId && Number.isInteger(taskRevision)
-                    ? { continuation_task_id: taskId, base_revision: taskRevision,
-                        selected_poi_id: p.poi_id || p.place_id || null }
-                    : { selected_poi_id: p.poi_id || p.place_id || null };
-                handleNlSubmit(candidateRouteQuery(p), false, null, continuation);
-            });
-            wrap.appendChild(btn);
-        });
-
-        // 地图上同步标注候选点，方便用户看着地图挑
-        if (state.map) {
-            var bounds = [];
-            candidates.slice(0, 6).forEach(function (p, i) {
-                var lng = p.lon != null ? p.lon : p.lng;
-                var lat = p.lat;
-                if (lng == null || lat == null) return;
-                var pillHtml = '<div class="whu-map-pill whu-map-pill-poi">' + (i + 1) + '. ' + (p.name || '') + '</div>';
-                var marker = divMarker(gcjToLatLng(lng, lat), pillHtml, [0, 0], [0, 0], p.name || '')
-                    .addTo(state.map);
-                // 点地图标记 = 选这个候选（跟点卡片一样）
-                marker.on('click', function () {
-                    trackEvent('candidate_click_map', { name: p.name, subcategory: p.subcategory || null });
-                    var continuation = taskId && Number.isInteger(taskRevision)
-                        ? { continuation_task_id: taskId, base_revision: taskRevision,
-                            selected_poi_id: p.poi_id || p.place_id || null }
-                        : { selected_poi_id: p.poi_id || p.place_id || null };
-                    handleNlSubmit(candidateRouteQuery(p), false, null, continuation);
-                });
-                state.poiMarkers.push(marker);
-                bounds.push(marker.getLatLng());
-            });
-            if (bounds.length > 1) {
-                state.map.fitBounds(bounds, { padding: [40, 40] });
-            } else if (bounds.length === 1) {
-                state.map.setView(bounds[0], 17);
-            }
+        function isCurrentGroup() {
+            return !taskId || !Number.isInteger(taskRevision) ||
+                (state.pendingServerTaskId === taskId && state.pendingServerTaskRevision === taskRevision);
         }
 
-        scrollChatToLatest(chatContent, followLatest);
+        function removeGroupMarkers() {
+            if (state.map) groupMarkers.forEach(function (marker) { state.map.removeLayer(marker); });
+            state.poiMarkers = state.poiMarkers.filter(function (marker) { return groupMarkers.indexOf(marker) < 0; });
+            groupMarkers = [];
+        }
+        function clearGroupMarkers() {
+            if (state.map && mapZoomHandler) state.map.off('zoomend', mapZoomHandler);
+            mapZoomHandler = null;
+            removeGroupMarkers();
+        }
+        state.activeCandidateMarkerClear = clearGroupMarkers;
+
+        function disableStaleGroup() {
+            wrap.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+            var status = wrap.querySelector('.candidate-page-status');
+            if (status) status.textContent = '这组候选已过期，请继续最新任务。';
+            clearGroupMarkers();
+        }
+
+        function choose(p, fromMap) {
+            if (locked) return;
+            if (!isCurrentGroup()) { disableStaleGroup(); return; }
+            locked = true;
+            wrap.querySelectorAll('button').forEach(function (button) { button.disabled = true; });
+            clearGroupMarkers();
+            trackEvent(fromMap ? 'candidate_click_map' : 'candidate_click',
+                { name: p.name, subcategory: p.subcategory || null });
+            var continuation = taskId && Number.isInteger(taskRevision)
+                ? { continuation_task_id: taskId, base_revision: taskRevision,
+                    selected_poi_id: p.poi_id || p.place_id || null }
+                : { selected_poi_id: p.poi_id || p.place_id || null };
+            handleNlSubmit(candidateRouteQuery(p), false, null, continuation);
+        }
+
+        function renderPage() {
+            if (!isCurrentGroup()) { disableStaleGroup(); return; }
+            clearGroupMarkers();
+            wrap.textContent = '';
+            wrap.setAttribute('data-candidate-page', String(pageIndex));
+            if (browseKey) {
+                state.diningCandidatePages.delete(browseKey);
+                state.diningCandidatePages.set(browseKey, pageIndex);
+                if (state.diningCandidatePages.size > 32) {
+                    state.diningCandidatePages.delete(state.diningCandidatePages.keys().next().value);
+                }
+            }
+            var start = pageIndex * pageSize;
+            var visible = candidates.slice(start, start + pageSize);
+            visible.forEach(function (p) {
+                var entry = document.createElement('div');
+                entry.className = 'candidate-entry';
+                var btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'candidate-card';
+                var placeId = p.poi_id || p.place_id;
+                if (typeof placeId === 'string' && placeId) btn.setAttribute('data-poi-id', placeId);
+                btn.setAttribute('aria-label', '选择地点 ' + String(p.name || ''));
+                var indexEl = document.createElement('span');
+                indexEl.className = 'candidate-index';
+                indexEl.textContent = String(start + visible.indexOf(p) + 1);
+                btn.appendChild(indexEl);
+                var nameEl = document.createElement('span');
+                nameEl.className = 'candidate-name';
+                nameEl.textContent = p.name || '';
+                btn.appendChild(nameEl);
+                var metaEl = document.createElement('span');
+                metaEl.className = 'candidate-meta';
+
+                var placeName = String(p.name || '');
+                var activityLabels = Array.isArray(p.activity_labels) ? p.activity_labels : [];
+                var cat = activityLabels.length
+                    ? activityLabels.filter(function (label) {
+                        return label && !placeName.includes(String(label));
+                    }).join('、')
+                    : (p.category_label || p.subcategory_label || p.subcategory || '');
+                if (cat && placeName.includes(String(cat))) cat = '';
+                if (cat) {
+                    var catEl = document.createElement('span');
+                    catEl.className = 'candidate-cat';
+                    catEl.textContent = cat;
+                    metaEl.appendChild(catEl);
+                }
+                if (p.campus && !placeName.includes(String(p.campus))) {
+                    var campusEl = document.createElement('span');
+                    campusEl.className = 'candidate-campus';
+                    campusEl.textContent = p.campus;
+                    metaEl.appendChild(campusEl);
+                }
+                if (p.distance_m != null) {
+                    var distEl = document.createElement('span');
+                    distEl.className = 'candidate-dist';
+                    var distanceText = p.distance_m >= 1000
+                        ? '约 ' + (p.distance_m / 1000).toFixed(1) + ' km'
+                        : '约 ' + Math.round(p.distance_m) + ' m';
+                    var reference = p.distance_reference_name || '';
+                    distEl.textContent = reference ? '路网距 ' + reference + ' ' + distanceText : distanceText;
+                    metaEl.appendChild(distEl);
+                }
+                if (metaEl.childNodes.length) btn.appendChild(metaEl);
+                btn.addEventListener('click', function () { choose(p, false); });
+                entry.appendChild(btn);
+
+                var sourceName = p.source === 'amap_online' ? '高德地图在线查询'
+                    : (p.source || '校园地点目录');
+                var sourceRefs = Array.isArray(p.source_refs) ? p.source_refs : [];
+                var hasDetails = Boolean(p.description || p.observed_at || sourceRefs.length || p.source);
+                if (hasDetails) {
+                    var details = document.createElement('details');
+                    details.className = 'candidate-details';
+                    var summary = document.createElement('summary');
+                    summary.textContent = '来源与位置';
+                    details.appendChild(summary);
+                    var detailText = document.createElement('div');
+                    detailText.className = 'candidate-details-body';
+                    var sourceEl = document.createElement('p');
+                    sourceEl.textContent = '来源：' + sourceName;
+                    detailText.appendChild(sourceEl);
+                    if (p.description) {
+                        var addressEl = document.createElement('p');
+                        addressEl.textContent = '地址：' + String(p.description);
+                        detailText.appendChild(addressEl);
+                    }
+                    if (p.observed_at) {
+                        var observedEl = document.createElement('p');
+                        var observedDate = new Date(p.observed_at);
+                        observedEl.textContent = '查询时间：' + (Number.isNaN(observedDate.getTime())
+                            ? '未知' : observedDate.toLocaleString('zh-CN', { hour12: false }));
+                        detailText.appendChild(observedEl);
+                    }
+                    if (sourceRefs.length) {
+                        var refEl = document.createElement('p');
+                        refEl.textContent = '记录来源：' + sourceRefs.map(function (ref) {
+                            return typeof ref === 'string' ? ref : (ref.source || ref.id || '已登记来源');
+                        }).join('、');
+                        detailText.appendChild(refEl);
+                    }
+                    if (p.access_link_verified === false) {
+                        var accessEl = document.createElement('p');
+                        accessEl.textContent = '地点到道路的末端接驳未现场核实。';
+                        detailText.appendChild(accessEl);
+                    }
+                    details.appendChild(detailText);
+                    entry.appendChild(details);
+                }
+                wrap.appendChild(entry);
+            });
+            if (candidates.length > pageSize) {
+                var pager = document.createElement('div');
+                pager.className = 'candidate-pager';
+                var status = document.createElement('span');
+                status.className = 'candidate-page-status';
+                status.setAttribute('aria-live', 'polite');
+                status.textContent = '第 ' + (start + 1) + '–' + (start + visible.length) +
+                    ' 项 · 已获取 ' + candidates.length + ' 项';
+                pager.appendChild(status);
+                var previous = document.createElement('button');
+                previous.type = 'button'; previous.className = 'candidate-page-btn'; previous.textContent = '上一批';
+                previous.disabled = pageIndex === 0;
+                previous.addEventListener('click', function () { pageIndex -= 1; renderPage(); });
+                pager.appendChild(previous);
+                var next = document.createElement('button');
+                next.type = 'button'; next.className = 'candidate-page-btn'; next.textContent = '换一批';
+                next.textContent = start + visible.length >= candidates.length ? '本批已看完' : '换一批';
+                next.disabled = start + visible.length >= candidates.length;
+                next.addEventListener('click', function () { pageIndex += 1; renderPage(); });
+                pager.appendChild(next);
+                wrap.appendChild(pager);
+            }
+
+            if (state.map) {
+                var located = [];
+                visible.forEach(function (p, i) {
+                    var lng = p.lon != null ? p.lon : p.lng;
+                    var lat = p.lat;
+                    if (!Number.isFinite(Number(lng)) || !Number.isFinite(Number(lat)) || lng == null || lat == null) return;
+                    located.push({ place: p, number: start + i + 1, latlng: gcjToLatLng(Number(lng), Number(lat)) });
+                });
+                var bounds = located.map(function (item) { return item.latlng; });
+                if (bounds.length > 1) state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 18, animate: false });
+                else if (bounds.length === 1) state.map.setView(bounds[0], 17, { animate: false });
+
+                function drawCandidateMarkers() {
+                    removeGroupMarkers();
+                    if (!isCurrentGroup() || locked) return;
+                    var clusters = [];
+                    located.forEach(function (item) {
+                        var point = state.map.latLngToContainerPoint(item.latlng);
+                        var matches = clusters.filter(function (candidate) {
+                            return candidate.points.some(function (other) { return point.distanceTo(other) < 44; });
+                        });
+                        var cluster = matches[0];
+                        if (!cluster) {
+                            cluster = { latlng: item.latlng, entries: [], points: [] };
+                            clusters.push(cluster);
+                        }
+                        matches.slice(1).forEach(function (other) {
+                            cluster.entries = cluster.entries.concat(other.entries);
+                            cluster.points = cluster.points.concat(other.points);
+                            clusters.splice(clusters.indexOf(other), 1);
+                        });
+                        cluster.entries.push(item);
+                        cluster.points.push(point);
+                    });
+                    clusters.forEach(function (cluster) {
+                        cluster.entries.sort(function (left, right) { return left.number - right.number; });
+                        var numbers = cluster.entries.map(function (item) { return item.number; });
+                        var label = numbers.length === 1 ? String(numbers[0]) : numbers.join('·');
+                        var title = cluster.entries.map(function (item) { return item.number + '. ' + (item.place.name || ''); }).join('、');
+                        var html = '<div class="candidate-map-pin' + (numbers.length > 1 ? ' is-group' : '') + '">' +
+                            escapeHtml(label) + '</div>';
+                        var marker = divMarker(cluster.latlng, html, [40, 40], [20, 20], title).addTo(state.map);
+                        if (cluster.entries.length === 1) {
+                            marker.on('click', function () { choose(cluster.entries[0].place, true); });
+                        } else {
+                            var popup = document.createElement('div');
+                            popup.className = 'candidate-map-popup';
+                            var heading = document.createElement('div');
+                            heading.className = 'candidate-map-popup-title';
+                            heading.textContent = '附近有 ' + cluster.entries.length + ' 个地点';
+                            popup.appendChild(heading);
+                            cluster.entries.forEach(function (item) {
+                                var choice = document.createElement('button');
+                                choice.type = 'button';
+                                choice.className = 'candidate-map-choice';
+                                choice.textContent = item.number + '. ' + (item.place.name || '未命名地点');
+                                choice.addEventListener('click', function () { choose(item.place, true); });
+                                popup.appendChild(choice);
+                            });
+                            L.DomEvent.disableClickPropagation(popup);
+                            marker.bindPopup(popup, { maxHeight: 125, autoPanPadding: [12, 12], keepInView: true });
+                        }
+                        groupMarkers.push(marker);
+                        state.poiMarkers.push(marker);
+                    });
+                }
+                drawCandidateMarkers();
+                mapZoomHandler = drawCandidateMarkers;
+                state.map.on('zoomend', mapZoomHandler);
+            }
+            scrollChatToLatest(chatContent, followLatest);
+        }
+
+        renderPage();
+        return { initialPage: pageIndex };
     }
 
     // 澄清选项（response_kind=clarify）：点击选项 → 把选项文本作为新 query 提交
@@ -4511,96 +4839,19 @@
 
     async function handleShortcutMode(mode) {
         hideError();
-
-        var modeConfig = {
-            distance_first: {
-                loadingText: '正在规划最短路径…',
-                loadingSubtext: '优先考虑距离',
-                userQuery: '帮我规划最短路径',
-            },
-            scenery_first: {
-                loadingText: '正在规划风景路线…',
-                loadingSubtext: '优先考虑景观',
-                userQuery: '帮我找一条风景好的路线',
-            },
-            slope_avoid: {
-                loadingText: '正在规划平坦路线…',
-                loadingSubtext: '优先考虑坡度',
-                userQuery: '帮我找一条平坦的路线',
-            },
-        };
-
-        var cfg = modeConfig[mode] || {};
-
         var strategyName = {
             distance_first: 'shortest',
             scenery_first: 'scenery',
             slope_avoid: 'flat',
         }[mode];
+        if (!strategyName) return;
+        var labels = { shortest: '规划最短路径', scenery: '规划风景路线', flat: '规划平坦路线' };
         var current = state.routeStore ? state.routeStore.current() : null;
-        if (current && strategyName) {
-            return replanCurrentRoute({ strategy: strategyName }, cfg.loadingText || '更新路线');
+        var results = document.getElementById('results-section');
+        if (current && state.latestRoute && results && !results.hidden && !state.pendingServerTaskId) {
+            return replanCurrentRoute({ strategy: strategyName }, labels[strategyName]);
         }
-
-        state.requestSeq += 1;
-        var mySeq = state.requestSeq;
-
-        // 优先复用上一次成功路线的端点（可能含 WGS-84 坐标，避免「我的位置」这类名无法解析）
-        var startEp = { name: '珞珈门' };
-        var endEp = { name: '樱顶' };
-        if (state.pendingIntent && state.pendingIntent.start && state.pendingIntent.end) {
-            startEp = state.pendingIntent.start;
-            endEp = state.pendingIntent.end;
-        }
-        var startName = startEp.name || '珞珈门';
-        var endName = endEp.name || '樱顶';
-
-        // 快捷模式也走对话流：用户气泡 + 思考气泡
-        hideWelcomeElements();
-        showUserBubble(cfg.userQuery || ('从' + startName + '到' + endName));
-        var thinkingBubble = showChatBubble('', '🌸 正在为你规划路线…');
-
-        var tm = TRAVEL_MODES[state.travelMode] || TRAVEL_MODES.walk;
-        showLoading(tm.loadingText, cfg.loadingSubtext || tm.loadingSub);
-
-        try {
-            var parsePayload = {
-                start: startEp,
-                end: endEp,
-                input_method: 'shortcut',
-                travel_mode: state.travelMode,
-            };
-            if (mode) parsePayload.mode = mode;
-
-            var parseResult = await apiRequest('/api/parse', parsePayload);
-            if (mySeq !== state.requestSeq) return;
-
-            var routePayload = parseResult || {};
-            routePayload.travel_mode = state.travelMode;
-
-            var routeResult = await apiRequest('/api/route', routePayload);
-            if (mySeq !== state.requestSeq) return;
-
-            if (routeResult.recommended && routeResult.recommended.length > 0) {
-                renderRoute(routeResult);
-                showResults(routeResult);
-                trackRouteShown();
-                // 快捷模式后端不返回 explanation，用兜底摘要
-                updateChatBubble(thinkingBubble, buildRouteSummary(routeResult));
-            } else {
-                clearRouteResult();
-                updateChatBubble(thinkingBubble, '唔，这条路我没能规划出来😅 试试换个目的地？');
-            }
-        } catch (err) {
-            if (mySeq !== state.requestSeq) return;
-            clearRouteResult();
-            var errMsg = (err && err.message) || '出了点小问题，再试一次吧～';
-            updateChatBubble(thinkingBubble, errMsg);
-        } finally {
-            if (mySeq === state.requestSeq) {
-                hideLoading();
-            }
-        }
+        stageRouteStrategy(strategyName);
     }
 
     // ========== 快捷键系统 ==========
@@ -4731,8 +4982,8 @@
             }
             var viewport = viewportHeight();
             var requested = state.mobilePaneHeight == null
-                ? viewport * 0.55
-                : viewport * (state.mobilePaneRatio || 0.55);
+                ? viewport * 0.35
+                : viewport * (state.mobilePaneRatio || 0.35);
             setPaneHeight(requested);
         }
 
@@ -4741,7 +4992,7 @@
         handle.addEventListener('pointerdown', function (event) {
             if (!isMobileViewport() || (event.button != null && event.button !== 0)) return;
             activePointer = event.pointerId;
-            pointerOffset = event.clientY - (state.mobilePaneHeight || viewportHeight() * 0.55);
+            pointerOffset = event.clientY - (state.mobilePaneHeight || viewportHeight() * 0.35);
             if (handle.setPointerCapture) {
                 try { handle.setPointerCapture(event.pointerId); } catch (e) { /* browser fallback */ }
             }
@@ -4805,6 +5056,7 @@
                 // auto-resize
                 nlInput.style.height = 'auto';
                 nlInput.style.height = Math.min(nlInput.scrollHeight, 100) + 'px';
+                syncRouteStrategyUI();
             });
 
             nlInput.addEventListener('keydown', function (e) {
@@ -4828,6 +5080,7 @@
                 nlInput.value = '';
                 nlInput.style.height = 'auto';
                 if (charCount) charCount.textContent = '0';
+                syncRouteStrategyUI();
             });
         }
 
@@ -5579,41 +5832,10 @@
     'use strict';
 
     var CONTAINER_ID = 'candidates-panel';
-    var BRAND_PINK = '#E8929C';
-    var BRAND_GOLD = '#D4915C';
 
     // =============== 内部状态 ===============
     var currentStartName = '';
     var $container = null;
-
-    // =============== 工具函数 ===============
-    function escapeHTML(str) {
-        var div = document.createElement('div');
-        div.appendChild(document.createTextNode(str));
-        return div.innerHTML;
-    }
-
-    function renderStars(score) {
-        score = Math.max(0, Math.min(5, parseInt(score, 10) || 3));
-        var filled = '';
-        var empty = '';
-        for (var i = 0; i < score; i++) { filled += '★'; }
-        for (var i = score; i < 5; i++) { empty += '☆'; }
-        return '<span style="color:' + BRAND_GOLD + ';letter-spacing:1px;">' + filled + '</span>'
-            + '<span style="color:#CCC;letter-spacing:1px;">' + empty + '</span>';
-    }
-
-    function typeBadgeHTML(poiType) {
-        var labelMap = { scenery: '赏景', landmark: '地标', study: '学习', gate: '校门', dining: '食堂', service: '服务' };
-        var colorMap = {
-            scenery: '#E8929C', landmark: '#D4915C', study: '#6A9FB5',
-            gate: '#8B7E74', dining: '#C79A63', service: '#7BA37B'
-        };
-        var label = labelMap[poiType] || poiType || 'POI';
-        var bg = colorMap[poiType] || '#A8A5A2';
-        return '<span style="display:inline-block;background:' + bg + ';color:#FFF;font-size:11px;'
-            + 'padding:2px 8px;border-radius:10px;margin-left:6px;">' + escapeHTML(label) + '</span>';
-    }
 
     // =============== 创建容器 DOM ===============
     function ensureContainer() {
@@ -5624,8 +5846,7 @@
         }
         el = document.createElement('div');
         el.id = CONTAINER_ID;
-        el.style.cssText =
-            'margin:16px 20px;padding:0;font-family:"Noto Serif SC","PingFang SC","Microsoft YaHei",serif;';
+        el.className = 'legacy-candidate-panel';
 
         var resultsSec = document.getElementById('results-section');
         if (resultsSec && resultsSec.parentNode) {
@@ -5648,12 +5869,6 @@
 
     // =============== 候选 POI 点击处理 ===============
     function onCandidateClick(candidateName) {
-        var cards = $container ? $container.querySelectorAll('.candidate-card') : [];
-        cards.forEach(function (card) {
-            card.style.boxShadow = '';
-            card.style.transform = '';
-        });
-
         var query = '从' + currentStartName + '到' + candidateName;
         var input = document.getElementById('nl-input')
             || document.querySelector('input[type="text"]')
@@ -5682,16 +5897,7 @@
             }
         }
 
-        if ($container) {
-            $container.style.transition = 'opacity 0.4s ease';
-            $container.style.opacity = '0.3';
-            setTimeout(function () {
-                if ($container) {
-                    $container.innerHTML = '';
-                    $container.style.opacity = '1';
-                }
-            }, 1200);
-        }
+        if ($container) $container.classList.add('is-routing');
     }
 
     // =============== 渲染候选卡片 ===============
@@ -5699,78 +5905,53 @@
         $container = ensureContainer();
         currentStartName = startName || '';
 
+        $container.classList.remove('is-routing');
         if (!candidates || candidates.length === 0) {
-            $container.innerHTML =
-                '<div style="background:#FDF0F2;border:1px dashed ' + BRAND_PINK + ';border-radius:12px;'
-                + 'padding:20px 24px;text-align:center;color:#C76B7A;font-size:14px;">'
-                + '🔍 未找到匹配的候选 POI，'
-                + '请尝试其他关键词或类型。'
-                + '</div>';
+            var empty = document.createElement('p');
+            empty.className = 'legacy-candidate-empty';
+            empty.textContent = '暂时没有可展示的地点，请调整关键词或范围后重试。';
+            $container.appendChild(empty);
             return;
         }
-
-        var html =
-            '<div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">'
-            + '<span style="font-size:13px;color:#A8A5A2;font-weight:500;">📍 候选目的地'
-            + '（点击卡片自动规划路线）</span>'
-            + '<span style="font-size:11px;color:#CCC;">— 从 '
-            + escapeHTML(currentStartName) + ' 出发</span>'
-            + '</div>'
-            + '<div style="display:flex;flex-wrap:wrap;gap:10px;">';
-
-        candidates.forEach(function (c) {
-            var starsHTML = renderStars(c.scenery_score || 3);
-            var badgeHTML = typeBadgeHTML(c.type || 'landmark');
-            var distText = (c.distance_m != null) ? (c.distance_m >= 1000
-                ? (c.distance_m / 1000).toFixed(1) + ' km'
-                : Math.round(c.distance_m) + ' m') : '—';
-            var desc = (c.description || '').substring(0, 60);
-
-            html +=
-                '<div class="candidate-card" data-candidate-name="' + escapeHTML(c.name) + '"'
-                + ' style="flex:1 1 200px;min-width:180px;max-width:280px;'
-                + 'background:#FFF;border:1.5px solid #F0EDE8;border-radius:14px;'
-                + 'padding:14px 16px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,0.06);'
-                + 'transition:all 0.2s ease;position:relative;overflow:hidden;'
-                + 'box-sizing:border-box;"'
-                + ' onmouseenter="this.style.boxShadow=\'0 4px 16px rgba(232,146,156,0.25)\';'
-                + 'this.style.borderColor=\'' + BRAND_PINK + '\';this.style.transform=\'translateY(-2px)\';"'
-                + ' onmouseleave="this.style.boxShadow=\'0 2px 8px rgba(0,0,0,0.06)\';'
-                + 'this.style.borderColor=\'#F0EDE8\';this.style.transform=\'\';">'
-                + '<div style="position:absolute;left:0;top:0;bottom:0;width:4px;'
-                + 'background:linear-gradient(180deg,' + BRAND_PINK + ',' + BRAND_GOLD + ');'
-                + 'border-radius:4px 0 0 4px;"></div>'
-                + '<div style="padding-left:8px;">'
-                + '<div style="font-size:15px;font-weight:600;color:#3D322B;'
-                + 'margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">'
-                + escapeHTML(c.name) + badgeHTML + '</div>'
-                + '<div style="font-size:12px;margin-bottom:4px;">'
-                + '<span style="color:#A8A5A2;">景色 </span>' + starsHTML
-                + '<span style="color:#A8A5A2;margin-left:4px;font-size:11px;">'
-                + (c.scenery_score || 3) + '/5</span>'
-                + '</div>'
-                + '<div style="font-size:12px;color:#8B7E74;margin-bottom:4px;">'
-                + '📏 路网距离：' + distText + '</div>'
-                + (desc
-                    ? '<div style="font-size:11px;color:#B5B0AB;line-height:1.4;">'
-                    + escapeHTML(desc) + (c.description && c.description.length > 60 ? '...' : '')
-                    + '</div>'
-                    : '')
-                + '</div>'
-                + '</div>';
+        var heading = document.createElement('div');
+        heading.className = 'legacy-candidate-heading';
+        heading.textContent = '候选地点 · 点击后规划路线 · 搜索中心 ' + (currentStartName || '未说明');
+        $container.appendChild(heading);
+        var list = document.createElement('div');
+        list.className = 'legacy-candidate-list';
+        candidates.slice(0, 4).forEach(function (candidate) {
+            var card = document.createElement('button');
+            card.type = 'button';
+            card.className = 'candidate-card legacy-candidate-card';
+            card.setAttribute('data-candidate-name', String(candidate.name || ''));
+            var name = document.createElement('span');
+            name.className = 'candidate-name';
+            name.textContent = candidate.name || '未命名地点';
+            var meta = document.createElement('span');
+            meta.className = 'candidate-meta';
+            var category = document.createElement('span');
+            category.className = 'candidate-cat';
+            category.textContent = candidate.subcategory_label || candidate.category_label || candidate.type || '地点';
+            meta.appendChild(category);
+            var distance = document.createElement('span');
+            distance.className = 'candidate-dist';
+            distance.textContent = candidate.distance_m == null ? '距离暂无'
+                : '约 ' + (candidate.distance_m >= 1000
+                    ? (candidate.distance_m / 1000).toFixed(1) + ' km'
+                    : Math.round(candidate.distance_m) + ' m');
+            meta.appendChild(distance);
+            card.append(name, meta);
+            list.appendChild(card);
         });
-
-        html += '</div>';
-        $container.innerHTML = html;
-
-        $container.addEventListener('click', function (e) {
+        $container.appendChild(list);
+        $container.onclick = function (e) {
             var card = e.target.closest('.candidate-card');
             if (!card) return;
             var name = card.getAttribute('data-candidate-name');
             if (name) {
                 onCandidateClick(name);
             }
-        });
+        };
     }
 
     // =============== 公开命名空间 ===============

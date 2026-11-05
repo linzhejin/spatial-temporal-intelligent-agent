@@ -158,6 +158,7 @@ def test_event_replay_readiness_certifies_db_file_and_frozen_time(tmp_path, monk
     monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
     monkeypatch.setenv("AGENT_REPLAY_ENABLE_LOCAL", "1")
     monkeypatch.setenv("AGENT_TOOL_TRACE_ENABLED", "1")
+    monkeypatch.setenv("AMAP_POI_LOOKUP_ENABLED", "false")
     monkeypatch.setenv("AGENT_REPLAY_EVENT_EPOCH", "150")
     monkeypatch.setenv("AGENT_REPLAY_EVENT_SHA256", digest)
     monkeypatch.setenv("FLASK_ENV", "development")

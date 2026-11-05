@@ -3,13 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#173b35">
+  <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261018-event-edit3">
+  <link rel="stylesheet" href="/css/manager.css?v=20261105-operations-v1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261018-event-edit3" defer></script>
+  <script src="/js/manager.js?v=20261105-operations-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -105,8 +105,17 @@
                 </div>
                 <small id="event-modes-help">直接勾选，可多选。只选择现场确认受影响的方式。</small>
               </fieldset>
+              <label>影响方向
+                <select id="event-direction" aria-describedby="event-direction-help">
+                  <option value="both" selected>双向</option>
+                  <option value="forward">仅 A → B</option>
+                  <option value="reverse">仅 B → A</option>
+                </select>
+                <small id="event-direction-help">选定路段后，地图用 A、B 标记两端；请按现场方向选择。</small>
+              </label>
               <label id="event-cost-wrap" hidden>缓行成本倍数
                 <input id="event-cost" type="number" min="1" max="5" step="0.1" value="1.5">
+                <small>1.5 倍表示该路段估算用时增加 50%。</small>
               </label>
               <fieldset class="event-validity-fieldset">
                 <legend>有效时间 <small>北京时间（UTC+8）</small></legend>
@@ -148,6 +157,7 @@
                 </div>
               </div>
               <div id="impact-preview" class="impact-preview" aria-live="polite" hidden></div>
+              <button id="retry-direction-preview" class="outline-button" type="button" hidden>重试方向预览</button>
               <button id="publish-event" class="primary-button" type="submit" aria-describedby="publish-guidance" disabled>发布事件 <span>→</span></button>
               <p id="publish-guidance" class="publish-guidance" role="status"></p>
               <p id="form-message" class="form-message" role="status"></p>
@@ -165,6 +175,8 @@
         <div class="vision-grid">
           <div id="vision-upload-card" class="vision-upload-card">
             <div id="vision-status" class="vision-status">正在读取视觉分析配置…</div>
+            <details class="vision-new-analysis">
+              <summary>新建影像分析</summary>
             <form id="vision-form">
               <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频（支持断点续传）</small></label>
               <input id="media-file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm" required>
@@ -240,6 +252,7 @@
             </form>
             <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。事故模型只判断画面类别；积水模型仅检查圈选路面像素、不估算水深。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
             <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
+            </details>
           </div>
           <div id="vision-jobs" class="vision-jobs"><div class="empty-state">尚无巡查任务。</div></div>
         </div>
@@ -247,6 +260,12 @@
 
       <section id="event-history" class="events-section">
         <div class="events-heading"><div><span class="eyebrow">EVENT REGISTER</span><h2>事件记录</h2></div><button id="refresh-events" class="quiet-button" type="button">刷新列表 ↻</button></div>
+        <div class="event-filters" role="search" aria-label="筛选事件记录">
+          <label for="event-search">名称或道路<input id="event-search" type="search" placeholder="输入事件名或道路名"></label>
+          <label for="event-status-filter">状态<select id="event-status-filter"><option value="all">全部状态</option><option value="active">生效中</option><option value="scheduled">待生效</option><option value="expired">已结束</option><option value="revoked">已撤销</option></select></label>
+          <label for="event-date-filter">日期<input id="event-date-filter" type="date"></label>
+          <button id="clear-event-filters" class="outline-button" type="button">清除筛选</button>
+        </div>
         <div id="event-list" class="event-list"><div class="empty-state">正在读取事件记录…</div></div>
       </section>
     </section>

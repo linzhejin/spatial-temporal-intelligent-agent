@@ -6,6 +6,7 @@ POI 加载与匹配模块
 """
 
 import json
+import math
 import os
 import re
 from copy import deepcopy
@@ -15,6 +16,8 @@ from typing import Optional
 _POIS_CACHE: list = []
 _LOADED = False
 _PENDING_POI_QUERY_NAMES: set | None = None
+_SOURCE_BACKED_POI_IDS: set | None = None
+_SOURCE_BACKED_POI_REFS: dict[str, list] | None = None
 
 # 搜索频率统计（用于途经点重要度排序）：{poi_id: count}
 # 冷启动时无真实数据，重要度靠景观分 + 类型加权兜底
@@ -139,6 +142,9 @@ def load_pois() -> list:
     pois = _load_from_json()
     if not pois:
         pois = _load_from_config()
+    # Preserve reports in the source file, but do not recommend or route to
+    # a location the user reports absent until the record has been reviewed.
+    pois = [poi for poi in pois if poi.get("recommendation_status") != "reported_absent_pending_review"]
     _POIS_CACHE = pois
     _LOADED = True
     return pois
@@ -146,8 +152,11 @@ def load_pois() -> list:
 
 def reload_pois() -> list:
     """强制重新加载 POI 数据（忽略缓存）。"""
-    global _LOADED
+    global _LOADED, _PENDING_POI_QUERY_NAMES, _SOURCE_BACKED_POI_IDS, _SOURCE_BACKED_POI_REFS
     _LOADED = False
+    _PENDING_POI_QUERY_NAMES = None
+    _SOURCE_BACKED_POI_IDS = None
+    _SOURCE_BACKED_POI_REFS = None
     return load_pois()
 
 
@@ -157,6 +166,14 @@ def _pending_osm_poi_names() -> set:
     if _PENDING_POI_QUERY_NAMES is not None:
         return _PENDING_POI_QUERY_NAMES
     names = set()
+    # Guard exact names and aliases of reported-absent entries against fuzzy
+    # replacement by an unrelated venue after they are removed from search.
+    for poi in _load_from_json():
+        if poi.get("recommendation_status") == "reported_absent_pending_review":
+            for label in [poi.get("name"), *(poi.get("aliases") or [])]:
+                normalized = re.sub(r"\s+", "", str(label or "")).casefold()
+                if normalized:
+                    names.add(normalized)
     data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
     try:
         with open(os.path.join(data_dir, "campus_review_decisions.json"),
@@ -177,13 +194,122 @@ def _pending_osm_poi_names() -> set:
             if candidate_name:
                 names.add(candidate_name)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        names = set()
+        pass  # Keep user-reported names even when the separate OSM review is unavailable.
     _PENDING_POI_QUERY_NAMES = names
     return names
 
 
 def _normalize_poi_query(name: str) -> str:
     return re.sub(r"\s+", "", str(name or "")).casefold()
+
+
+def has_source_backed_record(poi: dict) -> bool:
+    """Whether a POI has a record-specific source in the local/open catalog.
+
+    Historical entries use a file-level provenance default. They do not pass
+    this check unless a source is attached to the POI or an OSM source record
+    was explicitly matched to its stable POI ID.
+    """
+    if not isinstance(poi, dict) or poi.get("recommendation_status") == "reported_absent_pending_review":
+        return False
+    status = str(poi.get("verification_status") or "legacy_unverified")
+    if poi.get("source_refs") and status in {"source_only", "institution_verified", "field_verified"}:
+        return True
+    poi_id = str(poi.get("id") or poi.get("poi_id") or "")
+    if not poi_id:
+        return False
+    global _SOURCE_BACKED_POI_IDS, _SOURCE_BACKED_POI_REFS
+    if _SOURCE_BACKED_POI_IDS is None:
+        _SOURCE_BACKED_POI_IDS = set()
+        _SOURCE_BACKED_POI_REFS = {}
+        data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
+        try:
+            with open(os.path.join(data_dir, "pois_osm_candidates.json"),
+                      "r", encoding="utf-8") as handle:
+                candidates = json.load(handle).get("candidates", [])
+            with open(os.path.join(data_dir, "campus_review_decisions.json"),
+                      "r", encoding="utf-8") as handle:
+                review_rows = json.load(handle).get("poi_decisions", [])
+            decisions = {
+                row.get("source_id"): row.get("decision") for row in review_rows
+                if row.get("source") == "OpenStreetMap" and row.get("source_id")
+            }
+            accepted_decisions = {
+                "existing_name_match", "included", "alias_or_source_enrichment", "campus_corrected",
+            }
+            for candidate in candidates:
+                refs = candidate.get("source_refs") or []
+                decision = decisions.get(candidate.get("osm_id"))
+                if (candidate.get("verification_status") == "source_only" and refs
+                        and decision in accepted_decisions):
+                    for value in candidate.get("matched_poi_ids") or []:
+                        if value:
+                            key = str(value)
+                            _SOURCE_BACKED_POI_IDS.add(key)
+                            _SOURCE_BACKED_POI_REFS.setdefault(key, []).extend(ref for ref in refs
+                                                                              if ref not in _SOURCE_BACKED_POI_REFS.get(key, []))
+        except (OSError, json.JSONDecodeError, AttributeError, TypeError):
+            pass
+    return poi_id in _SOURCE_BACKED_POI_IDS
+
+
+def source_refs_for_poi(poi: dict) -> list:
+    refs = list(poi.get("source_refs") or []) if isinstance(poi, dict) else []
+    if refs or not has_source_backed_record(poi):
+        return refs
+    poi_id = str(poi.get("id") or poi.get("poi_id") or "")
+    return list((_SOURCE_BACKED_POI_REFS or {}).get(poi_id, []))
+
+
+def filter_reported_absent_provider_results(candidates: list[dict], *, max_distance_m: float = 100.0) -> list[dict]:
+    """Do not reintroduce an individually reported missing branch from a live provider.
+
+    A match requires both an exact normalized name/alias and a nearby recorded
+    location. This keeps a report about one branch from suppressing a different
+    store of the same brand.
+    """
+    held = [row for row in _load_from_json()
+            if row.get("recommendation_status") == "reported_absent_pending_review"]
+    if not held:
+        return list(candidates or [])
+
+    def labels(row):
+        values = [row.get("name"), *(row.get("aliases") or [])]
+        return {_normalize_num(re.sub(r"[\s\u3000\-—_()（）·]", "", str(value or "")))
+                for value in values if str(value or "").strip()}
+
+    def point(row):
+        coord = row.get("coordinates") or {}
+        try:
+            lng = float(coord.get("lng", row.get("lon", row.get("lng"))))
+            lat = float(coord.get("lat", row.get("lat")))
+            if math.isfinite(lng) and math.isfinite(lat):
+                return lng, lat
+        except (TypeError, ValueError):
+            pass
+        return None
+
+    held_rows = [(labels(row), point(row)) for row in held]
+    kept = []
+    for candidate in candidates or []:
+        candidate_labels = labels(candidate)
+        candidate_point = point(candidate)
+        excluded = False
+        if candidate_point:
+            lng, lat = candidate_point
+            for held_labels, held_point in held_rows:
+                if not candidate_labels.intersection(held_labels) or not held_point:
+                    continue
+                old_lng, old_lat = held_point
+                mean_lat = math.radians((lat + old_lat) / 2)
+                distance = math.hypot((lng - old_lng) * 111320 * math.cos(mean_lat),
+                                      (lat - old_lat) * 110540)
+                if distance <= max_distance_m:
+                    excluded = True
+                    break
+        if not excluded:
+            kept.append(candidate)
+    return kept
 
 
 def _exact_master_poi_matches(name: str, pois: list) -> list:

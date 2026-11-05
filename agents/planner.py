@@ -245,7 +245,13 @@ def _road_condition_feedback(route: dict, request: str) -> str:
                              for mode in modes if isinstance(mode, str)
                              and mode in {"walk", "bike", "drive"}) if isinstance(modes, list) else ""
         along = "沿途，" if is_along(event) else ""
-        items.append(f"{name}（{along}{road or '位置未标注'}，{action}{'，' + mode_text if mode_text else ''}）")
+        direction = event.get("direction")
+        direction_text = ({"forward": "地图 A → B", "reverse": "地图 B → A", "both": "双向"}.get(direction)
+                          if isinstance(direction, str) else None)
+        if "direction" in event and direction_text is None:
+            direction_text = "方向未核实"
+        items.append(f"{name}（{along}{road or '位置未标注'}，{action}{'，' + mode_text if mode_text else ''}"
+                     f"{'，影响方向：' + direction_text if direction_text else ''}）")
     if items:
         omitted = max(0, applied - len(items))
         remainder = f"另有 {omitted} 条生效记录。" if omitted else ""
@@ -617,6 +623,15 @@ def _vision_condition_summary(result: dict, query: str = "") -> str | None:
             event_type = str(event.get("type_label") or "事件类型未记录")[:30]
             detail = f"{name}（{location}，{event_type}）：{action}"
             detail += f"，影响{modes}。" if modes else "，受影响的出行方式未记录。"
+            direction = event.get("direction")
+            direction_text = ({"forward": "地图 A → B", "reverse": "地图 B → A", "both": "双向"}.get(direction)
+                              if isinstance(direction, str) else None)
+            if direction_text:
+                detail += f"影响方向：{direction_text}。"
+            elif "direction" in event:
+                detail += "影响方向未核实。"
+            elif re.search(r"方向|单向|双向", query):
+                detail += "影响方向未记录。"
             end_time = event.get("end_time")
             if isinstance(end_time, (int, float)) and not isinstance(end_time, bool):
                 try:
@@ -869,20 +884,90 @@ def _place_route_constraint_issue(legs: list[dict], requested: dict) -> str | No
 
 
 def _place_route_snapshot_issue(legs: list[dict]) -> str | None:
-    from agents.route_state import current_road_condition_version
+    from agents.route_state import current_data_version, current_road_condition_version
 
     try:
         version = current_road_condition_version(agent_tools.list_conditions(strict=True))
+        data_version = current_data_version()
     except Exception:
-        return "当前路况暂时无法确认"
+        return "当前路网或路况暂时无法确认"
+    if not isinstance(data_version, str) or not data_version or data_version == "unavailable":
+        return "当前路网或路况暂时无法确认"
+    if any(leg["route_state"].get("data_version") != data_version for leg in legs):
+        return "当前路网或地点数据已更新"
     if any(leg["route_state"].get("road_condition_version") != version for leg in legs):
         return "当前路况已更新"
     return None
 
 
+def _place_candidate_constraints(requested: dict, legs: list[dict], *, dependencies=None,
+                                 search_anchor=None, start=None) -> dict:
+    """Use the remaining whole-trip budget for a candidate's next leg."""
+    constraints = _place_tool_constraints(requested)
+    try:
+        limits = {key: positive_budget(requested, key) for key in ("max_distance_m", "max_duration_s")}
+    except ValueError as exc:
+        raise ValueError("路线距离或时间上限无效，请重新说明。") from exc
+    if any(value is not None for value in limits.values()) and isinstance(search_anchor, dict):
+        same_place = False
+        if isinstance(start, dict):
+            anchor_id, start_id = search_anchor.get("poi_id"), start.get("poi_id")
+            if anchor_id and start_id:
+                same_place = anchor_id == start_id
+            elif search_anchor.get("type") == start.get("type") == "poi":
+                same_place = bool(search_anchor.get("name")) and search_anchor.get("name") == start.get("name")
+        if not same_place:
+            raise ValueError("附近参照点与实际起点不同，暂不能可靠核验整程距离或时间上限。请调整约束后重试。")
+    if not any(value is not None for value in limits.values()):
+        return constraints
+    if not isinstance(legs, list):
+        raise ValueError("前序行程格式无法核验")
+    if not legs:
+        return constraints
+    if any(not isinstance(leg, dict)
+            or not isinstance(leg.get("route_state"), dict)
+            or not isinstance(leg.get("route_verification"), dict)
+            or leg["route_verification"].get("status") != "pass" for leg in legs):
+        raise ValueError("前序行程缺少可核验的路线结果")
+    from agents.result_maintenance import capture_dependencies
+
+    current = (capture_dependencies(legs, task_revision=dependencies.get("task_revision"))
+               if isinstance(dependencies, dict) else None)
+    keys = ("schema_version", "prefix_sha256", "data_version", "road_condition_version",
+            "travel_mode", "weather_input_sha256", "task_revision", "depends_on")
+    if current is None or any(dependencies.get(key) != current[key] for key in keys):
+        raise ValueError("前序行程的依赖记录不足或已变化，请先重新规划")
+    issue = _place_route_snapshot_issue(legs) or _place_route_constraint_issue(legs, requested)
+    if issue:
+        raise ValueError("前序行程无法按当前路况核验：" + issue)
+    for key, field, factor in (("max_distance_m", "recommended_length_m", 1),
+                               ("max_duration_s", "duration_min", 60)):
+        limit = limits[key]
+        if limit is None:
+            continue
+        values = [leg.get(field) for leg in legs]
+        if any(isinstance(value, bool) or not isinstance(value, (int, float))
+               or not math.isfinite(value) or value < 0 for value in values):
+            raise ValueError("前序行程的距离或时间无法核验")
+        remaining = limit - sum(values) * factor
+        if remaining <= 0:
+            raise ValueError("前序行程的剩余距离或时间不足，暂无法可靠筛选下一站")
+        constraints[key] = remaining
+    return constraints
+
+
+def _place_replan_notice(reason: str | None) -> str:
+    """Name an environmental change only when the snapshot check observed it."""
+    if reason == "当前路况已更新":
+        return "路况发生变化，已按当前数据重新规划全程。"
+    if reason == "当前路网或地点数据已更新":
+        return "路网或地点数据发生变化，已按当前数据重新规划全程。"
+    return "已按当前数据重新规划全程。"
+
+
 def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
     """Replan equivalent ordered legs using one fresh snapshot, or fail closed."""
-    from agents.route_state import current_road_condition_version, validate_route_state
+    from agents.route_state import current_data_version, current_road_condition_version, validate_route_state
 
     try:
         states = [validate_route_state(leg.get("route_state")) for leg in legs]
@@ -891,9 +976,23 @@ def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
         first = states[0]
         if any(state["travel_mode"] != first["travel_mode"]
                or state["hard_constraints"] != first["hard_constraints"]
-               or _place_strategy_signature(state["strategy"]) != _place_strategy_signature(first["strategy"])
-               or state.get("data_version") != first.get("data_version") for state in states):
-            raise ValueError("各段方式、约束、策略或路网版本不同，无法安全合并重算")
+               for state in states):
+            raise ValueError("各段方式或约束不同，无法安全合并重算")
+        override = context.get("confirmed_strategy_override")
+        if override is None:
+            if any(_place_strategy_signature(state["strategy"]) != _place_strategy_signature(first["strategy"])
+                   for state in states):
+                raise ValueError("各段路线策略不同，尚未确认整程策略")
+            strategy = first["strategy"]
+        else:
+            if (override not in {"shortest", "recommended", "scenery", "flat"}
+                    or states[-1]["strategy"].get("name") != override
+                    or _has_stage_scoped_place_goal(context.get("task_root_query") or "")
+                    or any(_has_stage_scoped_place_goal(state.get("original_query") or "") for state in states)
+                    or any(isinstance(item, dict) and _PLACE_STRATEGY_MENTION.search(str(item.get("query") or ""))
+                           for item in context.get("follow_up_requests") or [])):
+                raise ValueError("整程策略或分段需求无法确认")
+            strategy = states[-1]["strategy"]
         if "task_constraints" in context:
             requested = context["task_constraints"]
             expected_constraints = _place_tool_constraints(requested)
@@ -916,7 +1015,9 @@ def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
             if selected:
                 found = [poi for poi in pois if poi.get("id") == selected]
             else:
-                found = [poi for poi in pois if poi.get("name") == value.get("name")]
+                name = value.get("name")
+                found = [poi for poi in pois if isinstance(name, str) and name
+                         and name in [poi.get("name"), *(poi.get("aliases") or [])]]
             if len(found) != 1 or not found[0].get("id"):
                 raise ValueError("已选地点无法唯一确认，请重新选择")
             poi = found[0]
@@ -957,7 +1058,6 @@ def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
         data_version = agent_tools._data_version_for_graph(fresh["_route_graph_snapshot"])
         if data_version == "unavailable":
             raise ValueError("当前路网版本无法确认")
-        strategy = first["strategy"]
         args = {"start": ordered[0], "end": ordered[-1], "via_points": ordered[1:-1],
                 "mode": first["travel_mode"], "constraints": deepcopy(first["hard_constraints"]),
                 "strategy": strategy["name"], "strategy_source": strategy.get("source", "explicit_nl")}
@@ -979,7 +1079,7 @@ def _replan_changed_place_route(legs: list[dict], context: dict) -> tuple:
                 or new_state.get("road_condition_version") != version):
             raise ValueError("重算结果与原行程或快照不一致")
         if (current_road_condition_version(agent_tools.list_conditions(strict=True)) != version
-                or agent_tools._data_version_for_graph(fresh["_route_graph_snapshot"]) != data_version):
+                or current_data_version() != data_version):
             raise ValueError("路况或路网再次变化，请重试")
         return route, None
     except (KeyError, TypeError, ValueError, OverflowError):
@@ -1183,7 +1283,107 @@ def _explicit_place_strategy(query: str) -> str | None:
     return strategy if strategy in {"shortest", "recommended", "scenery", "flat"} else None
 
 
-def _requested_recommendation_limit(query: str, *, catalog: bool) -> int:
+_PLACE_GOAL_TERMS = re.compile(r"风景优先|景观优先|平坦优先|最短(?:路线|路径|路程)?")
+_PLACE_STRATEGY_MENTION = re.compile(
+    r"风景优先|景观优先|平坦优先|最短|看风景|风景好|平坦|平路|少爬坡|少走坡|"
+    r"不想爬坡|避坡|省力|赶时间|赶课|不绕路"
+)
+_PLACE_UNSCOPED_SLOPE = re.compile(r"少爬坡|少走坡|不想爬坡|避坡|避开陡坡")
+_PLACE_STEP_CONSTRAINT = re.compile(
+    r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)|(?:可以|允许)(?:走|经过)?(?:楼梯|台阶)|不(?:用|需要)避开(?:楼梯|台阶)"
+)
+_PLACE_STAGE_SCOPE = re.compile(
+    r"第[一二三四五六七八九十\d]+(?:段|程|站)|(?:前|后|上|下|这|该|当)(?:一)?(?:段|程)|(?:前|后)半(?:段|程)"
+)
+
+
+def _place_goal_clauses(query: str, saved: dict | None) -> list[str]:
+    """Separate a known candidate choice from additional request clauses."""
+    clauses = [re.sub(r"\s+", "", part) for part in re.split(r"[，,。；;！!？?]", str(query or ""))]
+    names = []
+    if isinstance(saved, dict) and saved.get("candidate_poi_ids"):
+        names.extend(
+            value for candidate in saved.get("candidate_places") or []
+            if isinstance(candidate, dict) and candidate.get("poi_id") in saved["candidate_poi_ids"]
+            for value in [candidate.get("name"), *(candidate.get("aliases") or [])]
+            if isinstance(value, str) and value
+        )
+        try:
+            for poi in agent_tools.load_pois():
+                if poi.get("id") in saved["candidate_poi_ids"]:
+                    names.extend(value for value in [poi.get("name"), *(poi.get("aliases") or [])]
+                                 if isinstance(value, str) and value)
+        except Exception:
+            names = []
+
+    def is_selection(clause):
+        if re.fullmatch(r"(?:就去|去|就选|选择|选|到)(?:这里|这个|那个|这个地点|那个地点|这家|那家)(?:吧|就好|就行)?", clause):
+            return True
+        return any(re.fullmatch(r"(?:就去|去|就选|选择|选|到)" + re.escape(re.sub(r"\s+", "", name))
+                                + r"(?:吧|就好|就行)?", clause) for name in names)
+
+    return [clause for clause in clauses if clause and not is_selection(clause)]
+
+
+def _has_unhandled_place_goal_clause(clauses: list[str]) -> bool:
+    unscoped = re.compile(
+        r"风景优先|景观优先|平坦优先|最短(?:路线|路径|路程)?|看风景|风景好|平坦|平路|"
+        r"少爬坡|少走坡|不想爬坡|避坡|省力|赶时间|赶课|不绕路"
+    )
+    constraint = re.compile(
+        r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)|(?:可以|允许)(?:走|经过)?(?:楼梯|台阶)"
+    )
+    return any(not (_explicit_global_place_strategy(clause) or unscoped.fullmatch(clause)
+                    or constraint.fullmatch(clause)) for clause in clauses)
+
+
+def _explicit_global_place_strategy(query: str) -> str | None:
+    """Accept an unambiguous standalone goal clause for the whole trip."""
+    text = str(query or "")
+    if _PLACE_STAGE_SCOPE.search(text):
+        return None
+    goals = []
+    for clause in re.split(r"[，,。；;！!？?]", text):
+        compact = re.sub(r"\s+", "", clause)
+        if not _PLACE_GOAL_TERMS.search(compact):
+            if _PLACE_STRATEGY_MENTION.search(compact):
+                return None
+            continue
+        match = re.fullmatch(
+            r"(?:全程|整程|整个行程)(?:的)?(?:路线|路径|策略)?(?:改成|改为|换成|换为|"
+            r"采用|使用|选择|按|走)?(风景优先|景观优先|平坦优先|最短(?:路线|路径|路程)?)"
+            r"(?:路线|路径|策略)?(?:吧|就好|就行|即可)?", compact,
+        )
+        if not match:
+            return None
+        goal = match.group(1)
+        goals.append("scenery" if goal in {"风景优先", "景观优先"}
+                     else "flat" if goal == "平坦优先" else "shortest")
+    return goals[0] if len(goals) == 1 else None
+
+
+def _has_stage_scoped_place_goal(text: str) -> bool:
+    text = str(text or "")
+    if not _PLACE_STRATEGY_MENTION.search(text):
+        return False
+    return bool(_PLACE_STAGE_SCOPE.search(text) or re.search(
+        r"(?:先|然后|接着|随后|再|最后)[^，,。；;]{0,40}"
+        r"(?:风景优先|景观优先|平坦优先|最短|看风景|风景好|平坦|平路|少爬坡|少走坡|"
+        r"不想爬坡|避坡|省力|赶时间|赶课|不绕路)", text,
+    ) or re.search(
+        r"(?:风景优先|景观优先|平坦优先|最短|看风景|风景好|平坦|平路|少爬坡|少走坡|"
+        r"不想爬坡|避坡|省力|赶时间|赶课|不绕路)[^，,。；;]{0,40}(?:然后|接着|随后|再|最后)", text,
+    ))
+
+
+def _place_has_scoped_goal(saved: dict) -> bool:
+    if _has_stage_scoped_place_goal(saved.get("root_query") or ""):
+        return True
+    return any(isinstance(item, dict) and _PLACE_STRATEGY_MENTION.search(str(item.get("query") or ""))
+               for item in saved.get("follow_up_requests") or [])
+
+
+def _requested_recommendation_limit(query: str, *, catalog: bool, default: int = 4) -> int:
     """Honor a small explicit shortlist size without truncating the search pool."""
     match = re.search(
         r"(?:推荐|介绍|列出|给我|找|选)[^，,。；;！？?!]{0,12}?"
@@ -1194,13 +1394,56 @@ def _requested_recommendation_limit(query: str, *, catalog: bool) -> int:
         return {"一": 1, "二": 2, "两": 2, "三": 3, "四": 4, "五": 5}.get(
             match.group(1), int(match.group(1)) if match.group(1).isdigit() else 4,
         )
-    return 20 if catalog else 4
+    return 20 if catalog else default
+
+
+def _place_candidate_limit(query: str, activities: list[str], *, catalog: bool) -> int:
+    """Make a broader food shortlist available while honoring explicit counts."""
+    food = {"meal", "canteen_meal", "restaurant_meal", "fast_food"}
+    default = 20 if food.intersection(activities or []) else 4
+    return _requested_recommendation_limit(query, catalog=catalog, default=default)
+
+
+def _place_candidate_radius_m(query: str, subcategories: list[str] | None) -> int:
+    """Use a 1 km nearby default and honor an explicit nearby radius."""
+    food = {"canteen", "restaurant", "fastfood", "coffee", "tea_drink"}
+    if not food.intersection(subcategories or []):
+        return 10000
+    match = re.search(r"(?<!\d)(\d+(?:\.\d+)?)\s*(公里|千米|km|米|m)(?![a-z])", str(query or ""), re.I)
+    if match:
+        amount = float(match.group(1))
+        radius = amount * (1000 if match.group(2).lower() in {"公里", "千米", "km"} else 1)
+        return max(100, min(round(radius), 10000))
+    return 1000
+
+
+def _candidate_snapshot_rows(candidates: list[dict] | None) -> list[dict]:
+    """Persist only the current selectable snapshot needed for text choice and refresh checks."""
+    rows = []
+    for candidate in (candidates or [])[:20]:
+        if not isinstance(candidate, dict) or not candidate.get("poi_id"):
+            continue
+        aliases = candidate.get("aliases") if isinstance(candidate.get("aliases"), list) else []
+        row = {
+            "poi_id": str(candidate["poi_id"]),
+            "name": str(candidate.get("name") or "")[:200],
+            "aliases": [str(value)[:200] for value in aliases[:8] if isinstance(value, str)],
+            "subcategory": str(candidate.get("subcategory") or "")[:50],
+            "source": str(candidate.get("source") or "campus_catalog")[:40],
+            "observed_at": candidate.get("observed_at"),
+        }
+        if candidate.get("lat") is not None and candidate.get("lng") is not None:
+            row["coordinates"] = {"lng": candidate.get("lng"), "lat": candidate.get("lat")}
+            row["coordinate_system"] = candidate.get("coordinate_system") or "GCJ-02"
+        rows.append(row)
+    return rows
 
 
 def _place_request_state(query: str, *, activities=None, subcategories=None,
                          pending_slot=None, start=None, constraints=None,
                          previous=None, candidate_poi_ids=None, selected_poi_id=None,
-                         follow_up_requests=None,
+                         candidate_places=None,
+                         follow_up_requests=None, search_anchor=None,
                          mode="walk") -> dict:
     previous = previous if isinstance(previous, dict) else {}
     strategy = previous.get("strategy") or _explicit_place_strategy(query)
@@ -1219,12 +1462,19 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
         "completed_legs": list(previous.get("completed_legs") or []),
         "pending_slot": pending_slot,
         "start": start if start is not None else previous.get("start"),
+        "search_anchor": search_anchor if search_anchor is not None else previous.get("search_anchor"),
         "selected_poi_id": (selected_poi_id if selected_poi_id is not None
                              else previous.get("selected_poi_id")),
         "candidate_poi_ids": list(candidate_poi_ids if candidate_poi_ids is not None
                                    else previous.get("candidate_poi_ids") or []),
+        "candidate_places": deepcopy(candidate_places if candidate_places is not None
+                                      else previous.get("candidate_places") or []),
+        "unresolved_revision": previous.get("unresolved_revision"),
+        "unresolved_route_requirements": previous.get("unresolved_route_requirements"),
+        "result_dependencies": deepcopy(previous.get("result_dependencies")),
         "mode": previous.get("mode") or mode,
         "strategy": strategy,
+        "confirmed_strategy_override": previous.get("confirmed_strategy_override"),
         "constraints": constraints if constraints is not None else previous.get("constraints") or {},
     }
 
@@ -1339,7 +1589,8 @@ def _verified_continuation_start(prefix: str, full_query: str, route: dict, coor
     return state, next_start, constraints, strategy
 
 
-def _recheck_route_candidate_stage(query, route, coord_start, coord_end, travel_mode, uid, execute_tool):
+def _recheck_route_candidate_stage(query, route, coord_start, coord_end, travel_mode, uid, execute_tool,
+                                   task_revision=None):
     """Make a pending next stop only from an explicit ordered travel request."""
     ordered = _ordered_candidate_tail(query)
     if not ordered:
@@ -1391,10 +1642,17 @@ def _recheck_route_candidate_stage(query, route, coord_start, coord_end, travel_
         pending_slot="selection", start=start, constraints=constraints, mode=state["travel_mode"],
         follow_up_requests=followups, previous={"root_query": query, "strategy": strategy})
     pending["completed_legs"] = [deepcopy(route)]
+    from agents.result_maintenance import capture_dependencies
+    pending["result_dependencies"] = capture_dependencies(pending["completed_legs"], task_revision=task_revision)
     args = {"start": start, "activities": activities, "subcategories": categories,
-            "mode": state["travel_mode"], "constraints": _place_tool_constraints(constraints),
-            "max_distance_m": 10000, "limit": 4}
+            "mode": state["travel_mode"], "constraints": _place_candidate_constraints(
+                constraints, pending["completed_legs"], dependencies=pending["result_dependencies"]),
+            "max_distance_m": _place_candidate_radius_m(tail, categories),
+            "limit": _place_candidate_limit(tail, activities, catalog=False)}
     result, artifact = execute_tool("search_poi_candidates", args, {"query": tail, "uid": uid})
+    if isinstance(result, dict):
+        from agents.result_maintenance import record_candidate_snapshot
+        record_candidate_snapshot(pending, result)
     candidates = artifact.get("candidates") if isinstance(artifact, dict) else None
     if not isinstance(result, dict) or result.get("error") or not isinstance(candidates, list) or not candidates:
         pending["pending_slot"] = "follow_up"
@@ -1410,28 +1668,64 @@ def _recheck_route_candidate_stage(query, route, coord_start, coord_end, travel_
         distance = candidate.get("distance_m")
         if distance is None:
             distance = candidate.get("network_distance_m")
-        if (not isinstance(identifier, str) or not re.fullmatch(r"poi_\d{3,}", identifier)
-                or identifier in seen or not poi or not isinstance(poi.get("name"), str)
-                or (activities and not agent_tools.matches_activities(poi, activities))
+        if isinstance(identifier, str) and identifier.startswith("amap:"):
+            try:
+                lng, lat = float(candidate.get("lng")), float(candidate.get("lat"))
+            except (TypeError, ValueError):
+                lng = lat = float("nan")
+            online_poi = {
+                "id": identifier, "name": candidate.get("name"),
+                "subcategory": candidate.get("subcategory"),
+                "activities": candidate.get("activities") or [],
+            }
+            identity_ok = (re.fullmatch(r"amap:[A-Za-z0-9_-]{3,80}", identifier)
+                           and candidate.get("source") == "amap_online"
+                           and isinstance(candidate.get("name"), str) and candidate.get("name")
+                           and math.isfinite(lng) and math.isfinite(lat)
+                           and -180 <= lng <= 180 and -90 <= lat <= 90
+                           and (not activities or agent_tools.matches_activities(online_poi, activities)))
+            candidate_name = candidate.get("name")
+        else:
+            identity_ok = (isinstance(identifier, str) and re.fullmatch(r"poi_\d{3,}", identifier)
+                           and bool(poi) and isinstance(poi.get("name"), str)
+                           and (not activities or agent_tools.matches_activities(poi, activities)))
+            candidate_name = poi.get("name") if poi else None
+        if (not identity_ok or identifier in seen
                 or isinstance(distance, bool) or not isinstance(distance, (int, float))
                 or not math.isfinite(distance) or distance < 0):
             raise ValueError("下一站候选用途或距离无法确认")
         seen.add(identifier)
         verified.append({**candidate, "poi_id": identifier, "place_id": identifier,
-                         "name": poi["name"], "distance_m": distance})
-    if any(first["distance_m"] > second["distance_m"]
-           for first, second in zip(verified, verified[1:])):
+                         "name": candidate_name, "distance_m": distance})
+    if (result.get("recommendation_order") == "distance_first"
+            and any(first["distance_m"] > second["distance_m"]
+                    for first, second in zip(verified, verified[1:]))):
         raise ValueError("下一站候选距离顺序无法确认")
+    by_category = {}
+    for item in verified:
+        by_category.setdefault(item.get("subcategory") or "", []).append(item)
+    if any(first["distance_m"] > second["distance_m"]
+           for group in by_category.values()
+           for first, second in zip(group, group[1:])):
+        raise ValueError("同类别候选距离顺序无法确认")
     pending["candidate_poi_ids"] = [item["poi_id"] for item in verified]
+    pending["candidate_places"] = _candidate_snapshot_rows(verified)
     return pending, verified, None
 
 
-def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str]) -> str | None:
+def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str],
+                                 candidate_places: list[dict] | None = None) -> str | None:
     """Accept a clear spoken choice only from the current candidate list."""
     candidate_ids = set(candidate_poi_ids)
     if not candidate_ids:
         return None
     choices = []
+    for candidate in candidate_places or []:
+        if not isinstance(candidate, dict) or candidate.get("poi_id") not in candidate_ids:
+            continue
+        names = [candidate.get("name"), *(candidate.get("aliases") or [])]
+        choices.extend((str(name).strip(), candidate["poi_id"]) for name in names
+                       if name and len(str(name).strip()) >= 3)
     for poi in agent_tools.load_pois():
         if poi.get("id") not in candidate_ids:
             continue
@@ -1471,7 +1765,9 @@ def _apply_place_request_correction(saved: dict, query: str) -> dict:
     mode, explicit_mode = detect_travel_mode(query)
     if explicit_mode:
         updated["mode"] = mode
-    strategy = _explicit_place_strategy(query)
+    strategy = (_explicit_global_place_strategy("，".join(_place_goal_clauses(query, saved)))
+                if saved.get("pending_slot") == "selection" and saved.get("completed_legs")
+                else _explicit_place_strategy(query))
     if strategy:
         updated["strategy"] = strategy
     constraints = dict(updated.get("constraints") or {})
@@ -1485,6 +1781,72 @@ def _apply_place_request_correction(saved: dict, query: str) -> dict:
         constraints["avoid_slope"] = False
     updated["constraints"] = constraints
     return updated
+
+
+def _place_activity_revision(saved: dict | None, query: str):
+    """Extract an explicit change to a pending activity, not a route edit.
+
+    Only the positive replacement after the last change verb is interpreted:
+    the old, explicitly rejected category must not leak into the new search.
+    Unrecognized replacements stay unresolved instead of silently retaining
+    the prior candidates.
+    """
+    if not isinstance(saved, dict) or saved.get("pending_slot") != "selection":
+        return None
+    dining = {"meal", "canteen_meal", "restaurant_meal", "fast_food"}
+    is_dining = bool(dining.intersection(saved.get("activities") or []))
+    if not saved.get("completed_legs") and not (
+            is_dining and (saved.get("start") or saved.get("search_anchor"))):
+        return None
+    text = str(query or "").strip()
+    matches = list(re.finditer(r"(?:改成|改为|换成|换为|换去)", text))
+    if not matches:
+        if not is_dining:
+            return None
+        rejected = re.search(r"(?:不想|不愿意|不吃|不去|不选|不要|别去|别吃)"
+                             r"(?:去|吃|选|找|在)?(?:食堂|餐厅|快餐)", text)
+        if not rejected:
+            return None
+        explicit_pair = re.fullmatch(
+            r"(?:我)?(?:不想|不愿意|不吃|不去|不选|不要|别去|别吃)"
+            r"(?:去|吃|选|找|在)?(?P<old>食堂|餐厅|快餐)(?:了)?[，,；;]"
+            r"(?:但|不过|我)?(?:想要|想|要|还是)(?:去|吃|找|选|选择)?"
+            r"(?P<new>食堂|餐厅|快餐)(?:吧|就好|就行|即可)?[。！!？?]?",
+            re.sub(r"\s+", "", text),
+        )
+        if not explicit_pair or explicit_pair.group("old") == explicit_pair.group("new"):
+            return text, None
+        replacement = explicit_pair.group("new")
+        intent = agent_tools.resolve_activity_query(replacement)
+        return (replacement, intent) if intent and intent.get("status") == "resolved" else (text, None)
+    replacement = re.split(r"[，,。；;！？?!]", text[matches[-1].end():], maxsplit=1)[0].strip()
+    if not replacement:
+        return None
+    if re.match(r"^(?:全程)?(?:风景优先|景观优先|平坦优先|最短(?:路径|路线|路程)?)", replacement):
+        return (replacement, None) if len(matches) > 1 else None
+    # These edits belong to the existing route/constraint update path.
+    if re.search(r"^(?:步行|走路|骑行|骑车|开车|驾车|不走台阶|避开台阶|少爬坡)", replacement):
+        return (replacement, None) if len(matches) > 1 else None
+    prefix = re.sub(r"[\s，,；;、]+", "", text[:matches[0].start()])
+    tail = text[matches[-1].end():].strip().rstrip("。！？?!")
+    safe_prefix = re.fullmatch(
+        r"(?:(?:只|仅)?(?:把|将)?(?:当前|下一站|刚才的)?(?:用餐|吃饭|餐饮|午餐|晚餐|"
+        r"餐厅|食堂|快餐)?|(?:我)?(?:不想吃|不想去|不吃|不去|不选|不要|别去)(?:食堂|餐厅|快餐)(?:了)?)", prefix,
+    )
+    safe_target = re.fullmatch(
+        r"(?:(?:去|找|吃|选|选择|附近的?|一家|一个|家|个)\s*)*"
+        r"(?:食堂|餐厅|快餐|快餐店|小吃|小吃店)(?:吧|就好|就行|即可)?", tail,
+    )
+    # This path edits only the current dining stage. More complex utterances
+    # need clarification, not partial interpretation of a later clause.
+    if len(matches) != 1 or not safe_prefix or not safe_target:
+        return replacement, None
+    intent = agent_tools.resolve_activity_query(replacement)
+    if not intent or intent.get("status") != "resolved":
+        return replacement, None
+    if not is_dining or not dining.intersection(intent.get("activities") or []):
+        return replacement, None
+    return replacement, intent
 
 
 def _response_verification(response: dict) -> dict | None:
@@ -1526,6 +1888,52 @@ def _record_experience_sample(query: str, response: dict) -> None:
     except Exception:
         # 经验沉淀是旁路观测，任何失败都不得影响主链路响应
         logger.warning("经验沉淀失败（忽略）", exc_info=True)
+
+
+def _mentions_multiple_place_modes(query: str) -> bool:
+    return sum(bool(re.search(pattern, str(query or "")))
+               for pattern in (r"步行|走路", r"骑行|骑车", r"驾车|开车")) > 1
+
+
+def _is_ordered_activity_origin_answer(query: str) -> bool:
+    """Recognize a narrow origin answer without discarding other preferences."""
+    if _mentions_multiple_place_modes(query):
+        return False
+    match = re.fullmatch(r"(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}[，,。；;](.*)",
+                         str(query or "").strip())
+    if not match:
+        bare = re.fullmatch(r"(?:我(?:现在)?在|(?:我)?从|由)([^，,。；;！？!?]{1,40})",
+                            str(query or "").strip())
+        if not bare:
+            return False
+        poi, alternatives = agent_tools.find_poi_ambiguous(bare.group(1).strip())
+        return bool(poi and not alternatives and bare.group(1).strip() in
+                    {str(poi.get("name") or ""), *(str(a) for a in poi.get("aliases") or [])})
+    tail = re.sub(
+        r"步行|走路|骑行|骑车|驾车|开车|全程|"
+        r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)|"
+        r"避坡|少爬坡|不想爬坡|避开陡坡",
+        "", match.group(1),
+    )
+    return not tail.strip(" ，,。；;、！! ")
+
+
+def _is_supported_ordered_activity_request(query: str) -> bool:
+    """Do not silently discard requirements outside this narrow continuation."""
+    if _mentions_multiple_place_modes(query):
+        return False
+    remaining = re.sub(
+        r"打乒乓球|打羽毛球|打篮球|踢足球|乒乓球|羽毛球|篮球|足球|跑步|游泳|健身|"
+        r"快餐店|快餐|食堂|餐厅|吃东西|吃饭|用餐|干饭|"
+        r"不要走(?:楼梯|台阶)|不走(?:楼梯|台阶)|避开(?:楼梯|台阶|陡坡)|"
+        r"绕开(?:楼梯|台阶)|不想爬坡|少爬坡|避坡|"
+        r"我想|我要|帮我|为我|我|想|请|先|然后|接着|随后|之后|再|去|到|"
+        r"风景优先|景观优先|平坦优先|最短路径|"
+        r"步行|走路|骑行|骑车|驾车|开车|全程|规划|安排|一条|一份|一个|条|"
+        r"路线|行程|计划|的",
+        "", str(query or ""),
+    )
+    return not remaining.strip(" \t\r\n，,。；;、！？!? ")
 
 
 def run_agent(query: str, context: dict = None, history: list = None,
@@ -1735,6 +2143,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
     from agents.parser import detect_travel_mode
     if (not isinstance(coord_start, dict) and not _explicit_start_name(query)
             and not isinstance((context or {}).get("place_request"), dict)
+            and not agent_tools.recommendation_near_reference_from_text(query)
             and not agent_tools.ordered_via_request(query)
             and not _named_via_request(query)
             and not re.search(r"先.+(?:然后|再|接着|最后)", query)):
@@ -2018,15 +2427,196 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     # Activity choices and candidate IDs resume the same durable POI request.
     place_request = (context or {}).get("place_request") if isinstance(context, dict) else None
-    place_request = (_apply_place_request_correction(place_request, query)
+    has_pending_selection = (isinstance(place_request, dict) and place_request.get("pending_slot") == "selection"
+                             and bool(place_request.get("completed_legs")))
+    goal_clauses = _place_goal_clauses(query, place_request) if has_pending_selection else []
+    goal_text = "，".join(goal_clauses) if has_pending_selection else str(query or "")
+    confirmed_goal = _explicit_global_place_strategy(goal_text)
+    unhandled_goal_clause = has_pending_selection and _has_unhandled_place_goal_clause(goal_clauses)
+    changed_constraints = False
+    if has_pending_selection and confirmed_goal:
+        try:
+            original = _place_tool_constraints(place_request.get("constraints") or {})
+            corrected = _apply_place_request_correction(place_request, query)
+            changed_constraints = _place_tool_constraints(corrected.get("constraints") or {}) != original
+        except (TypeError, ValueError):
+            changed_constraints = True
+    if isinstance(place_request, dict) and place_request.get("unresolved_route_requirements"):
+        pending = deepcopy(place_request)
+        if confirmed_goal and not _place_has_scoped_goal(pending):
+            pending["strategy"] = confirmed_goal
+            pending["confirmed_strategy_override"] = confirmed_goal
+        if _PLACE_UNSCOPED_SLOPE.search(pending["unresolved_route_requirements"]):
+            question = ("上一轮避坡要求的范围或前序段约束尚未确认，不能安全改写前序路线，"
+                        "目前也不支持分段避坡。原话和已选地点保留在当前记录供查看；"
+                        "刷新会开始新对话，不会自动继承，请重新输入完整行程、地点、避坡范围和路线目标。")
+        elif _PLACE_STEP_CONSTRAINT.search(pending["unresolved_route_requirements"]):
+            question = ("上一轮通行约束与前序段记录不同，尚未重新核验，不能直接交付路线。"
+                        "原话和已选地点保留在当前记录供查看；刷新会开始新对话，不会自动继承，"
+                        "请重新输入完整行程、地点、通行约束和路线目标。")
+        else:
+            question = ("上一轮仍有无法可靠处理的附加要求，不能忽略后生成路线。原话和已选地点保留在当前记录供查看；"
+                        "刷新会开始新对话，不会自动继承，请重新输入完整行程、地点、全部条件和路线目标。")
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None, "needs_input": True,
+                "place_request": pending, "clarify": {"question": question, "options": []},
+                "suggestions": None, "turns": 0}
+    if (has_pending_selection and _PLACE_STRATEGY_MENTION.search(goal_text)
+            and (unhandled_goal_clause or changed_constraints or not confirmed_goal
+                 or _place_has_scoped_goal(place_request))):
+        pending = deepcopy(place_request)
+        selected = (context or {}).get("selected_poi_id")
+        if not selected and pending.get("pending_slot") == "selection":
+            selected = _selected_candidate_from_text(
+                query, pending.get("candidate_poi_ids") or [], pending.get("candidate_places") or [],
+            )
+        if selected in (pending.get("candidate_poi_ids") or []):
+            pending["selected_poi_id"] = selected
+        if _PLACE_UNSCOPED_SLOPE.search(goal_text) or unhandled_goal_clause or changed_constraints:
+            pending["unresolved_route_requirements"] = str(query or "")[:2000]
+            if confirmed_goal and not _place_has_scoped_goal(pending):
+                pending["strategy"] = confirmed_goal
+                pending["confirmed_strategy_override"] = confirmed_goal
+            if _PLACE_UNSCOPED_SLOPE.search(goal_text):
+                question = ("避坡要求的范围或前序段约束尚未确认，不能安全改写前序路线，"
+                            "目前也不支持分段避坡。原话和已选地点保留在当前记录供查看；"
+                            "刷新会开始新对话，不会自动继承，请重新输入完整行程、地点、避坡范围和路线目标。")
+            elif changed_constraints:
+                question = ("新通行约束与前序段记录不同，尚未重新核验，不能直接交付路线。"
+                            "原话和已选地点保留在当前记录供查看；刷新会开始新对话，不会自动继承，"
+                            "请重新输入完整行程、地点、通行约束和路线目标。")
+            else:
+                question = ("这次修改包含无法可靠处理的附加要求，未忽略条件生成路线。"
+                            "原话和已选地点保留在当前记录供查看；刷新会开始新对话，不会自动继承，"
+                            "请重新输入完整行程、地点、全部条件和路线目标。")
+        elif _place_has_scoped_goal(pending):
+            question = ("原行程包含分段策略，暂不能自动覆盖。请保留原策略并重新选择，"
+                        "或点击刷新后重新说明完整行程。")
+        else:
+            question = ("路线目标的适用范围或含义不明确。请明确回复“全程风景优先”、"
+                        "“全程最短路线”或“全程平坦优先”；当前行程和已选地点已保留。")
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None, "needs_input": True,
+                "place_request": pending, "clarify": {"question": question, "options": []},
+                "suggestions": None, "turns": 0}
+    activity_revision = _place_activity_revision(place_request, query)
+    if (confirmed_goal and activity_revision
+            and len(re.findall(r"改成|改为|换成|换为|换去", str(query or ""))) == 1
+            and re.search(r"(?:改成|改为|换成|换为)\s*(?:全程)?(?:风景优先|景观优先|平坦优先|最短)", str(query or ""))):
+        activity_revision = None
+    if (isinstance(place_request, dict) and place_request.get("unresolved_revision")
+            and not re.fullmatch(r"\s*(?:只|仅)(?:把)?(?:当前)?(?:用餐|餐饮|吃饭)?"
+                                 r"(?:改成|改为|换成|换为)(?:食堂|餐厅|快餐)\s*[。！!]?\s*", query or "")):
+        pending = deepcopy(place_request)
+        question = ("上一轮还有未确认的修改，暂不能选择旧候选。请回复“只改成食堂”“只改成餐厅”或“只改成快餐”；"
+                    "其他修改请点击页面“刷新”，重新输入完整行程。")
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None, "needs_input": True,
+                "place_request": pending, "clarify": {"question": question, "options": []},
+                "suggestions": None, "turns": 0}
+    place_request = (deepcopy(place_request) if activity_revision and not activity_revision[1]
+                     else _apply_place_request_correction(place_request, query)
                      if isinstance(place_request, dict) else None)
-    selected_poi_id = ((context or {}).get("selected_poi_id")
-                       or (place_request or {}).get("selected_poi_id")) if isinstance(context, dict) else None
+    if (isinstance(place_request, dict) and place_request.get("pending_slot") == "selection"
+            and place_request.get("completed_legs") and confirmed_goal and not activity_revision):
+        place_request["confirmed_strategy_override"] = confirmed_goal
+    if activity_revision:
+        replacement, intent = activity_revision
+        place_request.update({
+            "selected_poi_id": None,
+            "candidate_poi_ids": [], "candidate_places": [],
+        })
+        if not intent:
+            place_request["unresolved_revision"] = str(query)
+            question = ("这次修改包含暂不能可靠处理的阶段或条件，尚未应用。"
+                        "请回复“只改成食堂”“只改成餐厅”或“只改成快餐”；"
+                        "其他修改请点击页面“刷新”，重新输入完整行程。")
+            return {"response_kind": "clarify", "message": question, "route": None,
+                    "route_kind": None, "candidates": None, "needs_input": True,
+                    "place_request": place_request, "clarify": {"question": question, "options": []},
+                    "suggestions": None, "turns": 0}
+        place_request.update({"original_query": replacement,
+                              "activities": list(intent.get("activities") or []),
+                              "subcategories": list(intent.get("subcategories") or []),
+                              "pending_slot": "follow_up", "unresolved_revision": None})
+    external_selection = (context or {}).get("selected_poi_id") if isinstance(context, dict) else None
+    if (external_selection and not activity_revision
+            and (not place_request or place_request.get("pending_slot") != "selection"
+                 or external_selection not in (place_request.get("candidate_poi_ids") or []))):
+        question = "这个候选已不属于当前列表，请按最新结果重新选择。"
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None, "needs_input": True,
+                "place_request": place_request, "clarify": {"question": question, "options": []},
+                "suggestions": None, "turns": 0}
+    selected_poi_id = (None if activity_revision else
+                       ((context or {}).get("selected_poi_id")
+                        or (place_request or {}).get("selected_poi_id"))
+                       if isinstance(context, dict) else None)
     if (not selected_poi_id and place_request
             and place_request.get("pending_slot") == "selection"):
         selected_poi_id = _selected_candidate_from_text(
             query, place_request.get("candidate_poi_ids") or [],
+            place_request.get("candidate_places") or [],
         )
+    if (selected_poi_id and place_request and
+            (isinstance(place_request.get("search_anchor"), dict) or isinstance(place_request.get("start"), dict))
+            and (place_request.get("activities") or place_request.get("subcategories"))
+            and place_request.get("pending_slot") == "selection"):
+        from agents.result_maintenance import candidate_snapshot_is_current, record_candidate_snapshot
+
+        if not candidate_snapshot_is_current(place_request.get("result_dependencies")):
+            pending = deepcopy(place_request)
+            pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
+                            "candidate_places": [], "selected_poi_id": None})
+            start = pending.get("search_anchor") or pending.get("start")
+            activities, categories = pending.get("activities") or [], pending.get("subcategories") or []
+            try:
+                if not isinstance(start, dict) or not (activities or categories):
+                    raise ValueError("旧候选的地点需求或起点无法确认，请重新说明下一站。")
+                constraints = _place_candidate_constraints(
+                    pending.get("constraints") or {}, pending.get("completed_legs") or [],
+                    dependencies=pending.get("result_dependencies"),
+                    search_anchor=pending.get("search_anchor"), start=pending.get("start"),
+                )
+            except (TypeError, ValueError) as exc:
+                question = str(exc) or "旧候选的地点需求或起点无法确认，请重新说明下一站。"
+                return {"response_kind": "clarify", "message": question, "route": None,
+                        "route_kind": None, "candidates": None, "needs_input": True,
+                        "clarify": {"question": question, "options": []},
+                        "place_request": pending, "suggestions": None, "turns": 0}
+            args = {"start": start, "activities": activities, "subcategories": categories,
+                    "mode": pending.get("mode") or "walk",
+                    "max_distance_m": _place_candidate_radius_m(
+                        pending.get("original_query") or query, categories),
+                    "limit": _place_candidate_limit(pending.get("original_query") or query,
+                                                    activities, catalog=False)}
+            if constraints:
+                args["constraints"] = constraints
+            result, artifact = execute_tool("search_poi_candidates", args, {
+                "query": pending.get("original_query") or query, "uid": uid,
+            })
+            candidates = ((artifact or {}).get("candidates") if isinstance(artifact, dict) else None)
+            if isinstance(result, dict):
+                record_candidate_snapshot(pending, result)
+            if (not isinstance(result, dict) or result.get("error") or not isinstance(candidates, list)
+                    or not candidates or not candidate_snapshot_is_current(pending.get("result_dependencies"))
+                    or any(not isinstance(item, dict) or not item.get("poi_id") for item in candidates)):
+                question = "旧候选已失效，当前无法可靠更新；请稍后重新查询。"
+                return {"response_kind": "clarify", "message": question, "route": None,
+                        "route_kind": None, "candidates": None, "needs_input": True,
+                        "clarify": {"question": question, "options": ["重新查询"]},
+                        "place_request": pending, "suggestions": None, "turns": 0}
+            candidates = deepcopy(candidates)
+            for candidate in candidates:
+                candidate["place_id"] = candidate["poi_id"]
+                candidate["recommendation_start_name"] = (pending.get("start") or {}).get("name") or ""
+            pending.update({"pending_slot": "selection", "candidate_poi_ids": [
+                item["poi_id"] for item in candidates],
+                "candidate_places": _candidate_snapshot_rows(candidates)})
+            message = "路网或路况已变化，旧候选已失效；请从更新后的选项重新选择。"
+            return {"response_kind": "candidates", "message": message, "route": None,
+                    "route_kind": None, "candidates": candidates, "needs_input": True,
+                    "clarify": None, "place_request": pending, "suggestions": None, "turns": 0}
     recommendation_query = original_request
 
     def current_coordinate_start():
@@ -2065,14 +2655,32 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 join_issue = _place_route_constraint_issue(completed_legs, (saved_request or {}).get("constraints") or {})
             if not join_issue:
                 join_issue = _place_route_snapshot_issue(completed_legs)
+            replan_reason = join_issue
             refreshed_route = None
             refresh_error = None
-            if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
+            from agents.result_maintenance import may_keep_prefix
+            identity_is_trusted = (isinstance(proof_identity, dict)
+                                   and bool(proof_identity.get("owner_id"))
+                                   and bool(proof_identity.get("task_id"))
+                                   and type(proof_identity.get("task_revision")) is int)
+            policy = getattr(config, "RESULT_MAINTENANCE_POLICY", "full_recompute")
+            keep_prefix = (not join_issue and policy == "conservative" and identity_is_trusted
+                           and may_keep_prefix((saved_request or {}).get("result_dependencies"),
+                                               completed_legs[:-1], mode=(saved_request or {}).get("mode"),
+                                               next_leg=current_leg)
+                           and all((leg.get("route_state") or {}).get("travel_mode") == (saved_request or {}).get("mode")
+                                   for leg in completed_legs))
+            if not keep_prefix:
                 refreshed_route, refresh_error = _replan_changed_place_route(
                     completed_legs, {"query": root_query + " " + query,
-                                     "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
+                                     "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {},
+                                     "confirmed_strategy_override": (saved_request or {}).get("confirmed_strategy_override"),
+                                     "task_root_query": root_query,
+                                     "follow_up_requests": (saved_request or {}).get("follow_up_requests") or []})
                 if refreshed_route is not None:
                     join_issue = None
+                elif not join_issue:
+                    join_issue = "先前结果缺少可复用证据或要求完整重算"
             if join_issue:
                 pending = _place_request_state(
                     "重新规划全程", pending_slot="route_retry", previous=saved_request,
@@ -2092,6 +2700,14 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route_response["route"] = refreshed_route or _combined_place_route(completed_legs)
             if refreshed_route is None:
                 _add_combined_direct_reference(route_response["route"], completed_legs, root_query, uid)
+            route_response["result_maintenance"] = {
+                "policy": policy if policy in {"conservative", "full_recompute"} else "full_recompute",
+                "prefix_action": "retained" if keep_prefix else "recomputed",
+                "candidate_action": "selected_from_current_list",
+                "itinerary_action": "recomputed" if refreshed_route else "reassembled",
+                "time_action": "updated", "explanation_action": "regenerated",
+                "dependencies": deepcopy((saved_request or {}).get("result_dependencies")),
+            }
             route_response["route_kind"] = (
                 "multimodal" if len({leg.get("mode") for leg in completed_legs}) > 1
                 else "via"
@@ -2100,10 +2716,20 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 route_response["route"], str((saved_request or {}).get("original_query") or "") + " " + query,
             )
             if refreshed_route is not None:
-                route_response["message"] += "路况发生变化，已按最新记录重新规划全程。"
+                route_response["message"] += _place_replan_notice(replan_reason)
             if route_response["route"].get("route_state_unavailable"):
                 route_response["message"] += "各段方式或约束不同，请在分段路线查看详情；全程暂不支持一键切换策略。"
         if not followups:
+            if (isinstance(saved_request, dict) and saved_request.get("completed_legs")
+                    and isinstance(route_response.get("route"), dict)):
+                # This server-generated snapshot is retained with the completed
+                # run. A later explicit activity edit can rebuild the last stage
+                # without guessing the earlier goal from conversation prose.
+                completed = deepcopy(saved_request)
+                completed.update({"pending_slot": "selection", "candidate_poi_ids": [],
+                                  "candidate_places": [],
+                                  "selected_poi_id": None})
+                route_response["completed_place_request"] = completed
             return route_response
         next_request = followups[0]
         next_query = str(next_request.get("query") or "").strip()
@@ -2176,14 +2802,32 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 join_issue = _place_route_constraint_issue(full_legs, (saved_request or {}).get("constraints") or {})
             if not join_issue:
                 join_issue = _place_route_snapshot_issue(full_legs)
+            replan_reason = join_issue
             refreshed_route = None
             refresh_error = None
-            if join_issue in {"两段路线使用的路网或路况版本不同", "当前路况已更新"}:
+            prior_maintenance = route_response.get("result_maintenance") or {}
+            policy = getattr(config, "RESULT_MAINTENANCE_POLICY", "full_recompute")
+            weather_inputs = [leg.get("weather_input_sha256") for leg in full_legs]
+            weather_consistent = (bool(weather_inputs)
+                                  and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                                          and value == weather_inputs[0] for value in weather_inputs))
+            # If an earlier prefix was recomputed, completed_legs still holds
+            # its old constituent segments. Recompute the complete sequence
+            # rather than assembling those stale segments with the final leg.
+            needs_replan = (bool(join_issue) or policy != "conservative"
+                            or prior_maintenance.get("prefix_action") == "recomputed"
+                            or not weather_consistent)
+            if needs_replan:
                 refreshed_route, refresh_error = _replan_changed_place_route(
                     full_legs, {"query": root_query + " " + query,
-                                "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {}})
+                                "uid": uid, "task_constraints": (saved_request or {}).get("constraints") or {},
+                                "confirmed_strategy_override": (saved_request or {}).get("confirmed_strategy_override"),
+                                "task_root_query": root_query,
+                                "follow_up_requests": (saved_request or {}).get("follow_up_requests") or []})
                 if refreshed_route is not None:
                     join_issue = None
+                elif not join_issue:
+                    join_issue = "需要按当前数据重新计算完整行程"
             if join_issue:
                 pending = _place_request_state("重新规划全程", pending_slot="route_retry", previous=saved_request)
                 pending["completed_legs"] = full_legs
@@ -2196,9 +2840,17 @@ def run_agent(query: str, context: dict = None, history: list = None,
             if refreshed_route is None:
                 _add_combined_direct_reference(full_route, full_legs, root_query, uid)
             return {**route_response, "response_kind": "route", "route": full_route,
+                    "result_maintenance": {
+                        "policy": policy if policy in {"conservative", "full_recompute"} else "full_recompute",
+                        "prefix_action": "recomputed" if refreshed_route else (
+                            prior_maintenance.get("prefix_action") or "fresh"),
+                        "candidate_action": "selected_from_current_list", "itinerary_action": "recomputed" if refreshed_route else "reassembled",
+                        "time_action": "updated", "explanation_action": "regenerated",
+                        "dependencies": deepcopy((saved_request or {}).get("result_dependencies")),
+                    },
                     "route_kind": "via", "message": _route_message_with_detour(full_route, root_query) + _road_condition_feedback(
                         full_route, str((saved_request or {}).get("original_query") or "") + " " + query)
-                        + ("路况发生变化，已按最新记录重新规划全程。" if refreshed_route is not None else ""),
+                        + (_place_replan_notice(replan_reason) if refreshed_route is not None else ""),
                     "needs_input": False, "place_request": None, "clarify": None,
                     "suggestions": None}
         next_activities = list(next_request.get("activities") or [])
@@ -2210,7 +2862,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "root_query": ((saved_request or {}).get("root_query")
                                    or (saved_request or {}).get("original_query")),
                     "original_query": next_query or "下一站",
-                    "selected_poi_id": None, "candidate_poi_ids": []}
+                    "selected_poi_id": None, "candidate_poi_ids": [],
+                    "candidate_places": [], "search_anchor": None}
         pending = _place_request_state(
             next_query or "下一站", activities=next_activities,
             subcategories=next_categories, pending_slot="follow_up",
@@ -2226,6 +2879,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
             if route_strategy in {"shortest", "recommended", "scenery", "flat"}:
                 pending["strategy"] = route_strategy
         pending["completed_legs"] = completed_legs
+        from agents.result_maintenance import capture_dependencies
+        pending["result_dependencies"] = capture_dependencies(
+            completed_legs, task_revision=(context or {}).get("task_revision") if isinstance(context, dict) else None,
+        )
         route_response["needs_input"] = True
         route_response["place_request"] = pending
         if not next_query or not (next_activities or next_categories):
@@ -2237,20 +2894,26 @@ def run_agent(query: str, context: dict = None, history: list = None,
             return route_response
         lookup_args = {
             "subcategories": next_categories, "activities": next_activities,
-            "mode": pending["mode"], "limit": 4, "start": next_start,
-            "max_distance_m": 10000,
+            "mode": pending["mode"],
+            "limit": _place_candidate_limit(next_query, next_activities, catalog=False), "start": next_start,
+            "max_distance_m": _place_candidate_radius_m(next_query, next_categories),
         }
-        lookup_constraints = {}
-        if pending["constraints"].get("avoid_steps"):
-            lookup_constraints["avoid_steps"] = True
-        if pending["constraints"].get("avoid_slope"):
-            lookup_constraints["slope"] = "avoid"
+        try:
+            lookup_constraints = _place_candidate_constraints(
+                pending["constraints"], pending["completed_legs"], dependencies=pending["result_dependencies"])
+        except (TypeError, ValueError) as exc:
+            question = str(exc) or "前序行程的剩余约束暂时无法核验。"
+            route_response["clarify"] = {"question": question, "options": []}
+            return route_response
         if lookup_constraints:
             lookup_args["constraints"] = lookup_constraints
         lookup, artifact = execute_tool(
             "search_poi_candidates", lookup_args,
             {"query": next_query, "uid": uid},
         )
+        if isinstance(lookup, dict):
+            from agents.result_maintenance import record_candidate_snapshot
+            record_candidate_snapshot(pending, lookup)
         candidates = ((artifact or {}).get("candidates")
                       if isinstance(artifact, dict) else None) or []
         if isinstance(lookup, dict) and lookup.get("error"):
@@ -2265,8 +2928,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
             pending["candidate_poi_ids"] = [
                 item["poi_id"] for item in candidates if item.get("poi_id")
             ]
+            pending["candidate_places"] = _candidate_snapshot_rows(candidates)
             route_response["candidates"] = candidates
             question = f"下一步从{destination_name}出发找{next_query}，请选择地点。"
+            if lookup_constraints.get("max_duration_s"):
+                question += "候选估时未计入天气，选择后仍需核验整程时间。"
         route_response["clarify"] = {
             "question": question,
             "options": [] if candidates else ["重试查找"],
@@ -2279,6 +2945,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
         route, error = _replan_changed_place_route(old_legs, {
             "query": place_request.get("original_query") or query, "uid": uid,
             "task_constraints": place_request.get("constraints") or {},
+            "confirmed_strategy_override": place_request.get("confirmed_strategy_override"),
+            "task_root_query": place_request.get("root_query") or "",
+            "follow_up_requests": place_request.get("follow_up_requests") or [],
         })
         if not route:
             message = error or "当前无法可靠重算完整行程，请稍后重试。"
@@ -2296,7 +2965,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "place_request": place_request, "clarify": {"question": message, "options": ["重试"]},
                     "suggestions": None, "turns": 0}
         response = {"response_kind": "route", "message": _build_route_message(route)
-                    + "路况发生变化，已按最新记录重新规划全程。", "route": route, "route_kind": "via",
+                    + _place_replan_notice(None), "route": route, "route_kind": "via",
                     "candidates": None, "clarify": None, "place_request": None,
                     "needs_input": False, "suggestions": None, "turns": 0}
         if not followups:
@@ -2340,10 +3009,27 @@ def run_agent(query: str, context: dict = None, history: list = None,
                     "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
         selected_poi = next((poi for poi in agent_tools.load_pois()
                              if poi.get("id") == selected_poi_id), None)
+        if isinstance(selected_poi_id, str) and selected_poi_id.startswith("amap:"):
+            snapshot = next((row for row in (place_request or {}).get("candidate_places") or []
+                             if isinstance(row, dict) and row.get("poi_id") == selected_poi_id), None)
+            refreshed = agent_tools.amap_poi.lookup_by_id(selected_poi_id)
+            accepted = (agent_tools.amap_poi.choose_match(snapshot.get("name"), [refreshed],
+                                                           known=snapshot)
+                        if snapshot and refreshed else None)
+            selected_poi = accepted
         if not selected_poi:
-            return {"response_kind": "chat", "message": "这个地点已不在当前主数据中，请重新搜索。",
+            message = ("这个在线候选已无法按原名称和位置重新核验，请重新搜索后选择。"
+                       if isinstance(selected_poi_id, str) and selected_poi_id.startswith("amap:")
+                       else "这个地点已不在当前主数据中，请重新搜索。")
+            pending = deepcopy(place_request) if isinstance(place_request, dict) else None
+            if pending is not None:
+                pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
+                                "candidate_places": [], "selected_poi_id": None})
+            return {"response_kind": "clarify", "message": message,
                     "route": None, "route_kind": None, "candidates": None,
-                    "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                    "clarify": {"question": message, "options": ["重新搜索"]},
+                    "place_request": pending, "needs_input": True,
+                    "suggestions": None, "turns": 0}
         start_ref = ((place_request or {}).get("start")
                      if (place_request or {}).get("pending_slot") == "destination" else
                      explicit_place_start(query) or (place_request or {}).get("start")
@@ -2429,7 +3115,33 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     if place_request and place_request.get("pending_slot") == "follow_up":
         original_request = place_request.get("original_query") or original_request
-    if not place_request and not coord_end:
+        recommendation_query = original_request
+    ordered_stages = agent_tools.resolve_activity_sequence(original_request)
+    active_ordered_task = bool(
+        not place_request and (context or {}).get("active_task_request")
+        and ordered_stages and all(stage["intent"].get("status") == "resolved" for stage in ordered_stages)
+    )
+    origin_attempt = (explicit_place_start(query) if active_ordered_task
+                      and re.match(r"^(?:我(?:现在)?在|(?:我)?从|由)", str(query or "").strip()) else None)
+    if (origin_attempt and not origin_attempt.get("ambiguous_name")
+            and (not _is_ordered_activity_origin_answer(query)
+                 or not _is_supported_ordered_activity_request(original_request))):
+        question = ("原始行程或这次补充含有暂不能可靠处理的条件或改动，尚未生成候选。"
+                    "请点击刷新后重新输入完整行程、起点和条件。")
+        return {"response_kind": "clarify", "message": question, "route": None,
+                "route_kind": None, "candidates": None, "needs_input": True,
+                "clarify": {"question": question, "options": []}, "place_request": None,
+                "suggestions": None, "turns": 0}
+    ordered_origin_answer = bool(active_ordered_task and origin_attempt
+                                 and _is_ordered_activity_origin_answer(query)
+                                 and _is_supported_ordered_activity_request(original_request))
+    if ordered_origin_answer:
+        detected_mode, explicit_mode = detect_travel_mode(query)
+        if not explicit_mode:
+            detected_mode, explicit_mode = detect_travel_mode(original_request)
+        if explicit_mode:
+            travel_mode = detected_mode
+    if not place_request and not coord_end and not ordered_origin_answer:
         start_ref = explicit_place_start(query)
         origin_clause = re.match(
             r"^(?:我(?:现在)?在|(?:我)?从|由)[^，,。；;]{1,40}?"
@@ -2536,6 +3248,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
                                        constraints=constraints,
                                        follow_up_requests=sequence_followups,
                                        mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk")
+        if activity_intent.get("unresolved_requirements"):
+            pending["unresolved_route_requirements"] = str(original_request or "")[:2000]
         return {"response_kind": "clarify", "message": activity_intent["question"],
                 "route": None, "route_kind": None, "candidates": None,
                 "clarify": {"question": activity_intent["question"],
@@ -2556,6 +3270,8 @@ def run_agent(query: str, context: dict = None, history: list = None,
     recommendation_has_target = (
         agent_tools._query_has_explicit_poi_destination(recommendation_query)
         and named_final is None
+        and not (agent_tools.recommendation_near_reference_from_text(recommendation_query)
+                 and not agent_tools.query_requests_route(recommendation_query))
     )
     route_to_nearest = bool(
         agent_tools.query_requests_route(recommendation_query)
@@ -2564,9 +3280,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
     if ((recommendation_categories or recommendation_activities)
             and not recommendation_has_target
             and (not agent_tools.query_requests_route(recommendation_query)
-                 or route_to_nearest or bool(activity_sequence and named_final))):
+                 or route_to_nearest or bool(activity_sequence and named_final) or ordered_origin_answer)):
         start_ref = None
-        explicit_origin = agent_tools.recommendation_origin_from_text(query)
+        nearby_reference = agent_tools.recommendation_near_reference_from_text(recommendation_query)
+        explicit_origin = (agent_tools.recommendation_explicit_origin_from_text(query)
+                           if nearby_reference else agent_tools.recommendation_origin_from_text(query))
         if explicit_origin:
             # 本轮文字明确给出的地点优先于页面附带的 GPS 或地图坐标。
             resolved_origin = explicit_place_start(query)
@@ -2605,7 +3323,21 @@ def run_agent(query: str, context: dict = None, history: list = None,
             except (TypeError, ValueError):
                 start_ref = None
 
-        if start_ref is None and not recommendation_is_catalog:
+        search_anchor = None
+        if nearby_reference:
+            near_poi, alternatives = agent_tools.find_poi_ambiguous(nearby_reference)
+            if not near_poi or alternatives:
+                question = f"无法确认“{nearby_reference}”是哪个地点，请补充准确名称后再搜索附近餐饮。"
+                return {"response_kind": "clarify", "message": question,
+                        "route": None, "route_kind": None, "candidates": None,
+                        "clarify": {"question": question, "options": []}, "needs_input": True,
+                        "place_request": None, "suggestions": None, "turns": 0}
+            search_anchor = {"type": "poi", "name": near_poi["name"]}
+        elif activity_revision and isinstance((place_request or {}).get("search_anchor"), dict):
+            # A change to the food category does not change the named area.
+            search_anchor = deepcopy(place_request["search_anchor"])
+
+        if start_ref is None and not search_anchor and not recommendation_is_catalog:
             question = "你从哪里出发？可以在地图上点起点，或告诉我所在的地点，我再按路网距离推荐。"
             options = ["地图上选起点", "告诉我所在地点"]
             pending = _place_request_state(
@@ -2625,13 +3357,24 @@ def run_agent(query: str, context: dict = None, history: list = None,
             "activities": recommendation_activities,
             "mode": (place_request or {}).get("mode") or
                     (travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk"),
-            "limit": _requested_recommendation_limit(
-                recommendation_query, catalog=recommendation_is_catalog,
+            "limit": _place_candidate_limit(
+                recommendation_query, recommendation_activities, catalog=recommendation_is_catalog,
             ),
         }
         request_constraints = (place_request or {}).get("constraints") or {}
         constraint_query = str(recommendation_query) + " " + str(query)
-        tool_constraints = {}
+        try:
+            tool_constraints = _place_candidate_constraints(
+                request_constraints, (place_request or {}).get("completed_legs") or [],
+                dependencies=(place_request or {}).get("result_dependencies"),
+                search_anchor=search_anchor, start=start_ref,
+            )
+        except (TypeError, ValueError) as exc:
+            question = str(exc) or "前序行程的剩余约束暂时无法核验。"
+            return {"response_kind": "clarify", "message": question, "route": None,
+                    "route_kind": None, "candidates": None, "needs_input": True,
+                    "clarify": {"question": question, "options": []},
+                    "place_request": place_request, "suggestions": None, "turns": 0}
         if request_constraints.get("avoid_steps") or re.search(
             r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", constraint_query
         ):
@@ -2642,21 +3385,44 @@ def run_agent(query: str, context: dict = None, history: list = None,
             tool_constraints["slope"] = "avoid"
         if tool_constraints:
             recommendation_args["constraints"] = tool_constraints
-        if start_ref and not recommendation_is_catalog:
-            recommendation_args.update({"start": start_ref, "max_distance_m": 10000})
+        if search_anchor or (start_ref and not recommendation_is_catalog):
+            recommendation_args.update({
+                "start": search_anchor or start_ref,
+                "max_distance_m": _place_candidate_radius_m(
+                    recommendation_query + " " + query, recommendation_categories),
+            })
         result, artifact = execute_tool(
             "search_poi_candidates", recommendation_args,
             {"query": recommendation_query, "uid": uid},
         )
         candidates = (artifact or {}).get("candidates") if isinstance(artifact, dict) else None
         if result.get("error"):
+            if isinstance(place_request, dict):
+                pending = deepcopy(place_request)
+                pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
+                                "candidate_places": [], "selected_poi_id": None})
+                question = result.get("message") or "附近地点暂时无法核实，请调整条件或稍后重试。"
+                return {"response_kind": "clarify", "message": question, "route": None,
+                        "route_kind": None, "candidates": None, "needs_input": True,
+                        "clarify": {"question": question, "options": []},
+                        "place_request": pending, "suggestions": None, "turns": 0}
             return {"response_kind": "chat", "message": result.get("message") or "附近地点暂时无法核实。",
                     "route": None, "route_kind": None, "candidates": None,
                     "clarify": None, "suggestions": None, "turns": 0}
         if not candidates:
-            empty_message = ("校园地点主数据中暂未记录明确支持该用途的场所；这不等于现实中不存在。"
+            empty_message = ("当前路网和约束下暂未找到候选地点；这不等于现实中不存在，请调整条件后重试。"
+                             if result.get("route_budget_scope") else
+                             "校园地点主数据中暂未记录明确支持该用途的场所；这不等于现实中不存在。"
                              if recommendation_activities else
                              result.get("message") or "当前路网范围内没有找到合适的地点。")
+            if isinstance(place_request, dict):
+                pending = deepcopy(place_request)
+                pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
+                                "candidate_places": [], "selected_poi_id": None})
+                return {"response_kind": "clarify", "message": empty_message,
+                        "route": None, "route_kind": None, "candidates": None, "needs_input": True,
+                        "clarify": {"question": empty_message, "options": []},
+                        "place_request": pending, "suggestions": None, "turns": 0}
             return {"response_kind": "chat",
                     "message": empty_message,
                     "route": None, "route_kind": None, "candidates": [],
@@ -2680,6 +3446,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 recommendation_query, activities=recommendation_activities,
                 subcategories=recommendation_categories, pending_slot="selection",
                 candidate_poi_ids=[item.get("poi_id") for item in candidates if item.get("poi_id")],
+                candidate_places=_candidate_snapshot_rows(candidates),
                 follow_up_requests=follow_up_requests,
                 previous=place_request,
                 mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
@@ -2701,7 +3468,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "mode": recommendation_args["mode"],
             }
             if tool_constraints:
-                route_args["constraints"] = dict(tool_constraints)
+                route_constraints = dict(tool_constraints)
+                for key in ("max_distance_m", "max_duration_s"):
+                    if request_constraints.get(key) is not None:
+                        route_constraints[key] = request_constraints[key]
+                route_args["constraints"] = route_constraints
             if re.search(r"平坦优先|少爬坡|少走坡|避坡|不想爬坡", route_request):
                 route_args["weights"] = {"distance": 0.2, "slope": 0.6, "scenery": 0.2}
                 route_args.setdefault("constraints", {})["slope"] = "avoid"
@@ -2722,11 +3493,13 @@ def run_agent(query: str, context: dict = None, history: list = None,
                             "route": route, "route_kind": "direct", "candidates": None,
                             "recommendation_candidates": candidates,
                             "clarify": None, "place_request": None, "suggestions": None, "turns": 0}
+                saved_constraints = deepcopy(request_constraints)
+                saved_constraints.update({
+                    "avoid_steps": bool(route_args.get("constraints", {}).get("avoid_steps")),
+                    "avoid_slope": route_args.get("constraints", {}).get("slope") == "avoid",
+                })
                 saved_request = {**(place_request or {}), "mode": route_args["mode"],
-                                 "constraints": {
-                                     "avoid_steps": bool(route_args.get("constraints", {}).get("avoid_steps")),
-                                     "avoid_slope": route_args.get("constraints", {}).get("slope") == "avoid",
-                                 }}
+                                 "constraints": saved_constraints}
                 return add_route_weather(
                     with_next_place_stage(response, selected_candidate, saved_request,
                                           follow_up_requests), weather,
@@ -2738,38 +3511,52 @@ def run_agent(query: str, context: dict = None, history: list = None,
                         "clarify": None, "place_request": None, "suggestions": None, "turns": 0}, weather)
 
         first = candidates[0]
-        start_name = result.get("start_name") or start_ref.get("name") or "你选定的起点"
-        if start_ref.get("type") == "poi":
+        start_name = result.get("start_name") or (search_anchor or start_ref or {}).get("name") or "你选定的起点"
+        if isinstance(start_ref, dict) and start_ref.get("type") == "poi":
             for candidate in candidates:
-                candidate["recommendation_start_name"] = start_name
-        raw_category = first.get("activity_labels") or first.get("subcategory_label") or first.get("subcategory")
-        if isinstance(raw_category, (list, tuple)):
-            category = "、".join(str(label).strip() for label in raw_category if str(label).strip())
-        else:
-            category = str(raw_category or "").strip()
-        place_name = str(first.get("name", "候选地点"))
-        if category and category in place_name:
-            category = ""
+                candidate["recommendation_start_name"] = start_ref.get("name") or ""
         distance = first.get("distance_m")
         if distance is not None:
-            category_suffix = f"（{category}）" if category else ""
-            summary = (f"从{start_name}出发，我按当前路网估算距离排了 {len(candidates)} 个选项。"
-                       f"最近的是{place_name}{category_suffix}，约 {round(float(distance))} 米。")
+            center = f"以{start_name}附近为范围" if search_anchor else f"从{start_name}出发"
+            summary = f"{center}，我按当前路网估算距离排了 {len(candidates)} 个选项。"
+            # Larger lists may open on a later page in the browser. Naming the
+            # first item there would refer to a card the user cannot yet see.
+            if len(candidates) <= 4:
+                raw_category = first.get("activity_labels") or first.get("subcategory_label") or first.get("subcategory")
+                if isinstance(raw_category, (list, tuple)):
+                    category = "、".join(str(label).strip() for label in raw_category if str(label).strip())
+                else:
+                    category = str(raw_category or "").strip()
+                place_name = str(first.get("name", "候选地点"))
+                if category and category in place_name:
+                    category = ""
+                category_suffix = f"（{category}）" if category else ""
+                summary += f"最近的是{place_name}{category_suffix}，约 {round(float(distance))} 米。"
         else:
-            summary = f"我按从{start_name}出发的路网距离排了 {len(candidates)} 个选项。"
-        summary += "起点和地点到道路的接驳按直线估算，未核实实际通行；点选地点可继续规划路线。"
+            center = f"{start_name}附近" if search_anchor else f"从{start_name}出发"
+            summary = f"我按{center}的路网距离排了 {len(candidates)} 个选项。"
+        summary += ("参照点和地点到道路的接驳按直线估算，未核实实际通行；点选地点可继续规划路线。"
+                    if search_anchor else
+                    "起点和地点到道路的接驳按直线估算，未核实实际通行；点选地点可继续规划路线。")
+        if tool_constraints.get("max_duration_s"):
+            summary += "候选估时未计入天气，选择后仍需核验整程时间。"
         pending = _place_request_state(
             recommendation_query, activities=recommendation_activities,
             subcategories=recommendation_categories, pending_slot="selection", start=start_ref,
+            search_anchor=search_anchor,
             follow_up_requests=follow_up_requests,
             constraints=(place_request or {}).get("constraints") or {
-                "avoid_steps": bool(re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", recommendation_query)),
-                "avoid_slope": bool(re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", recommendation_query)),
+                "avoid_steps": bool(re.search(r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶)", constraint_query)),
+                "avoid_slope": bool(re.search(r"避坡|少爬坡|不想爬坡|避开陡坡", constraint_query)),
             },
             candidate_poi_ids=[item.get("poi_id") for item in candidates if item.get("poi_id")],
+            candidate_places=_candidate_snapshot_rows(candidates),
             previous=place_request,
             mode=travel_mode if travel_mode in {"walk", "bike", "drive"} else "walk",
         )
+        if isinstance(search_anchor or start_ref, dict) and not recommendation_is_catalog:
+            from agents.result_maintenance import record_candidate_snapshot
+            record_candidate_snapshot(pending, result)
         return {"response_kind": "candidates", "message": summary,
                 "route": None, "route_kind": None, "candidates": candidates,
                 "clarify": None, "place_request": pending, "suggestions": None, "turns": 0}
@@ -3261,6 +4048,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             try:
                 pending_place_request, artifact_candidates, failure = _recheck_route_candidate_stage(
                     compound_query, artifact_route, coord_start, coord_end, travel_mode, uid, execute_tool,
+                    task_revision=(context or {}).get("task_revision") if isinstance(context, dict) else None,
                 )
             except (ValueError, KeyError, TypeError) as exc:
                 artifact_candidates = None
@@ -3272,7 +4060,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 question = f"首段路线已生成，但{failure}；请重新确认或稍后重试。"
                 continuation_clarify = {"question": question, "options": []}
             else:
-                continuation_clarify = {"question": "请选择下一站，继续规划完整行程。", "options": []}
+                question = "请选择下一站，继续规划完整行程。"
+                if (pending_place_request.get("constraints") or {}).get("max_duration_s"):
+                    question += "候选估时未计入天气，选择后仍需核验整程时间。"
+                continuation_clarify = {"question": question, "options": []}
         # Preserve only the verified route and actual candidate evidence; the
         # model's free text can describe stale candidates from its first search.
         final_message = _mixed_evidence_summary(

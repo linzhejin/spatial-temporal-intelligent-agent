@@ -73,9 +73,10 @@ def process_next_run(database_url, worker_id, graph, lease_seconds=30):
         if status not in {"completed", "partial", "failed", "needs_input"}:
             status = "completed"
         finished = finish_run(
-            database_url, run_id, worker_id, status=status, result=result,
+            database_url, run_id, worker_id, status=status, result=result, return_status=True,
         )
-        return {"run_id": run_id, "status": status if finished else "lease_lost"}
+        return {"run_id": run_id,
+                "status": finished if isinstance(finished, str) else status if finished else "lease_lost"}
     except Exception as error:
         logger.exception("Agent run failed (%s)", run_id)
         if lease_lost.is_set():

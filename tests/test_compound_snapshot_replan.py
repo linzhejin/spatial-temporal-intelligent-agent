@@ -32,6 +32,7 @@ def test_snapshot_replan_retains_nested_order_identity_and_constraints(monkeypat
                             "_route_conditions_snapshot": [], "_route_weather_snapshot": None}, None))
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     monkeypatch.setattr(planner.agent_tools, "_data_version_for_graph", lambda _: "data")
+    monkeypatch.setattr(planner.agent_tools.route_state_module, "current_data_version", lambda *_: "data")
     calls = []
     def execute(name, args, ctx):
         calls.append((name, deepcopy(args), ctx))
@@ -94,6 +95,7 @@ def test_return_to_start_is_not_silently_dropped(monkeypatch):
     monkeypatch.setattr(planner.agent_tools, "find_poi_ambiguous", lambda name:
         (next((poi for poi in pois if poi["name"] == name), None), []))
     monkeypatch.setattr(planner.agent_tools, "_ensure_graph", lambda: graph)
+    monkeypatch.setattr("spatial.network.get_network", lambda: graph)
     monkeypatch.setattr(planner.agent_tools, "_weather_snapshot", lambda: None)
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     route, reason = planner._replan_changed_place_route(values, {})
@@ -189,6 +191,7 @@ def test_snapshot_replan_uses_real_route_tool_on_isolated_graph(monkeypatch):
             travel_mode="walk", hard_constraints={}, strategy={"name": "shortest"},
             data_version="data", road_condition_version=version)
     monkeypatch.setattr(planner.agent_tools, "_ensure_graph", lambda: graph)
+    monkeypatch.setattr("spatial.network.get_network", lambda: graph)
     monkeypatch.setattr(planner.agent_tools, "_weather_snapshot", lambda: None)
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     route, error = planner._replan_changed_place_route([
@@ -218,6 +221,7 @@ def test_snapshot_replan_preserves_custom_weights_with_real_route_tool(monkeypat
             start=coord(a), end=coord(b), travel_mode="walk", hard_constraints={}, strategy=strategy,
             data_version="data", road_condition_version=version)}
     monkeypatch.setattr(planner.agent_tools, "_ensure_graph", lambda: graph)
+    monkeypatch.setattr("spatial.network.get_network", lambda: graph)
     monkeypatch.setattr(planner.agent_tools, "_weather_snapshot", lambda: None)
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
     route, reason = planner._replan_changed_place_route([leg(1, 2, "old"), leg(2, 3, "new")], {})
@@ -379,7 +383,12 @@ def test_multistage_combination_failure_retry_retains_next_target(monkeypatch):
     attempts = []
     def replan(route_legs, context):
         attempts.append((route_legs, context))
-        return (None, "路况正在更新") if len(attempts) == 1 else (rebuilt, None)
+        if len(attempts) == 1:
+            return None, "路况正在更新"
+        if len(attempts) == 2:
+            return rebuilt, None
+        return make_route("A", "F", "fresh", 1, 4,
+                          via={"type": "multi", "name": "D、E", "points": [ref("D"), ref("E")]}), None
     monkeypatch.setattr(planner, "_replan_changed_place_route", replan)
     pending = {"request_id": "request", "original_query": "从A经D到E再到F",
                "pending_slot": "selection", "start": ref("D"), "mode": "walk",
@@ -392,7 +401,9 @@ def test_multistage_combination_failure_retry_retains_next_target(monkeypatch):
     assert failed["place_request"]["pending_slot"] == "route_retry"
     assert failed["place_request"]["follow_up_requests"][0]["destination_poi_id"] == "id_F"
     retried = planner.run_agent("重试", context={"place_request": failed["place_request"]})
-    assert len(attempts) == 2 and retried["response_kind"] == "route"
+    # With no recorded weather fingerprints, the final merged trip must be
+    # recomputed rather than assembled from independently timed segments.
+    assert len(attempts) == 3 and retried["response_kind"] == "route"
     assert retried["route"]["route_state"]["end"]["poi_id"] == "id_F"
     assert [item["poi_id"] for item in retried["route"]["route_state"]["via"]["points"]] == ["id_D", "id_E"]
     assert retried["route"]["route_state"]["hard_constraints"]["avoid_steps"] is True
@@ -402,6 +413,7 @@ def test_multistage_combination_failure_retry_retains_next_target(monkeypatch):
 def test_total_library_basketball_meal_flow_replans_on_real_isolated_graph(monkeypatch, event_change):
     import time
     import networkx as nx
+    from agents.route_state import current_data_version, current_road_condition_version
     graph = nx.MultiDiGraph()
     pois = []
     for node, name, category, activity in [(1, "总图", "library", "study"),
@@ -416,6 +428,7 @@ def test_total_library_basketball_meal_flow_replans_on_real_isolated_graph(monke
         graph.add_edge(node, node + 1, 0, length=100, highway="residential")
         graph.add_edge(node + 1, node, 0, length=100, highway="residential")
     monkeypatch.setattr(planner.agent_tools, "_ensure_graph", lambda: graph)
+    monkeypatch.setattr("spatial.network.get_network", lambda: graph)
     monkeypatch.setattr(planner.agent_tools, "_weather_snapshot", lambda: None)
     monkeypatch.setattr(planner.agent_tools, "load_pois", lambda: pois)
     monkeypatch.setattr(planner.agent_tools, "navigation_wgs", lambda poi, _: (
@@ -439,7 +452,9 @@ def test_total_library_basketball_meal_flow_replans_on_real_isolated_graph(monke
             poi = pois[1] if basketball else pois[2]
             candidate = {"poi_id": poi["id"], "name": poi["name"], "subcategory": poi["subcategory"],
                          "activities": poi["activities"], "distance_m": 100}
-            return {"candidates": [candidate], "start_name": args["start"]["name"]}, {"candidates": [candidate]}
+            return {"candidates": [candidate], "start_name": args["start"]["name"],
+                    "data_version": current_data_version(graph),
+                    "road_condition_version": current_road_condition_version(current["events"])}, {"candidates": [candidate]}
         second_leg = name == "plan_route" and args["end"].get("poi_id") == "poi_3"
         if second_leg and event_change == "before_second_leg":
             current["events"] = [event]

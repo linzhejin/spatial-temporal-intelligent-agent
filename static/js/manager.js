@@ -2,7 +2,7 @@
   'use strict';
 
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
-  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, editingEventId: null, eventEditBusy: false, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
+  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, eventItems: [], preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, editingEventId: null, eventEditBusy: false, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   var visionPreviewStates = new Map();
   var playingVisionVideos = new Set();
@@ -780,6 +780,27 @@
 
   function resetEventModes() {
     eventModeInputs().forEach(function (input) { input.checked = false; });
+    byId('event-direction').value = 'both';
+  }
+
+  function directionLabel(direction) {
+    return direction === 'forward' ? 'A → B' : direction === 'reverse' ? 'B → A' : '双向';
+  }
+
+  function roadBindingIdentity(snap) {
+    if (!snap) return '';
+    return JSON.stringify([snap.u, snap.v, snap.key, snap.edges, snap.geometry_gcj]);
+  }
+
+  function addRoadDirectionEndpoints(geometry, layer) {
+    if (!geometry || geometry.length < 2) return [];
+    return [0, geometry.length - 1].map(function (index, number) {
+      return L.circleMarker(geometry[index], {
+        radius: 5, color: '#fff', weight: 2, fillColor: '#365f50', fillOpacity: 1, interactive: false,
+      }).bindTooltip(number ? 'B' : 'A', {
+        permanent: true, direction: 'center', className: 'road-direction-marker', opacity: 1,
+      }).addTo(layer);
+    });
   }
 
   // Campus event times always use UTC+8, even when the browser is in another timezone.
@@ -849,6 +870,9 @@
     if (state.picking) return '请在地图上选择道路；不需要重选时可再次点击“选取路段”取消。';
     if (!state.picked) return '请点击“选取路段”，再在地图上点击实际受影响的道路。';
     if (!state.picked.confirmed) return '请核对高亮道路，并点击“确认路段”。';
+    var direction = byId('event-direction').value;
+    if (direction !== 'both' && (!state.picked.snap || !state.picked.snap.binding_token ||
+        state.picked.bindingDirection !== direction)) return '请等待所选方向预览完成，再确认发布。';
     if (state.sourceJobId && byId('field-confirmation').value.trim().length < 8) return '请填写道路现场核实依据（至少 8 字）。';
     return '';
   }
@@ -880,7 +904,8 @@
   function conditionPreviewQuery(picked) {
     var query = '?lng=' + encodeURIComponent(picked.lng) +
       '&lat=' + encodeURIComponent(picked.lat) +
-      '&type=' + encodeURIComponent(byId('event-type').value);
+      '&type=' + encodeURIComponent(byId('event-type').value) +
+      '&direction=' + encodeURIComponent(byId('event-direction').value);
     var action = byId('event-action').value;
     if (action) {
       query += '&action=' + encodeURIComponent(action) +
@@ -903,6 +928,7 @@
     byId('selected-road').classList.remove('is-set');
     byId('confirm-picked-road').hidden = true;
     byId('clear-picked-road').hidden = true;
+    byId('retry-direction-preview').hidden = true;
     renderImpactPreview(null);
     updatePublishState();
   }
@@ -1007,6 +1033,7 @@
     byId('logout').hidden = false;
     if (!state.map) initMap();
     setTimeout(function () { state.map.invalidateSize(); }, 80);
+    restoreWorkspaceSelection();
     refreshEvents();
     refreshVisionStatus();
     refreshVisionScenes();
@@ -1061,6 +1088,49 @@
     state.visionLayers = L.layerGroup().addTo(state.map);
     state.map.on('click', handleMapClick);
   }
+
+  var activeWorkspaceStorageKey = 'whu-manager-active-workspace-v1';
+  function workspaceLinks() {
+    if (!document || typeof document.querySelectorAll !== 'function') return [];
+    return Array.prototype.slice.call(document.querySelectorAll('.workflow-nav a[href^="#"]'));
+  }
+  function selectWorkspace(targetId, shouldScroll) {
+    var target = byId(targetId);
+    if (!target) return;
+    workspaceLinks().forEach(function (link) {
+      var active = link.getAttribute('href') === '#' + targetId;
+      link.classList.toggle('is-active', active);
+      if (active) link.setAttribute('aria-current', 'location');
+      else link.removeAttribute('aria-current');
+    });
+    try { window.sessionStorage.setItem(activeWorkspaceStorageKey, targetId); } catch (_) {}
+    if (shouldScroll) target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (targetId === 'road-workspace' && state.map) {
+      window.setTimeout(function () { state.map.invalidateSize(); }, shouldScroll ? 350 : 80);
+    }
+  }
+  function restoreWorkspaceSelection() {
+    var hashTarget = String(window.location && window.location.hash || '').slice(1);
+    var stored = '';
+    try { stored = window.sessionStorage.getItem(activeWorkspaceStorageKey) || ''; } catch (_) {}
+    var target = byId(hashTarget) ? hashTarget : (byId(stored) ? stored : 'road-workspace');
+    selectWorkspace(target, false);
+    if (!hashTarget && target !== 'road-workspace') {
+      window.setTimeout(function () {
+        var element = byId(target);
+        if (element && !byId('workspace').hidden) element.scrollIntoView({ behavior: 'instant', block: 'start' });
+      }, 120);
+    }
+  }
+  workspaceLinks().forEach(function (link) {
+    link.addEventListener('click', function () {
+      var targetId = String(link.getAttribute('href') || '').slice(1);
+      selectWorkspace(targetId, false);
+      if (targetId === 'event-history') {
+        window.setTimeout(function () { byId('event-search').focus({ preventScroll: true }); }, 350);
+      }
+    });
+  });
 
   function setPicking(active, purpose) {
     var nextPurpose = active ? (purpose || state.pickPurpose || 'road') : null;
@@ -1138,7 +1208,7 @@
     var extent = document.createElement('p');
     extent.textContent = (preview.road_name || '所选道路') + ' · ' +
       (preview.affected_road_segments || 0) + ' 个路段 · 约 ' +
-      (preview.affected_length_m || 0) + ' 米';
+      (preview.affected_length_m || 0) + ' 米 · 影响方向：' + directionLabel(preview.direction);
     box.appendChild(extent);
     var modes = document.createElement('p');
     var labels = { walk: '步行', bike: '骑行', drive: '驾车' };
@@ -1169,26 +1239,45 @@
 
   async function refreshImpactPreview() {
     if (!state.picked) return;
+    byId('retry-direction-preview').hidden = true;
     var picked = state.picked;
     var type = byId('event-type').value;
     var requestId = ++state.impactPreviewRequestId;
     var query = conditionPreviewQuery(picked);
     var action = byId('event-action').value;
+    var direction = byId('event-direction').value;
+    if (direction !== 'both') {
+      picked.bindingDirection = null;
+      updatePublishState();
+    }
     try {
       var data = await request('/api/road-conditions/snap' + query, 'GET');
       if (requestId !== state.impactPreviewRequestId || state.picked !== picked ||
-          byId('event-type').value !== type || byId('event-action').value !== action) return;
+          byId('event-type').value !== type || byId('event-action').value !== action ||
+          byId('event-direction').value !== direction) return;
+      if (roadBindingIdentity(data.snap) !== roadBindingIdentity(picked.snap)) {
+        clearPickedRoad();
+        message('form-message', '道路匹配已变化，请重新选择并确认路段。');
+        return;
+      }
       picked.snap = data.snap;
+      picked.bindingDirection = direction === 'both' ||
+        (data.impact_preview && data.impact_preview.direction === direction) ? direction : null;
       picked.impactPreview = data.impact_preview;
       renderImpactPreview(data.impact_preview);
       updatePublishState();
     } catch (error) {
       if (requestId !== state.impactPreviewRequestId || state.picked !== picked ||
-          byId('event-type').value !== type || byId('event-action').value !== action) return;
+          byId('event-type').value !== type || byId('event-action').value !== action ||
+          byId('event-direction').value !== direction) return;
+      picked.bindingDirection = null;
+      updatePublishState();
+      byId('retry-direction-preview').hidden = direction === 'both';
       renderImpactPreview({
         road_name: picked.snap && picked.snap.road_name,
         affected_length_m: picked.snap && picked.snap.chain_length_m,
         affected_road_segments: picked.snap && picked.snap.edges && picked.snap.edges.length,
+        direction: direction,
         effects_by_mode: {}, sample_routes: {},
         route_sample_scope: error.message || '路线影响预览暂时不可用，请核对所选路段和事件类型。',
       });
@@ -1274,6 +1363,7 @@
     var requestedEventType = byId('event-type').value;
     var requestedAction = byId('event-action').value;
     var requestedModes = selectedEventModes();
+    var requestedDirection = byId('event-direction').value;
     try {
       var snapData = await request('/api/road-conditions/snap' + conditionPreviewQuery({ lng: lng, lat: lat }), 'GET');
       if (pickRequestId !== state.pickRequestId || !state.picking || state.pickPurpose !== 'road') return;
@@ -1282,8 +1372,12 @@
       var currentEventType = byId('event-type').value;
       var previewMatchesCurrentType = currentEventType === requestedEventType &&
         byId('event-action').value === requestedAction &&
+        byId('event-direction').value === requestedDirection &&
         selectedEventModes().join(',') === requestedModes.join(',');
-      state.picked = { lng: lng, lat: lat, snap: snap, impactPreview: previewMatchesCurrentType ? snapData.impact_preview : null, confirmed: false };
+      state.picked = { lng: lng, lat: lat, snap: snap, impactPreview: previewMatchesCurrentType ? snapData.impact_preview : null,
+        bindingDirection: previewMatchesCurrentType && (requestedDirection === 'both' ||
+          (snapData.impact_preview && snapData.impact_preview.direction === requestedDirection)) ? requestedDirection : null,
+        confirmed: false };
       renderImpactPreview(previewMatchesCurrentType ? snapData.impact_preview : null);
       if (state.preview) state.map.removeLayer(state.preview);
       state.pickFeedbackLayers.forEach(function (layer) { state.map.removeLayer(layer); });
@@ -1291,6 +1385,7 @@
       var geometry = (snap.geometry_gcj || []).map(function (point) { return [point[1], point[0]]; });
       if (geometry.length >= 2) {
         state.preview = L.polyline(geometry, { color: '#d48943', weight: 8, opacity: .85, lineCap: 'round' }).addTo(state.map);
+        state.pickFeedbackLayers = state.pickFeedbackLayers.concat(addRoadDirectionEndpoints(geometry, state.map));
       } else {
         state.preview = L.circleMarker([snap.snap_lat_gcj, snap.snap_lng_gcj], {
           radius: 8, color: '#fff', weight: 2, fillColor: '#d48943', fillOpacity: 1,
@@ -1329,6 +1424,16 @@
 
   function eventStatus(item) {
     return item.status || 'active';
+  }
+
+  function formatBeijingDateTime(value, seconds) {
+    var numeric = Number(value);
+    var date = new Date(seconds ? numeric * 1000 : value);
+    if (!Number.isFinite(date.getTime())) return '时间未知';
+    return date.toLocaleString('zh-CN', {
+      timeZone: 'Asia/Shanghai', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', hour12: false,
+    });
   }
 
   function eventEditDateTime(epochSeconds) {
@@ -1428,22 +1533,28 @@
     var name = document.createElement('div');
     var title = document.createElement('div'); title.className = 'event-name'; title.textContent = item.name || '未命名事件';
     var description = document.createElement('div'); description.className = 'event-sub'; description.textContent = item.description || '无补充说明';
-    name.append(title, description);
+    name.appendChild(title);
+    var detail = document.createElement('details'); detail.className = 'event-details';
+    var detailSummary = document.createElement('summary'); detailSummary.textContent = '查看说明与来源';
+    var detailBody = document.createElement('div'); detailBody.className = 'event-details-body';
+    detailBody.appendChild(description);
     if (item.source && item.source.kind === 'vision_job') {
       var source = document.createElement('div'); source.className = 'event-sub';
       var regionText = item.source.region_id ? ' · 观察区域 ' + item.source.region_id : '';
       var associatedRoad = item.source.associated_edge && item.source.associated_edge.road_name;
       var roadLinkText = associatedRoad ? ' → ' + associatedRoad : '';
       source.textContent = '影像来源 ' + String(item.source.job_id || '').slice(0, 8) + regionText + roadLinkText + ' · ' + (item.source.field_confirmation || '未记录核实依据');
-      name.appendChild(source);
+      detailBody.appendChild(source);
     }
     if (item.audit && item.audit.length) {
       var last = item.audit[item.audit.length - 1];
       var audit = document.createElement('div'); audit.className = 'event-sub';
       audit.textContent = '最近操作：' + ({ created: '发布', updated: '修改', ended: '结束', revoked: '撤销' }[last.action] || last.action) +
-        ' · ' + (last.actor || '未知') + ' · ' + (last.at ? new Date(Number(last.at) * 1000).toLocaleString('zh-CN', { hour12: false }) : '时间未知');
-      name.appendChild(audit);
+        ' · ' + (last.actor || '未知') + ' · ' + (last.at ? formatBeijingDateTime(last.at, true) : '时间未知');
+      detailBody.appendChild(audit);
     }
+    detail.append(detailSummary, detailBody);
+    name.appendChild(detail);
     var isVisionEvent = item.source && item.source.kind === 'vision_job';
     if (isVisionEvent && eventStatus(item) !== 'revoked' && state.selectedRoadRebindId === item.id) {
       var rebindPanel = document.createElement('div'); rebindPanel.className = 'event-rebind-panel';
@@ -1490,11 +1601,12 @@
     var type = document.createElement('div'); type.className = 'event-type'; type.textContent = item.type_label || item.type || '管制';
     var road = document.createElement('div'); road.className = 'event-meta';
     var edge = item.edge || {};
-    road.textContent = (edge.road_name || '未命名道路') + (edge.chain_length_m ? ' · ' + Math.round(edge.chain_length_m) + ' 米' : '');
+    road.textContent = (edge.road_name || '未命名道路') + (edge.chain_length_m ? ' · ' + Math.round(edge.chain_length_m) + ' 米' : '') +
+      ' · ' + directionLabel(item.direction);
     var times = document.createElement('div'); times.className = 'event-meta';
-    var end = item.end_time ? new Date(Number(item.end_time) * 1000).toLocaleString('zh-CN', { hour12: false }) : '持续有效';
-    times.textContent = eventStatus(item) === 'revoked' ? '撤销 ' + new Date(Number(item.revoked_at || item.updated_at) * 1000).toLocaleString('zh-CN', { hour12: false }) :
-      (eventStatus(item) === 'scheduled' ? '计划开始 ' + new Date(Number(item.start_time) * 1000).toLocaleString('zh-CN', { hour12: false }) : '结束 ' + end);
+    var end = item.end_time ? formatBeijingDateTime(item.end_time, true) : '持续有效';
+    times.textContent = eventStatus(item) === 'revoked' ? '撤销 ' + formatBeijingDateTime(item.revoked_at || item.updated_at, true) :
+      (eventStatus(item) === 'scheduled' ? '计划开始 ' + formatBeijingDateTime(item.start_time, true) : '结束 ' + end);
     var actions = document.createElement('div'); actions.className = 'row-actions';
     if (isVisionEvent && eventStatus(item) !== 'revoked') {
       var rebindButton = document.createElement('button'); rebindButton.type = 'button';
@@ -1528,6 +1640,7 @@
     try {
       var result = await request('/api/road-conditions?all=1', 'GET');
       var items = result.conditions || [];
+      state.eventItems = items;
       if (state.selectedRoadRebindId && !items.some(function (item) { return item.id === state.selectedRoadRebindId; })) {
         clearRoadRebind(false);
       }
@@ -1539,21 +1652,93 @@
         var geometry = (edge.geometry_gcj || []).map(function (point) { return [point[1], point[0]]; });
         if (geometry.length >= 2) {
           L.polyline(geometry, { color: item.status === 'active' ? '#d48943' : '#9da79c', weight: 5, opacity: .76 }).addTo(state.eventLayers);
+          if (item.direction === 'forward' || item.direction === 'reverse') addRoadDirectionEndpoints(geometry, state.eventLayers);
         } else if (edge.snap && edge.snap.lat && edge.snap.lng) {
           L.circleMarker([edge.snap.lat, edge.snap.lng], { radius: 6, color: '#fff', weight: 2, fillColor: '#d48943', fillOpacity: .95 }).addTo(state.eventLayers);
         }
       });
-      list.replaceChildren();
-      if (!items.length) {
-        var empty = document.createElement('div'); empty.className = 'empty-state'; empty.textContent = '目前没有路况记录。可在上方地图选路后发布第一条事件。'; list.appendChild(empty);
-      } else {
-        items.forEach(function (item) { list.appendChild(renderEventRow(item)); });
-      }
+      renderFilteredEvents();
     } catch (error) {
       list.replaceChildren();
       var failed = document.createElement('div'); failed.className = 'empty-state'; failed.textContent = error.message || '事件记录暂时无法读取。'; list.appendChild(failed);
     }
   }
+
+  function renderFilteredEvents() {
+    var list = byId('event-list');
+    if (!list) return;
+    var query = String(byId('event-search').value || '').trim().toLocaleLowerCase();
+    var status = byId('event-status-filter').value || 'all';
+    var date = byId('event-date-filter').value || '';
+    var items = (state.eventItems || []).filter(function (item) {
+      if (status !== 'all' && eventStatus(item) !== status) return false;
+      if (query) {
+        var searchable = [item.name, item.description, item.type_label, item.type,
+          item.edge && item.edge.road_name, directionLabel(item.direction)]
+          .filter(Boolean).join(' ').toLocaleLowerCase();
+        if (!searchable.includes(query)) return false;
+      }
+      if (date) {
+        var time = Number(item.start_time || item.created_at || 0);
+        var chinaDate = time ? new Date(time * 1000 + 8 * 3600000).toISOString().slice(0, 10) : '';
+        if (chinaDate !== date) return false;
+      }
+      return true;
+    });
+    list.replaceChildren();
+    if (!items.length) {
+      var empty = document.createElement('div'); empty.className = 'empty-state';
+      empty.textContent = state.eventItems.length
+        ? '没有符合筛选条件的事件，试试清除筛选。'
+        : '目前没有路况记录。可在上方地图选路后发布第一条事件。';
+      list.appendChild(empty);
+    } else {
+      items.forEach(function (item) { list.appendChild(renderEventRow(item)); });
+    }
+  }
+
+  function prepareRoadWorkflow() {
+    var form = byId('condition-form');
+    if (!form || !form.dataset || form.dataset.workflowPrepared === 'true') return;
+    form.dataset.workflowPrepared = 'true';
+    var banner = byId('vision-source-banner');
+    var pick = byId('pick-road');
+    var selected = form.querySelector('.selected-road-row');
+    var eventType = byId('event-type');
+    var preview = byId('impact-preview');
+    function heading(number, title, hint) {
+      var node = document.createElement('div');
+      node.className = 'road-step-heading';
+      var index = document.createElement('span'); index.textContent = number;
+      var copy = document.createElement('div');
+      var strong = document.createElement('strong'); strong.textContent = title;
+      var small = document.createElement('small'); small.textContent = hint;
+      copy.append(strong, small); node.append(index, copy);
+      return node;
+    }
+    if (pick && selected && eventType) {
+      var stepOne = heading('1', '选择道路', '先在地图上确认受影响路段');
+      form.insertBefore(stepOne, banner || eventType.parentNode);
+      form.insertBefore(pick, banner || eventType.parentNode);
+      form.insertBefore(selected, banner || eventType.parentNode);
+    }
+    if (eventType) form.insertBefore(heading('2', '设置影响与时间', '选择方式、方向和北京时间有效期'), eventType.parentNode);
+    if (preview) form.insertBefore(heading('3', '检查并发布', '核对道路和影响摘要后提交'), preview);
+  }
+
+  ['event-search', 'event-status-filter', 'event-date-filter'].forEach(function (id) {
+    var control = byId(id);
+    if (control) control.addEventListener(id === 'event-search' ? 'input' : 'change', renderFilteredEvents);
+  });
+  var clearEventFilters = byId('clear-event-filters');
+  if (clearEventFilters) clearEventFilters.addEventListener('click', function () {
+    byId('event-search').value = '';
+    byId('event-status-filter').value = 'all';
+    byId('event-date-filter').value = '';
+    renderFilteredEvents();
+  });
+
+  prepareRoadWorkflow();
 
   function readPendingVisionUpload() {
     try { return JSON.parse(window.sessionStorage.getItem(pendingVisionUploadKey) || 'null'); }
@@ -1784,7 +1969,9 @@
     var detections = Array.isArray(result.preview_detections) ? result.preview_detections.slice(0, 250) : [];
     var stage = document.createElement('div'); stage.className = 'vision-image-stage';
     var image = document.createElement('img');
-    image.alt = '管理员上传的校园巡查影像'; image.className = 'vision-preview'; image.src = job.media_url;
+    image.alt = Object.prototype.hasOwnProperty.call(result, 'research_replay')
+      ? '公开素材历史回放影像' : '管理员上传的校园巡查影像';
+    image.className = 'vision-preview'; image.src = job.media_url;
     stage.appendChild(image);
     if (width > 0 && height > 0 && width * height <= 12500000 && detections.length) {
       var svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -2272,16 +2459,33 @@
 
   function renderVisionJob(job) {
     var card = document.createElement('article'); card.className = 'vision-job';
+    var result = job.result && typeof job.result === 'object' ? job.result : {};
+    var isReplay = Object.prototype.hasOwnProperty.call(result, 'research_replay');
+    var replay = isReplay && result.research_replay && typeof result.research_replay === 'object'
+      ? result.research_replay : {};
     var head = document.createElement('div'); head.className = 'vision-job-head';
     var title = document.createElement('div'); title.className = 'vision-job-title'; title.textContent = job.original_name || '巡查影像';
     var meta = document.createElement('div'); meta.className = 'vision-job-meta';
-    var captured = job.captured_at ? new Date(job.captured_at).toLocaleString('zh-CN', { hour12: false }) : '拍摄时间未记录';
-    meta.textContent = '拍摄 ' + captured + (job.anchor_gcj ? ' · 校园位置已标注' : '')
-      + (job.media_kind === 'video' ? (job.camera_stabilized ? ' · 管理员声明固定/已稳像' : ' · 自动检查镜头运动') : '');
-    var captureSource = { dji_srt: 'DJI 字幕', manual: '人工填写' }[job.capture_time_source];
-    if (captureSource) {
-      meta.textContent += ' · 时间来自 ' + captureSource
-        + (job.capture_timezone ? ' · 时区 ' + job.capture_timezone : '');
+    if (isReplay) {
+      var originalLocation = typeof replay.original_location === 'string' && replay.original_location.trim()
+        ? replay.original_location.trim().slice(0, 120) : '未知';
+      var originalTime = typeof replay.original_capture_time === 'string' && replay.original_capture_time.trim()
+        ? replay.original_capture_time.trim().slice(0, 120) : '未知';
+      var simulatedLocation = typeof replay.simulated_location === 'string' && replay.simulated_location.trim()
+        ? replay.simulated_location.trim().slice(0, 120) : '未指定';
+      var simulatedClock = typeof replay.simulated_clock === 'string' && replay.simulated_clock.trim()
+        ? replay.simulated_clock.trim().slice(0, 120) : '未指定';
+      meta.textContent = '原素材地点：' + originalLocation + ' · 原拍摄时间：' + originalTime
+        + ' · 模拟校园道路：' + simulatedLocation + ' · 实验时钟（模拟）：' + simulatedClock;
+    } else {
+    var captured = job.captured_at ? formatBeijingDateTime(job.captured_at, false) : '拍摄时间未记录';
+      meta.textContent = '拍摄 ' + captured + (job.anchor_gcj ? ' · 校园位置已标注' : '')
+        + (job.media_kind === 'video' ? (job.camera_stabilized ? ' · 管理员声明固定/已稳像' : ' · 自动检查镜头运动') : '');
+      var captureSource = { dji_srt: 'DJI 字幕', manual: '人工填写' }[job.capture_time_source];
+      if (captureSource) {
+        meta.textContent += ' · 时间来自 ' + captureSource
+          + (job.capture_timezone ? ' · 时区 ' + job.capture_timezone : '');
+      }
     }
     title.appendChild(meta);
     var stateLabel = document.createElement('span'); stateLabel.className = 'vision-job-state ' + job.status;
@@ -2289,7 +2493,15 @@
       queued: '排队中', running: job.cancel_requested ? '等待取消' : '分析中', needs_review: job.review_status ? '已复核' : '待复核',
       completed: '完成', failed: '分析失败', cancelled: '已取消',
     }[job.status] || job.status;
+    if (isReplay && replay.review_origin === 'scripted' &&
+        (job.review_status || Object.keys(job.candidate_reviews || {}).length)) stateLabel.textContent = '脚本模拟审核';
     head.append(title, stateLabel); card.appendChild(head);
+    if (isReplay) {
+      var replayNotice = document.createElement('p'); replayNotice.className = 'vision-replay-notice';
+      replayNotice.textContent = '公开素材历史回放；校园道路和实验时钟均为模拟，不能发布为当前路况。'
+        + (replay.review_origin === 'scripted' ? '脚本模拟审核，非人工复核。' : '审核来源请以记录为准。');
+      card.appendChild(replayNotice);
+    }
     if (job.status === 'running' || job.status === 'queued') {
       var progressInfo = job.progress || {};
       var progressLine = document.createElement('p'); progressLine.className = 'vision-job-meta';
@@ -2326,11 +2538,10 @@
       var reviewed = document.createElement('p'); reviewed.className = 'vision-job-meta';
       reviewed.textContent = (job.review_status === 'confirmed' ? '已确认' : '已排除') +
         ' · ' + (job.reviewed_by || '管理者') +
-        (job.reviewed_at ? ' · ' + new Date(job.reviewed_at).toLocaleString('zh-CN', { hour12: false }) : '') +
+        (job.reviewed_at ? ' · ' + formatBeijingDateTime(job.reviewed_at, false) : '') +
         (job.review_note ? ' · ' + job.review_note : '');
       card.appendChild(reviewed);
     }
-    var result = job.result || {};
     if (job.result && (job.status === 'needs_review' || job.status === 'completed' || job.review_status)) {
       var previewMedia = appendVisionPreview(card, job, result);
       appendVisionMetrics(card, result, job.media_kind, job);
@@ -2377,7 +2588,7 @@
           if (candidateReview.reviewed_by) reviewParts.push(candidateReview.reviewed_by);
           if (candidateReview.reviewed_at) {
             var reviewDate = new Date(candidateReview.reviewed_at);
-            if (Number.isFinite(reviewDate.getTime())) reviewParts.push(reviewDate.toLocaleString('zh-CN', { hour12: false }));
+            if (Number.isFinite(reviewDate.getTime())) reviewParts.push(formatBeijingDateTime(reviewDate, false));
           }
           if (candidateReview.note) reviewParts.push(candidateReview.note);
           reviewText.textContent = '单项复核：' + reviewParts.join(' · ');
@@ -2395,8 +2606,8 @@
           });
           actions.append(confirmButton, dismissCandidate); candidate.appendChild(actions);
         }
-        if ((candidateReview && candidateReview.status === 'confirmed') ||
-            (legacyReview && job.review_status === 'confirmed')) {
+        if (!isReplay && ((candidateReview && candidateReview.status === 'confirmed') ||
+            (legacyReview && job.review_status === 'confirmed'))) {
           var transfer = document.createElement('button'); transfer.type = 'button';
           transfer.className = 'outline-button transfer-button'; transfer.textContent = '将此候选转入道路事件';
           transfer.addEventListener('click', function () { prepareVisionEvent(job, index); });
@@ -2414,7 +2625,7 @@
         });
         card.appendChild(dismissButton);
       }
-      if (job.review_status === 'confirmed') {
+      if (!isReplay && job.review_status === 'confirmed') {
         var next = document.createElement('p'); next.className = 'vision-job-meta';
         next.textContent = '已确认影像迹象。若需影响导航，请在上方路况表单中手工选定具体道路并发布事件。';
         card.appendChild(next);
@@ -2433,15 +2644,21 @@
         var terminal = document.createElement('div'); terminal.className = 'vision-terminal';
         var terminalTitle = document.createElement('strong'); terminalTitle.textContent = '分析已结束';
         var terminalCopy = document.createElement('p');
-        terminalCopy.textContent = result.safety && result.safety.observation_region_reassociation_required === true
-          ? '观察区域映射成功率低于 80%，系统不会基于相关区域生成拥堵或人群候选。请重新圈选观察区、核对道路绑定后重新分析；画面映射不等于地图地理配准。'
-          : noCandidateFeedback(result, job.media_kind);
+        if (isReplay) {
+          terminalCopy.textContent = '历史分析没有可复核候选；是否存在道路异常未知，不能据此发布当前路况。';
+        } else {
+          terminalCopy.textContent = result.safety && result.safety.observation_region_reassociation_required === true
+            ? '观察区域映射成功率低于 80%，系统不会基于相关区域生成拥堵或人群候选。请重新圈选观察区、核对道路绑定后重新分析；画面映射不等于地图地理配准。'
+            : noCandidateFeedback(result, job.media_kind);
+        }
         terminal.append(terminalTitle, terminalCopy); card.appendChild(terminal);
-        var manual = document.createElement('button'); manual.type = 'button';
-        manual.className = 'outline-button transfer-button';
-        manual.textContent = '依据原片手工登记路况';
-        manual.addEventListener('click', function () { prepareManualVisionEvent(job); });
-        card.appendChild(manual);
+        if (!isReplay) {
+          var manual = document.createElement('button'); manual.type = 'button';
+          manual.className = 'outline-button transfer-button';
+          manual.textContent = '依据原片手工登记路况';
+          manual.addEventListener('click', function () { prepareManualVisionEvent(job); });
+          card.appendChild(manual);
+        }
         if (!(result.safety && result.safety.observation_region_reassociation_required === true)) {
           appendVisionRecoveryActions(card, job);
         }
@@ -2597,10 +2814,12 @@
       type: byId('event-type').value,
       action: byId('event-action').value,
       affected_modes: selectedEventModes(),
+      direction: byId('event-direction').value,
       name: byId('event-name').value.trim(),
       description: byId('event-description').value.trim(),
       lng: state.picked.lng, lat: state.picked.lat,
     };
+    if (body.direction !== 'both') body.binding_token = state.picked.snap.binding_token;
     if (body.action === 'slowdown') body.cost_multiplier = Number(byId('event-cost').value);
     body.start_time = new Date(timeRange.start).toISOString();
     if (timeRange.end !== undefined) body.end_time = new Date(timeRange.end).toISOString();
@@ -2645,8 +2864,15 @@
     clearPickedRoad();
     message('form-message', '已清除所选路段。');
   });
+  byId('retry-direction-preview').addEventListener('click', refreshImpactPreview);
   byId('event-type').addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
   byId('event-action').addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
+  byId('event-direction').addEventListener('change', function () {
+    if (state.picked) state.picked.bindingDirection = null;
+    renderImpactPreview(null);
+    updatePublishState();
+    return refreshImpactPreview();
+  });
   eventModeInputs().forEach(function (input) {
     input.addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
   });

@@ -32,7 +32,8 @@ def test_new_recommendation_preserves_selected_mode_before_and_after_start_clari
                  "end_name": args["end"]["name"], "route_state": _test_route_state(args)}
         return route, {"route": route}
 
-    with patch.object(planner.agent_tools, "execute_tool", side_effect=plan_selected) as execute:
+    with patch("agents.result_maintenance.candidate_snapshot_is_current", return_value=True), \
+         patch.object(planner.agent_tools, "execute_tool", side_effect=plan_selected) as execute:
         result = planner.run_agent("就去这里", context={
             "place_request": answer["place_request"], "selected_poi_id": "poi_307",
         })
@@ -64,6 +65,7 @@ def test_activity_answer_preserves_follow_up_and_applies_new_mode_and_constraint
 
 def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes_after_second(monkeypatch):
     monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_: [])
+    monkeypatch.setattr("agents.route_state.current_data_version", lambda: "test-data")
     first = planner.run_agent("我在工学部，想先打球再吃饭")
     sport = {"poi_id": "poi_206", "name": "工学部篮球场", "activities": ["basketball"],
              "subcategory": "field", "distance_m": 120}
@@ -72,7 +74,8 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
 
     def search_sport(name, args, _ctx):
         assert name == "search_poi_candidates"
-        return {"candidates": [sport], "start_name": "工学部"}, {"candidates": [sport]}
+        return {"candidates": [sport], "start_name": "工学部", "data_version": "test-data",
+                "road_condition_version": current_road_condition_version([])}, {"candidates": [sport]}
 
     with patch.object(planner.agent_tools, "execute_tool", side_effect=search_sport):
         sports = planner.run_agent("篮球", context={"place_request": first["place_request"]})
@@ -84,11 +87,13 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
                                   "recommended_edge_ids": [[1, 2, 0]],
                                   "distance_m": 120, "duration_min": 2,
                                   "start_name": "工学部", "end_name": "工学部篮球场",
-                                  "mode": "walk", "route_state": _test_route_state(args)}}
+                                  "mode": "walk", "route_state": _test_route_state(args),
+                                  "route_verification": {"status": "pass"}, "weather_input_sha256": "a" * 64}}
         assert name == "search_poi_candidates"
         assert args["activities"] == ["meal"]
         assert args["start"] == {"type": "poi", "name": "工学部篮球场", "poi_id": "poi_206"}
-        return {"candidates": [meal], "start_name": "工学部篮球场"}, {"candidates": [meal]}
+        return {"candidates": [meal], "start_name": "工学部篮球场", "data_version": "test-data",
+                "road_condition_version": current_road_condition_version([])}, {"candidates": [meal]}
 
     with patch.object(planner.agent_tools, "load_pois", return_value=[
         {"id": "poi_206", "name": "工学部篮球场"},
@@ -111,14 +116,15 @@ def test_composite_sport_and_meal_remains_pending_after_first_route_and_finishes
                               "recommended_edge_ids": [[2, 3, 0]],
                               "distance_m": 260, "duration_min": 4,
                               "start_name": "工学部篮球场", "end_name": "工学部食堂",
-                              "mode": "walk", "route_state": _test_route_state(args)}}
+                              "mode": "walk", "route_state": _test_route_state(args),
+                              "weather_input_sha256": "a" * 64}}
 
     with patch.object(planner.agent_tools, "load_pois", return_value=[
         {"id": "poi_310", "name": "工学部食堂"},
     ]), patch.object(planner.agent_tools, "execute_tool", side_effect=second_stage):
         routed_meal = planner.run_agent("去这个食堂", context={
             "place_request": routed_sport["place_request"], "selected_poi_id": "poi_310",
-        })
+        }, proof_identity={"owner_id": "owner", "task_id": "task", "task_revision": 1})
     assert routed_meal["response_kind"] == "route"
     assert routed_meal.get("needs_input") is not True
     assert routed_meal["place_request"] is None

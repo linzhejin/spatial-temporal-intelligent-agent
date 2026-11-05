@@ -220,6 +220,13 @@ def build_agent_workflow(
             context["active_task_request"] = origin_query.strip()
         if isinstance(task.get("place_request"), dict):
             context["place_request"] = task["place_request"]
+        elif not continuation and isinstance(data.get("previous_completed_place_request"), dict):
+            # Only an explicit activity replacement can recover a completed
+            # trip; unrelated new questions must not inherit its destination.
+            from agents.planner import _place_activity_revision
+            previous_place = data["previous_completed_place_request"]
+            if _place_activity_revision(previous_place, data["query"]):
+                context["place_request"] = previous_place
         if data.get("selected_poi_id"):
             context["selected_poi_id"] = data["selected_poi_id"]
         from api.routes import _normalize_chat_context
@@ -311,6 +318,12 @@ def build_agent_workflow(
             return result
 
         def run_route_agent():
+            if (data.get("route_context_uncertain") and not continuation
+                    and is_route_followup(data["query"])):
+                question = "上一条路线尚未可靠完成，无法确定你要修改哪条。请重新说明起点和终点。"
+                return {"response_kind": "clarify", "message": question,
+                        "clarify": {"question": question, "options": []},
+                        "needs_input": True, "turns": 0}
             agent_kwargs = dict(
                 context=context, history=history,
                 coord_start=start, coord_end=end, coord_waypoints=waypoints,
@@ -436,7 +449,7 @@ def build_agent_workflow(
         from agents import provenance as provenance_mod
         provenance_mod.persist(response.get("provenance"))
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
-                    "place_request", "candidates"):
+                    "place_request", "candidates", "completed_place_request", "result_maintenance"):
             result[key] = response.get(key)
         if response.get("needs_input"):
             result["needs_input"] = True

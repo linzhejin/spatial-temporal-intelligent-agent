@@ -133,6 +133,8 @@ def test_only_typed_graph_no_path_produces_no_path_evidence(monkeypatch):
         "start": {"name": "起点"}, "end": {"name": "终点"},
         "travel_mode": "walk", "strategy": {"name": "shortest"},
         "hard_constraints": {},
+        "data_version": tools._data_version_for_graph(graph),
+        "road_condition_version": current_road_condition_version([]),
     }
 
     monkeypatch.delenv("AGENT_REPLAY_ENABLE_LOCAL")

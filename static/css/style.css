@@ -43,6 +43,20 @@
     --touch-min: 44px;
 }
 
+.whu-road-direction-endpoint {
+    width: 24px;
+    height: 24px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: #365f50;
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 20px;
+    text-align: center;
+    box-shadow: 0 1px 5px #0005;
+}
+
 * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
 html {
@@ -130,6 +144,8 @@ body {
     gap: 8px;
     color: var(--ink-soft);
 }
+
+.legend-item[hidden] { display: none; }
 
 .legend-line {
     width: 22px;
@@ -586,7 +602,23 @@ body {
 
 .travel-mode-btn:active { transform: scale(0.97); }
 
-/* ===== Route strategy segmented control（仅在已有路线时出现） ===== */
+/* ===== Route strategy segmented control ===== */
+.route-strategy-heading {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 8px;
+    margin: 9px 2px 0;
+    color: var(--ink-soft);
+    font-size: 0.73rem;
+    font-weight: 700;
+}
+.route-strategy-heading span:last-child {
+    color: var(--ink-light);
+    font-size: 0.68rem;
+    font-weight: 400;
+    text-align: right;
+}
 .route-strategy-switch {
     display: flex;
     gap: 6px;
@@ -631,8 +663,9 @@ body {
 
 .route-strategy-btn:active { transform: scale(0.97); }
 
-.route-strategy-switch.is-drive .route-strategy-btn[data-route-strategy="flat"] {
-    display: none;
+.route-strategy-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
 }
 
 /* ===== Mini shortcut cards row ===== */
@@ -1282,7 +1315,7 @@ body.is-planning-mode .desktop-route-workbench {
 @media (max-width: 767px) {
     body {
         grid-template-columns: 1fr;
-        grid-template-rows: minmax(0, var(--mobile-map-pane-height, 55vh)) minmax(0, 1fr);
+        grid-template-rows: minmax(0, var(--mobile-map-pane-height, 35vh)) minmax(0, 1fr);
         height: 100dvh;
     }
 
@@ -1371,7 +1404,7 @@ body.is-planning-mode .desktop-route-workbench {
 
     .submit-btn { width: 40px; height: 40px; }
 
-    .map-legend { bottom: 10px; right: 10px; padding: 8px 10px; font-size: 0.68rem; }
+    .map-legend { bottom: 10px; right: 76px; padding: 8px 10px; font-size: 0.68rem; }
 
     .whu-locate-group { flex-direction: column; gap: 4px; padding: 4px; border-radius: 13px; }
     .whu-point-btn { width: 52px; min-height: 44px; padding: 0 2px; border-radius: 9px; }
@@ -2021,6 +2054,41 @@ body.is-planning-mode .desktop-route-workbench {
     box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
     transform: translate(-50%, -120%);
 }
+.candidate-map-pin {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 40px;
+    height: 40px;
+    padding: 2px;
+    border: 2px solid #fff;
+    border-radius: 50%;
+    background: #aa4c51;
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(42, 36, 40, .35);
+    font-size: 13px;
+    font-weight: 700;
+    line-height: 1;
+    cursor: pointer;
+}
+.candidate-map-pin.is-group { background: #735072; font-size: 10px; }
+.candidate-map-popup { min-width: 180px; max-width: 240px; }
+.candidate-map-popup-title { padding: 3px 5px 6px; color: #5a4f58; font-weight: 700; }
+.candidate-map-choice {
+    display: block;
+    width: 100%;
+    min-height: 44px;
+    padding: 7px 5px;
+    border: 0;
+    border-top: 1px solid #e9e1e7;
+    background: transparent;
+    color: #512f47;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+}
+.candidate-map-choice:focus-visible { outline: 2px solid #735072; outline-offset: -2px; }
 
 /* GPS 定位按钮 */
 .whu-locate-btn {
@@ -2070,18 +2138,22 @@ body.is-planning-mode .desktop-route-workbench {
 /* ===== P4：候选卡片 / 澄清选项（珞珈秋色主题） ===== */
 .candidate-cards {
     display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    padding: 4px 0 4px 36px;  /* 与回复气泡头像对齐 */
-    max-width: 92%;
+    flex-direction: column;
+    gap: 5px;
+    padding: 4px 0 4px 36px;
+    width: min(100%, 460px);
+    max-width: 100%;
 }
 .candidate-card {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 2px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    width: 100%;
+    min-width: 0;
     min-height: var(--touch-min);
-    padding: 8px 14px;
+    padding: 8px 10px;
     background: var(--surface);
     border: 1px solid var(--divider);
     border-radius: var(--radius-md);
@@ -2101,10 +2173,24 @@ body.is-planning-mode .desktop-route-workbench {
     cursor: default;
 }
 .candidate-name {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-wrap: anywhere;
     font-size: 14px;
     font-weight: 600;
     color: var(--ink);
     line-height: 1.3;
+}
+.candidate-meta {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    align-items: center;
+    gap: 2px 6px;
+    min-width: 0;
+    max-width: 48%;
+    text-align: right;
 }
 .candidate-cat {
     font-size: 11px;
@@ -2118,6 +2204,31 @@ body.is-planning-mode .desktop-route-workbench {
     font-size: 11px;
     color: var(--ink-light);
 }
+.candidate-pager {
+    width: 100%;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    padding-top: 3px;
+}
+.candidate-page-status {
+    color: var(--ink-light);
+    font-size: 11px;
+    margin-right: auto;
+}
+.candidate-page-btn {
+    min-height: 44px;
+    padding: 6px 11px;
+    border: 1px solid var(--divider);
+    border-radius: 999px;
+    background: var(--surface);
+    color: var(--cherry-deep);
+    font: inherit;
+    font-size: 12px;
+    cursor: pointer;
+}
+.candidate-page-btn:disabled { opacity: 0.45; cursor: default; }
 
 /* Read-only comparison stays in the conversation and never implies a route was selected. */
 .route-comparison-row {
@@ -2859,4 +2970,77 @@ body.is-planning-mode.has-route-results .desktop-mode-card { display: none !impo
     .desktop-route-details__summary span,
     .poi-section__summary span { font-size: 0.63rem; }
     .poi-tags li { padding: 5px 8px; font-size: 0.72rem; }
+}
+
+/* Shared campus map design system */
+:root {
+    --cherry: #176B5B;
+    --cherry-deep: #125649;
+    --cherry-soft: #EAF3F1;
+    --cherry-tint: rgba(23, 107, 91, 0.12);
+    --ink: #172B32;
+    --ink-soft: #52656D;
+    --ink-light: #697B82;
+    --paper: #F4F7F7;
+    --surface: #FFFFFF;
+    --jade: #176B5B;
+    --jade-deep: #125649;
+    --jade-soft: #EAF3F1;
+    --stone: #D6E0DF;
+    --divider: #DDE6E5;
+    --color-recommended: #2563EB;
+    --color-shortest: #8797A0;
+    --color-poi: #176B5B;
+    --shadow-sm: 0 1px 4px rgba(23, 43, 50, 0.06);
+    --shadow-md: 0 4px 16px rgba(23, 43, 50, 0.08);
+    --shadow-lg: 0 8px 28px rgba(23, 43, 50, 0.1);
+    --shadow-float: 0 12px 36px rgba(23, 43, 50, 0.14);
+}
+body { background: #F4F7F7; }
+.chat-panel { background: #F4F7F7; }
+.floating-header { background: rgba(255,255,255,.97); border-bottom: 1px solid #DDE6E5; }
+.app-title { color: #172B32; }
+.candidate-cards { gap: 7px; padding-left: 32px; width: min(100%, 440px); }
+.candidate-entry { min-width: 0; overflow: hidden; border: 1px solid #DDE6E5; border-radius: 12px; background: #fff; box-shadow: var(--shadow-sm); }
+.candidate-card { border: 0; border-radius: 0; box-shadow: none; background: transparent; }
+.candidate-card:hover:not(:disabled) { border-color: transparent; box-shadow: none; transform: none; background: #F8FBFA; }
+.candidate-index { display: grid; place-items: center; flex: 0 0 26px; width: 26px; height: 26px; border-radius: 8px; background: #EAF3F1; color: #176B5B; font-size: 12px; font-weight: 750; }
+.candidate-name { color: #172B32; font-size: 14px; line-height: 1.35; }
+.candidate-meta { max-width: 56%; gap: 3px 7px; }
+.candidate-cat { color: #176B5B; font-size: 12px; }
+.candidate-campus,.candidate-dist { color: #52656D; font-size: 12px; }
+.candidate-dist { font-weight: 600; }
+.candidate-pager { gap: 7px; padding: 5px 0 0 32px; }
+.candidate-page-status { color: #52656D; font-size: 12px; }
+.candidate-page-btn { border-color: #C9D9D6; color: #176B5B; font-size: 13px; }
+.candidate-page-btn:not(:disabled):hover { background: #EAF3F1; }
+.candidate-details { margin: 0 10px 8px 44px; border-top: 1px solid #EEF2F1; }
+.candidate-details summary { min-height: 34px; padding: 8px 0; color: #176B5B; font-size: 12px; cursor: pointer; }
+.candidate-details-body { padding: 0 0 5px; color: #52656D; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
+.candidate-details-body p { margin: 0 0 4px; }
+.candidate-map-pin { border-color: #fff; background: #176B5B; box-shadow: 0 3px 10px rgba(23,43,50,.28); }
+.candidate-map-pin.is-group { background: #2563EB; }
+.candidate-map-choice { min-height: 44px; border-color: #DDE6E5; color: #172B32; }
+.candidate-map-choice:hover,.candidate-map-choice:focus-visible { background: #EAF3F1; }
+.clarify-chip { min-height: 44px; border-color: #C9D9D6; border-radius: 12px; background: #fff; color: #176B5B; font-size: 14px; }
+.clarify-chip:hover:not(:disabled) { background: #EAF3F1; border-color: #176B5B; }
+.legacy-candidate-panel { margin: 12px 16px; font-family: system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+.legacy-candidate-heading { margin-bottom: 8px; color: #52656D; font-size: 13px; }
+.legacy-candidate-list { display: grid; gap: 7px; }
+.legacy-candidate-card { min-height: 50px; }
+.legacy-candidate-empty { padding: 16px; border: 1px dashed #C9D9D6; border-radius: 12px; background: #fff; color: #52656D; text-align: center; font-size: 14px; }
+.legacy-candidate-panel.is-routing { opacity: .62; pointer-events: none; }
+.chat-bubble-body { color: #172B32; }
+button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible {
+    outline: 3px solid rgba(37,99,235,.42);
+    outline-offset: 2px;
+}
+@media (min-width: 1200px) { body { grid-template-columns: 400px 1fr; } }
+@media (max-width: 767px) {
+    body { background: #F4F7F7; }
+    .chat-panel { background: rgba(244,247,247,.98); }
+    .candidate-cards { padding-left: 0; width: 100%; }
+    .candidate-pager { padding-left: 0; }
+    .candidate-map-pin { width: 38px; height: 38px; }
+    .candidate-details { margin-left: 43px; }
 }

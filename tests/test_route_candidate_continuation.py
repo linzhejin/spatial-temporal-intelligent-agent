@@ -258,7 +258,8 @@ def test_selected_candidate_unavailable_keeps_task_and_supports_retry():
     result, _ = _run("从总图到樱顶，然后去附近食堂，再去梅园操场，最后去超市，不走台阶")
     pending = result["place_request"]
     selected = result["candidates"][0]["poi_id"]
-    with patch.object(planner.agent_tools, "execute_tool", return_value=(
+    with patch("agents.result_maintenance.candidate_snapshot_is_current", return_value=True), \
+         patch.object(planner.agent_tools, "execute_tool", return_value=(
         {"error": "route_unavailable", "message": "路线服务暂不可用"}, None,
     )):
         failed = planner.run_agent("桂园食堂", context={
@@ -275,17 +276,24 @@ def test_selected_candidate_unavailable_keeps_task_and_supports_retry():
 
 def test_real_graph_rescans_from_verified_route_endpoint(monkeypatch, tmp_path):
     from agents import tools
-    from spatial import network
+    from agents.result_maintenance import weather_input_fingerprint
+    from spatial import network, road_conditions
 
     events = tmp_path / "conditions.json"
     events.write_text("[]", encoding="utf-8")
     monkeypatch.setenv("ROAD_CONDITIONS_FILE", str(events))
+    monkeypatch.setattr(road_conditions, "_CONDITIONS_FILE", str(events))
+    monkeypatch.setattr(road_conditions, "_cache", None)
+    monkeypatch.setattr(road_conditions, "_cache_mtime", 0.0)
+    monkeypatch.setattr(road_conditions, "_cache_error", None)
     monkeypatch.setenv("AMAP_POI_LOOKUP_ENABLED", "false")
     cache = tmp_path / "graph.graphml"
     shutil.copyfile(Path(__file__).resolve().parents[1] / "data/whu_road_network.graphml", cache)
     monkeypatch.setattr(network, "_G", None)
     monkeypatch.setattr(network, "_cache_path", lambda: str(cache))
     monkeypatch.setattr(network, "_download_network", lambda *_: (_ for _ in ()).throw(AssertionError("network")))
+    weather = {"weather": "晴", "temperature": 22, "reporttime": "development-fixture"}
+    monkeypatch.setattr(tools, "_weather_snapshot", lambda: {"live": weather, "impact": {}})
     network.load_or_download_network()
     _, artifact = tools.execute_tool("plan_route", {
         "start": {"type": "poi", "name": "总图"},
@@ -293,6 +301,7 @@ def test_real_graph_rescans_from_verified_route_endpoint(monkeypatch, tmp_path):
         "constraints": {"avoid_steps": True}, "strategy": "shortest",
     }, {"query": "从总图到樱顶，不走台阶"})
     assert artifact and artifact.get("route")
+    assert artifact["route"]["weather_input_sha256"] == weather_input_fingerprint(weather)
     pending, candidates, failure = planner._recheck_route_candidate_stage(
         "从总图到樱顶，然后去附近食堂，不走台阶", artifact["route"],
         None, None, "walk", "isolated-test", tools.execute_tool,
@@ -311,6 +320,7 @@ def test_real_graph_rescans_from_verified_route_endpoint(monkeypatch, tmp_path):
     }, uid="isolated-test")
     assert response["response_kind"] == "route", response.get("message")
     assert response["route_kind"] == "via"
+    assert response["route"]["weather_input_sha256"] == weather_input_fingerprint(weather)
     assert response["route"]["route_state"]["start"]["name"] in {"总图", "武汉大学图书馆(总馆)"}
     assert response["route"]["route_state"]["end"]["name"] == selected["name"]
 

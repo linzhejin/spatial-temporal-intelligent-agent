@@ -61,6 +61,7 @@ CONDITION_LABELS = {
     "accident": "事故",
 }
 CONDITION_ACTIONS = {"notice", "slowdown", "closure"}
+CONDITION_DIRECTIONS = {"both", "forward", "reverse"}
 TRAVEL_MODES = {"walk", "bike", "drive"}
 
 # 管理员点击点离最近路段超过该距离（米）则拒绝吸附
@@ -90,11 +91,8 @@ _cache_error = None
 
 
 @contextmanager
-def _condition_write_lock():
-    """Serialize read-modify-write across the production web processes."""
-    if (os.getenv("AGENT_REPLAY_EVENT_EPOCH") is not None
-            or os.getenv("AGENT_REPLAY_EVENT_SHA256") is not None):
-        raise RoadConditionsUnavailableError("模拟路况重放期间不能修改路况文件")
+def _condition_store_lock():
+    """Serialize cooperating writers and result publication across processes."""
     directory = os.path.dirname(_CONDITIONS_FILE)
     os.makedirs(directory, exist_ok=True)
     with _write_lock, open(_CONDITIONS_FILE + ".lock", "a+b") as lock_file:
@@ -117,6 +115,27 @@ def _condition_write_lock():
                 msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
             else:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+
+
+@contextmanager
+def _condition_write_lock():
+    """Serialize read-modify-write across the production web processes."""
+    if (os.getenv("AGENT_REPLAY_EVENT_EPOCH") is not None
+            or os.getenv("AGENT_REPLAY_EVENT_SHA256") is not None):
+        raise RoadConditionsUnavailableError("模拟路况重放期间不能修改路况文件")
+    with _condition_store_lock():
+        yield
+
+
+@contextmanager
+def condition_publication_lock():
+    """Hold cooperating road-event writes while a checked result is committed.
+
+    This does not freeze wall-clock expiry, weather, graph files, or writers
+    that bypass the road-condition store's locking protocol.
+    """
+    with _condition_store_lock():
+        yield
 
 
 class RoadConditionsUnavailableError(RuntimeError):
@@ -191,6 +210,16 @@ def _validate_condition_record(condition: dict) -> None:
     """Validate persistent event shape before it can influence routing."""
     if condition.get("type") not in CONDITION_EFFECTS:
         raise ValueError("路况事件类型无效")
+    direction = condition.get("direction", "both")
+    if not isinstance(direction, str) or direction not in CONDITION_DIRECTIONS:
+        raise ValueError("路况影响方向无效")
+    if direction != "both":
+        edge = condition.get("edge") or {}
+        geometry = edge.get("geometry_gcj") if isinstance(edge, dict) else None
+        if (not isinstance(geometry, list) or len(geometry) < 2
+                or not all(isinstance(point, (list, tuple)) and len(point) >= 2
+                           and _valid_lon_lat(point[0], point[1]) for point in geometry)):
+            raise ValueError("单方向事件必须包含可核验的道路方向几何")
     if "blocked_modes" in condition:
         blocked_modes = condition.get("blocked_modes")
         if not _valid_blocked_modes(blocked_modes):
@@ -331,12 +360,19 @@ def list_conditions(include_inactive: bool = False, *, strict: bool = False) -> 
         ) from exc
     conditions = (replay_snapshot[1] if replay_snapshot is not None
                   else _load_conditions(strict=strict))
+    if replay_snapshot is not None:
+        for condition in conditions:
+            revoked_at = condition.get("revoked_at")
+            if revoked_at is not None and (type(revoked_at) is not int or revoked_at < 0):
+                raise RoadConditionsUnavailableError("模拟路况撤销时间无效，无法确认当前路况")
     if include_inactive:
         return list(conditions)
     now = replay_snapshot[0] if replay_snapshot is not None else time.time()
     active = []
     for c in conditions:
-        if c.get("revoked_at"):
+        revoked_at = c.get("revoked_at")
+        if ((replay_snapshot is not None and revoked_at is not None and now >= revoked_at)
+                or (replay_snapshot is None and revoked_at)):
             continue
         start = c.get("start_time", 0) or 0
         end = c.get("end_time", 0) or 0
@@ -373,6 +409,7 @@ def add_condition(
     action: Optional[str] = None,
     affected_modes: Optional[list[str]] = None,
     cost_multiplier: Optional[float] = None,
+    direction: str = "both",
 ) -> dict:
     """
     添加一个绑定到具体路段的路况事件。
@@ -391,6 +428,8 @@ def add_condition(
     """
     if cond_type not in CONDITION_EFFECTS:
         raise ValueError(f"未知路况类型: {cond_type}")
+    if not isinstance(direction, str) or direction not in CONDITION_DIRECTIONS:
+        raise ValueError("路况影响方向无效")
     if action is not None:
         if action not in CONDITION_ACTIONS:
             raise ValueError("路况影响动作无效")
@@ -448,6 +487,8 @@ def add_condition(
     }
     if source:
         condition["source"] = deepcopy(source)
+    if direction != "both":
+        condition["direction"] = direction
     if action is not None:
         condition["action"] = action
         condition["affected_modes"] = list(affected_modes or [])
@@ -588,6 +629,8 @@ def rebind_vision_condition_edge(cond_id: str, edge: dict, *,
         source = target.get("source") or {}
         if source.get("kind") != "vision_job":
             raise ValueError("只有影像识别来源的事件可以更正绑定道路")
+        if target.get("direction", "both") != "both":
+            raise ValueError("单方向事件更正道路时需先结束，再重新确认路段和方向")
         previous_edge = target.get("edge") or {}
         previous_association = {
             "road_name": str(previous_edge.get("road_name") or ""),
@@ -995,8 +1038,50 @@ def _expand_coincident_corridor_edges(G: nx.MultiDiGraph, keys: set, edge_info: 
         return set(keys)
 
     corridor_buffers = [line.buffer(_PARALLEL_CORRIDOR_DIST_M) for line in metric_corridors]
+    # A disjoint bounding box cannot be within the corridor distance. Reject
+    # such edges before constructing Shapely geometries; this matters because
+    # route calculation and independent verification may each resolve events.
+    # The small tolerance keeps boundary cases in the precise geometry check.
+    margin = _PARALLEL_CORRIDOR_DIST_M + 1e-6
+    corridor_bounds = [
+        (xmin - margin, ymin - margin, xmax + margin, ymax + margin)
+        for xmin, ymin, xmax, ymax in (line.bounds for line in metric_corridors)
+    ]
+
+    def definitely_outside_corridors(u, v, data):
+        geometry = data.get("geometry")
+        try:
+            if geometry is None:
+                first, second = G.nodes[u], G.nodes[v]
+                coords = [(float(first.get("x", 0)), float(first.get("y", 0))),
+                          (float(second.get("x", 0)), float(second.get("y", 0)))]
+            elif isinstance(geometry, str):
+                # Parse only simple 2-D LINESTRING WKT. Anything unusual or
+                # malformed falls through to the existing geometry handling.
+                head, separator, body = geometry.strip().partition("(")
+                if not separator or head.strip().upper() != "LINESTRING" or not body.endswith(")"):
+                    return False
+                pairs = [part.split() for part in body[:-1].split(",")]
+                if len(pairs) < 2 or any(len(pair) != 2 for pair in pairs):
+                    return False
+                coords = [(float(pair[0]), float(pair[1])) for pair in pairs]
+            else:
+                return False
+            points = [((x - origin_lon) * lon_scale, (y - origin_lat) * 111320.0)
+                      for x, y in coords]
+            if not all(math.isfinite(x) and math.isfinite(y) for x, y in points):
+                return False
+            xs, ys = zip(*points)
+            xmin, xmax, ymin, ymax = min(xs), max(xs), min(ys), max(ys)
+            return all(xmax < left or xmin > right or ymax < bottom or ymin > top
+                       for left, bottom, right, top in corridor_bounds)
+        except (KeyError, TypeError, ValueError, OverflowError):
+            return False
+
     matched = set(keys)
     for u, v, key, data in G.edges(keys=True, data=True):
+        if definitely_outside_corridors(u, v, data):
+            continue
         candidate_coords = _line_coords(_edge_line(G, u, v, data))
         if len(candidate_coords) < 2:
             continue
@@ -1103,6 +1188,67 @@ def _geometry_covered_by_edges(G, coords_gcj, keys, tolerance_m) -> bool:
         return False
 
 
+def _directional_corridor_edges(G: nx.MultiDiGraph, edge_info: dict, direction: str) -> set:
+    """Resolve an A→B or B→A event against directed, geometrically aligned edges.
+
+    The stored geometry defines A and B. Graph node order, not WKT coordinate
+    order, determines each edge's travel direction. Refuse ambiguous geometry
+    instead of silently applying a closure to the opposite direction.
+    """
+    from shapely.geometry import LineString, Point
+    from spatial.coord_transform import gcj02_to_wgs84
+
+    if direction not in {"forward", "reverse"}:
+        raise RoadConditionBindingError("单方向路况方向无效")
+    geometry = edge_info.get("geometry_gcj") if isinstance(edge_info, dict) else None
+    try:
+        if not isinstance(geometry, list) or len(geometry) < 2:
+            raise ValueError("missing road geometry")
+        coords = [gcj02_to_wgs84(float(point[0]), float(point[1])) for point in geometry]
+        origin_lon = sum(point[0] for point in coords) / len(coords)
+        origin_lat = sum(point[1] for point in coords) / len(coords)
+        lon_scale = 111320.0 * math.cos(math.radians(origin_lat))
+
+        def metric(point):
+            return ((float(point[0]) - origin_lon) * lon_scale,
+                    (float(point[1]) - origin_lat) * 111320.0)
+
+        corridor = LineString([metric(point) for point in coords])
+        if corridor.is_empty or not corridor.is_simple or corridor.length <= 0:
+            raise ValueError("ambiguous road geometry")
+        candidates = _expand_coincident_corridor_edges(G, set(), edge_info)
+        if not candidates or not _geometry_covered_by_edges(G, geometry, candidates, _EDGE_FALLBACK_DIST_M):
+            raise ValueError("road geometry is not covered by the current graph")
+
+        selected = set()
+        for u, v, key in candidates:
+            first, last = G.nodes[u], G.nodes[v]
+            a = metric((first["x"], first["y"]))
+            b = metric((last["x"], last["y"]))
+            edge_coords = _line_coords(_edge_line(G, u, v, G.get_edge_data(u, v, key) or {}))
+            if len(edge_coords) < 2:
+                raise ValueError("edge geometry is missing")
+            edge_start, edge_end = metric(edge_coords[0]), metric(edge_coords[-1])
+
+            def distance(x, y):
+                return math.hypot(x[0] - y[0], x[1] - y[1])
+
+            direct_error = max(distance(a, edge_start), distance(b, edge_end))
+            reversed_error = max(distance(a, edge_end), distance(b, edge_start))
+            if min(direct_error, reversed_error) > _PARALLEL_CORRIDOR_DIST_M:
+                raise ValueError("edge geometry does not match its nodes")
+            node_distance = distance(a, b)
+            span = corridor.project(Point(b)) - corridor.project(Point(a))
+            if (not math.isfinite(node_distance) or node_distance <= 1e-6
+                    or not math.isfinite(span) or abs(span) < min(0.5, node_distance * 0.5)):
+                raise ValueError("edge direction cannot be established")
+            if (span > 0) == (direction == "forward"):
+                selected.add((u, v, key))
+        return selected
+    except (AttributeError, IndexError, KeyError, TypeError, ValueError) as exc:
+        raise RoadConditionBindingError("单方向路况无法可靠匹配当前道路，请重新核对") from exc
+
+
 def resolve_condition_effects(
     G: nx.MultiDiGraph,
     conditions: Optional[list] = None,
@@ -1159,18 +1305,20 @@ def resolve_condition_effects(
                 raise RoadConditionBindingError("路况事件没有当前出行方式的通行规则")
             continue
         try:
-            keys = _resolve_edge_keys(G, cond, strict=strict)
             edge_info = cond.get("edge") if isinstance(cond, dict) else {}
-            # Corridor expansion is only valid after the stored binding (or its
-            # complete-geometry fallback) has resolved. Expanding from geometry
-            # alone here could silently revive a partially missing road chain.
-            if keys:
-                keys = _expand_coincident_corridor_edges(G, keys, edge_info or {})
+            directional = cond.get("direction", "both") != "both"
+            if directional:
+                keys = _directional_corridor_edges(G, edge_info or {}, cond.get("direction"))
+            else:
+                keys = _resolve_edge_keys(G, cond, strict=strict)
+                # Existing bidirectional bindings retain their original checks.
+                if keys:
+                    keys = _expand_coincident_corridor_edges(G, keys, edge_info or {})
         except (AttributeError, TypeError, ValueError, KeyError, IndexError) as exc:
             if strict:
                 raise RoadConditionBindingError("路况事件道路绑定无法解析") from exc
             continue
-        if not keys:
+        if not keys and not directional:
             if strict:
                 raise RoadConditionBindingError("生效中的路况事件无法匹配当前路网，已停止路线规划")
             continue
@@ -1202,6 +1350,7 @@ def _condition_overview(details: list) -> list:
             "name": " ".join(name.split())[:60] if isinstance(name, str) and name.strip() else "未命名路况",
             "road_name": " ".join(road_name.split())[:60] if isinstance(road_name, str) else "",
             "action": condition.get("action") or "closure",
+            **({"direction": condition["direction"]} if "direction" in condition else {}),
         })
     return overview
 
@@ -1251,6 +1400,7 @@ def route_condition_notices(G, conditions: list, mode: str, route_edges: list, *
             "end_time": condition.get("end_time"),
             "observation_time": source.get("captured_at") or condition.get("created_at"),
             "cost_multiplier": condition.get("cost_multiplier") if condition["action"] == "slowdown" else None,
+            **({"direction": condition["direction"]} if "direction" in condition else {}),
         }
         matches.append((min(indices), public))
     matches.sort(key=lambda item: item[0])

@@ -77,6 +77,12 @@ OPENAI_API_KEY = DEEPSEEK_API_KEY  # 兼容 openai SDK 字段名
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")  # DeepSeek V4-Flash 别名
 
+# Whether a verified, unchanged earlier itinerary stage may be reused.
+# Unknown values fail closed to complete recomputation.
+RESULT_MAINTENANCE_POLICY = os.getenv("RESULT_MAINTENANCE_POLICY", "conservative").strip().lower()
+if RESULT_MAINTENANCE_POLICY not in {"conservative", "full_recompute"}:
+    RESULT_MAINTENANCE_POLICY = "full_recompute"
+
 # ===== 高德地图配置 =====
 AMAP_KEY = os.getenv("AMAP_KEY", "")
 AMAP_SECURITY_CODE = os.getenv("AMAP_SECURITY_CODE", "")  # 高德 JS API 2.0 安全密钥

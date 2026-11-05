@@ -111,8 +111,9 @@ def create_task_run(
     submission = {"request_id": idempotency_key, "route_spec": route_spec,
                   "continuation_task_id": continuation_task_id}
     if selected_poi_id is not None:
-        if not isinstance(selected_poi_id, str) or not re.fullmatch(r"poi_\d{3,}", selected_poi_id):
-            raise ValueError("selected_poi_id must be a stable POI ID")
+        if not isinstance(selected_poi_id, str) or not re.fullmatch(
+                r"(?:poi_\d{3,}|amap:[A-Za-z0-9_-]{3,80})", selected_poi_id):
+            raise ValueError("selected_poi_id must be a stable local or provider ID")
         if continuation_task_id is None:
             raise ValueError("selected_poi_id requires a clarification task")
         submission["selected_poi_id"] = selected_poi_id
@@ -153,6 +154,18 @@ def create_task_run(
             if (not row or row["status"] != "needs_input" or row["revision"] != base_revision):
                 raise TaskContinuationConflict("clarification task is no longer awaiting this answer")
             current = TaskState.model_validate(row["state"])
+            latest_user = conn.execute(
+                "SELECT task_id FROM conversation_message WHERE conversation_id=%s AND role='user'"
+                " ORDER BY seq DESC LIMIT 1",
+                (conversation_id,),
+            ).fetchone()
+            if not latest_user or str(latest_user["task_id"]) != str(continuation_task_id):
+                raise TaskContinuationConflict("a newer conversation request superseded this clarification")
+            if selected_poi_id is not None:
+                pending = current.place_request
+                if (not pending or pending.pending_slot != "selection"
+                        or selected_poi_id not in pending.candidate_poi_ids):
+                    raise TaskContinuationConflict("selected place is not in the current candidate list")
             merged_spec = current.route_spec.model_dump(mode="python")
             merged_spec.update(route_spec)
             new_spec = RouteSpec.model_validate(merged_spec)
@@ -272,12 +285,58 @@ def get_run_input(url: str | None, run_id: str) -> dict | None:
                 (row["conversation_id"], user_message["seq"]),
             ).fetchall()
         previous = conn.execute(
-            "SELECT prior.metadata->'route_state' AS route_state, prior.task_id"
+            "SELECT prior.metadata->'route_state' AS route_state, prior.task_id, source_user.seq AS source_seq"
             " FROM conversation_message prior"
+            " LEFT JOIN conversation_message source_user ON source_user.conversation_id=prior.conversation_id"
+            " AND source_user.role='user' AND source_user.task_id=prior.task_id"
+            " AND source_user.seq::text=prior.metadata->>'source_message_seq'"
             " WHERE prior.conversation_id=%s AND prior.role='assistant' AND prior.seq<%s"
-            " AND prior.metadata ? 'route_state' ORDER BY prior.seq DESC LIMIT 1",
+            " AND prior.metadata ? 'route_state'"
+            " ORDER BY source_user.seq DESC NULLS LAST, prior.seq DESC LIMIT 1",
             (row["conversation_id"], user_message["seq"]),
         ).fetchone()
+        # A newer failed or unfinished route request makes an older successful
+        # route unsafe to inherit, even if its answer arrived more recently.
+        # Explicitly unrelated questions such as weather remain pass-through.
+        from agents.context_builder import is_route_followup
+        from agents.task_planner import build_task_plan
+
+        route_context_uncertain = False
+        if is_route_followup(user_message["content"]):
+            if not previous or previous.get("source_seq") is None:
+                previous = None
+                route_context_uncertain = True
+            else:
+                intervening = conn.execute(
+                    "SELECT content FROM conversation_message"
+                    " WHERE conversation_id=%s AND role='user' AND seq>%s AND seq<%s ORDER BY seq",
+                    (row["conversation_id"], previous["source_seq"], user_message["seq"]),
+                ).fetchall()
+                if any(is_route_followup(item["content"])
+                       or build_task_plan(item["content"], has_route_context=False).kind in {"route", "composite"}
+                       for item in intervening):
+                    previous = None
+                    route_context_uncertain = True
+        # Bind to the most recent *user request*, not the last response to
+        # arrive: a slower, older task can finish after a newer one. If that
+        # request has no completed answer, never fall back to an older trip.
+        # The run result is server-owned; request JSON cannot provide it.
+        latest_delivery = conn.execute(
+            "SELECT r.status, r.result FROM conversation_message user_turn"
+            " LEFT JOIN conversation_message prior ON prior.conversation_id=user_turn.conversation_id"
+            " AND prior.role='assistant' AND prior.task_id=user_turn.task_id AND prior.seq<%s"
+            " AND prior.metadata->>'source_message_seq'=user_turn.seq::text"
+            " LEFT JOIN run r ON r.run_id::text=prior.metadata->>'run_id' AND r.task_id=prior.task_id"
+            " WHERE user_turn.conversation_id=%s AND user_turn.role='user' AND user_turn.seq<%s"
+            " ORDER BY user_turn.seq DESC, prior.seq DESC NULLS LAST LIMIT 1",
+            (user_message["seq"], row["conversation_id"], user_message["seq"]),
+        ).fetchone()
+        previous_place = None
+        if (latest_delivery and latest_delivery["status"] == "completed"
+                and isinstance(latest_delivery["result"], dict)):
+            candidate = latest_delivery["result"].get("completed_place_request")
+            if isinstance(candidate, dict):
+                previous_place = candidate
     return {
         "run_id": str(row["run_id"]), "task_id": str(row["task_id"]),
         "task_revision": row["task_revision"], "task_revision_current": row["revision"],
@@ -287,6 +346,8 @@ def get_run_input(url: str | None, run_id: str) -> dict | None:
         "task_origin_query": origin_message["content"] if origin_message else None,
         "previous_route_state": previous["route_state"] if previous else None,
         "previous_route_state_task_id": str(previous["task_id"]) if previous and previous["task_id"] else None,
+        "route_context_uncertain": route_context_uncertain,
+        "previous_completed_place_request": previous_place,
         "cancel_requested": row["cancel_requested"],
     }
 
@@ -685,14 +746,101 @@ def _route_spec_from_result(current, route_state: dict):
     return RouteSpec.model_validate(spec), document
 
 
+def _publishes_anchored_candidates(pending: object, result: dict) -> bool:
+    return bool(
+        isinstance(pending, dict)
+        and (isinstance(pending.get("search_anchor"), dict) or isinstance(pending.get("start"), dict))
+        and (pending.get("activities") or pending.get("subcategories"))
+        and result.get("candidates")
+    )
+
+
+def _maintenance_snapshot_is_current(result: dict) -> bool:
+    """Recheck graph and active events just before publishing an updated trip."""
+    from agents import route_state, tools
+
+    state = result.get("route_state")
+    pending = result.get("place_request")
+    maintenance = result.get("result_maintenance")
+    record = maintenance.get("dependencies") if isinstance(maintenance, dict) else None
+    if _publishes_anchored_candidates(pending, result):
+        record = pending.get("result_dependencies")
+    snapshot = record.get("candidate_snapshot") if isinstance(record, dict) else None
+    try:
+        data_version = route_state.current_data_version()
+        event_version = route_state.current_road_condition_version(tools.list_conditions(strict=True))
+    except Exception:
+        return False
+    if not isinstance(data_version, str) or data_version in {"", "unavailable"}:
+        return False
+    if isinstance(state, dict):
+        if state.get("data_version") != data_version or state.get("road_condition_version") != event_version:
+            return False
+    elif not isinstance(snapshot, dict):
+        return False
+    if isinstance(record, dict):
+        if (not isinstance(snapshot, dict) or snapshot.get("data_version") != data_version
+                or snapshot.get("road_condition_version") != event_version):
+            return False
+    return True
+
+
+def _requires_environment_snapshot(status: str, result: dict | None) -> bool:
+    if status not in {"completed", "partial", "needs_input"} or not isinstance(result, dict):
+        return False
+    pending_result = result.get("place_request") if isinstance(result, dict) else None
+    publishes_candidates = _publishes_anchored_candidates(pending_result, result)
+    publishes_pending_route = (isinstance(pending_result, dict) and pending_result.get("completed_legs")
+                               and isinstance(result.get("route_state"), dict))
+    publishes_route_result = (isinstance(result, dict) and isinstance(result.get("route_state"), dict)
+                              and result.get("response_kind") in {"route", "no_route"})
+    return bool(isinstance(result.get("result_maintenance"), dict) or publishes_candidates
+                or publishes_pending_route or publishes_route_result)
+
+
 def finish_run(
     url: str | None, run_id: str, worker_id: str, *, status: str,
-    result: dict | None = None, error: dict | None = None,
-) -> bool:
+    result: dict | None = None, error: dict | None = None, return_status: bool = False,
+) -> bool | str:
+    if _requires_environment_snapshot(status, result):
+        from spatial.road_conditions import condition_publication_lock
+
+        # Road-event writers take the same lock. Hold it from the snapshot
+        # check through database commit, so an accepted event cannot land in
+        # between. This cannot freeze event expiry or out-of-band file writes.
+        with condition_publication_lock():
+            return _finish_run(url, run_id, worker_id, status=status, result=result,
+                               error=error, return_status=return_status)
+    return _finish_run(url, run_id, worker_id, status=status, result=result,
+                       error=error, return_status=return_status)
+
+
+def _finish_run(
+    url: str | None, run_id: str, worker_id: str, *, status: str,
+    result: dict | None = None, error: dict | None = None, return_status: bool = False,
+) -> bool | str:
     from agents.state_models import TaskState, utc_now
 
     if status not in {"completed", "partial", "failed", "needs_input", "cancelled", "superseded"}:
         raise ValueError("invalid terminal run status")
+    if _requires_environment_snapshot(status, result) and not _maintenance_snapshot_is_current(result):
+        pending = deepcopy(result.get("completed_place_request") or result.get("place_request"))
+        message = "路网、地点或路况在计算期间发生变化，旧路线未交付。请重新查询并选择下一站。"
+        if isinstance(pending, dict):
+            pending.update({"candidate_poi_ids": [], "candidate_places": [], "selected_poi_id": None})
+            if pending.get("pending_slot") in ("selection", "follow_up", None):
+                pending["pending_slot"] = "follow_up"
+            elif pending.get("pending_slot") == "destination":
+                message = "路网或路况在计算期间发生变化，旧路线未交付。请补充下一站的具体地点，我会重新规划。"
+            status = "needs_input"
+            result = {"task_type": "unknown", "response_kind": "clarify", "message": message,
+                      "clarify": {"question": message, "options": ["重新查询"]},
+                      "place_request": pending, "needs_input": True,
+                      "execution_status": "needs_input"}
+        else:
+            status = "failed"
+            result = {"task_type": "chat", "response_kind": "chat", "reply": message,
+                      "message": message, "execution_status": "failed"}
     if isinstance(result, dict):
         result = deepcopy(result)
         route_state = result.get("route_state")
@@ -837,7 +985,7 @@ def finish_run(
             "INSERT INTO run_event(run_id, seq, event_type, payload) VALUES (%s, %s, %s, %s)",
             (run_id, event_seq, "run_completed", Jsonb({"status": actual_status})),
         )
-    return True
+    return actual_status if return_status else True
 
 
 def cancel_run(url: str | None, owner_id: str, run_id: str) -> dict | None:

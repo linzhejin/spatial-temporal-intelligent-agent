@@ -132,7 +132,12 @@ def test_reference_failure_keeps_valid_via_route_without_inventing_distance(offl
     assert "无法核实" in planner._build_route_message(route)
 
 
-def test_changed_snapshot_replans_full_trip_and_answers_detour_once(offline_graph, monkeypatch):
+@pytest.mark.parametrize("reason,expected_notice", [
+    ("当前路况已更新", "路况发生变化"),
+    ("当前路网或地点数据已更新", "路网或地点数据发生变化"),
+    ("当前路网或路况暂时无法确认", "已按当前数据重新规划全程"),
+])
+def test_changed_snapshot_replans_full_trip_and_answers_detour_once(offline_graph, monkeypatch, reason, expected_notice):
     query = "我在总图，先找一个球场然后去吃饭，不走台阶，告诉我绕行多少距离"
     first = planner.run_agent(query)
     sports = planner.run_agent("篮球", context={"place_request": first["place_request"]})
@@ -141,11 +146,13 @@ def test_changed_snapshot_replans_full_trip_and_answers_detour_once(offline_grap
         "place_request": sports["place_request"], "selected_poi_id": sport["poi_id"],
     })
     meal = next_step["candidates"][0]
-    monkeypatch.setattr(planner, "_place_route_snapshot_issue", lambda _legs: "当前路况已更新")
+    monkeypatch.setattr(planner, "_place_route_snapshot_issue", lambda _legs: reason)
     final = planner.run_agent("去这个吃饭的地方", context={
         "place_request": next_step["place_request"], "selected_poi_id": meal["poi_id"],
     })
     assert final["response_kind"] == "route"
     assert final["route"]["direct_reference_verified"] is True
     assert final["message"].count("相比同条件下不经途经点的路线") == 1
-    assert "路况发生变化" in final["message"]
+    assert expected_notice in final["message"]
+    if reason != "当前路况已更新":
+        assert "路况发生变化" not in final["message"]

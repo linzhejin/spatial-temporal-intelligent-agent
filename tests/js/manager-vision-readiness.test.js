@@ -65,6 +65,7 @@ function managerHarness(sessionSeed = []) {
       scrollIntoView() { this.scrollCount += 1; },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
     };
+    if (id === 'event-direction') node.value = 'both';
     Object.defineProperty(node, 'textContent', {
       get: () => textContent,
       set(value) {
@@ -89,6 +90,7 @@ function managerHarness(sessionSeed = []) {
       addTo() { mapLayers.push(this); return this; },
       clearLayers() {},
       setLatLng(value) { this.coordinates = value; return this; },
+      bindTooltip(value, options) { this.tooltip = { value, options }; return this; },
     };
   }
   const L = {
@@ -262,7 +264,8 @@ function managerHarness(sessionSeed = []) {
         effects_by_mode: {}, sample_routes: {},
       };
       item.resolve({ ok: true, json: async () => ({ data: {
-        snap: { road_name: roadName, chain_length_m: 80, edges: [] },
+        snap: { u: 1, v: 2, key: 0, road_name: roadName, chain_length_m: 80,
+          geometry_gcj: [[114.36, 30.53], [114.361, 30.53]] },
         impact_preview: preview,
       } }) });
     },
@@ -282,8 +285,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261018-event-edit3/);
-  assert.match(managerHtml, /manager\.js\?v=20261018-event-edit3/);
+  assert.match(managerHtml, /manager\.css\?v=20261105-operations-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261105-operations-v1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -857,7 +860,9 @@ test('a selected road can be explicitly cleared before publishing', async () => 
   const connector = harness.mapLayers.find((layer) => layer.kind === 'polyline' && layer.options && layer.options.dashArray === '4 5');
   assert.ok(connector, 'the map should show the click-to-snap distance');
   assert.equal(JSON.stringify(connector.coordinates), JSON.stringify([[30.53, 114.36], [30.53, 114.36002]]));
-  assert.equal(harness.mapLayers.filter((layer) => layer.kind === 'circleMarker').length, 2);
+  const circles = harness.mapLayers.filter((layer) => layer.kind === 'circleMarker');
+  assert.equal(circles.length, 4);
+  assert.deepEqual(circles.filter((layer) => layer.tooltip).map((layer) => layer.tooltip.value), ['A', 'B']);
   await elements.get('condition-form').listeners.submit({ preventDefault() {} });
   assert.equal(harness.calls.some((call) => call.url === '/api/road-conditions' && call.options.method === 'POST'), false);
 

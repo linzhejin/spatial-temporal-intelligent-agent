@@ -47,6 +47,32 @@ ACTIVITY_LABELS = {
 _BALL_OPTIONS = ("篮球", "羽毛球", "乒乓球", "足球", "其他球类")
 _SPORT_OPTIONS = ("跑步", "打球", "健身", "其他运动")
 
+_DINING_REJECTION = re.compile(
+    r"(?:不想|不愿意|不愿|不考虑|不吃|不去|不选|不要|别去|别吃|别选)"
+    r"(?:再)?(?:去|吃|选|找|在)?(?:一家|一个|家|个)?"
+    r"(?P<category>食堂|餐厅|饭店|快餐店|快餐|小吃店|小吃|炸鸡|汉堡)"
+)
+_DINING_TERMS = {
+    "canteen_meal": ("食堂",),
+    "restaurant_meal": ("餐厅", "饭店"),
+    "fast_food": ("快餐", "小吃", "炸鸡", "汉堡"),
+}
+
+
+def _dining_category(term: str) -> str:
+    return next(category for category, terms in _DINING_TERMS.items()
+                if any(word in term for word in terms))
+
+
+def _clarify_dining_exclusion(excluded: set[str], *, unresolved: bool = False) -> dict:
+    labels = {"canteen_meal": "食堂", "restaurant_meal": "餐厅", "fast_food": "快餐"}
+    options = [label for category, label in labels.items() if category not in excluded]
+    if unresolved:
+        return {"status": "needs_clarification", "question": "这次用餐条件暂不能可靠处理，请重新说明完整需求。",
+                "options": [], "unresolved_requirements": True}
+    return {"status": "needs_clarification", "question": "想选择哪种用餐地点？请明确需要的类别。",
+            "options": options}
+
 
 def _compact(text: str) -> str:
     return re.sub(r"\s+", "", str(text or "")).lower()
@@ -71,8 +97,29 @@ def _without_leading_origin(text: str) -> str:
 def resolve_activity_query(query: str) -> dict | None:
     """Resolve an explicit use case, or ask only for a materially missing one."""
     text = _without_leading_origin(_compact(query))
+    # A venue used as a nearby reference is not itself the requested category.
+    text = re.sub(r"^(?:我想|我要|想|请|帮我)?(?:在|去|到|前往)"
+                  r"[^，,。；;！？?]{1,40}?(?:附近|周边|旁边|一带)", "", text)
     if not text:
         return None
+
+    # A rejected venue type must never become the positive recommendation.
+    # Conditions outside the supported venue categories remain unresolved.
+    rejected = list(_DINING_REJECTION.finditer(text))
+    excluded = {_dining_category(match.group("category")) for match in rejected}
+    if rejected:
+        if re.search(r"(?:不是|并非|未必|不一定)(?:不想|不吃|不去|不要)", text):
+            return _clarify_dining_exclusion(set(), unresolved=True)
+        if any(text[match.end():].startswith(("附近", "周边", "旁边", "以外", "之外"))
+               for match in rejected):
+            return _clarify_dining_exclusion(excluded, unresolved=True)
+        text = _DINING_REJECTION.sub("", text)
+        positive = {category for category, terms in _DINING_TERMS.items()
+                    if any(term in text for term in terms)}
+        if excluded & positive or len(positive) > 1:
+            return _clarify_dining_exclusion(excluded)
+        if re.search(r"不吃辣|不要辣|不吃肉|不吃荤|素食|清真|过敏|忌口", text):
+            return _clarify_dining_exclusion(excluded, unresolved=True)
 
     # Named food venue types take precedence over generic meal verbs.
     if "食堂" in text:
@@ -94,9 +141,11 @@ def resolve_activity_query(query: str) -> dict | None:
     if any(term in text for term in ("奶茶", "茶饮", "果茶", "果汁", "喝饮料", "饮品")):
         return {"status": "resolved", "activities": ["tea_drink"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["tea_drink"])}
-    if any(term in text for term in (
+    wants_ganfan = ("干饭" in text and not re.search(
+        r"(?:不想|不去|不要|别|不必|无需|不)(?:去)?干饭", text))
+    if not excluded and (wants_ganfan or any(term in text for term in (
             "美食", "吃饭", "吃点", "吃什么", "吃东西", "觅食", "饿了",
-            "午饭", "午餐", "晚饭", "晚餐", "早餐", "早饭", "夜宵", "餐饮", "好吃")):
+            "午饭", "午餐", "晚饭", "晚餐", "早餐", "早饭", "夜宵", "餐饮", "好吃"))):
         return {"status": "resolved", "activities": ["meal"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["meal"])}
 
@@ -150,6 +199,8 @@ def resolve_activity_query(query: str) -> dict | None:
     if any(term in text for term in ("赏樱", "樱花")):
         return {"status": "resolved", "activities": ["view_sakura"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["view_sakura"])}
+    if excluded:
+        return _clarify_dining_exclusion(excluded)
     return None
 
 

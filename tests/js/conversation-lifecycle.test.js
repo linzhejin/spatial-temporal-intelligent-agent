@@ -87,6 +87,7 @@ function harness(storage = new Map()) {
         var realSubmitQueuedMessage = submitQueuedMessage;
         globalThis.app = { state: state, init: init, submit: handleNlSubmit, reset: handleReset,
             candidateRouteQuery: candidateRouteQuery,
+            repeatDiningSearchKey: repeatDiningSearchKey,
             buildRouteSummary: buildRouteSummary,
             renderRouteDirect: realRenderRoute,
             renderClarifyOptions: realRenderClarifyOptions,
@@ -572,6 +573,16 @@ test('route overview preserves the verified detour distance while removing dupli
     assert.match(summary, /多走约\s*144\s*米/);
     assert.equal((summary.match(/821\s*米/g) || []).length, 1);
 });
+test('desktop route overview names the requested waypoints in their original order', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        start: { name: '总图' }, end: { name: '快餐店' }, mode: 'walk',
+        recommended_length_m: 1500, duration_min: 23, route_kind: 'via',
+        via: { points: [{ name: '樱顶' }, { name: '操场' }] },
+        explanation: '已为你规划好从总图经樱顶、操场到快餐店的步行路线，约 1.5 公里、23 分钟。',
+    });
+    assert.match(summary, /总图.*樱顶.*操场.*快餐店/);
+});
 test('route overview keeps other numerical facts that are not the route total', () => {
     const h = harness();
     const summary = h.buildRouteSummary({
@@ -649,12 +660,13 @@ test('route overview shows only explicitly supplied along-route notices and slow
         start: { name: '总图' }, end: { name: '桂园操场' }, mode: 'walk',
         recommended_length_m: 640, duration_min: 9, road_conditions_applied: 3,
         route_events: [
-            { action: 'slowdown', road_name: '科技路', name: '行人较多' },
+            { action: 'slowdown', road_name: '科技路', name: '行人较多', direction: 'forward' },
             { action: 'notice', road_name: '樱园路', name: '施工提示' },
         ],
     });
     assert.match(summary, /沿途路况/);
     assert.match(summary, /科技路.*缓行/);
+    assert.match(summary, /A → B/);
     assert.match(summary, /樱园路.*提示/);
     assert.match(summary, /行人较多/);
     assert.match(summary, /施工提示/);
@@ -701,6 +713,44 @@ test('mobile route feedback keeps the route explanation and appends the field-pa
     assert.match(reply, /路线约 800 米，预计步行 10 分钟/);
     assert.match(reply, /未实地确认道路当前可通行/);
     assert.equal((reply.match(/未实地确认道路当前可通行/g) || []).length, 1);
+});
+test('route overview identifies the unverified steps in a multi-leg route', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        mode: 'walk', recommended_length_m: 640, duration_min: 9,
+        filter_status: 'no_outside+steps_avoid+steps_unverified;no_outside+steps_avoid+steps_unverified',
+        route_state: { hard_constraints: { avoid_steps: true } },
+    });
+
+    assert.match(summary, /已排除.*标注.*台阶/);
+    assert.match(summary, /台阶.*尚未核实/);
+    assert.equal((summary.match(/台阶.*尚未核实/g) || []).length, 1);
+});
+test('missing step filter evidence does not claim that marked steps were excluded', () => {
+    const h = harness();
+    const summary = h.buildRouteSummary({
+        mode: 'walk', route_state: { hard_constraints: { avoid_steps: true } },
+    });
+
+    assert.match(summary, /台阶.*尚未核实/);
+    assert.doesNotMatch(summary, /已排除.*标注.*台阶/);
+    assert.doesNotMatch(h.buildRouteSummary({ mode: 'walk' }), /台阶/);
+});
+test('mobile route feedback discloses unverified steps even when an explanation exists', async () => {
+    const h = harness();
+    h.state.productMode = 'navigation';
+    h.setApi(async () => ({
+        ...routeResult('mobile-step-limit'),
+        route_state: { ...existingRoute(), route_id: 'mobile-step-limit', hard_constraints: { avoid_steps: true } },
+        explanation: '已按当前数据重新规划全程。',
+        filter_status: 'no_outside+steps_avoid+steps_unverified',
+    }));
+
+    await h.submit('从信息学部到图书馆，不走台阶');
+
+    const reply = h.bubbles.at(-1).text;
+    assert.match(reply, /已按当前数据重新规划全程/);
+    assert.match(reply, /台阶.*尚未核实/);
 });
 test('desktop route details are compact and use collapsed disclosures for long lists', () => {
     const html = fs.readFileSync(require.resolve('../../static/index.html'), 'utf8');
@@ -1166,6 +1216,75 @@ test('polling recovers from a temporary network failure without losing the accep
     assert.equal(result.route_state.route_id, 'recovered');
     assert.equal(polls, 2);
     assert.equal(h.state.activeRuns['run-retry'], undefined);
+});
+
+test('a lost submit response retries the same request identity and recovers the original run', async () => {
+    const h = harness();
+    const submitted = [];
+    h.setQueuedApi(async (url, body) => {
+        if (url === '/api/conversations') return { conversation_id: 'same-session' };
+        if (url.endsWith('/messages')) {
+            submitted.push({ ...body });
+            if (submitted.length === 1) throw new Error('网络请求失败，请检查网络连接');
+            return { run_id: 'existing-run' };
+        }
+        if (url.includes('/api/runs/existing-run?')) return { status: 'completed', events: [], result: routeResult('recovered') };
+        throw new Error('unexpected request ' + url);
+    });
+    const result = await h.queued('到图书馆', { travel_mode: 'walk' }, { text: '' }, 0);
+    assert.equal(result.route_state.route_id, 'recovered');
+    assert.equal(submitted.length, 2);
+    assert.ok(submitted[0].request_id);
+    assert.deepEqual(submitted[0], submitted[1]);
+});
+
+test('a reset during an uncertain submission does not retry the old message', async () => {
+    const h = harness(), sending = deferred();
+    let sends = 0;
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations') return { conversation_id: 'old-session' };
+        if (url.endsWith('/messages')) { sends++; return sending.promise; }
+        return {};
+    });
+    const pending = h.queued('旧请求', {}, { text: '' }, 0);
+    while (!sends) await new Promise(resolve => setTimeout(resolve, 0));
+    h.reset();
+    sending.reject(new Error('网络请求失败，请检查网络连接'));
+    assert.equal(await pending, null);
+    assert.equal(sends, 1);
+});
+
+test('a late accepted submission is cancelled after the conversation resets', async () => {
+    const h = harness(), sending = deferred();
+    const cancelled = [];
+    let sends = 0;
+    h.setQueuedApi(async (url, body) => {
+        if (url === '/api/conversations') return { conversation_id: 'old-session' };
+        if (url.endsWith('/messages')) { sends++; return sending.promise; }
+        if (url === '/api/runs/late-run/cancel') { cancelled.push(body); return {}; }
+        throw new Error('unexpected request ' + url);
+    });
+    const pending = h.queued('旧请求', {}, { text: '' }, 0);
+    while (!sends) await new Promise(resolve => setTimeout(resolve, 0));
+    h.reset();
+    sending.resolve({ run_id: 'late-run' });
+    assert.equal(await pending, null);
+    assert.equal(cancelled.length, 1);
+    assert.equal(cancelled[0].conversation_id, 'old-session');
+});
+
+test('a definitive task conflict is not automatically retried', async () => {
+    const h = harness();
+    let sends = 0;
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations') return { conversation_id: 'same-session' };
+        if (url.endsWith('/messages')) {
+            sends++;
+            const error = new Error('任务已变化'); error.code = 'task_revision_conflict'; throw error;
+        }
+    });
+    await assert.rejects(h.queued('继续', {}, { text: '' }, 0), /任务已变化/);
+    assert.equal(sends, 1);
 });
 
 test('a still-running task continues polling after ninety seconds without requiring refresh', async () => {
@@ -1926,6 +2045,33 @@ test('a rejected older candidate result does not render stale cards', async () =
     assert.equal(h.candidateRenders.length, 0);
     assert.equal(h.state.pendingServerTaskId, 'newer-task');
     assert.match(h.bubbles.at(-1).text, /过期/);
+});
+test('local conversation history does not claim an unseen candidate list was displayed', async () => {
+    const h = harness();
+    h.setApi(async () => ({ task_type: 'path_planning', response_kind: 'candidates',
+        _task_id: 'food-task', _task_revision: 1, message: '附近找到候选。', explanation: '未展示的解释。',
+        candidates: Array.from({ length: 8 }, (_, i) => ({ poi_id: 'p' + i, name: '候选' + i })) }));
+
+    await h.submit('总图附近吃饭');
+
+    assert.equal(h.state.conversationHistory.at(-1).content, '附近找到候选。');
+});
+test('repeated dining rotation requires a new search with stable unique IDs', () => {
+    const h = harness();
+    const candidates = Array.from({ length: 5 }, (_, i) => ({
+        poi_id: 'p' + i, subcategory: 'restaurant', distance_m: i * 100,
+    }));
+    const options = { query: '总图附近干饭', newSearch: true };
+    assert.ok(h.repeatDiningSearchKey(candidates, options, 4));
+    assert.equal(h.repeatDiningSearchKey(candidates, { ...options, newSearch: false }, 4), null);
+    assert.equal(h.repeatDiningSearchKey(candidates, { ...options, query: '总图最近的餐厅' }, 4), null);
+    for (const query of ['总图附近吃饭，按距离排序', '总图附近吃饭，从近到远',
+                         '总图附近吃饭，距离优先', '总图附近吃饭，越近越好']) {
+        assert.equal(h.repeatDiningSearchKey(candidates, { ...options, query }, 4), null);
+    }
+    assert.equal(h.repeatDiningSearchKey(candidates.map((p, i) => i ? p : { ...p, poi_id: '' }), options, 4), null);
+    assert.equal(h.repeatDiningSearchKey(candidates.map((p, i) => i ? p : { ...p, poi_id: 'p1' }), options, 4), null);
+    assert.equal(h.repeatDiningSearchKey(candidates.slice(0, 4), options, 4), null);
 });
 
 test('a rejected older clarification does not show stale options', async () => {
