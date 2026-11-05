@@ -91,6 +91,6 @@ def test_mixed_named_and_fuzzy_stops_survive_api_and_worker(monkeypatch, tmp_pat
         assert final["status"] == "completed", final.get("result")
         route = final["result"]
         assert [leg["end_name"] for leg in route["legs"]] == [
-            "武汉大学老斋舍", meal["name"], "武汉大学梅园操场", shop["name"],
+            "武汉大学老斋舍", meal["name"], "武汉大学梅园小操场", shop["name"],
         ]
         assert route["route_state"]["hard_constraints"]["avoid_steps"] is True

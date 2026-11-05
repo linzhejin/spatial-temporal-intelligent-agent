@@ -1766,6 +1766,44 @@ def _selected_candidate_from_text(query: str, candidate_poi_ids: list[str],
     return None
 
 
+def _explicit_named_place_choice(query: str) -> str | None:
+    """Extract a short affirmative choice, leaving categories and questions alone."""
+    text = str(query or "").strip()
+    if not text or text.endswith(("吗", "么", "？", "?")):
+        return None
+    text = text.rstrip("。！! ")
+    clauses = [part.strip() for part in re.split(r"[，,；;]", text)]
+    if len(clauses) > 1:
+        correction = r"(?:不走|避开|不要走|绕开)(?:楼梯|台阶|陡坡)|避坡|少爬坡|步行|走路|骑行|骑车|开车|驾车|(?:全程)?(?:风景优先|平坦优先|最短路线|最短路径)"
+        if not all(re.fullmatch(correction, part) for part in clauses[1:]):
+            return None
+        text = clauses[0]
+    match = re.fullmatch(
+        r"(?:(?:我(?:想|要)?|那就|那|还是|就)\s*)?"
+        r"(?:去|到|前往|选(?:择)?|换成|换到|换去|改成|改去|改到)\s*"
+        r"([^，,。；;！!？?]{2,60}?)(?:吧|就好|就行)?", text,
+    )
+    if not match:
+        return None
+    name = match.group(1).strip()
+    generic = {"这个", "这个地点", "那个", "那个地点", "这里", "那里", "第一个", "第二个",
+               "食堂", "餐厅", "快餐", "吃饭", "跑步", "运动", "操场", "运动场", "球场",
+               "篮球场", "足球场", "羽毛球场", "图书馆", "自习室", "超市",
+               "风景优先", "平坦优先", "最短路线", "最短路径", "全程风景优先", "全程平坦优先",
+               "全程最短路线", "全程最短路径", "步行", "走路", "骑行", "骑车", "驾车", "开车",
+               "不走台阶", "避开台阶", "不走楼梯", "避开陡坡"}
+    return name if name and name not in generic else None
+
+
+def _exact_local_place_choices(name: str) -> list[dict]:
+    from spatial.poi import _normalize_poi_query
+
+    target = _normalize_poi_query(name)
+    return [poi for poi in agent_tools.load_pois()
+            if target and any(_normalize_poi_query(value) == target
+                              for value in [poi.get("name"), *(poi.get("aliases") or [])])]
+
+
 def _apply_place_request_correction(saved: dict, query: str) -> dict:
     """Keep unanswered slots while applying only explicit current-turn changes."""
     from agents.parser import detect_travel_mode
@@ -2522,7 +2560,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 "route_kind": None, "candidates": None, "needs_input": True,
                 "place_request": pending, "clarify": {"question": question, "options": []},
                 "suggestions": None, "turns": 0}
-    activity_revision = _place_activity_revision(place_request, query)
+    named_choice = (_explicit_named_place_choice(query)
+                    if isinstance(place_request, dict) and place_request.get("pending_slot") == "selection"
+                    and not (context or {}).get("selected_poi_id") else None)
+    activity_revision = None if named_choice else _place_activity_revision(place_request, query)
     if (confirmed_goal and activity_revision
             and len(re.findall(r"改成|改为|换成|换为|换去", str(query or ""))) == 1
             and re.search(r"(?:改成|改为|换成|换为)\s*(?:全程)?(?:风景优先|景观优先|平坦优先|最短)", str(query or ""))):
@@ -2575,6 +2616,43 @@ def run_agent(query: str, context: dict = None, history: list = None,
                        ((context or {}).get("selected_poi_id")
                         or (place_request or {}).get("selected_poi_id"))
                        if isinstance(context, dict) else None)
+    fresh_named_choice = False
+    if named_choice and place_request and not external_selection:
+        listed = _selected_candidate_from_text(
+            query, place_request.get("candidate_poi_ids") or [],
+            place_request.get("candidate_places") or [],
+        )
+        exact = _exact_local_place_choices(named_choice)
+        # Online candidates retain their identity and existing snapshot checks.
+        if listed and (str(listed).startswith("amap:") or not exact):
+            selected_poi_id = listed
+        elif len(exact) != 1:
+            question = (f"“{named_choice}”对应多个地点，请说出更完整的名称。" if exact else
+                        f"无法确认“{named_choice}”是哪个地点，请补充完整名称或从候选中选择。")
+            return {"response_kind": "clarify", "message": question, "route": None,
+                    "route_kind": None, "candidates": None, "needs_input": True,
+                    "clarify": {"question": question, "options": []},
+                    "place_request": place_request, "suggestions": None, "turns": 0}
+        else:
+            place = exact[0]
+            activities = place_request.get("activities") or []
+            if activities and not agent_tools.matches_activities(place, activities):
+                labels = "、".join(agent_tools.ACTIVITY_LABELS.get(item, item) for item in activities)
+                question = (f"你指定了{place.get('name')}，但当前资料无法确认它满足“{labels}”需求。"
+                            "请另选地点，或重新说明只需前往该地点。")
+                return {"response_kind": "clarify", "message": question, "route": None,
+                        "route_kind": None, "candidates": None, "needs_input": True,
+                        "clarify": {"question": question, "options": []},
+                        "place_request": place_request, "suggestions": None, "turns": 0}
+            selected_poi_id = place.get("id")
+            fresh_named_choice = bool(selected_poi_id)
+            if selected_poi_id and selected_poi_id not in (place_request.get("candidate_poi_ids") or []):
+                previous_ids = list(place_request.get("candidate_poi_ids") or [])[:19]
+                place_request["candidate_poi_ids"] = [*previous_ids, selected_poi_id]
+                place_request["candidate_places"] = [
+                    item for item in (place_request.get("candidate_places") or [])
+                    if isinstance(item, dict) and item.get("poi_id") in previous_ids
+                ]
     if (not selected_poi_id and place_request
             and place_request.get("pending_slot") == "selection"):
         selected_poi_id = _selected_candidate_from_text(
@@ -2587,7 +2665,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             and place_request.get("pending_slot") == "selection"):
         from agents.result_maintenance import candidate_snapshot_is_current, record_candidate_snapshot
 
-        if not candidate_snapshot_is_current(place_request.get("result_dependencies")):
+        if not fresh_named_choice and not candidate_snapshot_is_current(place_request.get("result_dependencies")):
             pending = deepcopy(place_request)
             pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
                             "candidate_places": [], "selected_poi_id": None})

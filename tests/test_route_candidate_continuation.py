@@ -341,6 +341,6 @@ def test_real_graph_rescans_from_verified_route_endpoint(monkeypatch, tmp_path):
     }, uid="isolated-test")
     assert final["response_kind"] == "route", final.get("message")
     assert [leg["end_name"] for leg in final["route"]["legs"]] == [
-        "武汉大学老斋舍", meal["name"], "武汉大学梅园操场", shop["name"],
+        "武汉大学老斋舍", meal["name"], "武汉大学梅园小操场", shop["name"],
     ]
     assert final["route"]["route_state"]["hard_constraints"]["avoid_steps"] is True

@@ -239,16 +239,24 @@ def matches_activities(poi: dict, activities: Iterable[str] | None) -> bool:
     return bool(supported & requested)
 
 
+_ACTIVITY_REVIEW_OVERRIDES = {
+    "poi_082": (
+        [],
+        "reviewed: 用户现场反馈（2026-11-05）称梅园小操场为活动广场，不适合作为跑步场地推荐；"
+        "学校活动报道将其作为活动集散地：https://news.whu.edu.cn/info/1002/49599.htm",
+    ),
+}
+
+
 _SOURCE_REVIEWED_SPORTS = {
     "poi_077": ("swimming", "poi name identifies a swimming pool"),
     "poi_078": ("volleyball", "poi name identifies volleyball ground"),
     "poi_079": ("badminton", "poi name identifies badminton court"),
-    "poi_080": ("running", "named athletic ground and aliases identify the running track"),
+    "poi_080": ("running", "武汉大学2019年报道将九一二列为田径场；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364"),
     "poi_081": ("fitness", "sports hall subcategory; no ball sport is claimed"),
-    "poi_082": ("running", "poi name identifies an athletic ground"),
     "poi_083": ("basketball", "poi name and OSM reviewed sports feature identify basketball"),
     "poi_084": ("tennis", "poi name and OSM reviewed sports feature identify tennis"),
-    "poi_085": ("football", "poi name and aliases identify the football ground"),
+    "poi_085": (["running", "football"], "用户现场反馈和武汉大学2019年报道支持桂园田径场跑步用途；足球用途依据场地名称和别名；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364"),
     "poi_086": (
         ["fitness", "badminton", "table_tennis"],
         "武汉大学学生资助管理中心《生活在珞珈丨第7期：运动场地大盘点——文理学部》"
@@ -261,7 +269,7 @@ _SOURCE_REVIEWED_SPORTS = {
         "（2024-04-24）记载工学部体育馆设羽毛球、乒乓球和排球场地；场馆当前开放和预约情况未核实；"
         "https://zzgl.whu.edu.cn/info/1017/1029.htm",
     ),
-    "poi_205": ("running", "aliases identify the athletics ground"),
+    "poi_205": ("running", "武汉大学2019年报道将工学部操场列为田径场；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364"),
     "poi_206": ("basketball", "poi name identifies basketball court"),
     "poi_257": (
         ["fitness", "badminton"],
@@ -303,7 +311,10 @@ def audit_poi_activities(pois: list[dict]) -> list[dict]:
         name_text = " ".join([str(poi.get("name") or ""), *map(str, poi.get("aliases") or [])])
         activities: list[str] = []
         basis = ""
-        if place_type == "sports":
+        if poi_id in _ACTIVITY_REVIEW_OVERRIDES:
+            activities, basis = _ACTIVITY_REVIEW_OVERRIDES[poi_id]
+            activities = list(activities)
+        elif place_type == "sports":
             source_ids = {str(source.get("id") or "") for source in poi.get("source_refs") or []}
             source_activity = {
                 "node/2177869899": ("table_tennis", "OSM source names a table-tennis facility in 信息学部"),
@@ -346,7 +357,7 @@ def audit_poi_activities(pois: list[dict]) -> list[dict]:
                              or place_type == "sports" and activities else
                              "category_supported" if activities else
                              "reviewed_no_supported_activity")})
-    missing_sports = set(_SOURCE_REVIEWED_SPORTS) - seen_ids
-    if missing_sports:
-        raise ValueError(f"reviewed sports POI IDs are missing from the master: {sorted(missing_sports)}")
+    missing_reviewed = (set(_SOURCE_REVIEWED_SPORTS) | set(_ACTIVITY_REVIEW_OVERRIDES)) - seen_ids
+    if missing_reviewed:
+        raise ValueError(f"reviewed sports POI IDs are missing from the master: {sorted(missing_reviewed)}")
     return reviewed

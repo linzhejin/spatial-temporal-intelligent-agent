@@ -22,12 +22,15 @@ def rebuild(poi_document: dict) -> dict:
 
     # These short names were attached to a dormitory and an area in the legacy
     # catalog. Keep the known sports-ground aliases on their actual grounds.
-    for poi_id, alias in (("poi_110", "桂操"), ("poi_151", "梅操")):
+    for poi_id, alias in (("poi_110", "桂操"), ("poi_151", "梅操"),
+                          ("poi_035", "奥林匹克操场"), ("poi_205", "奥场"),
+                          ("poi_205", "奥林匹克运动场")):
         if poi_id not in by_id:
             raise ValueError(f"expected reviewed POI is missing: {poi_id}")
         by_id[poi_id]["aliases"] = [value for value in by_id[poi_id].get("aliases", [])
                                      if value != alias]
     expected_aliases = {
+        "poi_080": ("奥场", "奥林匹克操场", "奥林匹克运动场", "奥林匹克广场"),
         "poi_085": ("桂操",),
         "poi_082": ("梅操",),
         "poi_260": ("信操", "竹园操场"),

@@ -156,11 +156,13 @@ def test_curated_pois_carry_audited_activity_provenance():
     assert all(poi.get("activity_review_status") in {
         "source_supported", "category_supported", "reviewed_no_supported_activity",
     } for poi in pois.values())
-    assert len(pois) == len(json.loads(Path("data/pois.json").read_text(encoding="utf-8"))["pois"])
+    master = json.loads(Path("data/pois.json").read_text(encoding="utf-8"))["pois"]
+    assert len(pois) == sum(poi.get("recommendation_status") != "reported_absent_pending_review"
+                            for poi in master)
 
 
 def test_every_master_poi_matches_its_reproducible_activity_audit():
-    pois = load_pois()
+    pois = json.loads(Path("data/pois.json").read_text(encoding="utf-8"))["pois"]
     audited = audit_poi_activities(pois)
     by_id = {poi["id"]: poi for poi in pois}
     assert len(audited) == len(pois) == 443

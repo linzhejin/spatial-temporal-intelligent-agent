@@ -762,7 +762,7 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
     points = {
         "武汉大学文理学部教3楼": [114.36, 30.53],
         "桂园一食堂": [114.361, 30.53],
-        "武汉大学梅园操场": [114.362, 30.53],
+        "武汉大学梅园小操场": [114.362, 30.53],
     }
 
     def execute(name, args, _context):
@@ -804,7 +804,7 @@ def test_textual_meal_selection_keeps_named_non_activity_final_stop(
     assert completed["response_kind"] == "route"
     assert completed["route_kind"] == "via"
     assert [leg["end_name"] for leg in completed["route"]["legs"]] == [
-        "桂园一食堂", "武汉大学梅园操场",
+        "桂园一食堂", "武汉大学梅园小操场",
     ]
     assert [call["end"]["poi_id"] for call in route_calls] == ["poi_068", "poi_082"]
     assert [call.get("strategy") for call in route_calls] == [expected_strategy] * 2

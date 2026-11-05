@@ -1062,7 +1062,6 @@
    "id": "poi_035",
    "name": "武汉大学早期建筑工学院",
    "aliases": [
-    "奥林匹克操场",
     "工学大楼",
     "早期建筑工学院",
     "老工学院",
@@ -2277,7 +2276,11 @@
     "912操场",
     "九一二操场",
     "9·12操场",
-    "912运动场"
+    "912运动场",
+    "奥场",
+    "奥林匹克操场",
+    "奥林匹克运动场",
+    "奥林匹克广场"
    ],
    "coordinates": {
     "lng": 114.366465,
@@ -2298,7 +2301,7 @@
    "activities": [
     "running"
    ],
-   "activity_basis": "named athletic ground and aliases identify the running track",
+   "activity_basis": "武汉大学2019年报道将九一二列为田径场；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364",
    "activity_review_status": "source_supported"
   },
   {
@@ -2337,8 +2340,9 @@
   },
   {
    "id": "poi_082",
-   "name": "武汉大学梅园操场",
+   "name": "武汉大学梅园小操场",
    "aliases": [
+    "武汉大学梅园操场",
     "梅园小操场",
     "梅园操场",
     "梅操"
@@ -2347,23 +2351,21 @@
     "lng": 114.3648,
     "lat": 30.538499
    },
-   "type": "sports",
+   "type": "scenery",
    "campus": "文理学部",
-   "category": "sports",
-   "description": "文理学部校内地点。武汉大学(近樱花大道)",
+   "category": "scenery",
+   "description": "文理学部的活动广场，俗称梅操；根据用户现场反馈不作为跑步场地推荐。",
    "season_tags": [
     "all"
    ],
    "scenery_score": 1,
    "rating": null,
-   "subcategory": "field",
+   "subcategory": "square",
    "is_minor": false,
    "poi_id": "poi_082",
-   "activities": [
-    "running"
-   ],
-   "activity_basis": "poi name identifies an athletic ground",
-   "activity_review_status": "source_supported"
+   "activities": [],
+   "activity_basis": "reviewed: 用户现场反馈（2026-11-05）称梅园小操场为活动广场，不适合作为跑步场地推荐；学校活动报道将其作为活动集散地：https://news.whu.edu.cn/info/1002/49599.htm",
+   "activity_review_status": "reviewed_no_supported_activity"
   },
   {
    "id": "poi_083",
@@ -2450,9 +2452,10 @@
    "is_minor": false,
    "poi_id": "poi_085",
    "activities": [
+    "running",
     "football"
    ],
-   "activity_basis": "poi name and aliases identify the football ground",
+   "activity_basis": "用户现场反馈和武汉大学2019年报道支持桂园田径场跑步用途；足球用途依据场地名称和别名；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364",
    "activity_review_status": "source_supported"
   },
   {
@@ -6027,8 +6030,6 @@
    "id": "poi_205",
    "name": "工学部操场",
    "aliases": [
-    "奥场",
-    "奥林匹克运动场",
     "工学部田径场"
    ],
    "coordinates": {
@@ -6050,7 +6051,7 @@
    "activities": [
     "running"
    ],
-   "activity_basis": "aliases identify the athletics ground",
+   "activity_basis": "武汉大学2019年报道将工学部操场列为田径场；当前开放情况未核实；https://m.thepaper.cn/baijiahao_4292364",
    "activity_review_status": "source_supported"
   },
   {
