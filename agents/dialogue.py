@@ -25,7 +25,29 @@ def _function(name, description, properties, required=()):
                        "additionalProperties": False}}}
 
 
-def tool_schemas():
+_COMMON_DIALOGUE_TOOLS = {
+    "update_task", "present_places", "resolve_poi", "get_place_details",
+    "search_web", "read_web_page", "ask_user", "suggest_followup",
+}
+_PLACE_SEARCH_TOOLS = _COMMON_DIALOGUE_TOOLS | {
+    "search_poi_candidates", "find_reachable_places",
+}
+_ROUTE_DIALOGUE_TOOLS = _COMMON_DIALOGUE_TOOLS | {
+    "search_poi_candidates", "find_reachable_places", "compare_routes", "plan_route",
+    "plan_via_route", "plan_itinerary", "plan_tour", "plan_multimodal_route",
+    "get_weather", "list_road_conditions",
+}
+_OPERATION_TOOL_NAMES = {
+    "place_search": _PLACE_SEARCH_TOOLS,
+    "route": _ROUTE_DIALOGUE_TOOLS,
+    "itinerary": _ROUTE_DIALOGUE_TOOLS,
+    "route_comparison": _ROUTE_DIALOGUE_TOOLS,
+    "weather": _COMMON_DIALOGUE_TOOLS | {"get_weather"},
+    "campus_answer": _COMMON_DIALOGUE_TOOLS | {"search_poi_candidates"},
+}
+
+
+def tool_schemas(operation=None):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -44,6 +66,8 @@ def tool_schemas():
     schemas.extend([
         _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
+             "operation": {"type": "string", "enum": list(_OPERATION_TOOL_NAMES),
+                           "description": "本轮语义任务类型；按主要用户目标选择"},
              "goal": {"type": "string"},
              "start": {**_ENDPOINT_SCHEMA, "description": "实际出发地点，不能用搜索中心代替"},
              "search_anchor": {**_ENDPOINT_SCHEMA, "description": "附近查询参照点，可与起点不同"},
@@ -59,7 +83,8 @@ def tool_schemas():
              "limit": {"type": "integer", "minimum": 1, "maximum": 20},
              "constraints": _PREFERENCE_SCHEMA["constraints"],
              "clear_fields": {"type": "array", "items": {"type": "string"},
-                              "description": "仅在用户明确取消时清除已有字段或条件，例如budget_per_person"}}, ("relation",)),
+                              "description": "仅在用户明确取消时清除已有字段或条件，例如budget_per_person"}},
+            ("relation", "operation")),
         _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定，理由与来源会和卡片一起展示。",
             {"introduction": {"type": "string"},
              "places": {"type": "array", "minItems": 1, "maxItems": 4, "items": {
@@ -71,7 +96,8 @@ def tool_schemas():
         _function("read_web_page", "读取本轮搜索返回的某个来源，核对内容、日期与分店。",
                   {"source_id": {"type": "string"}}, ("source_id",)),
     ])
-    return schemas
+    allowed = _OPERATION_TOOL_NAMES.get(operation) if isinstance(operation, str) else None
+    return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
 
 
 def _compact(value):
@@ -203,9 +229,11 @@ class Dialogue:
             pending.setdefault("semantic_request", {})["route_to_modify"] = deepcopy(state)
         intent = pending.setdefault("semantic_request", {}) or {}
         changed_search = relation == "new"
-        for field in ("goal", "requirements", "area", "keywords", "exclude_terms", "budget_per_person", "limit"):
+        for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms", "budget_per_person", "limit"):
             if field in args:
                 value = args[field]
+                if field == "operation" and (not isinstance(value, str) or value not in _OPERATION_TOOL_NAMES):
+                    raise ValueError("invalid operation")
                 if field in {"requirements", "keywords", "exclude_terms"}:
                     if not isinstance(value, list) or len(value) > 30 or any(not isinstance(x, str) or len(x) > 500 for x in value):
                         raise ValueError(f"invalid {field}")
@@ -215,7 +243,7 @@ class Dialogue:
                     raise ValueError("invalid limit")
                 if field == "budget_per_person" and (type(value) not in (int, float) or not 0 < value <= 100000):
                     raise ValueError("invalid budget_per_person")
-                changed_search |= field != "goal" and value != intent.get(field)
+                changed_search |= field not in {"goal", "operation"} and value != intent.get(field)
                 intent[field] = deepcopy(value)
         for field in ("start", "search_anchor", "mode", "strategy", "activities", "subcategories"):
             if field in args:
@@ -453,7 +481,8 @@ class Dialogue:
             self.trace({"tool_name": "model_dialogue", "argument_keys": [], "outcome": "success", "artifact_kind": None})
             try:
                 response = client.chat.completions.create(
-                    model=config.LLM_MODEL, messages=deepcopy(self.messages), tools=tool_schemas(),
+                    model=config.LLM_MODEL, messages=deepcopy(self.messages),
+                    tools=tool_schemas(self.intent.get("operation")),
                     temperature=0.2, max_tokens=2600,
                 )
             except Exception:

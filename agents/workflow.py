@@ -463,7 +463,8 @@ def build_agent_workflow(
         from agents import provenance as provenance_mod
         provenance_mod.persist(response.get("provenance"))
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
-                    "place_request", "candidates", "completed_place_request", "result_maintenance"):
+                    "place_request", "candidates", "completed_place_request", "result_maintenance",
+                    "turns", "model_usage"):
             result[key] = response.get(key)
         if response.get("needs_input"):
             result["needs_input"] = True

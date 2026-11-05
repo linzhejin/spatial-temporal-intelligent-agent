@@ -71,7 +71,8 @@ def test_full_dining_requirements_reach_model_and_it_selects_the_delivered_place
         return {"status": "ok", "candidates": candidates}, {"candidates": candidates}
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
     model.side_effect = [
-        reply(update_task={"relation": "new", "goal": query, "requirements": ["独立门店", "不含食堂档口", "三人聚餐"],
+        reply(update_task={"relation": "new", "operation": "place_search", "goal": query,
+                           "requirements": ["独立门店", "不含食堂档口", "三人聚餐"],
                            "budget_per_person": 50, "keywords": ["火锅"], "subcategories": ["restaurant"]}),
         reply(search_poi_candidates={"keyword": "火锅", "area": "武汉大学", "subcategories": ["restaurant"]}),
         reply(present_places={"introduction": "找到一个可进一步核对的选择，人均消费暂未核实。",
@@ -149,7 +150,8 @@ def test_changing_a_requirement_invalidates_old_candidate_set(model):
         candidate_poi_ids=["amap:A123"], candidate_places=[old])
     state["semantic_request"] = {"goal": "找餐厅", "requirements": ["不要食堂档口"]}
     model.side_effect = [
-        reply(update_task={"relation": "continue", "requirements": ["适合三人聚餐"]}),
+        reply(update_task={"relation": "continue", "operation": "place_search",
+                           "requirements": ["适合三人聚餐"]}),
         reply("我会按适合聚餐的条件重新搜索。"),
     ]
 
@@ -157,6 +159,47 @@ def test_changing_a_requirement_invalidates_old_candidate_set(model):
 
     assert result["place_request"]["candidate_poi_ids"] == []
     assert result["place_request"]["candidate_places"] == []
+
+
+def test_switching_from_place_search_to_route_keeps_the_accepted_candidate():
+    from agents.dialogue import Dialogue
+
+    candidate = place("amap:SHOP123", "已接受的店铺")
+    state = planner._place_request_state("推荐店铺", pending_slot="selection",
+        candidate_poi_ids=[candidate["poi_id"]], candidate_places=[candidate])
+    state["semantic_request"] = {"operation": "place_search", "goal": "找店铺"}
+    dialogue = Dialogue("去这家", context={"place_request": state,
+        "selected_poi_id": candidate["poi_id"]}, execute_tool=lambda *_args: {},
+        client_factory=lambda: None, trace=lambda *_args: None)
+
+    dialogue.update({"relation": "continue", "operation": "route"})
+
+    assert dialogue.pending["selected_poi_id"] == candidate["poi_id"]
+    assert dialogue.pending["candidate_poi_ids"] == [candidate["poi_id"]]
+
+
+def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(model, monkeypatch):
+    from agents import tools as spatial_tools
+
+    candidates = [place("amap:SHOP123", "测试火锅")]
+    monkeypatch.setattr(spatial_tools, "execute_tool", lambda *_args: (
+        {"status": "ok", "candidates": candidates}, {"candidates": candidates}))
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search", "goal": "推荐火锅店",
+                           "keywords": ["火锅"], "limit": 1},
+              search_poi_candidates={"keyword": "火锅", "area": "武汉大学"}),
+        reply(present_places={"introduction": "找到一条地图候选，价格待核实。",
+                              "places": [{"poi_id": "amap:SHOP123", "reason": "地图目录匹配火锅检索词。"}]}),
+    ]
+
+    result = planner.run_agent("推荐一家武大校内火锅店")
+
+    assert result["response_kind"] == "candidates"
+    first_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
+    second_names = {tool["function"]["name"] for tool in model.call_args_list[1].kwargs["tools"]}
+    assert "plan_multimodal_route" in first_names
+    assert "search_poi_candidates" in second_names
+    assert "plan_multimodal_route" not in second_names
 
 
 def test_model_cannot_create_coordinates_for_search_anchor(model, monkeypatch):
