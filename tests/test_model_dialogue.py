@@ -80,6 +80,67 @@ def place(identifier, name):
             "subcategory": "restaurant", "verification_status": "provider_only"}
 
 
+def test_new_task_commits_distinct_start_and_search_anchor_before_spatial_tools(model, monkeypatch):
+    query = "我在信图，想去总图附近干饭"
+    candidate = place("amap:ANCHOR123", "总图附近餐厅")
+    calls = []
+
+    def execute(name, args, context):
+        calls.append((name, args, context))
+        return {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}
+
+    monkeypatch.setattr(planner.agent_tools, "_prepare_route_context", lambda _context: ({}, None))
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
+    model.side_effect = [
+        reply(update_task={
+            "relation": "new", "operation": "place_search", "goal": "总图附近用餐",
+            "start": {"type": "poi", "name": "信息学部图书馆"},
+            "search_anchor": {"type": "poi", "name": "总图"},
+            "area": "总图", "keywords": ["餐饮"], "activities": ["meal"],
+            "subcategories": ["restaurant", "canteen", "fastfood"], "limit": 1,
+        }),
+        reply(search_poi_candidates={"keyword": "餐饮", "area": "总图", "limit": 1}),
+        reply(present_places={"introduction": "以下地点来自本次地图检索。", "places": [
+            {"poi_id": candidate["poi_id"], "reason": "位于总图附近的餐饮候选。"},
+        ]}),
+    ]
+
+    result = planner.run_agent(query)
+
+    first_call = model.call_args_list[0].kwargs
+    first_tool_names = {item["function"]["name"] for item in first_call["tools"]}
+    assert first_tool_names == {"update_task"}
+    assert first_call["tool_choice"] == {
+        "type": "function", "function": {"name": "update_task"},
+    }
+    assert calls[0][0] == "search_poi_candidates"
+    assert calls[0][1]["start"]["name"] == "信息学部图书馆"
+    assert calls[0][1]["search_anchor"]["name"] == "总图"
+    next_tool_names = {item["function"]["name"]
+                       for item in model.call_args_list[1].kwargs["tools"]}
+    assert "search_poi_candidates" in next_tool_names
+    assert "plan_multimodal_route" not in next_tool_names
+    assert result["place_request"]["start"]["name"] == "信息学部图书馆"
+    assert result["place_request"]["search_anchor"]["name"] == "总图"
+    assert result["candidates"][0]["poi_id"] == candidate["poi_id"]
+
+
+def test_new_task_cannot_execute_spatial_tool_before_intent_is_saved(model, monkeypatch):
+    executed = []
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda name, *_args: executed.append(name))
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["干饭"]},
+              search_poi_candidates={"keyword": "干饭", "area": "总图"}),
+        reply("先按保存的需求继续处理。"),
+    ]
+
+    result = planner.run_agent("我在信图，想去总图附近干饭")
+
+    assert result["response_kind"] == "chat"
+    assert executed == []
+    assert model.call_count == 2
+
+
 def test_full_dining_requirements_reach_model_and_it_selects_the_delivered_places(model, monkeypatch):
     query = "推荐武大校内独立火锅店，不要食堂档口，人均50元以内，适合三个人聚餐"
     candidates = [place("amap:A123", "测试火锅甲"), place("amap:B123", "测试火锅乙")]
@@ -111,9 +172,14 @@ def test_full_dining_requirements_reach_model_and_it_selects_the_delivered_place
 
 
 def test_general_recommendation_does_not_require_origin_before_model(model, monkeypatch):
-    model.side_effect = [reply("可以先比较校内不同区域的店铺，确定地点后再计算从你出发的路线。")]
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search",
+                           "goal": "推荐校内适合聚餐的火锅店", "area": "武汉大学",
+                           "keywords": ["火锅"]}),
+        reply("可以先比较校内不同区域的店铺，确定地点后再计算从你出发的路线。"),
+    ]
     result = planner.run_agent("推荐几家武大校内适合聚餐的火锅店")
-    assert model.call_count == 1
+    assert model.call_count == 2
     assert result["response_kind"] == "chat"
     assert "你从哪里出发" not in result["message"]
 
@@ -212,8 +278,8 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
         {"status": "ok", "candidates": candidates}, {"candidates": candidates}))
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "goal": "推荐火锅店",
-                           "keywords": ["火锅"], "limit": 1},
-              search_poi_candidates={"keyword": "火锅", "area": "武汉大学"}),
+                           "keywords": ["火锅"], "limit": 1}),
+        reply(search_poi_candidates={"keyword": "火锅", "area": "武汉大学"}),
         reply(present_places={"introduction": "找到一条地图候选，价格待核实。",
                               "places": [{"poi_id": "amap:SHOP123", "reason": "地图目录匹配火锅检索词。"}]}),
     ]
@@ -223,12 +289,18 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
     assert result["response_kind"] == "candidates"
     first_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
     second_names = {tool["function"]["name"] for tool in model.call_args_list[1].kwargs["tools"]}
-    assert len(second_names) == 4
-    assert "plan_multimodal_route" in first_names
-    assert "present_places" in second_names
-    assert "search_web" in second_names
-    assert "search_poi_candidates" not in second_names
+    third_names = {tool["function"]["name"] for tool in model.call_args_list[2].kwargs["tools"]}
+    assert first_names == {"update_task"}
+    assert model.call_args_list[0].kwargs["tool_choice"] == {
+        "type": "function", "function": {"name": "update_task"},
+    }
+    assert "search_poi_candidates" in second_names
     assert "plan_multimodal_route" not in second_names
+    assert len(third_names) == 4
+    assert "present_places" in third_names
+    assert "search_web" in third_names
+    assert "search_poi_candidates" not in third_names
+    assert "plan_multimodal_route" not in third_names
 
 
 def test_place_search_stops_when_enough_candidates_are_already_available():
@@ -261,6 +333,8 @@ def test_model_cannot_create_coordinates_for_search_anchor(model, monkeypatch):
         return {"candidates": []}, {"candidates": []}
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
     model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search",
+                           "keywords": ["火锅"], "area": "梅园"}),
         reply(search_poi_candidates={"keyword": "火锅", "area": "梅园",
                                      "search_anchor": {"type": "coord", "lng": 114.1, "lat": 30.1}}),
         reply("我不能用未核对的地图坐标搜索。"),
@@ -269,18 +343,25 @@ def test_model_cannot_create_coordinates_for_search_anchor(model, monkeypatch):
     result = planner.run_agent("找梅园附近火锅")
 
     assert "search_poi_candidates" not in called
-    assert "untrusted_coordinates" in str(model.call_args_list[1].kwargs["messages"])
+    assert "untrusted_coordinates" in str(model.call_args_list[2].kwargs["messages"])
     assert not result.get("candidates")
 
 
 def test_presenter_rejects_a_model_invented_poi(model, monkeypatch):
-    model.side_effect = [reply(present_places={"introduction": "推荐这里", "places": [{"poi_id": "amap:FAKE", "reason": "好吃"}]}),
-                         reply("暂时没有核对到具体门店，可以继续检索。")]
+    candidates = [place("amap:REAL", "已检索门店")]
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda *_args: (
+        {"status": "ok", "count": 1, "candidates": candidates}, {"candidates": candidates}))
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"], "limit": 1}),
+        reply(search_poi_candidates={"keyword": "火锅", "area": "武汉大学", "limit": 1}),
+        reply(present_places={"introduction": "推荐这里", "places": [{"poi_id": "amap:FAKE", "reason": "好吃"}]}),
+        reply("暂时没有核对到具体门店，可以继续检索。"),
+    ]
     result = planner.run_agent("推荐火锅店")
-    assert model.call_count == 2
+    assert model.call_count == 4
     assert not result.get("candidates")
     assert "amap:FAKE" not in result["message"]
-    assert "unknown_place" in str(model.call_args.kwargs["messages"])
+    assert "unknown_place" in str(model.call_args_list[3].kwargs["messages"])
 
 
 def test_model_failure_is_explicit_and_does_not_fall_back_to_keyword_recommendations(model):

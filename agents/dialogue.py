@@ -542,15 +542,29 @@ class Dialogue:
             candidate_count = len(self.last_search.get("candidates") or [])
             ready_to_present = candidate_count >= requested_count or self.place_search_count >= 2
             try:
-                response = client.chat.completions.create(
-                    model=config.LLM_MODEL, messages=deepcopy(self.messages),
-                    tools=tool_schemas(self.intent.get("operation"), allow_place_search=(
+                operation = self.intent.get("operation")
+                schemas = tool_schemas(operation, allow_place_search=(
                         self.place_search_count < 2 and candidate_count < requested_count),
                         ready_to_present=ready_to_present,
                         selected_place=bool(self.pending.get("selected_poi_id")),
-                        route_preplanned=self.route_preplanned),
-                    temperature=0.2, max_tokens=2600,
-                )
+                        route_preplanned=self.route_preplanned)
+                request = {
+                    "model": config.LLM_MODEL,
+                    "messages": deepcopy(self.messages),
+                    "tools": schemas,
+                    "temperature": 0.2,
+                    "max_tokens": 2600,
+                }
+                if operation not in _OPERATION_TOOL_NAMES:
+                    request["tools"] = [item for item in schemas
+                                        if item["function"]["name"] == "update_task"]
+                    request["tool_choice"] = {
+                        "type": "function", "function": {"name": "update_task"},
+                    }
+                available_tool_names = {
+                    item["function"]["name"] for item in request["tools"]
+                }
+                response = client.chat.completions.create(**request)
             except Exception:
                 return self.result("对话模型暂时没有完成回答，已保留本轮需求和查得信息，请重试。", failed=True)
             usage = getattr(response, "usage", None)
@@ -576,7 +590,10 @@ class Dialogue:
                     args = json.loads(call.function.arguments)
                     if not isinstance(args, dict):
                         raise ValueError("arguments must be an object")
-                    if name == "update_task":
+                    if name not in available_tool_names:
+                        answer = {"error": "tool_not_available",
+                                  "message": "当前阶段未开放此工具，请先完成任务信息提交后再继续。"}
+                    elif name == "update_task":
                         answer = self.update(args)
                     elif name == "present_places":
                         final = self.present(args)
