@@ -49,7 +49,8 @@ _OPERATION_TOOL_NAMES = {
 
 
 def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False,
-                 selected_place=False, route_preplanned=False):
+                 web_research_requested=False, web_search_available=True,
+                 web_fetch_available=True, selected_place=False, route_preplanned=False):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -79,6 +80,7 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
              "area": {"type": "string", "description": "检索区域文字，例如梅园、桂园或武汉大学"},
              "keywords": {"type": "array", "items": {"type": "string"}},
              "exclude_terms": {"type": "array", "items": {"type": "string"}},
+             "web_research_requested": {"type": "boolean", "description": "仅用户明确询问价格、营业时间、评价等地图目录没有的事实时设为true"},
              "activities": {"type": "array", "items": {"type": "string"}},
              "subcategories": {"type": "array", "items": {"type": "string"}},
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
@@ -100,7 +102,11 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
     ])
     allowed = _OPERATION_TOOL_NAMES.get(operation) if isinstance(operation, str) else None
     if allowed and operation == "place_search" and ready_to_present:
-        allowed = {"update_task", "present_places", "search_web", "read_web_page"}
+        allowed = {"present_places"}
+        if web_research_requested and web_search_available:
+            allowed.add("search_web")
+        elif web_research_requested and web_fetch_available:
+            allowed.add("read_web_page")
     elif allowed and operation == "place_search" and not allow_place_search:
         allowed = allowed - {"search_poi_candidates", "find_reachable_places", "resolve_poi"}
     if allowed and selected_place:
@@ -210,6 +216,7 @@ class Dialogue:
         self.web_search_count = 0
         self.web_fetch_count = 0
         self.place_search_count = 0
+        self._last_task_update_changed_search = False
         self.turns = 0
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         self.original_coords = [point for point in [coord_start, coord_end, *(coord_waypoints or [])] if point]
@@ -256,7 +263,8 @@ class Dialogue:
             pending.setdefault("semantic_request", {})["route_to_modify"] = deepcopy(state)
         intent = pending.setdefault("semantic_request", {}) or {}
         changed_search = relation == "new"
-        for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms", "budget_per_person", "limit"):
+        for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms",
+                      "web_research_requested", "budget_per_person", "limit"):
             if field in args:
                 value = args[field]
                 if field == "operation" and (not isinstance(value, str) or value not in _OPERATION_TOOL_NAMES):
@@ -268,10 +276,14 @@ class Dialogue:
                     raise ValueError("invalid goal")
                 if field == "limit" and (type(value) is not int or not 1 <= value <= 20):
                     raise ValueError("invalid limit")
+                if field == "web_research_requested" and type(value) is not bool:
+                    raise ValueError("invalid web_research_requested")
                 if field == "budget_per_person" and (type(value) not in (int, float) or not 0 < value <= 100000):
                     raise ValueError("invalid budget_per_person")
                 changed_search |= field not in {"goal", "operation"} and value != intent.get(field)
                 intent[field] = deepcopy(value)
+        if "web_research_requested" not in args:
+            intent["web_research_requested"] = False
         for field in ("start", "search_anchor", "mode", "strategy", "activities", "subcategories"):
             if field in args:
                 if field in {"start", "search_anchor"} and args[field] is not None:
@@ -296,11 +308,13 @@ class Dialogue:
                 changed_search = True
             else:
                 raise ValueError("unsupported clear field")
+        self._last_task_update_changed_search = changed_search
         if changed_search:
             intent["shown_ids"] = []
             pending.update({"candidate_poi_ids": [], "candidate_places": [], "result_dependencies": None})
             pending.pop("selected_poi_id", None)
             self.fresh.clear()
+            self.last_search = {}
         pending["semantic_request"] = intent
         PlaceRequestState.model_validate(pending)
         self.pending, self.intent = pending, intent
@@ -534,18 +548,28 @@ class Dialogue:
         for _ in range(12):
             if time.monotonic() - started > max_seconds or self.usage["total_tokens"] > 40000:
                 return self.result("本轮查询达到执行上限，已保留得到的信息和任务，可以继续或缩小检索范围。", failed=True)
+            operation = self.intent.get("operation")
+            requested_count = min(self.intent.get("limit", 4), 4)
+            candidate_count = len(self.last_search.get("candidates") or [])
+            if operation == "place_search" and self.place_search_count >= 2 and not candidate_count:
+                online_status = self.last_search.get("online_status")
+                message = ("地图地点服务暂时不可用，请稍后重试。"
+                           if online_status not in (None, "ok", "not_requested")
+                           else "这次地图检索没有找到可核对的地点；可以换一个区域或餐饮类型再试。")
+                return self.result(message)
             self.turns += 1
             # The existing lease-aware callback also detects cancellation between
             # model turns; do not swallow errors raised by the workflow callback.
             self.trace({"tool_name": "model_dialogue", "argument_keys": [], "outcome": "success", "artifact_kind": None})
-            requested_count = min(self.intent.get("limit", 4), 4)
-            candidate_count = len(self.last_search.get("candidates") or [])
             ready_to_present = candidate_count >= requested_count or self.place_search_count >= 2
             try:
-                operation = self.intent.get("operation")
+                web_research_requested = self.intent.get("web_research_requested") is True
                 schemas = tool_schemas(operation, allow_place_search=(
                         self.place_search_count < 2 and candidate_count < requested_count),
                         ready_to_present=ready_to_present,
+                        web_research_requested=web_research_requested,
+                        web_search_available=self.web_search_count < 1,
+                        web_fetch_available=bool(self.sources) and self.web_fetch_count < 1,
                         selected_place=bool(self.pending.get("selected_poi_id")),
                         route_preplanned=self.route_preplanned)
                 request = {
@@ -560,6 +584,16 @@ class Dialogue:
                                         if item["function"]["name"] == "update_task"]
                     request["tool_choice"] = {
                         "type": "function", "function": {"name": "update_task"},
+                    }
+                elif operation == "place_search" and ready_to_present:
+                    if web_research_requested and self.web_search_count < 1:
+                        required_tool = "search_web"
+                    elif web_research_requested and self.sources and self.web_fetch_count < 1:
+                        required_tool = "read_web_page"
+                    else:
+                        required_tool = "present_places"
+                    request["tool_choice"] = {
+                        "type": "function", "function": {"name": required_tool},
                     }
                 available_tool_names = {
                     item["function"]["name"] for item in request["tools"]
@@ -584,7 +618,13 @@ class Dialogue:
                 record["reasoning_content"] = msg.reasoning_content
             self.messages.append(record)
             final = None
-            for call in calls[:8]:
+            task_update_applied = False
+            search_intent_changed = False
+            auto_search_done = False
+            # Commit changed intent before any spatial call from the same model
+            # response, so stale arguments cannot search the previous request.
+            ordered_calls = sorted(calls[:8], key=lambda call: call.function.name != "update_task")
+            for call in ordered_calls:
                 name = call.function.name
                 try:
                     args = json.loads(call.function.arguments)
@@ -594,7 +634,18 @@ class Dialogue:
                         answer = {"error": "tool_not_available",
                                   "message": "当前阶段未开放此工具，请先完成任务信息提交后再继续。"}
                     elif name == "update_task":
-                        answer = self.update(args)
+                        if task_update_applied:
+                            answer = {"error": "task_already_committed",
+                                      "message": "本轮任务已保存，请基于当前任务继续。"}
+                        else:
+                            answer = self.update(args)
+                            if not answer.get("error"):
+                                task_update_applied = True
+                            search_intent_changed = (
+                                not answer.get("error")
+                                and self._last_task_update_changed_search
+                                and self.intent.get("operation") == "place_search"
+                            )
                     elif name == "present_places":
                         final = self.present(args)
                         answer = {"accepted": True, "poi_ids": self.pending["candidate_poi_ids"]}
@@ -606,6 +657,10 @@ class Dialogue:
                             setattr(self, counter_name, getattr(self, counter_name) + 1)
                             answer = web_evidence.execute(name, args, self.sources,
                                                           original_question=self.query)
+                    elif (name in {"search_poi_candidates", "find_reachable_places"}
+                          and search_intent_changed and auto_search_done):
+                        answer = {"error": "search_superseded",
+                                  "message": "任务条件已更新，服务端已按新条件重新查询；请使用新结果提交推荐。"}
                     else:
                         answer = self.spatial(name, args)
                 except (ValueError, TypeError, KeyError) as exc:
@@ -615,6 +670,16 @@ class Dialogue:
                                 "outcome": "tool_error" if answer.get("error") else "success", "artifact_kind": None})
                 self.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
+                if (name == "update_task" and not answer.get("error")
+                        and search_intent_changed and not auto_search_done
+                        and self.place_search_count < 2):
+                    search_result = self.spatial("search_poi_candidates", {})
+                    self.messages.append({"role": "system", "content": (
+                        "服务端已按刚保存的任务调用地图地点检索。只能从以下返回的 poi_id 中提交推荐；"
+                        "来源没有提供的事实应说明未知。检索结果：\n"
+                        + _model_tool_content("search_poi_candidates", search_result)
+                    )})
+                    auto_search_done = True
                 if name == "present_places" and not answer.get("error"):
                     break
             if final is not None:

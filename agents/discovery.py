@@ -47,7 +47,9 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     anchor = args.get("start")
     generic_areas = {"武汉大学", "武大", "校园", "校内"}
     search_center = args.get("search_anchor") or (anchor if area in generic_areas else None)
-    distance_origin = anchor or search_center
+    # A nearby search is ranked against the place the user asked about; the
+    # actual trip origin remains separate for a later route request.
+    distance_origin = search_center or anchor
     local = tools._search_poi_categories(subcategories or None, args.get("poi_type"), keyword,
                                          args.get("season"), True, activities=activities)
     local = [deepcopy(item) for item in local if has_source_backed_record(item)
