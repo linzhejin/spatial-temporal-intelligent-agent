@@ -47,7 +47,7 @@ _OPERATION_TOOL_NAMES = {
 }
 
 
-def tool_schemas(operation=None):
+def tool_schemas(operation=None, *, allow_place_search=True):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -97,6 +97,8 @@ def tool_schemas(operation=None):
                   {"source_id": {"type": "string"}}, ("source_id",)),
     ])
     allowed = _OPERATION_TOOL_NAMES.get(operation) if isinstance(operation, str) else None
+    if allowed and operation == "place_search" and not allow_place_search:
+        allowed = allowed - {"search_poi_candidates", "resolve_poi"}
     return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
 
 
@@ -310,10 +312,20 @@ class Dialogue:
     def spatial(self, name, args):
         from agents import tools
         args = deepcopy(args)
+        if name == "resolve_poi" and self.intent.get("operation") == "place_search":
+            requested_count = min(self.intent.get("limit", 4), 4)
+            if len(self.last_search.get("candidates") or []) >= requested_count:
+                return {"error": "candidate_search_complete",
+                        "message": "地图已返回足够候选，无需再次核验这些门店；请基于现有候选提交 present_places。"}
         if name in {"search_poi_candidates", "find_reachable_places"}:
-            if self.place_search_count >= 6:
+            requested_count = min(self.intent.get("limit", 4), 4)
+            previous_candidates = self.last_search.get("candidates") or []
+            if len(previous_candidates) >= requested_count:
+                return {"error": "candidate_search_complete",
+                        "message": "已有足够候选，请按现有地点资料筛选并立即提交 present_places。价格或独立门店信息没有来源时可说明未核实。"}
+            if self.place_search_count >= 2:
                 return {"error": "place_search_limit",
-                        "message": "本轮地点检索次数已达上限，请缩小区域或继续说明最重要的条件。"}
+                        "message": "本轮已完成两次地点检索；请基于已有候选回答，未证实的事实说明未知。"}
             self.place_search_count += 1
         context = {"query": self.query, "uid": self.uid, "_model_dialogue": True,
                    "_semantic_request": self.intent, "_known_places": self.known}
@@ -482,7 +494,9 @@ class Dialogue:
             try:
                 response = client.chat.completions.create(
                     model=config.LLM_MODEL, messages=deepcopy(self.messages),
-                    tools=tool_schemas(self.intent.get("operation")),
+                    tools=tool_schemas(self.intent.get("operation"), allow_place_search=(
+                        self.place_search_count < 2 and len(self.last_search.get("candidates") or [])
+                        < min(self.intent.get("limit", 4), 4))),
                     temperature=0.2, max_tokens=2600,
                 )
             except Exception:
@@ -517,7 +531,7 @@ class Dialogue:
                         answer = {"accepted": True, "poi_ids": self.pending["candidate_poi_ids"]}
                     elif name in {"search_web", "read_web_page"}:
                         counter_name = "web_search_count" if name == "search_web" else "web_fetch_count"
-                        if getattr(self, counter_name) >= 3:
+                        if getattr(self, counter_name) >= 1:
                             answer = {"error": "web_evidence_limit", "message": "本轮网页检索次数已达上限，请基于已查来源回答。"}
                         else:
                             setattr(self, counter_name, getattr(self, counter_name) + 1)

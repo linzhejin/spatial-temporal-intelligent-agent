@@ -198,8 +198,32 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
     first_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
     second_names = {tool["function"]["name"] for tool in model.call_args_list[1].kwargs["tools"]}
     assert "plan_multimodal_route" in first_names
-    assert "search_poi_candidates" in second_names
+    assert "present_places" in second_names
+    assert "search_poi_candidates" not in second_names
     assert "plan_multimodal_route" not in second_names
+
+
+def test_place_search_stops_when_enough_candidates_are_already_available():
+    from agents.dialogue import Dialogue
+
+    calls = []
+    candidates = [place("amap:SHOP123", "火锅甲"), place("amap:SHOP456", "火锅乙")]
+    def execute(name, args, _context):
+        calls.append((name, args))
+        return {"status": "ok", "count": len(candidates), "candidates": candidates}, {"candidates": candidates}
+    dialogue = Dialogue("推荐两家火锅", execute_tool=execute, client_factory=lambda: None,
+                        trace=lambda *_args: None)
+    dialogue.intent["operation"] = "place_search"
+    dialogue.intent["limit"] = 2
+
+    first = dialogue.spatial("search_poi_candidates", {"keyword": "火锅"})
+    repeated = dialogue.spatial("search_poi_candidates", {"keyword": "武大火锅"})
+    re_resolved = dialogue.spatial("resolve_poi", {"name": "火锅甲"})
+
+    assert len(first["candidates"]) == 2
+    assert repeated["error"] == "candidate_search_complete"
+    assert re_resolved["error"] == "candidate_search_complete"
+    assert len(calls) == 1
 
 
 def test_model_cannot_create_coordinates_for_search_anchor(model, monkeypatch):
