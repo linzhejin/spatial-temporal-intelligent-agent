@@ -4627,7 +4627,9 @@
                         ? '约 ' + (p.distance_m / 1000).toFixed(1) + ' km'
                         : '约 ' + Math.round(p.distance_m) + ' m';
                     var reference = p.distance_reference_name || '';
-                    distEl.textContent = reference ? '路网距 ' + reference + ' ' + distanceText : distanceText;
+                    var distanceLabel = p.distance_basis === 'network_path_plus_unverified_straight_line_access_estimate'
+                        ? '估算距 ' : '距 ';
+                    distEl.textContent = reference ? distanceLabel + reference + ' ' + distanceText : distanceText;
                     metaEl.appendChild(distEl);
                 }
                 if (metaEl.childNodes.length) btn.appendChild(metaEl);

@@ -13,6 +13,8 @@ def test_overlapping_map_places_can_be_chosen_individually(static_site, mobile, 
     submissions = []
     candidates = [{'poi_id': f'poi_{i}', 'name': f'梅园餐饮地点{i}', 'subcategory': 'restaurant',
                    'campus': '文理学部', 'distance_m': 100 + i,
+                   'distance_reference_name': '总图',
+                   'distance_basis': 'network_path_plus_unverified_straight_line_access_estimate',
                    'lng': 114.36, 'lat': 30.54} for i in range(1, 5)]
 
     def respond(route, data):
@@ -53,6 +55,8 @@ def test_overlapping_map_places_can_be_chosen_individually(static_site, mobile, 
         page.locator('#submit-btn').click()
         cards = page.locator('.candidate-cards').last
         expect(cards.locator('.candidate-card')).to_have_count(4)
+        expect(cards.locator('.candidate-dist').first).to_contain_text('估算距 总图')
+        assert '路网距' not in cards.locator('.candidate-dist').first.inner_text()
         assert cards.locator('.candidate-card').first.bounding_box()['height'] <= 70
         marker = page.locator('.candidate-map-pin')
         expect(marker).to_have_count(1)
