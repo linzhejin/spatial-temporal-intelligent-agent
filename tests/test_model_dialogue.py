@@ -197,8 +197,10 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
     assert result["response_kind"] == "candidates"
     first_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
     second_names = {tool["function"]["name"] for tool in model.call_args_list[1].kwargs["tools"]}
+    assert len(second_names) == 4
     assert "plan_multimodal_route" in first_names
     assert "present_places" in second_names
+    assert "search_web" in second_names
     assert "search_poi_candidates" not in second_names
     assert "plan_multimodal_route" not in second_names
 

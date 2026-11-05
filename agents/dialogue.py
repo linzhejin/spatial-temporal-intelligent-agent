@@ -47,7 +47,7 @@ _OPERATION_TOOL_NAMES = {
 }
 
 
-def tool_schemas(operation=None, *, allow_place_search=True):
+def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -97,8 +97,10 @@ def tool_schemas(operation=None, *, allow_place_search=True):
                   {"source_id": {"type": "string"}}, ("source_id",)),
     ])
     allowed = _OPERATION_TOOL_NAMES.get(operation) if isinstance(operation, str) else None
-    if allowed and operation == "place_search" and not allow_place_search:
-        allowed = allowed - {"search_poi_candidates", "resolve_poi"}
+    if allowed and operation == "place_search" and ready_to_present:
+        allowed = {"update_task", "present_places", "search_web", "read_web_page"}
+    elif allowed and operation == "place_search" and not allow_place_search:
+        allowed = allowed - {"search_poi_candidates", "find_reachable_places", "resolve_poi"}
     return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
 
 
@@ -491,12 +493,15 @@ class Dialogue:
             # The existing lease-aware callback also detects cancellation between
             # model turns; do not swallow errors raised by the workflow callback.
             self.trace({"tool_name": "model_dialogue", "argument_keys": [], "outcome": "success", "artifact_kind": None})
+            requested_count = min(self.intent.get("limit", 4), 4)
+            candidate_count = len(self.last_search.get("candidates") or [])
+            ready_to_present = candidate_count >= requested_count or self.place_search_count >= 2
             try:
                 response = client.chat.completions.create(
                     model=config.LLM_MODEL, messages=deepcopy(self.messages),
                     tools=tool_schemas(self.intent.get("operation"), allow_place_search=(
-                        self.place_search_count < 2 and len(self.last_search.get("candidates") or [])
-                        < min(self.intent.get("limit", 4), 4))),
+                        self.place_search_count < 2 and candidate_count < requested_count),
+                        ready_to_present=ready_to_present),
                     temperature=0.2, max_tokens=2600,
                 )
             except Exception:
