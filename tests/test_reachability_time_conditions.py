@@ -20,9 +20,11 @@ def reachability_network(monkeypatch):
     graph.add_edge(3, 2, 0, length=200.0)
     pois = [
         {"id": "destination", "name": "终点食堂", "type": "dining", "subcategory": "canteen", "activities": ["canteen_meal"],
-         "coordinates": {"lng": 114.3630, "lat": 30.5300}, "lat": 30.5300, "lon": 114.3630},
+         "coordinates": {"lng": 114.3630, "lat": 30.5300}, "lat": 30.5300, "lon": 114.3630,
+         "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]},
         {"id": "intermediate", "name": "中途食堂", "type": "dining", "subcategory": "canteen", "activities": ["canteen_meal"],
-         "coordinates": {"lng": 114.3615, "lat": 30.5310}, "lat": 30.5310, "lon": 114.3615},
+         "coordinates": {"lng": 114.3615, "lat": 30.5310}, "lat": 30.5310, "lon": 114.3615,
+         "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]},
     ]
     conditions = [{"id": "slow-1", "type": "construction", "action": "slowdown",
                    "affected_modes": ["walk"], "cost_multiplier": 3.0,
@@ -104,7 +106,8 @@ def test_time_budget_includes_both_estimated_access_links(reachability_network, 
     graph, _conditions = reachability_network
     graph.remove_edge(1, 3, 0)
     poi = {"id": "destination", "name": "终点食堂", "type": "dining", "subcategory": "canteen",
-           "coordinates": {"lng": 114.3630, "lat": 30.5304}, "lat": 30.5304, "lon": 114.3630}
+           "coordinates": {"lng": 114.3630, "lat": 30.5304}, "lat": 30.5304, "lon": 114.3630,
+           "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]}
     monkeypatch.setattr(tools, "search_by_category", lambda **_: [poi])
     start = {"type": "coord", "name": "起点", "lng": 114.3595, "lat": 30.5300}
 
@@ -222,7 +225,8 @@ def test_route_budget_excludes_unverified_access_links(reachability_network, mon
     graph.remove_edge(1, 3, 0)
     poi = {"id": "destination", "name": "终点食堂", "type": "dining", "subcategory": "canteen",
            "activities": ["canteen_meal"], "coordinates": {"lng": 114.3630, "lat": 30.5304},
-           "lat": 30.5304, "lon": 114.3630}
+           "lat": 30.5304, "lon": 114.3630,
+           "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]}
     monkeypatch.setattr(tools, "search_by_category", lambda **_: [poi])
     result, artifact = tools.execute_tool("search_poi_candidates", {
         "start": {"type": "coord", "name": "起点", "lng": 114.3595, "lat": 30.5300},

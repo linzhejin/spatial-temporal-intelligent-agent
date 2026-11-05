@@ -2582,7 +2582,22 @@ def run_agent(query: str, context: dict = None, history: list = None,
     named_choice = (_explicit_named_place_choice(query)
                     if isinstance(place_request, dict) and place_request.get("pending_slot") == "selection"
                     and not (context or {}).get("selected_poi_id") else None)
-    activity_revision = None if named_choice else _place_activity_revision(place_request, query)
+    activity_revision = _place_activity_revision(place_request, query)
+    if named_choice and activity_revision:
+        # A change phrase can also name a real candidate ("换成梅园店").
+        # Keep that explicit selection path only when the name resolves to the
+        # current candidate list or an exact local POI; otherwise let the
+        # activity revision remain unresolved instead of treating descriptors
+        # such as "素食餐厅" as a place name and retaining stale candidates.
+        known_candidate = _selected_candidate_from_text(
+            query, place_request.get("candidate_poi_ids") or [],
+            place_request.get("candidate_places") or [],
+        )
+        exact_local = _exact_local_place_choices(named_choice)
+        if not known_candidate and not exact_local:
+            named_choice = None
+    if named_choice:
+        activity_revision = None
     if (confirmed_goal and activity_revision
             and len(re.findall(r"改成|改为|换成|换为|换去", str(query or ""))) == 1
             and re.search(r"(?:改成|改为|换成|换为)\s*(?:全程)?(?:风景优先|景观优先|平坦优先|最短)", str(query or ""))):
