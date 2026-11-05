@@ -13,6 +13,7 @@ import math
 import re
 import sys
 from collections import Counter, defaultdict
+from datetime import date
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,9 +68,10 @@ def build_report():
             osm_by_poi[item["poi_id"]].append(item)
 
     valid_types = {"study", "dining", "landmark", "scenery", "gate", "service",
-                   "sports", "medical", "building", "area", "transport"}
+                   "sports", "medical", "building", "area", "transport", "dorm"}
     coords_by_id = {}
     normalized_names = defaultdict(list)
+    normalized_labels = defaultdict(list)
     for poi in pois:
         coord = poi.get("coordinates") or {}
         try:
@@ -80,6 +82,9 @@ def build_report():
             point = None
         coords_by_id[poi.get("id")] = point
         normalized_names[_normalized(poi.get("name"))].append(poi)
+        labels = {_normalized(label) for label in [poi.get("name"), *(poi.get("aliases") or [])]}
+        for normalized in labels - {""}:
+            normalized_labels[normalized].append(poi)
 
     duplicates = defaultdict(list)
     for name, rows in normalized_names.items():
@@ -92,6 +97,18 @@ def build_report():
                 first, second = coords_by_id.get(row.get("id")), coords_by_id.get(other.get("id"))
                 if first is None or second is None or _distance_m(first, second) <= 20:
                     duplicates[row.get("id")].append(other.get("id"))
+
+    name_or_alias_duplicates = defaultdict(set)
+    for label, rows in normalized_labels.items():
+        if len(rows) < 2:
+            continue
+        for index, row in enumerate(rows):
+            for other in rows[index + 1:]:
+                first = coords_by_id.get(row.get("id"))
+                second = coords_by_id.get(other.get("id"))
+                if first is None or second is None or _distance_m(first, second) <= 20:
+                    name_or_alias_duplicates[row.get("id")].add(other.get("id"))
+                    name_or_alias_duplicates[other.get("id")].add(row.get("id"))
 
     snaps = {}
     graph_status = "unavailable"
@@ -165,10 +182,12 @@ def build_report():
             issue_codes.append("type_outside_known_vocabulary")
         if not poi.get("campus"):
             issue_codes.append("campus_unassigned")
-        if duplicates.get(poi_id):
-            issue_codes.append("exact_name_duplicate_needs_review")
+        if name_or_alias_duplicates.get(poi_id):
+            issue_codes.append("exact_name_or_alias_duplicate_needs_review")
         if poi_id not in snaps:
             issue_codes.append("network_snap_unavailable_or_invalid")
+        elif snaps[poi_id]["snap_distance_m"] > 50:
+            issue_codes.append("road_network_snap_over_50m_needs_review")
         row = {
             "poi_id": poi_id, "name": poi.get("name"),
             "aliases": list(poi.get("aliases") or []),
@@ -181,6 +200,7 @@ def build_report():
             "source_evidence": evidence,
             "osm_review_records": reviewed_osm,
             "near_exact_name_ids_within_20m": sorted(set(duplicates.get(poi_id, []))),
+            "near_name_or_alias_ids_within_20m": sorted(name_or_alias_duplicates.get(poi_id, [])),
             "road_network_proximity": snaps.get(poi_id),
             "recommendation_disposition": disposition,
             "classification_rationale": rationale,
@@ -193,7 +213,7 @@ def build_report():
 
     return {
         "schema_version": 1,
-        "created_local_date": "2026-11-05",
+        "created_local_date": date.today().isoformat(),
         "scope": "read-only row-by-row evidence classification for all POIs",
         "source_fingerprints": {str(path.relative_to(ROOT)): _sha256(path)
                                 for path in (data_path, review_path, candidates_path, graph_path)
