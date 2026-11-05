@@ -85,6 +85,54 @@ def _compact(value):
     return value[:7000] if isinstance(value, str) else value
 
 
+_MODEL_PLACE_FIELDS = (
+    "poi_id", "name", "type", "type_name", "category", "subcategory", "campus",
+    "aliases", "description", "activities", "activity_basis", "source", "data_source",
+    "verification_status", "coordinate_verification_status", "provider_rating",
+    "provider_cost", "address", "business_area", "opening_hours", "observed_at",
+    "distance_m", "network_distance_m", "distance_basis", "distance_reference_name",
+    "estimated_duration_min", "access_link_verified", "step_access_status", "accessibility",
+)
+
+
+def _model_tool_content(name, answer):
+    """Send recommendation-relevant facts to the model without repeating full POI geometry."""
+    if name not in {"search_poi_candidates", "find_reachable_places"} or not isinstance(answer, dict):
+        return json.dumps(_compact(answer), ensure_ascii=False, default=str)
+
+    result = {key: answer[key] for key in (
+        "status", "error", "message", "count", "online_status", "search_area",
+        "search_keyword", "start_name", "max_distance_m", "max_time_min",
+    ) if key in answer}
+    rows = answer.get("candidates")
+    if isinstance(rows, list):
+        result["candidates"] = []
+        for row in rows[:12]:
+            if not isinstance(row, dict):
+                continue
+            item = {key: row[key] for key in _MODEL_PLACE_FIELDS if key in row}
+            for key in ("name", "type", "type_name", "category", "subcategory", "campus", "source",
+                        "data_source", "verification_status", "coordinate_verification_status", "address",
+                        "business_area", "distance_basis", "distance_reference_name", "step_access_status",
+                        "accessibility", "opening_hours", "provider_rating", "provider_cost"):
+                if isinstance(item.get(key), str):
+                    item[key] = item[key][:240]
+            for key in ("description", "activity_basis"):
+                if isinstance(item.get(key), str):
+                    item[key] = item[key][:500]
+            if isinstance(item.get("aliases"), list):
+                item["aliases"] = [str(value)[:120] for value in item["aliases"][:5]]
+            if isinstance(item.get("activities"), list):
+                item["activities"] = [str(value)[:120] for value in item["activities"][:8]]
+            result["candidates"].append(item)
+        total = answer.get("count")
+        if not isinstance(total, int):
+            total = len(rows)
+        result["candidate_batch_truncated"] = len(rows) > len(result["candidates"])
+        result["candidate_batch_has_more"] = total > len(result["candidates"])
+    return json.dumps(result, ensure_ascii=False, default=str)
+
+
 class Dialogue:
     def __init__(self, query, *, context=None, history=None, coord_start=None, coord_end=None,
                  coord_waypoints=None, travel_mode=None, uid=None, execute_tool, client_factory, trace):
@@ -454,7 +502,7 @@ class Dialogue:
                     self.trace({"tool_name": name, "argument_keys": sorted(args) if isinstance(args, dict) else [],
                                 "outcome": "tool_error" if answer.get("error") else "success", "artifact_kind": None})
                 self.messages.append({"role": "tool", "tool_call_id": call.id,
-                                      "content": json.dumps(_compact(answer), ensure_ascii=False, default=str)})
+                                      "content": _model_tool_content(name, answer)})
                 if name == "present_places" and not answer.get("error"):
                     break
             if final is not None:

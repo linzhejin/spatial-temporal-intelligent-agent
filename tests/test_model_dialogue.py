@@ -14,6 +14,29 @@ def test_model_dialogue_is_the_default_mode(monkeypatch):
     assert model_dialogue_enabled()
 
 
+def test_model_receives_compact_place_candidates_without_geometry():
+    import json
+    from agents.dialogue import _model_tool_content
+
+    candidates = [{"poi_id": f"amap:{index}", "name": f"店铺{index}",
+                  "coordinates": {"lng": 114.36, "lat": 30.54}, "lng": 114.36, "lat": 30.54,
+                  "provider_cost": "人均50元", "distance_m": index * 100,
+                  "description": "d" * 900} for index in range(15)]
+
+    result = json.loads(_model_tool_content("search_poi_candidates", {
+        "status": "ok", "count": 15, "candidates": candidates,
+    }))
+
+    assert len(result["candidates"]) == 12
+    assert result["candidate_batch_truncated"] is True
+    assert result["candidate_batch_has_more"] is True
+    assert result["candidates"][0]["provider_cost"] == "人均50元"
+    assert result["candidates"][0]["distance_m"] == 0
+    assert len(result["candidates"][0]["description"]) == 500
+    assert "coordinates" not in result["candidates"][0]
+    assert "lng" not in result["candidates"][0]
+
+
 def reply(text="", **calls):
     import json
     return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(
