@@ -26,6 +26,7 @@ def test_find_reachable_places_uses_network_distance_and_respects_budget(monkeyp
     monkeypatch.setattr(tools, "get_routing_index",
                         lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
     monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "起点", None))
+    monkeypatch.setattr(tools, "has_source_backed_record", lambda _poi: True)
     monkeypatch.setattr(tools, "search_by_category", lambda **_: pois)
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
@@ -60,6 +61,7 @@ def test_find_reachable_places_includes_start_connector_in_ranked_distance(monke
     monkeypatch.setattr(tools, "get_routing_index",
                         lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
     monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "起点", None))
+    monkeypatch.setattr(tools, "has_source_backed_record", lambda _poi: True)
     monkeypatch.setattr(tools, "search_by_category", lambda **_: [poi])
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
@@ -79,6 +81,39 @@ def test_find_reachable_places_includes_start_connector_in_ranked_distance(monke
         candidate["start_access_m"] + candidate["network_path_distance_m"]
         + candidate["access_snap_m"]
     )
+
+
+def test_model_dialogue_route_pool_keeps_valid_live_amap_places(monkeypatch):
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.3600, y=30.5300)
+    graph.add_node(2, x=114.3610, y=30.5300)
+    graph.add_edge(1, 2, length=100.0)
+    mode_index = SimpleNamespace(graph=graph, mode_penalty={})
+    valid = {"id": "amap:A123", "name": "在线火锅店", "type": "dining",
+             "subcategory": "restaurant", "source": "amap_online",
+             "coordinate_system": "GCJ-02",
+             "coordinates": {"lng": 114.361, "lat": 30.53},
+             "lat": 30.53, "lon": 114.361}
+    next_valid = {**valid, "id": "amap:A124", "poi_id": "amap:A124", "name": "下一批在线火锅店"}
+    invalid = {**valid, "id": "amap:B123", "name": "坐标系不明的店", "coordinate_system": "unknown"}
+    monkeypatch.setattr(tools, "_ensure_graph", lambda: graph)
+    monkeypatch.setattr(tools, "get_routing_index",
+                        lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
+    monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "信图", None))
+    monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
+    monkeypatch.setattr(tools, "_endpoint_access_evidence", lambda *_: {"snap_distance_m": 0})
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
+
+    result, _artifact = tools._tool_find_reachable_places(
+        {"start": {"type": "poi", "name": "信图"}, "subcategories": ["restaurant"],
+         "mode": "walk", "max_distance_m": 500},
+        {"query": "信图附近火锅", "_model_dialogue": True,
+         "_candidate_pool": [valid, next_valid, invalid], "_excluded_candidate_ids": ["amap:A123"],
+         "_route_graph_snapshot": graph,
+         "_route_conditions_snapshot": []},
+    )
+
+    assert [row["poi_id"] for row in result["candidates"]] == ["amap:A124"]
 
 
 def test_find_reachable_places_rejects_conflicting_or_invalid_budgets():
@@ -133,6 +168,7 @@ def test_reachability_discloses_unknown_step_status_for_remaining_edges(monkeypa
     monkeypatch.setattr(tools, "get_routing_index",
                         lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
     monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "起点", None))
+    monkeypatch.setattr(tools, "has_source_backed_record", lambda _poi: True)
     monkeypatch.setattr(tools, "search_by_category", lambda **_: [poi])
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
@@ -177,6 +213,7 @@ def test_reachability_keeps_route_supported_connector_and_excludes_longer_one(mo
     monkeypatch.setattr(tools, "get_routing_index",
                         lambda _graph: SimpleNamespace(for_mode=lambda _mode: mode_index))
     monkeypatch.setattr(tools, "_resolve_endpoint", lambda *_: (1, "起点", None))
+    monkeypatch.setattr(tools, "has_source_backed_record", lambda _poi: True)
     monkeypatch.setattr(tools, "search_by_category", lambda **_: [near_poi, far_poi])
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])

@@ -93,6 +93,72 @@ def _nearby_pages(client, params, pages):
     return raw_rows, reported_count, None
 
 
+def search_text(keywords, *, city="420100", pages=3, client=None):
+    """Search live provider POIs by a model-selected name/area keyword."""
+    query = _text(keywords)[:80]
+    try:
+        pages = int(pages)
+    except (ValueError, TypeError, OverflowError):
+        return {"status": "invalid_query", "candidates": []}
+    if not query or not 1 <= pages <= 3:
+        return {"status": "invalid_query", "candidates": []}
+    key = os.getenv("AMAP_WEB_KEY") or os.getenv("AMAP_KEY")
+    if not key:
+        return {"status": "missing_key", "candidates": []}
+    params = {"key": key, "keywords": query, "city": _text(city) or "420100",
+              "citylimit": "false", "offset": 25, "extensions": "all"}
+    try:
+        if client is None:
+            with httpx.Client(timeout=httpx.Timeout(3, connect=2)) as request_client:
+                rows, reported_count, error = _text_pages(request_client, params, pages)
+        else:
+            rows, reported_count, error = _text_pages(client, params, pages)
+        if error is not None:
+            return {"status": "provider_error", "provider_code": error, "candidates": []}
+    except (httpx.HTTPError, ValueError, TypeError, AttributeError):
+        return {"status": "network_error", "candidates": []}
+    observed_at = datetime.now(timezone.utc).isoformat()
+    candidates, seen = [], set()
+    for raw in rows:
+        if not isinstance(raw, dict):
+            continue
+        poi = normalize_poi(raw)
+        if not poi or poi["id"] == "amap:" or poi["id"] in seen:
+            continue
+        seen.add(poi["id"])
+        poi.update({"type": "dining", "category": "dining",
+                    "subcategory": _dining_subcategory(raw), "campus": "",
+                    "source": "amap_online", "observed_at": observed_at,
+                    "business_area": _text(raw.get("adname") or raw.get("address")),
+                    "provider_rating": _text((raw.get("biz_ext") or {}).get("rating")),
+                    "provider_cost": _text((raw.get("biz_ext") or {}).get("cost")),
+                    "verification_status": "provider_only"})
+        candidates.append(poi)
+    return {"status": "ok", "candidates": candidates[:75],
+            "count": len(candidates), "provider_count": max(len(candidates), reported_count),
+            "has_more": max(len(candidates), reported_count) > len(candidates),
+            "observed_at": observed_at, "query": query}
+
+
+def _text_pages(client, params, pages):
+    first = client.get("https://restapi.amap.com/v3/place/text", params={**params, "page": 1})
+    first.raise_for_status()
+    body = first.json()
+    if str(body.get("status")) != "1":
+        return None, int(body.get("count") or 0), str(body.get("infocode") or "")[:16]
+    total, rows = int(body.get("count") or 0), list(body.get("pois") or [])
+    for page in range(2, pages + 1):
+        if len(rows) < 25 or len(rows) >= total:
+            break
+        response = client.get("https://restapi.amap.com/v3/place/text", params={**params, "page": page})
+        response.raise_for_status()
+        body = response.json()
+        if str(body.get("status")) != "1":
+            return None, total, str(body.get("infocode") or "")[:16]
+        rows.extend(body.get("pois") or [])
+    return rows, total, None
+
+
 def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None):
     """Search nearby dining from a worker or request without retaining provider state."""
     location = _coord(f"{center.get('lng')},{center.get('lat')}") if isinstance(center, dict) else None

@@ -375,8 +375,13 @@ def build_agent_workflow(
                     requirement_results["weather"] = "failed"
         elif plan.kind == "weather":
             try:
-                weather = run_weather_tool()
-                requirement_results["weather"] = "satisfied"
+                response = run_route_agent()
+                weather = response.get("weather") if isinstance(response, dict) else None
+                if isinstance(weather, dict):
+                    requirement_results["weather"] = "satisfied"
+                else:
+                    errors["weather"] = "model_did_not_complete_weather_lookup"
+                    requirement_results["weather"] = "failed"
             except Exception as error:
                 errors["weather"] = type(error).__name__
                 requirement_results["weather"] = "failed"
@@ -418,7 +423,7 @@ def build_agent_workflow(
         if weather:
             weather_text = _weather_message(weather)
             if plan.kind == "weather":
-                response["message"] = weather_text
+                response["message"] = response.get("message") or weather_text
             else:
                 if requirement_results.get("route") == "failed":
                     route_failure = "路线暂时无法规划，请检查起终点后重试。"
@@ -426,7 +431,9 @@ def build_agent_workflow(
                 else:
                     response["message"] = (response.get("message", "").strip() + "\n" + weather_text).strip()
         elif "weather" in errors:
-            weather_text = "天气服务暂时不可用。"
+            weather_text = ("本轮对话模型未完成天气查询，没有生成天气结论，请重试。"
+                            if errors.get("weather") == "model_did_not_complete_weather_lookup"
+                            else "天气服务暂时不可用。")
             if plan.kind == "composite":
                 response["message"] = (response.get("message", "").strip() + "\n" + weather_text).strip()
             else:

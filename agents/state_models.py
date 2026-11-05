@@ -147,6 +147,9 @@ class PlaceRequestState(Contract):
     unresolved_revision: str | None = Field(default=None, max_length=500)
     unresolved_route_requirements: str | None = Field(default=None, max_length=2000)
     result_dependencies: dict[str, Any] | None = None
+    # Model-understood requirements and retrieved evidence; older task records
+    # remain valid. Accepted coordinates and route proofs stay in their own fields.
+    semantic_request: dict[str, Any] | None = None
     mode: TravelMode = "walk"
     strategy: Literal["shortest", "recommended", "scenery", "flat"] | None = None
     confirmed_strategy_override: Literal["shortest", "recommended", "scenery", "flat"] | None = None

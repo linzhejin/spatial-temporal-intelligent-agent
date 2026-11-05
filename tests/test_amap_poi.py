@@ -158,6 +158,46 @@ def test_nearby_search_returns_provider_errors_without_echoing_credentials(monke
     assert result == {'status': 'provider_error', 'provider_code': '10003', 'candidates': []}
 
 
+def test_text_search_supports_offline_recommendations_without_a_start(monkeypatch):
+    from spatial.amap_poi import search_text
+    monkeypatch.setenv('AMAP_WEB_KEY', 'test-key')
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {'status': '1', 'count': '1', 'pois': [{
+                'id': 'B0TEXT001', 'name': '周麻婆(梅园店)', 'type': '餐饮服务;中餐厅',
+                'typecode': '050100', 'location': '114.365,30.536', 'address': '梅园CBD',
+            }]}
+
+    class Client:
+        def __init__(self):
+            self.calls = []
+
+        def get(self, url, params):
+            self.calls.append((url, params))
+            return Response()
+
+    client = Client()
+    result = search_text('梅园 火锅', client=client)
+
+    assert result['status'] == 'ok'
+    assert result['candidates'][0]['id'] == 'amap:B0TEXT001'
+    assert result['candidates'][0]['subcategory'] == 'restaurant'
+    assert client.calls[0][0].endswith('/v3/place/text')
+    assert client.calls[0][1]['keywords'] == '梅园 火锅'
+    assert client.calls[0][1]['key'] == 'test-key'
+
+
+def test_text_search_distinguishes_missing_key_from_provider_empty(monkeypatch):
+    from spatial.amap_poi import search_text
+    monkeypatch.delenv('AMAP_WEB_KEY', raising=False)
+    monkeypatch.delenv('AMAP_KEY', raising=False)
+    assert search_text('梅园 火锅') == {'status': 'missing_key', 'candidates': []}
+
+
 @pytest.mark.parametrize(('type_code', 'expected'), [
     ('050101', 'restaurant'),
     ('050301', 'fastfood'),

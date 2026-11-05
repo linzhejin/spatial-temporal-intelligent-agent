@@ -4015,6 +4015,7 @@
                     if (cands.length) {
                         var presentation = renderCandidateCards(cands, result._task_id, result._task_revision, {
                             query: query, newSearch: !requestBody.continuation_task_id,
+                            sources: result.sources || [],
                         });
                         if (presentation && presentation.initialPage > 0) {
                             candidateMessage += ' 本次先展示另一批，可点击“上一批”查看前面的地点。';
@@ -4078,7 +4079,8 @@
                             saveContext();
                             if (nextQuestion) showChatBubble('', nextQuestion);
                             if (Array.isArray(result.candidates) && result.candidates.length) {
-                                renderCandidateCards(result.candidates, result._task_id, result._task_revision);
+                                renderCandidateCards(result.candidates, result._task_id, result._task_revision,
+                                    { sources: result.sources || [] });
                             } else if (result.clarify && Array.isArray(result.clarify.options)) {
                                 renderClarifyOptions(result.clarify.options,
                                     result._task_id, result._task_revision);
@@ -4496,6 +4498,7 @@
 
     // 候选 POI 卡片（response_kind=candidates）：点击时沿用文字起点或当前选定位置
     function renderCandidateCards(candidates, taskId, taskRevision, options) {
+        options = options || {};
         var chatContent = document.getElementById('chat-content');
         if (!chatContent || !candidates.length) return;
         clearActiveCandidateMarkers();
@@ -4670,6 +4673,20 @@
                         }).join('、');
                         detailText.appendChild(refEl);
                     }
+                    var sourceIds = Array.isArray(p.source_ids) ? p.source_ids : [];
+                    var webSources = (Array.isArray(options.sources) ? options.sources : []).filter(function (source) {
+                        return source && sourceIds.indexOf(source.source_id) >= 0
+                            && typeof source.url === 'string' && /^https?:\/\//i.test(source.url);
+                    }).slice(0, 4);
+                    webSources.forEach(function (source) {
+                        var link = document.createElement('a');
+                        link.href = source.url;
+                        link.target = '_blank';
+                        link.rel = 'noopener noreferrer';
+                        link.className = 'candidate-source-link';
+                        link.textContent = String(source.title || source.site_name || '参考网页').slice(0, 160);
+                        detailText.appendChild(link);
+                    });
                     if (p.access_link_verified === false) {
                         var accessEl = document.createElement('p');
                         accessEl.textContent = '地点到道路的末端接驳未现场核实。';
@@ -5386,7 +5403,8 @@
                     );
                     if (acceptedCandidates) {
                         saveContext();
-                        renderCandidateCards(result.candidates, candidateTaskId, candidateRevision);
+                        renderCandidateCards(result.candidates, candidateTaskId, candidateRevision,
+                            { sources: result.sources || [] });
                     }
                 } else if (result.response_kind === 'route' && result.needs_input
                         && result.task_type === 'path_planning' && result.recommended && result.recommended.length
@@ -5400,7 +5418,8 @@
                     )) {
                         saveContext();
                         if (Array.isArray(result.candidates) && result.candidates.length) {
-                            renderCandidateCards(result.candidates, routeTaskId, routeRevision);
+                            renderCandidateCards(result.candidates, routeTaskId, routeRevision,
+                                { sources: result.sources || [] });
                         } else if (result.clarify && Array.isArray(result.clarify.options)) {
                             renderClarifyOptions(result.clarify.options, routeTaskId, routeRevision);
                         }

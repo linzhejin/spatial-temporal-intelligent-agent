@@ -2005,6 +2005,9 @@ def run_agent(query: str, context: dict = None, history: list = None,
     Raises:
         PlannerError: LLM API 不可用（调用方落回旧管道）
     """
+    from agents.dialogue import model_dialogue_enabled, run_dialogue
+    dialogue_mode = model_dialogue_enabled()
+
     # 溯源记录：与 tool_trace_callback 同源，另存一份 run 级 PROV 记录。
     # 这里是唯一的采集点，下游（PG 事件 / 管理端点）共用同一份数据。
     _external_tool_trace = tool_trace_callback
@@ -2012,8 +2015,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
         query,
         uid=uid,
         model=getattr(config, "LLM_MODEL", None),
-        temperature=0.0,
-        tool_names=agent_tools.TOOL_NAMES,
+        temperature=0.2 if dialogue_mode else 0.0,
+        tool_names=sorted(set(agent_tools.TOOL_NAMES) | ({
+            "update_task", "present_places", "search_web", "read_web_page",
+        } if dialogue_mode else set())),
         has_gps=isinstance(coord_start, dict) or isinstance(coord_end, dict),
         has_waypoints=isinstance(coord_waypoints, list) and bool(coord_waypoints),
         task_revision=(context or {}).get("task_revision")
@@ -2104,6 +2109,20 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if record_trace and tool_trace_callback:
             record_tool_result(name, args, result, artifact)
         return result, artifact
+
+    if dialogue_mode:
+        response = run_dialogue(
+            query, context=context, history=history, coord_start=coord_start,
+            coord_end=coord_end, coord_waypoints=coord_waypoints,
+            travel_mode=travel_mode, uid=uid, execute_tool=execute_tool,
+            client_factory=_make_client, trace=tool_trace_callback,
+        )
+        response["provenance"] = _provenance.finish(
+            response_kind=response.get("response_kind"), turns=response.get("turns"),
+            artifact_kinds=[key for key in ("route", "candidates", "clarify") if response.get(key)],
+            verification_status=((response.get("route") or {}).get("route_verification") or {}).get("status"),
+        )
+        return response
 
     def route_weather(text):
         """Fetch explicitly requested weather before route tools share the snapshot."""

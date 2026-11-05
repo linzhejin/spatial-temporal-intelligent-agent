@@ -3018,6 +3018,7 @@ body { background: #F4F7F7; }
 .candidate-details summary { min-height: 34px; padding: 8px 0; color: #176B5B; font-size: 12px; cursor: pointer; }
 .candidate-details-body { padding: 0 0 5px; color: #52656D; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
 .candidate-details-body p { margin: 0 0 4px; }
+.candidate-source-link { display: block; width: fit-content; max-width: 100%; margin: 3px 0; color: var(--color-poi); font-size: 12px; overflow-wrap: anywhere; }
 .candidate-map-pin { border-color: #fff; background: #176B5B; box-shadow: 0 3px 10px rgba(23,43,50,.28); }
 .candidate-map-pin.is-group { background: #2563EB; }
 .candidate-map-choice { min-height: 44px; border-color: #DDE6E5; color: #172B32; }

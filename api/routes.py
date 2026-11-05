@@ -883,6 +883,8 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             out["weather"] = resp["weather"]
         if isinstance(resp.get("recommendation_candidates"), list):
             out["recommendation_candidates"] = resp["recommendation_candidates"]
+        if resp.get("sources"):
+            out["sources"] = resp["sources"]
         return out
 
     if kind == "candidates":
@@ -892,6 +894,7 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             "message": resp.get("message", ""),
             "candidates": resp.get("candidates") or [],
             "place_request": resp.get("place_request"),
+            "sources": resp.get("sources") or [],
         }
 
     if kind == "no_route":
@@ -910,6 +913,7 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             "message": clarify.get("question") or resp.get("message", ""),
             "clarify": clarify,
             "place_request": resp.get("place_request"),
+            "sources": resp.get("sources") or [],
         }
         if resp.get("route_verification") is not None:
             out["route_verification"] = resp["route_verification"]
@@ -921,6 +925,7 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
             "response_kind": kind,
             "reply": resp.get("message", ""),
             "route_comparison": resp.get("route_comparison"),
+            "sources": resp.get("sources") or [],
         }
 
     out = {
@@ -928,7 +933,10 @@ def _agent_response_to_legacy(resp: dict, coord_start=None, coord_end=None) -> d
         "response_kind": kind,
         "query": "",
         "reply": resp.get("message", ""),
+        "sources": resp.get("sources") or [],
     }
+    if isinstance(resp.get("weather"), dict):
+        out["weather"] = resp["weather"]
     if resp.get("route_verification") is not None:
         out["route_verification"] = resp["route_verification"]
     return out
@@ -1675,8 +1683,8 @@ def chat():
     agent_started = time.perf_counter()
     fallback_agent_ms = 0.0
 
-    # v2 全 Agent 架构：所有输入优先进入 Agent 循环（LLM 决策 + 工具执行）。
-    # LLM 本身故障（断网/鉴权/超时）时落回旧管道——停电保险，不是备用通道。
+    # All inputs enter the model-led dialogue; model/provider failures are returned
+    # explicitly so deterministic legacy heuristics cannot mask the failure.
     try:
         from agents.planner import run_agent
         agent_resp = run_agent(

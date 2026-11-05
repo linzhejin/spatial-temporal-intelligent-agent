@@ -12,6 +12,7 @@ import hashlib
 import json
 import logging
 import math
+from copy import deepcopy
 import networkx as nx
 import os
 import re
@@ -1384,6 +1385,9 @@ def _tool_resolve_poi(args, ctx):
 
 def _tool_search_poi_candidates(args, ctx):
     context = dict(ctx) if isinstance(ctx, dict) else {}
+    if context.get("_model_dialogue") is True:
+        from agents.discovery import search_places_for_dialogue
+        return search_places_for_dialogue(args, context)
     query = str(context.get("query") or "")
     is_catalog = is_poi_catalog_query(query)
     default_limit = 4 if args.get("start") or args.get("near_poi") else 20 if is_catalog else 10
@@ -1688,12 +1692,26 @@ def _tool_find_reachable_places(args, ctx):
     keyword = (args.get("keyword") or "").strip()
     include_minor = bool(args.get("include_minor", True))
     season = args.get("season")
-    places = _search_poi_categories(
-        subcategories or None, poi_type, keyword, season, include_minor, activities=activities,
-    )
-    places = [poi for poi in places if has_source_backed_record(poi)]
+    supplied_pool = context.get("_candidate_pool") if isinstance(context, dict) else None
+    places = (deepcopy(supplied_pool) if isinstance(supplied_pool, list) else
+              _search_poi_categories(subcategories or None, poi_type, keyword, season,
+                                      include_minor, activities=activities))
+    model_pool = isinstance(supplied_pool, list) and isinstance(context, dict) and context.get("_model_dialogue") is True
+    excluded_candidate_ids = (set(context.get("_excluded_candidate_ids") or [])
+                              if model_pool else set())
+    places = [poi for poi in places if (
+        has_source_backed_record(poi) or (
+            model_pool and poi.get("source") == "amap_online"
+            and str(poi.get("id") or poi.get("poi_id") or "").startswith("amap:")
+            and poi.get("coordinate_system") == "GCJ-02"
+            and bool(str(poi.get("name") or "").strip())
+            and isinstance(poi.get("coordinates"), dict)
+            and all(isinstance(poi["coordinates"].get(axis), (int, float))
+                    and math.isfinite(poi["coordinates"][axis]) for axis in ("lng", "lat"))
+        )
+    ) and (not model_pool or (poi.get("poi_id") or poi.get("id")) not in excluded_candidate_ids)]
     online_dining = {"status": "not_requested", "candidates": []}
-    if set(subcategories) & _ONLINE_DINING_SUBCATEGORIES:
+    if set(subcategories) & _ONLINE_DINING_SUBCATEGORIES and not isinstance(supplied_pool, list):
         local_canteens = [poi for poi in places if poi.get("subcategory") == "canteen"
                           and has_source_backed_record(poi)]
         online_dining = _search_amap_dining_for_start(
