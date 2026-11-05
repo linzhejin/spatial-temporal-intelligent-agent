@@ -426,6 +426,15 @@ def _explicit_route_edit(query: str, prior_route: dict) -> dict | None:
         changed["route_id"] = f"route-{uuid4().hex}"
         return validate_route_state(changed)
 
+    from agents.context_builder import named_destination_followup
+    alternatives = named_destination_followup(query)
+    if len(alternatives) == 1 and prior_route.get("route_kind") in {"direct", "via", "itinerary"}:
+        place = alternatives[0]
+        changed = deepcopy(validate_route_state(prior_route))
+        changed["end"] = {"name": place["name"], "type": "poi", "poi_id": place["id"]}
+        changed["route_id"] = f"route-{uuid4().hex}"
+        return validate_route_state(changed)
+
     constraint = re.fullmatch(
         prefix + r"(不走台阶|避开台阶|避开陡坡|不走楼梯|可以走台阶了)", text
     )
@@ -2140,9 +2149,11 @@ def run_agent(query: str, context: dict = None, history: list = None,
 
     # Resolve a deictic continuation only within the same unfinished task.
     # Chat history or an unrelated old route must never supply this endpoint.
+    from agents.context_builder import named_destination_followup
     from agents.parser import detect_travel_mode
     if (not isinstance(coord_start, dict) and not _explicit_start_name(query)
             and not isinstance((context or {}).get("place_request"), dict)
+            and not ((context or {}).get("previous_route_state") and named_destination_followup(query))
             and not agent_tools.recommendation_near_reference_from_text(query)
             and not agent_tools.ordered_via_request(query)
             and not _named_via_request(query)
@@ -2333,6 +2344,16 @@ def run_agent(query: str, context: dict = None, history: list = None,
     # untouched constraints. The LLM may otherwise issue a plausible direct
     # route after seeing only the endpoint and strategy in the short context.
     if isinstance(prior_route, dict) and is_route_followup(query):
+        destination_matches = named_destination_followup(query)
+        if len(destination_matches) > 1 or (destination_matches and prior_route.get("route_kind")
+                                             not in {"direct", "via", "itinerary"}):
+            question = ("这个地点名称对应多个地点，请说明更完整的地点名称。"
+                        if len(destination_matches) > 1 else
+                        "上一条是多段或游览路线，请明确说明要替换的终点或行程段。")
+            return {"response_kind": "clarify", "message": question, "route": None,
+                    "route_kind": None, "candidates": None,
+                    "clarify": {"question": question, "options": []},
+                    "suggestions": None, "turns": 0}
         requested = _explicit_route_edit(query, prior_route)
         if requested is not None:
             from api.routes import _replan_tool_request
@@ -2345,8 +2366,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
             route = (artifact or {}).get("route") if isinstance(artifact, dict) else None
             if route:
                 route["timings_ms"] = normalize_timings(route.get("timings_ms"), agent=0.0)
+                lead = (f"按你的追问，沿用原起点，将终点改为{requested['end']['name']}。"
+                        if destination_matches else "")
                 return add_route_weather({"response_kind": "route",
-                        "message": _build_route_message(route) + _road_condition_feedback(route, query),
+                        "message": lead + _build_route_message(route) + _road_condition_feedback(route, query),
                         "route": route, "route_kind": requested["route_kind"],
                         "candidates": None, "clarify": None, "suggestions": None,
                         "turns": 0}, weather)

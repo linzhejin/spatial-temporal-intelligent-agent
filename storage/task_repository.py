@@ -298,7 +298,7 @@ def get_run_input(url: str | None, run_id: str) -> dict | None:
         # A newer failed or unfinished route request makes an older successful
         # route unsafe to inherit, even if its answer arrived more recently.
         # Explicitly unrelated questions such as weather remain pass-through.
-        from agents.context_builder import is_route_followup
+        from agents.context_builder import is_implicit_destination_followup, is_route_followup
         from agents.task_planner import build_task_plan
 
         route_context_uncertain = False
@@ -331,6 +331,22 @@ def get_run_input(url: str | None, run_id: str) -> dict | None:
             " ORDER BY user_turn.seq DESC, prior.seq DESC NULLS LAST LIMIT 1",
             (user_message["seq"], row["conversation_id"], user_message["seq"]),
         ).fetchone()
+        # An elliptical "what about X?" refers to the immediately preceding
+        # route, not an older route hidden behind another task or a failed run.
+        if is_implicit_destination_followup(user_message["content"]):
+            latest_result = (latest_delivery or {}).get("result") or {}
+            latest_route = latest_result.get("route_state") if isinstance(latest_result, dict) else None
+            verification = latest_result.get("route_verification") if isinstance(latest_result, dict) else None
+            previous_state = (previous or {}).get("route_state")
+            if (not latest_delivery or latest_delivery.get("status") not in {"completed", "partial"}
+                    or not isinstance(latest_route, dict)
+                    or latest_result.get("response_kind") != "route"
+                    or not isinstance(verification, dict) or verification.get("status") != "pass"
+                    or not isinstance(previous_state, dict)
+                    or not previous_state.get("route_id")
+                    or latest_route.get("route_id") != previous_state.get("route_id")):
+                previous = None
+                route_context_uncertain = True
         previous_place = None
         if (latest_delivery and latest_delivery["status"] == "completed"
                 and isinstance(latest_delivery["result"], dict)):

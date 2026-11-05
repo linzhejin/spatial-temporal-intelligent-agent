@@ -12,10 +12,41 @@ _ROUTE_FOLLOWUP = re.compile(
 _FRESH_ROUTE = re.compile(r"从.{1,35}(?:到|去).{1,35}(?:走|路线|怎么|最短)?")
 
 
+def named_destination_followup(query: str) -> list[dict]:
+    """Find a named-place alternative without treating an activity as a place.
+
+    Exact local names and aliases are used here: a fuzzy match must not silently
+    turn a question about something else into a route destination.
+    """
+    text = (query or "").strip().rstrip("？?！!。 ")
+    prefix = r"(?:那|那么|要不|要不然|不然|或者|还是)?"
+    ending = r"(?:不行吗|可以吗|行不行|能行吗|行吗|怎么样|呢|吧)?"
+    patterns = (
+        prefix + r"(?:把|将)?(?:终点|目的地)(?:改为|改成|改到|换成|换为|换到|设为|定为)(.+?)" + ending,
+        prefix + r"(?:换成|换为|换到|换去|改成|改为|改到|改去)(?:去|到)?(.+?)" + ending,
+        prefix + r"(?:去|到)?(.+?)(?:不行吗|可以吗|行不行|能行吗|行吗|怎么样|呢)",
+    )
+    name = next((match.group(1).strip() for pattern in patterns
+                 if (match := re.fullmatch(pattern, text))), "")
+    if not 2 <= len(name) <= 50 or re.search(r"[，,；;。？！?!]", name):
+        return []
+    from spatial.poi import find_poi_candidates
+
+    return [poi for poi, score in find_poi_candidates(name, limit=20, min_score=1.0)
+            if score >= 1.0]
+
+
+def is_implicit_destination_followup(query: str) -> bool:
+    """An elliptical alternative needs the immediately preceding route."""
+    return bool(named_destination_followup(query)) and not re.search(
+        r"路线|终点|目的地", query or "",
+    )
+
+
 def is_route_followup(query: str) -> bool:
     """Return true only when the user explicitly refers to a prior route."""
     text = (query or "").strip()
-    if not text or not _ROUTE_FOLLOWUP.search(text):
+    if not text or not (_ROUTE_FOLLOWUP.search(text) or named_destination_followup(text)):
         return False
     # An explicit pair of new endpoints starts a new route unless the user also
     # explicitly asks to modify the previous one.

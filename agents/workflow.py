@@ -201,7 +201,10 @@ def build_agent_workflow(
         stops = route_spec.get("stops") or []
         waypoints = [point for point in (_coordinate(item) for item in stops) if point]
         history = data.get("history") or []
-        from agents.context_builder import build_agent_context, is_route_followup
+        from agents.context_builder import (
+            build_agent_context, is_implicit_destination_followup, is_route_followup,
+            named_destination_followup,
+        )
         continuation = data.get("task_revision", 0) > 0
         origin_query = data.get("task_origin_query")
         previous_route_state = data.get("previous_route_state")
@@ -242,7 +245,9 @@ def build_agent_workflow(
             plan_text += " " + data["query"]
         plan = build_task_plan(
             plan_text,
-            has_route_context=bool(start or end or waypoints or context.get("place_request")),
+            has_route_context=bool(start or end or waypoints or context.get("place_request")
+                                   or (context.get("previous_route_state")
+                                       and named_destination_followup(data["query"]))),
         )
         response = None
         weather = None
@@ -320,7 +325,9 @@ def build_agent_workflow(
         def run_route_agent():
             if (data.get("route_context_uncertain") and not continuation
                     and is_route_followup(data["query"])):
-                question = "上一条路线尚未可靠完成，无法确定你要修改哪条。请重新说明起点和终点。"
+                question = ("无法确定你想修改哪条路线，请重新说明起点和终点。"
+                            if is_implicit_destination_followup(data["query"]) else
+                            "上一条路线尚未可靠完成，无法确定你要修改哪条。请重新说明起点和终点。")
                 return {"response_kind": "clarify", "message": question,
                         "clarify": {"question": question, "options": []},
                         "needs_input": True, "turns": 0}
