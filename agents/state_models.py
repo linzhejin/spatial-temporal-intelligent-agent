@@ -140,10 +140,17 @@ class PlaceRequestState(Contract):
     completed_legs: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
     pending_slot: Literal["activity", "start", "selection", "follow_up", "destination", "route_retry"] | None = None
     start: dict[str, Any] | None = None
+    # Preserve fields written by the newer release during a rollback.
+    search_anchor: dict[str, Any] | None = None
     selected_poi_id: Identifier | None = None
     candidate_poi_ids: list[Identifier] = Field(default_factory=list, max_length=20)
+    candidate_places: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    unresolved_revision: str | None = Field(default=None, max_length=500)
+    unresolved_route_requirements: str | None = Field(default=None, max_length=2000)
+    result_dependencies: dict[str, Any] | None = None
     mode: TravelMode = "walk"
     strategy: Literal["shortest", "recommended", "scenery", "flat"] | None = None
+    confirmed_strategy_override: Literal["shortest", "recommended", "scenery", "flat"] | None = None
     constraints: HardConstraints = Field(default_factory=HardConstraints)
 
 

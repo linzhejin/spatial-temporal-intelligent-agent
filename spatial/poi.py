@@ -139,6 +139,9 @@ def load_pois() -> list:
     pois = _load_from_json()
     if not pois:
         pois = _load_from_config()
+    # Preserve reports in the source file, but do not recommend or route to
+    # a location the user reports absent until the record has been reviewed.
+    pois = [poi for poi in pois if poi.get("recommendation_status") != "reported_absent_pending_review"]
     _POIS_CACHE = pois
     _LOADED = True
     return pois
@@ -146,8 +149,9 @@ def load_pois() -> list:
 
 def reload_pois() -> list:
     """强制重新加载 POI 数据（忽略缓存）。"""
-    global _LOADED
+    global _LOADED, _PENDING_POI_QUERY_NAMES
     _LOADED = False
+    _PENDING_POI_QUERY_NAMES = None
     return load_pois()
 
 
@@ -157,6 +161,14 @@ def _pending_osm_poi_names() -> set:
     if _PENDING_POI_QUERY_NAMES is not None:
         return _PENDING_POI_QUERY_NAMES
     names = set()
+    # Guard exact names and aliases of reported-absent entries against fuzzy
+    # replacement by an unrelated venue after they are removed from search.
+    for poi in _load_from_json():
+        if poi.get("recommendation_status") == "reported_absent_pending_review":
+            for label in [poi.get("name"), *(poi.get("aliases") or [])]:
+                normalized = re.sub(r"\s+", "", str(label or "")).casefold()
+                if normalized:
+                    names.add(normalized)
     data_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"))
     try:
         with open(os.path.join(data_dir, "campus_review_decisions.json"),
@@ -177,7 +189,7 @@ def _pending_osm_poi_names() -> set:
             if candidate_name:
                 names.add(candidate_name)
     except (OSError, json.JSONDecodeError, AttributeError, TypeError):
-        names = set()
+        pass  # Keep user-reported names even when the separate OSM review is unavailable.
     _PENDING_POI_QUERY_NAMES = names
     return names
 

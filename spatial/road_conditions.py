@@ -1103,6 +1103,13 @@ def _geometry_covered_by_edges(G, coords_gcj, keys, tolerance_m) -> bool:
         return False
 
 
+def reject_unsupported_directional_conditions(conditions: list) -> None:
+    """Do not reinterpret newer directional events in the rollback version."""
+    if any(isinstance(item, dict) and "direction" in item and item["direction"] != "both"
+           for item in conditions):
+        raise RoadConditionBindingError("回退版本无法确认单方向路况，请先结束或重新核对相关事件")
+
+
 def resolve_condition_effects(
     G: nx.MultiDiGraph,
     conditions: Optional[list] = None,
@@ -1117,6 +1124,7 @@ def resolve_condition_effects(
     if not conditions:
         return ({}, set(), 0, []) if include_event_details else ({}, set(), 0)
 
+    reject_unsupported_directional_conditions(conditions)
     if strict and mode not in {"walk", "bike", "drive"}:
         raise RoadConditionBindingError("未知出行方式，无法校验路况影响")
 

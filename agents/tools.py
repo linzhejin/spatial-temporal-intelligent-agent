@@ -42,7 +42,7 @@ from spatial.amap_poi import navigation_wgs
 from spatial.road_conditions import (
     list_conditions, CONDITION_LABELS, apply_conditions_to_graph,
     route_condition_notices, active_condition_overview,
-    RoadConditionsUnavailableError,
+    RoadConditionsUnavailableError, reject_unsupported_directional_conditions,
 )
 from spatial.route_constraints import positive_budget
 from spatial.result_verifier import (
@@ -3238,6 +3238,13 @@ def _tool_list_road_conditions(args, ctx):
         return {
             "error": "road_conditions_unavailable",
             "message": "当前路况数据暂不可用，不能确认是否存在管制信息；请稍后再试。",
+        }, None
+    try:
+        reject_unsupported_directional_conditions(conds)
+    except RoadConditionsUnavailableError:
+        return {
+            "error": "road_conditions_unavailable",
+            "message": "当前版本无法确认单方向路况，请联系管理员处理后再查询或规划。",
         }, None
     out = []
     for c in conds:

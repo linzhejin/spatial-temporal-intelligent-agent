@@ -153,6 +153,20 @@ def create_task_run(
             if (not row or row["status"] != "needs_input" or row["revision"] != base_revision):
                 raise TaskContinuationConflict("clarification task is no longer awaiting this answer")
             current = TaskState.model_validate(row["state"])
+            # The old planner cannot honor these newer semantics. Keep their
+            # stored values readable but refuse to resume the task as if it
+            # were an ordinary old-version request.
+            pending = current.place_request
+            if pending and (
+                pending.candidate_places
+                or any(str(value or "").startswith("amap:")
+                       for value in [pending.selected_poi_id, *pending.candidate_poi_ids])
+                or any(getattr(pending, name) is not None for name in (
+                    "search_anchor", "unresolved_revision", "unresolved_route_requirements",
+                    "result_dependencies", "confirmed_strategy_override",
+                ))
+            ):
+                raise TaskContinuationConflict("当前系统已回退，无法继续这个新版行程；请新建对话重新规划。")
             merged_spec = current.route_spec.model_dump(mode="python")
             merged_spec.update(route_spec)
             new_spec = RouteSpec.model_validate(merged_spec)
