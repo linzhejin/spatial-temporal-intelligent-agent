@@ -33,15 +33,16 @@ _PLACE_SEARCH_TOOLS = _COMMON_DIALOGUE_TOOLS | {
     "search_poi_candidates", "find_reachable_places",
 }
 _ROUTE_DIALOGUE_TOOLS = _COMMON_DIALOGUE_TOOLS | {
-    "search_poi_candidates", "find_reachable_places", "compare_routes", "plan_route",
-    "plan_via_route", "plan_itinerary", "plan_tour", "plan_multimodal_route",
-    "get_weather", "list_road_conditions",
+    "find_reachable_places", "plan_route", "plan_via_route", "get_weather",
+    "list_road_conditions",
 }
 _OPERATION_TOOL_NAMES = {
     "place_search": _PLACE_SEARCH_TOOLS,
     "route": _ROUTE_DIALOGUE_TOOLS,
-    "itinerary": _ROUTE_DIALOGUE_TOOLS,
-    "route_comparison": _ROUTE_DIALOGUE_TOOLS,
+    "itinerary": _ROUTE_DIALOGUE_TOOLS | {
+        "search_poi_candidates", "plan_itinerary", "plan_tour", "plan_multimodal_route",
+    },
+    "route_comparison": _ROUTE_DIALOGUE_TOOLS | {"compare_routes"},
     "weather": _COMMON_DIALOGUE_TOOLS | {"get_weather"},
     "campus_answer": _COMMON_DIALOGUE_TOOLS | {"search_poi_candidates"},
 }
@@ -184,6 +185,7 @@ class Dialogue:
         accepted_ids = set(self.pending.get("candidate_poi_ids") or [])
         if selected_id in accepted_ids and selected_id in self.known:
             self.pending["selected_poi_id"] = selected_id
+            self.intent["operation"] = "route"
         else:
             self.pending.pop("selected_poi_id", None)
         self.fresh = set()

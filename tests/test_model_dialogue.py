@@ -140,6 +140,9 @@ def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypat
     result = planner.run_agent("去这家", context={"place_request": state, "selected_poi_id": "campus-poi-7"})
 
     assert result["response_kind"] == "route"
+    first_tool_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
+    assert "plan_route" in first_tool_names
+    assert "plan_multimodal_route" not in first_tool_names
     assert captured["args"]["end"]["poi_id"] == "campus-poi-7"
     assert "campus-poi-7" in str(model.call_args_list[0].kwargs["messages"])
 
