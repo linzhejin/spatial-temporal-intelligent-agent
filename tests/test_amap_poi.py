@@ -40,6 +40,14 @@ def test_exact_identity_preserves_entrance_and_alias_without_moving_center():
     assert found['aliases'] == ['卓尔馆', '卓尔体育馆']
 
 
+def test_choose_match_accepts_flat_candidate_lng_lat_coordinates():
+    row = normalize_poi({'name': '椒大喜铜炉火锅鸡(武大店)', 'location': '114.356807,30.532098'})
+    found = choose_match(row['name'], [row], {
+        'poi_id': 'amap:B0K3M1Q398', 'name': row['name'], 'lng': 114.356807, 'lat': 30.532098,
+    })
+    assert found is row
+
+
 def test_same_name_far_away_or_ambiguous_is_not_selected():
     row = normalize_poi({'name': '体育馆', 'location': '114.38,30.54'})
     assert choose_match('体育馆', [row], {'lon': 114.35, 'lat': 30.54}) is None

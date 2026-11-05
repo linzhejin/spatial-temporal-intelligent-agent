@@ -283,7 +283,15 @@ def choose_match(name, rows, known=None):
         if not row or not labels.intersection(_label(x) for x in [row['name'], *row['aliases']]):
             continue
         if known:
-            center = known.get('coordinates') or {'lng': known['lon'], 'lat': known['lat']}
+            center = known.get('coordinates')
+            if not isinstance(center, dict):
+                center = {'lng': known.get('lon', known.get('lng')), 'lat': known.get('lat')}
+            try:
+                center = {'lng': float(center['lng']), 'lat': float(center['lat'])}
+            except (KeyError, TypeError, ValueError, OverflowError):
+                return None
+            if not all(math.isfinite(center[key]) for key in ('lng', 'lat')):
+                return None
             if _distance(center, row['coordinates']) > 100:
                 continue
         matches.append(row)

@@ -115,12 +115,19 @@ def test_rich_followup_gets_durable_origin_and_requirements(model, monkeypatch):
 
 
 def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypatch):
+    candidate_id = "amap:B0K3M1Q398"
     state = planner._place_request_state(
         "找餐厅", pending_slot="selection", start={"type": "poi", "name": "信息学部图书馆"},
-        candidate_poi_ids=["campus-poi-7"],
-        candidate_places=[{"poi_id": "campus-poi-7", "name": "桂园餐厅", "source": "campus_catalog"}],
+        candidate_poi_ids=[candidate_id],
+        candidate_places=[{"poi_id": candidate_id, "name": "桂园餐厅", "source": "amap_online",
+                           "lng": 114.36, "lat": 30.54}],
     )
     monkeypatch.setattr(planner.agent_tools, "_prepare_route_context", lambda _ctx: ({}, None))
+    provider = planner.agent_tools.amap_poi.normalize_poi({
+        "id": "B0K3M1Q398", "name": "桂园餐厅", "location": "114.36,30.54",
+    })
+    monkeypatch.setattr(planner.agent_tools.amap_poi, "lookup_by_id", lambda _poi_id: provider)
+    monkeypatch.setattr(planner.agent_tools, "filter_reported_absent_provider_results", lambda rows: rows)
     route = {"start_name": "信息学部图书馆", "end_name": "桂园餐厅", "mode": "walk",
              "route_verification": {"status": "pass"},
              "route_state": {"start": {"type": "poi", "name": "信息学部图书馆"},
@@ -132,7 +139,7 @@ def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypat
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
     model.side_effect = [reply("已按你选的桂园餐厅规划路线。")]
 
-    result = planner.run_agent("去这家", context={"place_request": state, "selected_poi_id": "campus-poi-7"})
+    result = planner.run_agent("去这家", context={"place_request": state, "selected_poi_id": candidate_id})
 
     assert result["response_kind"] == "route"
     first_tool_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
@@ -141,8 +148,8 @@ def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypat
     assert first_tool_names == {"get_weather", "list_road_conditions"}
     assert model.call_count == 1
     assert "plan_multimodal_route" not in first_tool_names
-    assert captured["args"]["end"]["poi_id"] == "campus-poi-7"
-    assert "campus-poi-7" in str(model.call_args_list[0].kwargs["messages"])
+    assert captured["args"]["end"]["poi_id"] == candidate_id
+    assert candidate_id in str(model.call_args_list[0].kwargs["messages"])
 
 
 def test_changing_a_requirement_invalidates_old_candidate_set(model):
