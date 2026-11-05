@@ -49,7 +49,7 @@ _OPERATION_TOOL_NAMES = {
 
 
 def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False,
-                 selected_place=False):
+                 selected_place=False, route_preplanned=False):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -106,6 +106,8 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
     if allowed and selected_place:
         allowed = {"update_task", "plan_route", "plan_via_route", "plan_itinerary",
                    "get_weather", "list_road_conditions"}
+    if allowed and route_preplanned:
+        allowed = {"get_weather", "list_road_conditions"}
     return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
 
 
@@ -189,9 +191,17 @@ class Dialogue:
         accepted_ids = set(self.pending.get("candidate_poi_ids") or [])
         if selected_id in accepted_ids and selected_id in self.known:
             self.pending["selected_poi_id"] = selected_id
-            self.intent["operation"] = "route"
+            complex_follow_up = (self.intent.get("operation") in {"itinerary", "route_comparison"}
+                                 or bool(self.pending.get("completed_legs") or self.pending.get("follow_up_requests")))
+            if not complex_follow_up:
+                self.intent["operation"] = "route"
+                self.direct_route_selection = True
+            else:
+                self.direct_route_selection = False
         else:
             self.pending.pop("selected_poi_id", None)
+            self.direct_route_selection = False
+        self.route_preplanned = False
         self.fresh = set()
         self.candidates, self.route, self.route_kind, self.comparison = None, None, None, None
         self.weather = None
@@ -493,6 +503,28 @@ class Dialogue:
         from agents import web_evidence
         started = time.monotonic()
         max_seconds = min(120.0, max(20.0, float(os.getenv("AGENT_DIALOGUE_TIMEOUT_S", "90"))))
+        if self.direct_route_selection:
+            selected_id = self.pending["selected_poi_id"]
+            selected = self.known[selected_id]
+            route_result = self.spatial("plan_route", {
+                "end": {"type": "poi", "poi_id": selected_id, "name": selected.get("name")},
+            })
+            if not self.route:
+                message = ((self.clarify or {}).get("question")
+                           or route_result.get("message")
+                           or "暂时无法生成到所选地点的可靠路线，请检查起点或稍后重试。")
+                return self.result(message, failed=bool(route_result.get("error")))
+            route_summary = {key: self.route.get(key) for key in (
+                "start_name", "end_name", "mode", "distance_m", "duration_min",
+                "recommended_length_m", "route_verification", "endpoint_access",
+                "road_condition_overview", "strategy",
+            ) if key in self.route}
+            self.messages.append({"role": "system", "content": (
+                "地图工具已按服务端接受的地点 ID 完成路线计算。仅依据以下路线结果作简洁说明；"
+                "不得修改距离、时间、起终点或核验状态。路线摘要："
+                + json.dumps(_compact(route_summary), ensure_ascii=False, default=str)
+            )})
+            self.route_preplanned = True
         try:
             if not config.DEEPSEEK_API_KEY:
                 raise RuntimeError("model_not_configured")
@@ -515,7 +547,8 @@ class Dialogue:
                     tools=tool_schemas(self.intent.get("operation"), allow_place_search=(
                         self.place_search_count < 2 and candidate_count < requested_count),
                         ready_to_present=ready_to_present,
-                        selected_place=bool(self.pending.get("selected_poi_id"))),
+                        selected_place=bool(self.pending.get("selected_poi_id")),
+                        route_preplanned=self.route_preplanned),
                     temperature=0.2, max_tokens=2600,
                 )
             except Exception:

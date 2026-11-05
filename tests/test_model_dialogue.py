@@ -130,20 +130,16 @@ def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypat
         captured.update({"name": name, "args": args})
         return route, {"route": route, "route_kind": "direct"}
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
-    model.side_effect = [
-        reply(plan_route={"start": {"type": "poi", "name": "信息学部图书馆"},
-                          "end": {"type": "poi", "poi_id": "campus-poi-7", "name": "桂园餐厅"},
-                          "mode": "walk"}),
-        reply("已按你选的桂园餐厅规划路线。"),
-    ]
+    model.side_effect = [reply("已按你选的桂园餐厅规划路线。")]
 
     result = planner.run_agent("去这家", context={"place_request": state, "selected_poi_id": "campus-poi-7"})
 
     assert result["response_kind"] == "route"
     first_tool_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
-    assert "plan_route" in first_tool_names
     assert "resolve_poi" not in first_tool_names
     assert "search_poi_candidates" not in first_tool_names
+    assert first_tool_names == {"get_weather", "list_road_conditions"}
+    assert model.call_count == 1
     assert "plan_multimodal_route" not in first_tool_names
     assert captured["args"]["end"]["poi_id"] == "campus-poi-7"
     assert "campus-poi-7" in str(model.call_args_list[0].kwargs["messages"])
