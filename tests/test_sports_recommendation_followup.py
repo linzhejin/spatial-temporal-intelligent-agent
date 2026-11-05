@@ -10,6 +10,12 @@ from spatial.poi import _exact_master_poi_matches, load_pois
 from tests.test_real_graph_composite_route import offline_graph  # noqa: F401
 
 
+@pytest.fixture(autouse=True)
+def use_legacy_dialogue_for_rule_path_regressions(monkeypatch):
+    """These tests cover the explicit legacy fallback, not model-led dialogue."""
+    monkeypatch.setenv("AGENT_DIALOGUE_MODE", "legacy")
+
+
 def test_running_tags_are_evidenced_and_meiyuan_is_a_square():
     pois = {poi["id"]: poi for poi in load_pois()}
     meiyuan, guiyuan = pois["poi_082"], pois["poi_085"]
