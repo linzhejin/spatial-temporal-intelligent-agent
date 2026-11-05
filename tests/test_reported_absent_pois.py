@@ -1,6 +1,8 @@
 import json
 from pathlib import Path
 
+import pytest
+
 from spatial import poi
 
 
@@ -73,3 +75,20 @@ def test_feedback_data_change_invalidates_a_previous_candidate_snapshot(tmp_path
     new = {'candidate_snapshot': {'data_version': after, 'road_condition_version': events}}
     assert not result_maintenance.candidate_snapshot_is_current(old)
     assert result_maintenance.candidate_snapshot_is_current(new)
+
+
+@pytest.mark.parametrize('poi_id,provider_name', [
+    ('poi_346', '鱼你在一起(武汉大学店 )'),
+    ('poi_348', '麦当劳（武大校园店）'),
+    ('poi_351', '蔬三时轻食(武汉大学店)'),
+])
+def test_generic_campus_branch_alias_cannot_reintroduce_a_reported_location(poi_id, provider_name):
+    raw = json.loads((Path(__file__).resolve().parents[1] / 'data/pois.json').read_bytes())['pois']
+    held = next(row for row in raw if row['id'] == poi_id)
+    center = held['coordinates']
+    candidates = [
+        {'id': 'amap:same-site', 'name': provider_name, 'coordinates': center},
+        {'id': 'amap:other-site', 'name': provider_name,
+         'coordinates': {'lng': center['lng'] + 0.01, 'lat': center['lat']}},
+    ]
+    assert [row['id'] for row in poi.filter_reported_absent_provider_results(candidates)] == ['amap:other-site']

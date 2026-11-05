@@ -264,19 +264,37 @@ def source_refs_for_poi(poi: dict) -> list:
 def filter_reported_absent_provider_results(candidates: list[dict], *, max_distance_m: float = 100.0) -> list[dict]:
     """Do not reintroduce an individually reported missing branch from a live provider.
 
-    A match requires both an exact normalized name/alias and a nearby recorded
-    location. This keeps a report about one branch from suppressing a different
-    store of the same brand.
+    A match requires a name/alias identity and a nearby recorded location.
+    A provider's generic campus suffix is compatible with a more specific
+    reported branch at that location; explicitly different branches stay separate.
     """
     held = [row for row in _load_from_json()
             if row.get("recommendation_status") == "reported_absent_pending_review"]
     if not held:
         return list(candidates or [])
 
-    def labels(row):
-        values = [row.get("name"), *(row.get("aliases") or [])]
-        return {_normalize_num(re.sub(r"[\s\u3000\-—_()（）·]", "", str(value or "")))
-                for value in values if str(value or "").strip()}
+    def identity(row):
+        def normalize(value):
+            return _normalize_num(re.sub(r"[\s\u3000\-—_()（）·]", "", value)).casefold()
+
+        labels, businesses, campus_businesses = set(), set(), set()
+        campus_suffixes = ("武汉大学校内店", "武汉大学校园店", "武汉大学店",
+                           "武大校内店", "武大校园店", "武大店")
+        for value in [row.get("name"), *(row.get("aliases") or [])]:
+            text = str(value or "").strip()
+            if not text:
+                continue
+            normalized = normalize(text)
+            labels.add(normalized)
+            named_branch = re.fullmatch(r"(.+?)[(（][^()（）]+[)）]", text)
+            businesses.add(normalize(named_branch.group(1)) if named_branch else normalized)
+            for suffix in campus_suffixes:
+                if normalized.endswith(suffix) and len(normalized) > len(suffix):
+                    business = normalized[:-len(suffix)]
+                    campus_businesses.add(business)
+                    businesses.add(business)
+                    break
+        return labels, businesses, campus_businesses
 
     def point(row):
         coord = row.get("coordinates") or {}
@@ -289,16 +307,18 @@ def filter_reported_absent_provider_results(candidates: list[dict], *, max_dista
             pass
         return None
 
-    held_rows = [(labels(row), point(row)) for row in held]
+    held_rows = [(identity(row), point(row)) for row in held]
     kept = []
     for candidate in candidates or []:
-        candidate_labels = labels(candidate)
+        candidate_labels, _, candidate_campus = identity(candidate)
         candidate_point = point(candidate)
         excluded = False
         if candidate_point:
             lng, lat = candidate_point
-            for held_labels, held_point in held_rows:
-                if not candidate_labels.intersection(held_labels) or not held_point:
+            for (held_labels, held_businesses, _), held_point in held_rows:
+                same_identity = (candidate_labels.intersection(held_labels)
+                                 or candidate_campus.intersection(held_businesses))
+                if not same_identity or not held_point:
                     continue
                 old_lng, old_lat = held_point
                 mean_lat = math.radians((lat + old_lat) / 2)
