@@ -70,7 +70,13 @@ class TestPoiDataIntegrity:
         assert len(names) == len(set(names)), "存在重复 POI 名称"
 
     def test_load_pois_matches_json(self, pois_data):
-        assert len(load_pois()) == pois_data["count"]
+        held = [poi for poi in pois_data["pois"]
+                if poi.get("recommendation_status") == "reported_absent_pending_review"]
+        active = load_pois()
+        assert len(pois_data["pois"]) == pois_data["count"]
+        assert len(held) == 3
+        assert len(active) == pois_data["count"] - len(held)
+        assert not {poi["id"] for poi in active} & {poi["id"] for poi in held}
 
 
 # ===== 2. 后端地名归一化（两阶段·第二阶段） =====

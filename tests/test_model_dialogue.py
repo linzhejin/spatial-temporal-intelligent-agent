@@ -14,6 +14,24 @@ def test_model_dialogue_is_the_default_mode(monkeypatch):
     assert model_dialogue_enabled()
 
 
+def test_run_agent_uses_model_dialogue_when_mode_is_unset(monkeypatch):
+    from agents import dialogue
+
+    monkeypatch.delenv("AGENT_DIALOGUE_MODE", raising=False)
+    calls = []
+    monkeypatch.setattr(dialogue, "run_dialogue", lambda *args, **kwargs: (
+        calls.append((args, kwargs)) or {
+            "response_kind": "chat", "message": "模型主流程", "turns": 1,
+        }
+    ))
+
+    result = planner.run_agent("请推荐校园地点")
+
+    assert len(calls) == 1
+    assert result["response_kind"] == "chat"
+    assert result["message"] == "模型主流程"
+
+
 def test_model_receives_compact_place_candidates_without_geometry():
     import json
     from agents.dialogue import _model_tool_content

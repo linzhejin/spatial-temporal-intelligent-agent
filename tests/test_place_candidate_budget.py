@@ -132,6 +132,10 @@ def test_remaining_budget_filters_actual_candidates_after_dining_revision(
         "data_version": "data-test", "road_condition_version": current_road_condition_version(conditions),
     }
     monkeypatch.setattr(planner.agent_tools, "_data_version_for_graph", lambda _graph: "data-test")
+    monkeypatch.setattr(planner.agent_tools, "_endpoint_access_evidence", lambda *_args: {
+        "snap_distance_m": 0.0, "status": "test_fixture", "access_link_verified": False,
+        "access_link_basis": "test_fixture", "note": "synthetic graph endpoint",
+    })
 
     result = planner.run_agent("换成食堂", context={"place_request": pending})
     assert result["response_kind"] == "candidates"

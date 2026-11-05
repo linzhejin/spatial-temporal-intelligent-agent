@@ -47,6 +47,7 @@ def test_location_ranked_candidates_search_full_categories_before_limiting(monke
         graph.add_edge(0, node, length=float((13 - node) * 100))
     mode_index = SimpleNamespace(graph=graph, mode_penalty={})
     categories_called = []
+    online_queries = []
 
     canteens = []
     fastfood = []
@@ -56,6 +57,7 @@ def test_location_ranked_candidates_search_full_categories_before_limiting(monke
             "subcategory": "canteen" if node % 2 else "fastfood",
             "coordinates": {"lng": 114.36 + node * 0.0001, "lat": 30.53},
             "lat": 30.53, "lon": 114.36 + node * 0.0001,
+            "verification_status": "source_only",
             "source_refs": [f"source-{node}"],
         }
         (canteens if node % 2 else fastfood).append(poi)
@@ -72,6 +74,22 @@ def test_location_ranked_candidates_search_full_categories_before_limiting(monke
     monkeypatch.setattr(tools, "search_by_category", category_search)
     monkeypatch.setattr(tools, "gcj02_to_wgs84", lambda lng, lat: (lng, lat))
     monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
+    online_fastfood = [
+        {
+            **poi,
+            "id": f"amap:fixture{index}",
+            "poi_id": f"amap:fixture{index}",
+            "source": "amap_online",
+            "coordinate_system": "GCJ-02",
+            "activities": ["fast_food"],
+        }
+        for index, poi in enumerate(reversed(fastfood))
+    ]
+    def online_lookup(_start, _mode, subcategories, **_kwargs):
+        online_queries.append(tuple(subcategories))
+        return {"status": "ok", "candidates": online_fastfood}
+
+    monkeypatch.setattr(tools, "_search_amap_dining_for_start", online_lookup)
 
     result, artifact = tools.execute_tool("search_poi_candidates", {
         "start": {"type": "coord", "name": "地图起点", "lng": 114.36, "lat": 30.53},
@@ -79,10 +97,11 @@ def test_location_ranked_candidates_search_full_categories_before_limiting(monke
         "mode": "walk",
         "max_distance_m": 5000,
         "limit": 4,
-    })
+    }, {"query": "距离优先"})
 
     assert {category for category, _limit in categories_called} == {"canteen", "fastfood"}
     assert all(limit >= 12 for _category, limit in categories_called)
+    assert online_queries == [("canteen", "fastfood")]
     candidates = result["candidates"]
     assert [item["name"] for item in candidates] == ["餐饮点12", "餐饮点11", "餐饮点10", "餐饮点9"]
     assert [item["network_distance_m"] for item in candidates] == [100, 200, 300, 400]
@@ -373,9 +392,11 @@ def test_candidate_order_changes_with_origin(monkeypatch):
         graph.add_edge(start, 4, length=east)
     places = [
         {"id": "west", "name": "西侧食堂", "type": "dining", "subcategory": "canteen",
-         "coordinates": {"lng": 114.3610, "lat": 30.53}, "lat": 30.53, "lon": 114.3610},
+         "coordinates": {"lng": 114.3610, "lat": 30.53}, "lat": 30.53, "lon": 114.3610,
+         "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]},
         {"id": "east", "name": "东侧食堂", "type": "dining", "subcategory": "canteen",
-         "coordinates": {"lng": 114.3690, "lat": 30.53}, "lat": 30.53, "lon": 114.3690},
+         "coordinates": {"lng": 114.3690, "lat": 30.53}, "lat": 30.53, "lon": 114.3690,
+         "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]},
     ]
     mode_index = SimpleNamespace(graph=graph, mode_penalty={})
     monkeypatch.setattr(tools, "_ensure_graph", lambda: graph)

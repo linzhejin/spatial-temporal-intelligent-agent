@@ -20,6 +20,12 @@ _ISOLATED_DB_URL = os.environ.get("TEST_DATABASE_URL")
 os.environ["DATABASE_URL"] = ""
 
 
+@pytest.fixture(autouse=True)
+def legacy_dialogue_for_legacy_contract_tests(monkeypatch):
+    """Keep parser regressions on the fallback path; model tests opt in explicitly."""
+    monkeypatch.setenv("AGENT_DIALOGUE_MODE", "legacy")
+
+
 @pytest.fixture(scope="module")
 def isolated_test_database(request) -> str:
     if not _ISOLATED_DB_URL:

@@ -375,13 +375,14 @@ def build_agent_workflow(
                     requirement_results["weather"] = "failed"
         elif plan.kind == "weather":
             try:
-                response = run_route_agent()
-                weather = response.get("weather") if isinstance(response, dict) else None
-                if isinstance(weather, dict):
-                    requirement_results["weather"] = "satisfied"
-                else:
-                    errors["weather"] = "model_did_not_complete_weather_lookup"
-                    requirement_results["weather"] = "failed"
+                weather = run_weather_tool()
+                response = {
+                    "response_kind": "chat",
+                    "message": _weather_message(weather),
+                    "weather": weather,
+                    "turns": 0,
+                }
+                requirement_results["weather"] = "satisfied"
             except Exception as error:
                 errors["weather"] = type(error).__name__
                 requirement_results["weather"] = "failed"

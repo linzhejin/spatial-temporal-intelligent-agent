@@ -21,7 +21,8 @@ def test_route_tools_expose_the_same_hard_budget_and_access_contract():
 
 def test_non_routing_tool_executors_return_schema_shaped_results(monkeypatch):
     poi = {"name": "卓尔体育馆", "type": "sports", "subcategory": "gym",
-           "lat": 30.53, "lon": 114.36, "description": "体育场馆"}
+           "lat": 30.53, "lon": 114.36, "description": "体育场馆",
+           "verification_status": "source_only", "source_refs": [{"source": "test fixture"}]}
     monkeypatch.setattr(tools, "find_poi_ambiguous", lambda name: (poi, []))
     result, artifact = tools.execute_tool("resolve_poi", {"name": "卓尔体育馆"})
     assert result["found"] is True
