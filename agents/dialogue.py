@@ -48,7 +48,8 @@ _OPERATION_TOOL_NAMES = {
 }
 
 
-def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False):
+def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False,
+                 selected_place=False):
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -102,6 +103,9 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
         allowed = {"update_task", "present_places", "search_web", "read_web_page"}
     elif allowed and operation == "place_search" and not allow_place_search:
         allowed = allowed - {"search_poi_candidates", "find_reachable_places", "resolve_poi"}
+    if allowed and selected_place:
+        allowed = {"update_task", "plan_route", "plan_via_route", "plan_itinerary",
+                   "get_weather", "list_road_conditions"}
     return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
 
 
@@ -206,10 +210,17 @@ class Dialogue:
                    "route_context_uncertain": bool(self.context.get("route_context_uncertain")),
                    "map_start": coord_start, "map_end": coord_end, "map_waypoints": coord_waypoints,
                    "selected_poi_id": self.pending.get("selected_poi_id"), "travel_mode": travel_mode}
+        if self.pending.get("selected_poi_id"):
+            self.messages = [{"role": "system", "content": (
+                "本轮有已接受的结构化地点选择。按用户原有出发点直接调用 plan_route，"
+                "终点使用 selected_poi_id 对应候选；不要再次搜索或 resolve_poi。") }]
+        else:
+            self.messages = []
         transcript = [{"role": item["role"], "content": str(item["content"])[:4000]}
                       for item in (history or self.context.get("history") or [])[-12:]
                       if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")]
-        self.messages = [{"role": "system", "content": (Path(__file__).parent / "prompts" / "dialogue_system.txt").read_text(encoding="utf-8")},
+        self.messages = [*self.messages,
+                         {"role": "system", "content": (Path(__file__).parent / "prompts" / "dialogue_system.txt").read_text(encoding="utf-8")},
                          *transcript,
                          {"role": "system", "content": "服务器提供的已接受状态（历史并不代表用户当前的位置）：\n" + json.dumps(trusted, ensure_ascii=False)},
                          {"role": "user", "content": query}]
@@ -503,7 +514,8 @@ class Dialogue:
                     model=config.LLM_MODEL, messages=deepcopy(self.messages),
                     tools=tool_schemas(self.intent.get("operation"), allow_place_search=(
                         self.place_search_count < 2 and candidate_count < requested_count),
-                        ready_to_present=ready_to_present),
+                        ready_to_present=ready_to_present,
+                        selected_place=bool(self.pending.get("selected_poi_id"))),
                     temperature=0.2, max_tokens=2600,
                 )
             except Exception:
