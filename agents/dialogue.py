@@ -117,6 +117,8 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
                   {"offset": {"type": "integer", "minimum": 0},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 12},
                    "include_shown": {"type": "boolean"}}),
+        _function("conclude_without_places", "已查看候选但没有适合本轮条件的地点时，说明无法推荐的原因；不要据此声称候选池为空。",
+                  {"reason": {"type": "string", "minLength": 1, "maxLength": 1000}}, ("reason",)),
         _function("read_result", "读取本会话历史结果引用；路线几何与候选按页返回。",
                   {"run_id": {"type": "string"},
                    "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
@@ -308,6 +310,7 @@ class Dialogue:
         self.web_fetch_count = 0
         self.place_search_count = 0
         self.place_service_error = None
+        self._expanded_this_turn = False
         self._last_task_update_changed_search = False
         self.turns = 0
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
@@ -368,6 +371,8 @@ class Dialogue:
             self.pending.setdefault("constraints", {})
             self.intent = self.pending.setdefault("semantic_request", {}) or {}
             self.pending["semantic_request"] = self.intent
+            self.sources = {item["source_id"]: item for item in self.intent.get("sources", [])
+                            if isinstance(item, dict) and item.get("source_id")}
             self.known = {item["poi_id"]: item for item in [*(self.pending.get("candidate_pool") or []),
                                                              *(self.pending.get("candidate_places") or []),
                                                              self.pending.get("selected_place")]
@@ -431,16 +436,27 @@ class Dialogue:
                 if field in {"search_anchor", "activities", "subcategories"}:
                     changed_search |= args[field] != pending.get(field)
                 pending[field] = deepcopy(args[field])
+        radius_note = None
+        ignored_radius = False
+        expanded_this_update = False
         if "search_radius_m" in args:
             radius = args["search_radius_m"]
             if type(radius) is not int or not 100 <= radius <= 5000:
                 raise ValueError("invalid search radius")
-            changed_search |= pending.get("search_radius_m") != radius
-            pending["search_radius_m"] = radius
-        elif args.get("expand_search_radius") is True:
-            radius = min(5000, (pending.get("search_radius_m") or 1000) * 2)
-            changed_search |= pending.get("search_radius_m") != radius
-            pending["search_radius_m"] = radius
+            previous_radius = pending.get("search_radius_m") or 1000
+            from agents.distance_evidence import radius_supported_by_message
+            if radius != previous_radius and not radius_supported_by_message(self.query, radius, previous_radius):
+                ignored_radius = True
+                radius_note = "本轮没有支持该数值的用户距离条件，已保留原半径；需要扩大可使用 expand_search_radius。"
+            else:
+                changed_search |= previous_radius != radius
+                pending["search_radius_m"] = radius
+        if ("search_radius_m" not in args or ignored_radius) and args.get("expand_search_radius") is True:
+            if not self._expanded_this_turn:
+                radius = min(5000, (pending.get("search_radius_m") or 1000) * 2)
+                changed_search |= pending.get("search_radius_m") != radius
+                pending["search_radius_m"] = radius
+                expanded_this_update = True
         if "constraints" in args:
             previous_constraints = HardConstraints.model_validate(pending.get("constraints") or {}).model_dump()
             incoming = dict(args["constraints"])
@@ -464,7 +480,12 @@ class Dialogue:
                 pending.pop("selected_place", None)
             else:
                 raise ValueError("unsupported clear field")
-        self._last_task_update_changed_search = changed_search
+        candidate_action = args.get("candidate_action") or ("recommend" if changed_search else self.turn_action)
+        if candidate_action not in {"recommend", "next_batch"}:
+            raise ValueError("invalid candidate_action")
+        if candidate_action == "next_batch" and (relation != "continue" or changed_search):
+            raise ValueError("next_batch requires unchanged place search conditions")
+        next_known, next_last_search = self.known, self.last_search
         if changed_search:
             selected_id = pending.get("selected_poi_id")
             selected_place = self.known.get(selected_id) if selected_id else None
@@ -474,42 +495,49 @@ class Dialogue:
                 intent["shown_ids"] = []
             pending.update({"candidate_poi_ids": [], "candidate_places": [], "candidate_pool": [],
                             "result_dependencies": None})
-            self.known = {selected_id: selected_place} if selected_place else {}
-            self.fresh.clear()
-            self.last_search = {}
+            next_known = {selected_id: selected_place} if selected_place else {}
+            next_last_search = {}
         pending["semantic_request"] = intent
-        candidate_action = args.get("candidate_action", "recommend")
-        if candidate_action not in {"recommend", "next_batch"}:
-            raise ValueError("invalid candidate_action")
-        if candidate_action == "next_batch" and (relation != "continue" or changed_search):
-            raise ValueError("next_batch requires unchanged place search conditions")
-        self.turn_action = candidate_action
-        self._intent_resolved = True
         if candidate_action == "next_batch":
             shown = set(intent.get("shown_ids") or [])
             pool = pending.get("candidate_pool") or []
             remaining = [row for row in pool if row.get("poi_id") not in shown]
-            self.last_search = {"status": "ok", "online_status": "ok",
+            next_last_search = {"status": "ok", "online_status": "ok",
                                 "candidates": deepcopy(remaining), "count": len(remaining)}
-            self.place_search_count = 2
         PlaceRequestState.model_validate(pending)
         changed_fields = ["place_request." + ("search_radius_m" if key == "expand_search_radius" else key)
-                          for key in args if key not in {"relation", "task_id", "task_revision", "clear_fields", "candidate_action"}]
+                          for key in args if key not in {"relation", "task_id", "task_revision", "clear_fields", "candidate_action"}
+                          and not (key == "search_radius_m" and ignored_radius)]
         changed_fields.extend("place_request." + field for field in args.get("clear_fields", []) if isinstance(field, str))
         if self.bind_task and self.bound_task is None:
             self.bound_task = self.bind_task(relation=relation, task_id=args.get("task_id"),
                                              base_revision=args.get("task_revision"), place_request=pending,
                                              changed_fields=changed_fields)
+        if expanded_this_update:
+            self._expanded_this_turn = True
+        self._last_task_update_changed_search = changed_search
+        self.known, self.last_search = next_known, next_last_search
+        if changed_search:
+            self.fresh.clear()
+        self.turn_action = candidate_action
+        self._intent_resolved = True
+        if candidate_action == "next_batch":
+            self.place_search_count = 2
         self.modified_fields.update(changed_fields)
         self.pending, self.intent = pending, intent
         compact_pending = deepcopy(pending)
         compact_pending.pop("candidate_pool", None)
         response = {"accepted_task": _compact(compact_pending)}
+        if radius_note:
+            response["radius_note"] = radius_note
         if self.bound_task:
             response.update({"task_id": self.bound_task["task_id"], "task_revision": self.bound_task["task_revision"]})
         if candidate_action == "next_batch":
             response["candidate_page"] = json.loads(_model_tool_content("search_poi_candidates", self.last_search))
-            response["candidate_page"]["exhausted"] = not bool(self.last_search.get("candidates"))
+            page = response["candidate_page"]
+            page["offset"] = 0
+            page["next_offset"] = len(page.get("candidates") or [])
+            page["exhausted"] = page["next_offset"] >= page["count"]
         return response
 
     def _endpoint(self, ref, *, allow_pending=True):

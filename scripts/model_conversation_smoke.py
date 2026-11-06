@@ -21,6 +21,7 @@ os.environ["AGENT_DIALOGUE_MODE"] = "model"
 
 from langgraph.checkpoint.memory import InMemorySaver
 from agents import planner, workflow
+from agents.dialogue import Dialogue
 from jobs.worker import process_next_run
 from storage import database
 from storage.task_repository import create_conversation, create_task_run, get_run, get_run_input
@@ -44,7 +45,17 @@ def main():
         owner, _, conversation = create_conversation(url)
     graph = workflow.build_agent_workflow(InMemorySaver(), database_url=url)
     captured = []
+    presentation_errors = []
     factory = planner._make_client
+    original_present = Dialogue.present
+
+    def monitored_present(self, args):
+        try:
+            return original_present(self, args)
+        except ValueError as error:
+            presentation_errors.append(str(error).split(":", 1)[0])
+            raise
+    Dialogue.present = monitored_present
 
     def monitored_client():
         client = factory()
@@ -65,6 +76,7 @@ def main():
         inputs = get_run_input(url, accepted["run_id"])
         expected = [{"role": row["role"], "content": row["content"]} for row in inputs["history"]]
         captured.clear()
+        presentation_errors.clear()
         outcome = process_next_run(url, "smoke-" + uuid4().hex, graph, lease_seconds=30)
         run = get_run(url, owner, accepted["run_id"])
         result = run.get("result") or {}
@@ -73,6 +85,23 @@ def main():
         pending = result.get("place_request") or result.get("completed_place_request") or {}
         events = [event["payload"] for event in run.get("events", [])
                   if event.get("event_type") == "agent_tool_call" and event.get("payload", {}).get("phase") == "started"]
+        call_names, feedback = {}, []
+        for item in captured[-1] if captured else []:
+            if item.get("role") == "assistant":
+                for call in item.get("tool_calls") or []:
+                    call_names[call.get("id")] = (call.get("function") or {}).get("name")
+            if item.get("role") != "tool":
+                continue
+            name = call_names.get(item.get("tool_call_id"))
+            if name not in {"update_task", "browse_candidates", "present_places"}:
+                continue
+            try:
+                value = json.loads(item.get("content") or "{}")
+            except (ValueError, TypeError):
+                continue
+            page = value.get("candidate_page") or value
+            feedback.append({"tool": name, "error": value.get("error"), "message": value.get("message") if value.get("error") else None,
+                             "count": page.get("count"), "exhausted": page.get("exhausted")})
         record = {"seconds": round(time.monotonic() - start, 2), "status": run["status"],
                   "outcome": outcome and outcome["status"], "kind": result.get("response_kind"),
                   "failure_code": result.get("failure_code"), "model_calls": len(captured),
@@ -87,6 +116,7 @@ def main():
                   "end_name": (result.get("end") or {}).get("name"),
                   "candidate_ids": [row.get("poi_id") for row in result.get("candidates") or []],
                   "route_verification": (result.get("route_verification") or {}).get("status"),
+                  "presentation_errors": presentation_errors, "tool_feedback": feedback[-20:],
                   "tools": [event.get("tool_name") for event in events], "model_usage": result.get("model_usage")}
         print(json.dumps(record, ensure_ascii=False), flush=True)
         return run, pending, record
@@ -100,7 +130,7 @@ def main():
         b = {"candidate_ids": []}
     else:
         first, pending, a = turn("我从信图出发，在总图附近找餐馆，别推荐食堂档口")
-        if not a["candidate_ids"] or not a["all_original_messages_received"]:
+        if not a["candidate_ids"] or not a["all_original_messages_received"] or a["search_radius_m"] != 1000:
             return 1
         second, pending, b = turn("再换几家看看")
         if (not b["candidate_ids"] or not b["all_original_messages_received"] or b["task_id"] != a["task_id"]

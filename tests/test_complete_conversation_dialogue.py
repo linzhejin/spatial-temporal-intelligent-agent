@@ -63,6 +63,41 @@ def test_candidate_paging_always_consults_model_with_unshown_candidate_ids(monke
     assert result["place_request"]["search_anchor"]["name"] == "总图"
 
 
+def test_model_next_batch_cannot_finish_with_stale_text_while_unseen_candidates_exist(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    first, second = place("amap:A123", "已展示餐厅"), place("amap:B123", "未展示餐厅")
+    pending = {"request_id": "request", "original_query": "找餐厅", "mode": "walk",
+               "candidate_pool": [first, second], "candidate_places": [first],
+               "candidate_poi_ids": [first["poi_id"]],
+               "semantic_request": {"operation": "place_search", "shown_ids": [first["poi_id"]]}}
+    dialogue, model = make_dialogue("再看看其他家", context={"place_request": pending}, replies=[
+        reply(update_task={"relation": "continue", "operation": "place_search", "candidate_action": "next_batch"}),
+        reply(update_task={"relation": "continue", "operation": "place_search"}),
+        reply("上面就是所有候选。"),
+        reply(present_places={"introduction": "还有一家。", "places": [
+            {"poi_id": second["poi_id"], "reason": "目录候选"}]}),
+    ])
+    result = dialogue.run()
+    assert model.call_count == 4
+    assert [row["poi_id"] for row in result["candidates"]] == [second["poi_id"]]
+    assert "上面就是所有候选" not in result["message"]
+
+
+def test_model_can_explain_that_unshown_candidates_do_not_satisfy_requirements(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    candidate = place("amap:B123", "未展示餐厅")
+    pending = {"request_id": "request", "original_query": "找安静的餐厅", "candidate_pool": [candidate],
+               "semantic_request": {"operation": "place_search", "shown_ids": []}}
+    dialogue, _ = make_dialogue("再看看", context={"place_request": pending}, replies=[
+        reply(update_task={"relation": "continue", "operation": "place_search", "candidate_action": "next_batch"}),
+        reply(conclude_without_places={"reason": "现有候选缺少安静程度的依据，暂时无法推荐。"}),
+    ])
+    result = dialogue.run()
+    assert result["response_kind"] == "chat"
+    assert "缺少安静程度的依据" in result["message"]
+    assert "仍有 1 条未展示记录" in result["message"]
+
+
 def test_exhausted_candidates_are_reported_and_cannot_be_represented():
     import pytest
     selected = place("amap:A123", "已展示餐厅")
@@ -74,6 +109,17 @@ def test_exhausted_candidates_are_reported_and_cannot_be_represented():
     assert page["candidates"] == [] and page["exhausted"] is True
     with pytest.raises(ValueError, match="already_shown"):
         dialogue.present({"places": [{"poi_id": selected["poi_id"], "reason": "目录候选"}]})
+
+
+def test_next_batch_page_reports_its_actual_exhaustion():
+    candidate = place("amap:B123", "未展示餐厅")
+    pending = {"request_id": "request", "original_query": "找餐厅", "candidate_pool": [candidate],
+               "semantic_request": {"operation": "place_search", "shown_ids": []}}
+    dialogue, _ = make_dialogue("换几家", context={"place_request": pending})
+    page = dialogue.update({"relation": "continue", "operation": "place_search",
+                            "candidate_action": "next_batch"})["candidate_page"]
+    assert page["count"] == page["next_offset"] == 1
+    assert page["offset"] == 0 and page["exhausted"] is True
 
 
 def test_presenting_candidates_preserves_all_prior_shown_ids():
@@ -137,8 +183,53 @@ def test_expand_radius_keeps_activity_anchors_and_previously_shown_ids():
     assert dialogue.pending["activities"] == ["meal"]
     assert dialogue.intent["shown_ids"] == [first["poi_id"]]
     dialogue.update({"relation": "continue", "operation": "place_search", "expand_search_radius": True})
+    assert dialogue.pending["search_radius_m"] == 2000
+    next_turn, _ = make_dialogue("再扩大", context={"place_request": deepcopy(dialogue.pending)})
+    next_turn.update({"relation": "continue", "operation": "place_search", "expand_search_radius": True})
+    assert next_turn.pending["search_radius_m"] == 4000
+    last_turn, _ = make_dialogue("再扩大", context={"place_request": deepcopy(next_turn.pending)})
+    last_turn.update({"relation": "continue", "operation": "place_search", "expand_search_radius": True})
+    assert last_turn.pending["search_radius_m"] == 5000
+
+
+def test_unrequested_model_radius_cannot_replace_default_or_existing_radius():
+    new, _ = make_dialogue("我从信图出发，在总图附近找三家餐馆")
+    accepted = new.update({"relation": "new", "operation": "place_search", "search_radius_m": 1500})
+    assert new.pending["search_radius_m"] == 1000
+    assert "半径" in accepted["radius_note"]
+    existing = {"request_id": "request", "original_query": "找餐馆", "search_radius_m": 1000}
+    followup, _ = make_dialogue("范围宽一些", context={"place_request": existing})
+    followup.update({"relation": "continue", "operation": "place_search",
+                     "search_radius_m": 1500, "expand_search_radius": True})
+    assert followup.pending["search_radius_m"] == 2000
+
+
+def test_explicit_distance_or_change_can_support_the_model_selected_radius():
+    for text, radius in [("范围限定1.5公里", 1500), ("附近一千五百米", 1500),
+                         ("半公里内", 500), ("一公里半内", 1500)]:
+        dialogue, _ = make_dialogue(text)
+        dialogue.update({"relation": "new", "operation": "place_search", "search_radius_m": radius})
+        assert dialogue.pending["search_radius_m"] == radius
+    previous = {"request_id": "request", "original_query": "找餐馆", "search_radius_m": 1000}
+    for text, radius in [("范围再加500米", 1500), ("范围变为三倍", 3000)]:
+        dialogue, _ = make_dialogue(text, context={"place_request": deepcopy(previous)})
+        dialogue.update({"relation": "continue", "operation": "place_search", "search_radius_m": radius})
+        assert dialogue.pending["search_radius_m"] == radius
+
+
+def test_rejected_expand_and_next_batch_update_does_not_consume_the_expansion():
+    import pytest
+    candidate = place("amap:A123", "候选餐厅")
+    pending = {"request_id": "request", "original_query": "找餐馆", "search_radius_m": 1000,
+               "candidate_pool": [candidate], "semantic_request": {"operation": "place_search"}}
+    dialogue, _ = make_dialogue("范围放宽一些", context={"place_request": pending})
+    with pytest.raises(ValueError, match="next_batch requires"):
+        dialogue.update({"relation": "continue", "operation": "place_search",
+                         "candidate_action": "next_batch", "expand_search_radius": True})
+    assert dialogue.pending["search_radius_m"] == 1000
+    assert candidate["poi_id"] in dialogue.known
     dialogue.update({"relation": "continue", "operation": "place_search", "expand_search_radius": True})
-    assert dialogue.pending["search_radius_m"] == 5000
+    assert dialogue.pending["search_radius_m"] == 2000
 
 
 def test_route_preference_preserves_selected_place_when_search_cache_is_invalidated():
@@ -180,6 +271,31 @@ def test_provider_failure_is_reported_without_repeated_network_calls(monkeypatch
     assert result["execution_status"] == "failed"
     assert result["failure_code"] == "place_service_unavailable"
     assert result["response_kind"] != "clarify"
+
+
+def test_repeated_identical_tool_validation_errors_stop_without_exhausting_the_budget(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    invalid = reply(present_places={"introduction": "候选", "places": [
+        {"poi_id": "amap:UNKNOWN", "reason": "目录记录"}]})
+    dialogue, model = make_dialogue("推荐餐馆", replies=[
+        reply(update_task={"relation": "new", "operation": "place_search"}), invalid, invalid, invalid,
+    ])
+    result = dialogue.run()
+    assert model.call_count == 4
+    assert result["execution_status"] == "failed"
+    assert result["failure_code"] == "repeated_tool_error"
+
+
+def test_continued_task_restores_its_previously_accepted_web_sources():
+    source = {"source_id": "S123", "url": "https://example.test/place", "title": "来源"}
+    pending = {"request_id": "request", "original_query": "找餐馆",
+               "semantic_request": {"sources": [source]}}
+    dialogue, _ = make_dialogue("继续", context={"available_tasks": [{
+        "task_id": "task", "revision": 2, "state": {"place_request": pending},
+    }]})
+    dialogue.bind_task = lambda **_kwargs: {"task_id": "task", "task_revision": 3}
+    dialogue.update({"relation": "continue", "task_id": "task", "task_revision": 2, "operation": "place_search"})
+    assert dialogue.sources["S123"] == source
 
 
 def test_model_context_limit_explicitly_offers_a_new_conversation(monkeypatch):

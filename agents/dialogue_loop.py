@@ -37,6 +37,8 @@ def _run_dialogue_loop(dialogue):
 
     schemas = tool_schemas()
     names = {item["function"]["name"] for item in schemas}
+    repeated_errors = {}
+    undelivered_candidate_responses = 0
     for _ in range(20):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -81,6 +83,17 @@ def _run_dialogue_loop(dialogue):
             if dialogue.route_tool_failure and not dialogue.route and not dialogue.candidates:
                 return _failure(dialogue, dialogue.route_tool_failure["message"] + " 已保留已有需求，可调整条件后重试。",
                                 dialogue.route_tool_failure["code"])
+            if dialogue.turn_action == "next_batch" and not dialogue.candidates:
+                remaining = dialogue.browse_candidates({})
+                if remaining["count"]:
+                    undelivered_candidate_responses += 1
+                    if undelivered_candidate_responses > 2:
+                        return _failure(dialogue, "仍有候选尚未完成筛选，已保留当前需求，请重试。", "candidate_delivery_incomplete")
+                    dialogue.messages.append({"role": "assistant", "content": text})
+                    dialogue.messages.append({"role": "system", "content":
+                        f"服务器核对：候选池仍有 {remaining['count']} 条未展示记录。请查看具体候选并用 present_places 交付；"
+                        "如果已查看但没有符合条件的地点，调用 conclude_without_places 说明原因，不要声称候选池已空。"})
+                    continue
             return dialogue.result(text) if text else _failure(dialogue, "本轮没有形成回答，请重试。", "model_empty_response")
         dialogue.messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [
             {"id": call.id, "type": "function", "function": {
@@ -145,6 +158,15 @@ def _run_dialogue_loop(dialogue):
                 elif name == "present_places":
                     final = dialogue.present(args)
                     answer = {"accepted": True, "poi_ids": dialogue.pending["candidate_poi_ids"]}
+                elif name == "conclude_without_places":
+                    reason = args.get("reason")
+                    if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
+                        raise ValueError("invalid_candidate_conclusion")
+                    final = reason.strip()
+                    remaining = dialogue.browse_candidates({})["count"]
+                    if remaining:
+                        final += f" 候选池仍有 {remaining} 条未展示记录。"
+                    answer = {"accepted": True}
                 elif name in {"search_web", "read_web_page"}:
                     counter = "web_search_count" if name == "search_web" else "web_fetch_count"
                     limit = 4 if name == "search_web" else 3
@@ -170,6 +192,11 @@ def _run_dialogue_loop(dialogue):
                             and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["online_status"]) else None})
             dialogue.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
+            if answer.get("error"):
+                fingerprint = (name, str(answer["error"]), str(answer.get("message") or ""))
+                repeated_errors[fingerprint] = repeated_errors.get(fingerprint, 0) + 1
+                if repeated_errors[fingerprint] >= 3:
+                    return _failure(dialogue, "本轮结果反复未通过校验，已保留当前需求，请重试。", "repeated_tool_error")
             if answer.get("error") == "place_service_unavailable":
                 return _failure(dialogue, "地点服务暂时不可用，本轮没有查到地点，请稍后重试。", "place_service_unavailable")
             if answer.get("error") == "place_search_limit":
