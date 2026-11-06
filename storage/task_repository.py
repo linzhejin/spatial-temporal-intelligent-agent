@@ -123,7 +123,7 @@ def create_task_run(
         existing = conn.execute(
             "SELECT r.run_id, r.task_id, r.task_revision, r.status, m.content, m.metadata,"
             " t.state, c.owner_id, c.conversation_id "
-            "FROM run r JOIN task t USING (task_id) JOIN conversation c USING (conversation_id) "
+            "FROM run r JOIN task t USING (task_id) JOIN conversation c ON c.conversation_id=t.conversation_id "
             "LEFT JOIN conversation_message m ON m.task_id=t.task_id AND m.role='user'"
             " AND m.metadata->>'request_id'=r.idempotency_key "
             "WHERE r.idempotency_key=%s",
@@ -250,7 +250,7 @@ def get_run_input(url: str | None, run_id: str) -> dict | None:
             "SELECT r.run_id, r.task_id, r.task_revision, r.cancel_requested,"
             " t.conversation_id, t.revision, t.state, c.owner_id"
             " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id) WHERE r.run_id=%s",
+            " JOIN conversation c ON c.conversation_id=t.conversation_id WHERE r.run_id=%s",
             (run_id,),
         ).fetchone()
         if not row:
@@ -468,7 +468,7 @@ def list_active_runs(url: str | None, owner_id: str, conversation_id: str) -> li
             "SELECT r.run_id, r.task_id, r.status, r.deadline_at, t.revision AS task_revision,"
             " user_message.content AS query, user_message.seq AS message_seq"
             " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id)"
+            " JOIN conversation c ON c.conversation_id=t.conversation_id"
             " JOIN LATERAL (SELECT content, seq FROM conversation_message m"
             "   WHERE m.task_id=t.task_id AND m.role='user' ORDER BY seq DESC LIMIT 1) user_message ON true"
             " WHERE c.owner_id=%s AND c.conversation_id=%s"
@@ -879,7 +879,7 @@ def _finish_run(
             "    AND m.metadata->>'request_id'=r.idempotency_key"
             "  ORDER BY m.seq DESC LIMIT 1) AS source_message_seq"
             " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id)"
+            " JOIN conversation c ON c.conversation_id=t.conversation_id"
             " WHERE r.run_id=%s AND r.worker_id=%s FOR UPDATE OF r, t",
             (run_id, worker_id),
         ).fetchone()
@@ -1047,7 +1047,7 @@ def get_run(url: str | None, owner_id: str, run_id: str, after_seq: int = 0) -> 
             "SELECT r.run_id, r.task_id, r.task_revision, t.revision AS current_task_revision,"
             " r.status, r.deadline_at, r.lease_until,"
             " r.attempt, r.cancel_requested, r.result, r.error FROM run r"
-            " JOIN task t USING (task_id) JOIN conversation c USING (conversation_id)"
+            " JOIN task t USING (task_id) JOIN conversation c ON c.conversation_id=t.conversation_id"
             " WHERE c.owner_id=%s AND r.run_id=%s"
         )
         run = conn.execute(query, (owner_id, run_id)).fetchone()

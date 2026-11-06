@@ -141,7 +141,11 @@ class PlaceRequestState(Contract):
     pending_slot: Literal["activity", "start", "selection", "follow_up", "destination", "route_retry"] | None = None
     start: dict[str, Any] | None = None
     search_anchor: dict[str, Any] | None = None
+    # Retain fields written by the model-led release if an emergency rollback
+    # returns to the preceding dialogue implementation.
+    search_radius_m: int | None = Field(default=None, ge=100, le=5000)
     selected_poi_id: Identifier | None = None
+    selected_place: dict[str, Any] | None = None
     candidate_poi_ids: list[Identifier] = Field(default_factory=list, max_length=20)
     candidate_places: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     # Map-verified candidates not yet shown in the current recommendation batch.
