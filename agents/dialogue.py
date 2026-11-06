@@ -9,6 +9,7 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import re
 import time
 from uuid import uuid4
 
@@ -55,7 +56,8 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
-    search["description"] = ("按模型理解的关键词、区域、类别/用途检索真实地点。无需出发点也能查询校园店铺。"
+    search["description"] = ("按模型理解的关键词、区域、类别/用途检索地图或校园目录中的候选记录。"
+                              "目录匹配不证明现场存在、营业或入口可通行。无需出发点也能查询校园店铺。"
                               "有参照点可计算距离；返回检索结果，由你选择推荐；不把最近当作最好。")
     search["parameters"]["properties"].update({
         "area": {"type": "string", "description": "地点所在区域，例如武汉大学、梅园、信息学部"},
@@ -69,7 +71,8 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
     })
     for item in schemas:
         if item["function"]["name"] == "resolve_poi":
-            item["function"]["description"] = "核对具体地名，查询本地校园设施及在线商户；多分店返回候选，不擅自选定。"
+            item["function"]["description"] = ("核对具体地名并查询校园/在线目录记录；多分店返回候选，不擅自选定。"
+                "名称和坐标匹配不代表现场存在、营业或入口可通行。")
     schemas.extend([
         _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
@@ -84,7 +87,7 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
              "area": {"type": "string", "description": "检索区域文字，例如梅园、桂园或武汉大学"},
              "keywords": {"type": "array", "items": {"type": "string"}},
              "exclude_terms": {"type": "array", "items": {"type": "string"}},
-             "web_research_requested": {"type": "boolean", "description": "用户请求商户/餐饮推荐、攻略或地图目录可能不全的地点时设为true；地图可核对名称与位置，网页用于发现候选和补充有来源的描述"},
+             "web_research_requested": {"type": "boolean", "description": "用户请求商户/餐饮推荐、攻略或地图目录可能不全的地点时设为true；地图只能匹配目录中的名称与坐标记录，不能证明现场存在或营业；网页用于发现候选和补充有来源的描述"},
              "activities": {"type": "array", "items": {"type": "string"}},
              "subcategories": {"type": "array", "items": {"type": "string"}},
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
@@ -93,7 +96,7 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
              "clear_fields": {"type": "array", "items": {"type": "string"},
                               "description": "仅在用户明确取消时清除已有字段或条件，例如budget_per_person"}},
             ("relation", "operation")),
-        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定，理由与来源会和卡片一起展示。",
+        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定，理由与来源会和卡片一起展示。只能称地图/校园目录中匹配到的候选记录，不能称为实际存在、实地核实或正在营业。",
             {"introduction": {"type": "string"},
              "places": {"type": "array", "minItems": 1, "maxItems": 4, "items": {
                  "type": "object", "properties": {"poi_id": {"type": "string"},
@@ -171,6 +174,7 @@ def _model_tool_content(name, answer):
         "status", "error", "message", "count", "online_status", "search_area",
         "search_keyword", "start_name", "max_distance_m", "max_time_min",
     ) if key in answer}
+    result["evidence_scope"] = "地图/校园目录匹配只证明返回了候选记录，不证明现场存在、营业或入口可通行。"
     rows = answer.get("candidates")
     if isinstance(rows, list):
         result["candidates"] = []
@@ -198,6 +202,24 @@ def _model_tool_content(name, answer):
         result["candidate_batch_truncated"] = len(rows) > len(result["candidates"])
         result["candidate_batch_has_more"] = total > len(result["candidates"])
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _safe_candidate_prose(value):
+    """Do not let model prose turn a provider directory match into field verification."""
+    text = str(value or "")
+    text = re.sub(
+        r"(?:地图|高德)(?:地图)?(?:目录)?(?:已|已经)?(?:核对|核验|确认)(?:到|了)?(?:的)?(?:实际|真实)(?:地点|门店|店铺|商户)",
+        "地图目录中匹配到的候选记录", text,
+    )
+    text = re.sub(
+        r"(?:这些|上述|以上)(?:店铺|门店|商户|地点)?(?:都|均)?(?:是|为)(?:地图|高德)?(?:目录中)?(?:真实|实际)(?:存在的)?(?:地点|店铺|门店|商户)",
+        "这些是目录匹配候选，现场存在情况未核实", text,
+    )
+    text = re.sub(
+        r"(?:已|已经)?(?:实地)?(?:核实|确认)(?:了)?(?:这家|该|上述|这些)?(?:门店|店铺|商户|地点)?(?:的)?(?:真实|确实|实际)?(?:存在|营业|开业)",
+        "对应目录记录已匹配，现场存在与营业情况未核实", text,
+    )
+    return text
 
 
 def _web_search_query(intent):
@@ -513,14 +535,14 @@ class Dialogue:
                 raise ValueError("unknown_place: 只能展示已查得地点")
             if identifier in shown:
                 raise ValueError("already_shown: 换批不得重复推荐，耗尽时请明确说明")
-        introduction = str(args.get("introduction") or "")[:2000]
+        introduction = _safe_candidate_prose(str(args.get("introduction") or "")[:2000])
         prose = introduction + " ".join(str(item.get("reason", "")) for item in places)
         if any(row.get("name") and row["name"] in prose for key, row in self.known.items() if key not in ids):
             raise ValueError("unselected_place_in_text: 文字不可另推卡片之外的地点")
         candidates, paragraphs = [], [introduction]
         for number, item in enumerate(places, 1):
             row = deepcopy(self.known[item["poi_id"]])
-            reason = str(item.get("reason") or "")[:1500]
+            reason = _safe_candidate_prose(str(item.get("reason") or "")[:1500])
             source_ids = item.get("source_ids") or []
             if any(source_id not in self.sources for source_id in source_ids):
                 raise ValueError("unknown_source")
@@ -540,6 +562,11 @@ class Dialogue:
         self.intent["sources"] = list(self.sources.values())[-12:]
         self.pending["semantic_request"] = self.intent
         kind = "route" if self.route else "route_comparison" if self.comparison else "candidates" if self.candidates else "clarify" if self.clarify else "chat"
+        if self.candidates:
+            message = _safe_candidate_prose(message)
+            scope_note = "地点依据：以上为地图/校园目录匹配结果，未现场核实存在性、入口或营业状态。"
+            if scope_note not in message:
+                message += "\n\n" + scope_note
         if self.sources:
             source_list = " · ".join(f"[{source['source_id']}]({source['url']})" for source in self.sources.values())
             message += "\n\n参考来源：" + source_list

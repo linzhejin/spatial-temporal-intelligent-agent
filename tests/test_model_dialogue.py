@@ -391,8 +391,8 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"],
                            "area": "武汉大学", "limit": 1, "web_research_requested": True}),
         reply(search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
-        reply(present_places={"introduction": "门店消费信息参考网页来源。", "places": [
-            {"poi_id": candidate["poi_id"], "reason": "地图核对到该地点；消费信息以来源为准。",
+        reply(present_places={"introduction": "下面几家都是地图核对到的实际地点。门店消费信息参考网页来源。", "places": [
+            {"poi_id": candidate["poi_id"], "reason": "地图目录中匹配到的候选记录；消费信息以来源为准。",
              "source_ids": ["Sfact123"]},
         ]}),
     ]
@@ -412,6 +412,16 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     assert "火锅" in web_calls[0][1]["query"]
     assert "武汉大学" in web_calls[0][1]["query"]
     assert result["candidates"][0]["source_ids"] == ["Sfact123"]
+    assert "地图核对到的实际地点" not in result["message"]
+    assert "地图目录中匹配到的候选记录" in result["message"]
+    assert "未现场核实存在性、入口或营业状态" in result["message"]
+    system_prompt = model.call_args_list[0].kwargs["messages"][0]["content"]
+    assert "地图返回记录不等于现场存在性核实" in system_prompt
+    map_schema = next(tool for tool in model.call_args_list[1].kwargs["tools"]
+                      if tool["function"]["name"] == "search_poi_candidates")
+    assert "不证明现场存在" in map_schema["function"]["description"]
+    assert any("evidence_scope" in message.get("content", "")
+               for message in model.call_args_list[2].kwargs["messages"])
 
 
 def test_web_flow_falls_back_to_grounded_map_search_when_model_skips_map_step(model, monkeypatch):
