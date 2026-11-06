@@ -110,6 +110,59 @@ def test_strategy_is_visible_before_route_and_food_candidates_can_be_paged(stati
         browser.close()
 
 
+def test_failed_run_shows_contextual_recovery_options_instead_of_an_error(static_site):
+    messages = []
+
+    def json_response(route, data, status=200):
+        route.fulfill(status=status, content_type="application/json; charset=utf-8",
+                      body=json.dumps({"data": data}, ensure_ascii=False))
+
+    def handle(route):
+        url = urlsplit(route.request.url)
+        if url.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+        elif url.path == "/api/conversations" and route.request.method == "POST":
+            json_response(route, {"conversation_id": "recovery-conversation"})
+        elif url.path.endswith("/messages") and route.request.method == "POST":
+            messages.append(route.request.post_data_json)
+            json_response(route, {"run_id": f"recovery-run-{len(messages)}"})
+        elif url.path == "/api/runs/recovery-run-1":
+            json_response(route, {
+                "status": "failed", "task_id": "recovery-task", "current_task_revision": 2,
+                "error": {"code": "provider_internal", "message": "private provider traceback"},
+            })
+        elif url.path == "/api/runs/recovery-run-2":
+            json_response(route, {
+                "status": "completed", "task_id": "recovery-task", "current_task_revision": 3,
+                "result": {"task_type": "chat", "response_kind": "chat", "message": "已按原条件继续。"},
+            })
+        elif url.path == "/api/road-conditions":
+            json_response(route, {"count": 0, "conditions": [], "active_event_version": "test"})
+        elif url.path.startswith("/api/"):
+            json_response(route, {})
+        else:
+            route.continue_()
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        context = browser.new_context(viewport={"width": 1280, "height": 900}, service_workers="block")
+        context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page = context.new_page()
+        page.route("**/*", handle)
+        page.goto(static_site, wait_until="domcontentloaded")
+        page.locator("#nl-input").fill("我在信图，想去总图附近干饭")
+        page.locator("#submit-btn").click()
+
+        expect(page.get_by_text("我保留了当前需求和已确认条件", exact=False)).to_be_visible(timeout=15000)
+        expect(page.get_by_text("任务没有完成", exact=False)).to_have_count(0)
+        expect(page.get_by_text("private provider traceback", exact=False)).to_have_count(0)
+        page.get_by_role("button", name="按原条件继续").click()
+        expect(page.get_by_text("已按原条件继续。", exact=False)).to_be_visible(timeout=15000)
+        assert messages[1]["continuation_task_id"] == "recovery-task"
+        assert messages[1]["base_revision"] == 2
+        browser.close()
+
+
 def test_required_viewport_widths_fit_without_horizontal_page_scroll(static_site):
     with sync_playwright() as p:
         browser = p.chromium.launch()

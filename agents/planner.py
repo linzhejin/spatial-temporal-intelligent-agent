@@ -1451,7 +1451,7 @@ def _candidate_snapshot_rows(candidates: list[dict] | None) -> list[dict]:
 def _place_request_state(query: str, *, activities=None, subcategories=None,
                          pending_slot=None, start=None, constraints=None,
                          previous=None, candidate_poi_ids=None, selected_poi_id=None,
-                         candidate_places=None,
+                         candidate_places=None, candidate_pool=None,
                          follow_up_requests=None, search_anchor=None,
                          mode="walk") -> dict:
     previous = previous if isinstance(previous, dict) else {}
@@ -1478,6 +1478,8 @@ def _place_request_state(query: str, *, activities=None, subcategories=None,
                                    else previous.get("candidate_poi_ids") or []),
         "candidate_places": deepcopy(candidate_places if candidate_places is not None
                                       else previous.get("candidate_places") or []),
+        "candidate_pool": deepcopy(candidate_pool if candidate_pool is not None
+                                    else previous.get("candidate_pool") or []),
         "unresolved_revision": previous.get("unresolved_revision"),
         "unresolved_route_requirements": previous.get("unresolved_route_requirements"),
         "result_dependencies": deepcopy(previous.get("result_dependencies")),
@@ -2622,7 +2624,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         replacement, intent = activity_revision
         place_request.update({
             "selected_poi_id": None,
-            "candidate_poi_ids": [], "candidate_places": [],
+            "candidate_poi_ids": [], "candidate_places": [], "candidate_pool": [],
         })
         if not intent:
             place_request["unresolved_revision"] = str(query)
@@ -2702,7 +2704,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
         if not fresh_named_choice and not candidate_snapshot_is_current(place_request.get("result_dependencies")):
             pending = deepcopy(place_request)
             pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
-                            "candidate_places": [], "selected_poi_id": None})
+                            "candidate_places": [], "candidate_pool": [], "selected_poi_id": None})
             start = pending.get("search_anchor") or pending.get("start")
             activities, categories = pending.get("activities") or [], pending.get("subcategories") or []
             try:
@@ -2862,7 +2864,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                 # without guessing the earlier goal from conversation prose.
                 completed = deepcopy(saved_request)
                 completed.update({"pending_slot": "selection", "candidate_poi_ids": [],
-                                  "candidate_places": [],
+                                  "candidate_places": [], "candidate_pool": [],
                                   "selected_poi_id": None})
                 route_response["completed_place_request"] = completed
             return route_response
@@ -2998,7 +3000,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
                                    or (saved_request or {}).get("original_query")),
                     "original_query": next_query or "下一站",
                     "selected_poi_id": None, "candidate_poi_ids": [],
-                    "candidate_places": [], "search_anchor": None}
+                    "candidate_places": [], "candidate_pool": [], "search_anchor": None}
         pending = _place_request_state(
             next_query or "下一站", activities=next_activities,
             subcategories=next_categories, pending_slot="follow_up",
@@ -3159,7 +3161,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             pending = deepcopy(place_request) if isinstance(place_request, dict) else None
             if pending is not None:
                 pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
-                                "candidate_places": [], "selected_poi_id": None})
+                                "candidate_places": [], "candidate_pool": [], "selected_poi_id": None})
             return {"response_kind": "clarify", "message": message,
                     "route": None, "route_kind": None, "candidates": None,
                     "clarify": {"question": message, "options": ["重新搜索"]},
@@ -3535,7 +3537,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             if isinstance(place_request, dict):
                 pending = deepcopy(place_request)
                 pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
-                                "candidate_places": [], "selected_poi_id": None})
+                                "candidate_places": [], "candidate_pool": [], "selected_poi_id": None})
                 question = result.get("message") or "附近地点暂时无法核实，请调整条件或稍后重试。"
                 return {"response_kind": "clarify", "message": question, "route": None,
                         "route_kind": None, "candidates": None, "needs_input": True,
@@ -3553,7 +3555,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             if isinstance(place_request, dict):
                 pending = deepcopy(place_request)
                 pending.update({"pending_slot": "follow_up", "candidate_poi_ids": [],
-                                "candidate_places": [], "selected_poi_id": None})
+                                "candidate_places": [], "candidate_pool": [], "selected_poi_id": None})
                 return {"response_kind": "clarify", "message": empty_message,
                         "route": None, "route_kind": None, "candidates": None, "needs_input": True,
                         "clarify": {"question": empty_message, "options": []},

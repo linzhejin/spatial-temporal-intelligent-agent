@@ -144,6 +144,8 @@ class PlaceRequestState(Contract):
     selected_poi_id: Identifier | None = None
     candidate_poi_ids: list[Identifier] = Field(default_factory=list, max_length=20)
     candidate_places: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
+    # Map-verified candidates not yet shown in the current recommendation batch.
+    candidate_pool: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     unresolved_revision: str | None = Field(default=None, max_length=500)
     unresolved_route_requirements: str | None = Field(default=None, max_length=2000)
     result_dependencies: dict[str, Any] | None = None

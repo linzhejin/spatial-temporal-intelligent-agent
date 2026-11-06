@@ -88,6 +88,9 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
              "keywords": {"type": "array", "items": {"type": "string"}},
              "exclude_terms": {"type": "array", "items": {"type": "string"}},
              "web_research_requested": {"type": "boolean", "description": "用户请求商户/餐饮推荐、攻略或地图目录可能不全的地点时设为true；地图只能匹配目录中的名称与坐标记录，不能证明现场存在或营业；网页用于发现候选和补充有来源的描述"},
+             "web_page_read_requested": {"type": "boolean", "description": "仅当用户明确需要核对门店级详情（如人均、营业时间或近期评价）时设为true；一般附近推荐只需搜索摘要和地图匹配，不必读取网页正文"},
+             "candidate_action": {"type": "string", "enum": ["recommend", "next_batch"],
+                                  "description": "用户要求换一批/换一家且继续当前地点条件时设为next_batch；筛选条件变化时设为recommend"},
              "activities": {"type": "array", "items": {"type": "string"}},
              "subcategories": {"type": "array", "items": {"type": "string"}},
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
@@ -256,9 +259,12 @@ class Dialogue:
         self.pending["semantic_request"] = self.intent
         self.sources = {item["source_id"]: item for item in self.intent.get("sources", [])
                         if isinstance(item, dict) and item.get("source_id")}
-        self.known = {item["poi_id"]: item for item in self.pending.get("candidate_places", [])
+        self.known = {item["poi_id"]: item for item in [
+                          *(self.pending.get("candidate_pool") or []),
+                          *(self.pending.get("candidate_places") or []),
+                      ]
                       if isinstance(item, dict) and item.get("poi_id")}
-        selected_id = self.context.get("selected_poi_id") or self.pending.get("selected_poi_id")
+        selected_id = self.context.get("selected_poi_id")
         accepted_ids = set(self.pending.get("candidate_poi_ids") or [])
         if selected_id in accepted_ids and selected_id in self.known:
             self.pending["selected_poi_id"] = selected_id
@@ -272,6 +278,8 @@ class Dialogue:
         else:
             self.pending.pop("selected_poi_id", None)
             self.direct_route_selection = False
+        self.turn_action = "recommend"
+        self._intent_resolved = not bool(self.context.get("place_request")) or self.direct_route_selection
         self.route_preplanned = False
         self.fresh = set()
         self.candidates, self.route, self.route_kind, self.comparison = None, None, None, None
@@ -288,7 +296,11 @@ class Dialogue:
         self.coord_start, self.coord_end, self.coord_waypoints = coord_start, coord_end, coord_waypoints
         self.previous_route = self.context.get("previous_route_state")
         self.spatial_snapshot = None
-        trusted = {"active_task": _compact(self.pending), "previous_route": _compact(self.previous_route),
+        trusted_task = deepcopy(self.pending)
+        if trusted_task.get("candidate_pool"):
+            trusted_task["candidate_pool_count"] = len(trusted_task["candidate_pool"])
+            trusted_task.pop("candidate_pool", None)
+        trusted = {"active_task": _compact(trusted_task), "previous_route": _compact(self.previous_route),
                    "route_context_uncertain": bool(self.context.get("route_context_uncertain")),
                    "map_start": coord_start, "map_end": coord_end, "map_waypoints": coord_waypoints,
                    "selected_poi_id": self.pending.get("selected_poi_id"), "travel_mode": travel_mode}
@@ -329,7 +341,7 @@ class Dialogue:
         intent = pending.setdefault("semantic_request", {}) or {}
         changed_search = relation == "new"
         for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms",
-                      "web_research_requested", "budget_per_person", "limit"):
+                      "web_research_requested", "web_page_read_requested", "budget_per_person", "limit"):
             if field in args:
                 value = args[field]
                 if field == "operation" and (not isinstance(value, str) or value not in _OPERATION_TOOL_NAMES):
@@ -341,14 +353,16 @@ class Dialogue:
                     raise ValueError("invalid goal")
                 if field == "limit" and (type(value) is not int or not 1 <= value <= 20):
                     raise ValueError("invalid limit")
-                if field == "web_research_requested" and type(value) is not bool:
-                    raise ValueError("invalid web_research_requested")
+                if field in {"web_research_requested", "web_page_read_requested"} and type(value) is not bool:
+                    raise ValueError(f"invalid {field}")
                 if field == "budget_per_person" and (type(value) not in (int, float) or not 0 < value <= 100000):
                     raise ValueError("invalid budget_per_person")
                 changed_search |= field not in {"goal", "operation"} and value != intent.get(field)
                 intent[field] = deepcopy(value)
         if "web_research_requested" not in args and relation == "new":
             intent["web_research_requested"] = False
+        if "web_page_read_requested" not in args and relation == "new":
+            intent["web_page_read_requested"] = False
         for field in ("start", "search_anchor", "mode", "strategy", "activities", "subcategories"):
             if field in args:
                 if field in {"start", "search_anchor"} and args[field] is not None:
@@ -365,7 +379,8 @@ class Dialogue:
             pending["constraints"] = HardConstraints.model_validate({**previous_constraints, **incoming}).model_dump()
             changed_search |= pending["constraints"] != previous_constraints
         for field in args.get("clear_fields", []):
-            if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms"}:
+            if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms",
+                         "web_page_read_requested"}:
                 intent.pop(field, None)
                 changed_search = True
             elif field in {"start", "search_anchor", "strategy"}:
@@ -376,14 +391,36 @@ class Dialogue:
         self._last_task_update_changed_search = changed_search
         if changed_search:
             intent["shown_ids"] = []
-            pending.update({"candidate_poi_ids": [], "candidate_places": [], "result_dependencies": None})
+            pending.update({"candidate_poi_ids": [], "candidate_places": [], "candidate_pool": [],
+                            "result_dependencies": None})
             pending.pop("selected_poi_id", None)
             self.fresh.clear()
             self.last_search = {}
         pending["semantic_request"] = intent
+        candidate_action = args.get("candidate_action", "recommend")
+        if candidate_action not in {"recommend", "next_batch"}:
+            raise ValueError("invalid candidate_action")
+        if candidate_action == "next_batch" and (relation != "continue" or changed_search):
+            raise ValueError("next_batch requires unchanged place search conditions")
+        self.turn_action = candidate_action
+        self._intent_resolved = True
+        if candidate_action == "next_batch":
+            shown = set(intent.get("shown_ids") or [])
+            pool = pending.get("candidate_pool") or []
+            remaining = [row for row in pool if row.get("poi_id") not in shown]
+            self.last_search = {"status": "ok", "online_status": "ok",
+                                "candidates": deepcopy(remaining), "count": len(remaining)}
+            self.place_search_count = 2
+            if not remaining:
+                self.clarify = {
+                    "question": "这次检索到的候选已经展示完了。要扩大搜索范围，还是换一种地点类型？",
+                    "options": ["扩大搜索范围", "换一种地点类型"], "slot": "selection",
+                }
         PlaceRequestState.model_validate(pending)
         self.pending, self.intent = pending, intent
-        return {"accepted_task": _compact(pending)}
+        compact_pending = deepcopy(pending)
+        compact_pending.pop("candidate_pool", None)
+        return {"accepted_task": _compact(compact_pending)}
 
     def _endpoint(self, ref, *, allow_pending=True):
         """Never accept invented coordinates or use ambiguous provider identities."""
@@ -487,6 +524,11 @@ class Dialogue:
                 self.fresh.add(identifier)
         if name in {"search_poi_candidates", "find_reachable_places"}:
             self.last_search = result
+            if self.intent.get("operation") == "place_search":
+                self.pending["candidate_pool"] = [
+                    deepcopy(row) for row in (result.get("candidates") or [])
+                    if isinstance(row, dict) and row.get("poi_id")
+                ][:20]
             if name == "search_poi_candidates":
                 if result.get("search_area"):
                     self.intent["area"] = result["search_area"]
@@ -559,6 +601,15 @@ class Dialogue:
 
     def result(self, message, *, failed=False):
         from agents.planner import _sanitize_message
+        if failed and not (self.route or self.comparison or self.candidates):
+            question = "刚才这一步暂时没有完成，我保留了当前需求和已确认条件。你想按原条件继续，还是调整区域或类型？"
+            self.clarify = {"question": question,
+                            "options": ["按原条件继续", "调整区域或类型"], "slot": "other"}
+            message = question
+        elif failed and self.candidates:
+            message = "我保留了这批已核对候选。你可以先选择其中一个，或说“换一批”继续。"
+        elif failed and self.route:
+            message = "路线结果已保留，你可以先查看路线；如果还需要说明，我可以继续补充。"
         self.intent["sources"] = list(self.sources.values())[-12:]
         self.pending["semantic_request"] = self.intent
         kind = "route" if self.route else "route_comparison" if self.comparison else "candidates" if self.candidates else "clarify" if self.clarify else "chat"
@@ -580,7 +631,9 @@ class Dialogue:
             result["completed_place_request"] = deepcopy(self.pending)
             result["place_request"] = None
         if failed:
-            result["execution_status"] = "partial" if self.route or self.candidates else "failed"
+            result["execution_status"] = "partial" if self.route or self.comparison or self.candidates else "needs_input"
+            if result["execution_status"] == "needs_input":
+                result["needs_input"] = True
         return result
 
     def run(self):
@@ -622,8 +675,9 @@ class Dialogue:
             requested_count = min(self.intent.get("limit", 4), 4)
             candidate_count = len(self.last_search.get("candidates") or [])
             web_research_requested = self.intent.get("web_research_requested") is True
+            page_read_requested = self.intent.get("web_page_read_requested") is True
             web_lookup_complete = (web_research_requested and self.web_search_count >= 1
-                                   and (self.web_fetch_count >= 1 or not self.sources))
+                                   and (not page_read_requested or self.web_fetch_count >= 1 or not self.sources))
             web_results_exhausted = (web_lookup_complete and self.place_search_count >= 1
                                      and ("limit" not in self.intent or self.place_search_count >= 2))
             if operation == "place_search" and not candidate_count and (
@@ -645,7 +699,7 @@ class Dialogue:
             required_tool = None
             try:
                 web_map_search_pending = (web_research_requested and self.web_search_count >= 1
-                    and (self.web_fetch_count >= 1 or not self.sources)
+                    and (not page_read_requested or self.web_fetch_count >= 1 or not self.sources)
                     and self.place_search_count < 2
                     and (self.place_search_count == 0
                          or "limit" in self.intent and candidate_count < requested_count))
@@ -654,7 +708,7 @@ class Dialogue:
                         ready_to_present=ready_to_present,
                         web_research_requested=web_research_requested,
                         web_search_available=self.web_search_count < 1,
-                        web_fetch_available=bool(self.sources) and self.web_fetch_count < 1,
+                        web_fetch_available=bool(self.sources) and page_read_requested and self.web_fetch_count < 1,
                         web_map_search_pending=web_map_search_pending,
                         selected_place=bool(self.pending.get("selected_poi_id")),
                         route_preplanned=self.route_preplanned)
@@ -665,16 +719,29 @@ class Dialogue:
                     "temperature": 0.2,
                     "max_tokens": 2600,
                 }
-                if operation not in _OPERATION_TOOL_NAMES:
+                if not self._intent_resolved:
+                    intent_tools = tool_schemas(None)
+                    request["tools"] = [item for item in intent_tools
+                                        if item["function"]["name"] in {"update_task", "ask_user"}]
+                    request["tool_choice"] = "auto"
+                elif operation not in _OPERATION_TOOL_NAMES:
                     request["tools"] = [item for item in schemas
                                         if item["function"]["name"] == "update_task"]
                     request["tool_choice"] = {
                         "type": "function", "function": {"name": "update_task"},
                     }
+                elif self.turn_action == "next_batch" and operation == "place_search":
+                    required_tool = "present_places" if candidate_count else None
+                    request["tools"] = [item for item in tool_schemas(None)
+                                        if item["function"]["name"] == "present_places"]
+                    if required_tool:
+                        request["tool_choice"] = {
+                            "type": "function", "function": {"name": required_tool},
+                        }
                 elif operation == "place_search" and web_research_requested:
                     if self.web_search_count < 1:
                         required_tool = "search_web"
-                    elif self.sources and self.web_fetch_count < 1:
+                    elif self.sources and page_read_requested and self.web_fetch_count < 1:
                         required_tool = "read_web_page"
                     elif web_map_search_pending:
                         required_tool = "search_poi_candidates"
@@ -701,6 +768,12 @@ class Dialogue:
                 return self.result("对话模型返回了空结果，已保留本轮需求，请重试。", failed=True)
             msg = choices[0].message
             calls = getattr(msg, "tool_calls", None) or []
+            if not calls and not self._intent_resolved:
+                self.clarify = {
+                    "question": "你是想继续刚才的地点搜索，还是想换一个区域或类型？",
+                    "options": ["继续刚才的搜索", "换区域或类型"], "slot": "other",
+                }
+                return self.result(self.clarify["question"])
             if (operation == "place_search" and web_research_requested
                     and required_tool == "search_poi_candidates"):
                 expected_calls = [call for call in calls
@@ -799,7 +872,9 @@ class Dialogue:
                 if (name == "update_task" and not answer.get("error")
                         and search_intent_changed and not auto_search_done
                         and self.place_search_count < 2):
-                    if self.intent.get("web_research_requested") is True:
+                    if self.turn_action == "next_batch":
+                        auto_search_done = True
+                    elif self.intent.get("web_research_requested") is True:
                         if self.web_search_count < 1:
                             self.web_search_count = 1
                             query = _web_search_query(self.intent)
@@ -818,7 +893,7 @@ class Dialogue:
                             source_rows = search_result.get("results") or []
                             source_id = next((row.get("source_id") for row in source_rows
                                               if isinstance(row, dict) and row.get("source_id")), None)
-                            if source_id:
+                            if source_id and self.intent.get("web_page_read_requested") is True:
                                 self.web_fetch_count = 1
                                 fetch_result = web_evidence.execute(
                                     "read_web_page", {"source_id": source_id}, self.sources,

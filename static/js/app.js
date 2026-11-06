@@ -3565,6 +3565,57 @@
         return new Promise(function (resolve) { setTimeout(resolve, delayMs || 900); });
     }
 
+    function normalizeTerminalRun(run) {
+        var result = run && run.result && typeof run.result === 'object' ? run.result : null;
+        var status = run && run.status;
+        if (status === 'cancelled' || status === 'superseded') {
+            result = {
+                task_type: 'chat', response_kind: 'chat',
+                message: status === 'cancelled'
+                    ? '这项任务已停止，你之前确认的条件仍保留。需要继续时告诉我下一步。'
+                    : '这项任务已有更新版本，旧结果没有覆盖当前内容。请继续最新任务。',
+            };
+        } else if (status === 'failed') {
+            var usefulKinds = ['route', 'route_comparison', 'candidates', 'no_route', 'clarify'];
+            var hasCandidateResults = result && result.response_kind === 'candidates'
+                && Array.isArray(result.candidates) && result.candidates.length > 0;
+            var hasRouteResult = result && ['route', 'route_comparison', 'no_route'].indexOf(result.response_kind) !== -1;
+            if (!result || usefulKinds.indexOf(result.response_kind) === -1
+                    || result.execution_status === 'failed' && !hasCandidateResults && !hasRouteResult) {
+                var question = '刚才这一步暂时没有完成，我保留了当前需求和已确认条件。你想按原条件继续，还是调整区域或类型？';
+                var pending = result && result.place_request;
+                result = {
+                    task_type: 'unknown', response_kind: 'clarify', message: question, reply: question,
+                    clarify: { question: question, options: ['按原条件继续', '调整区域或类型'], slot: 'other' },
+                    needs_input: true, execution_status: 'needs_input', place_request: pending || null,
+                };
+            } else if (hasCandidateResults) {
+                result.message = '我保留了这批已核对候选。你可以先选择其中一个，或说“换一批”继续。';
+                result.reply = result.message;
+                result.execution_status = 'partial';
+            } else if (hasRouteResult && result.execution_status === 'failed') {
+                result.message = result.response_kind === 'no_route'
+                    ? (result.message || '当前条件下没有找到可行路线，可以调整条件后再试。')
+                    : '路线结果已保留，你可以先查看路线；如果还需要说明，我可以继续补充。';
+                result.reply = result.message;
+                result.execution_status = 'partial';
+            }
+        }
+        if (!result) {
+            var fallback = '这一步暂时没有完成。我保留了当前需求，你可以重试刚才的请求，或告诉我想调整什么。';
+            result = {
+                task_type: 'unknown', response_kind: 'clarify', message: fallback, reply: fallback,
+                clarify: { question: fallback, options: ['重试刚才的请求', '调整需求'], slot: 'other' },
+                needs_input: true, execution_status: 'needs_input',
+            };
+        }
+        if (run && run.task_id) result._task_id = run.task_id;
+        if (run && Number.isInteger(run.current_task_revision)) {
+            result._task_revision = run.current_task_revision;
+        }
+        return result;
+    }
+
     async function submitQueuedMessage(query, requestBody, replyBubble, epoch) {
         var conversationId = await ensureServerConversation(epoch);
         if (epoch !== state.conversationEpoch) return null;
@@ -3656,14 +3707,7 @@
                 if (lastLabel) updateChatBubble(replyBubble, '🌸 ' + lastLabel + '…');
                 if (terminal.indexOf(run.status) !== -1) {
                     terminalReached = true;
-                    if (run.result && (run.status === 'completed' || run.status === 'partial' || run.status === 'needs_input')) {
-                        run.result._task_id = run.task_id;
-                        run.result._task_revision = run.current_task_revision;
-                        return run.result;
-                    }
-                    var message = run.error && run.error.message;
-                    throw new Error(message || (run.status === 'cancelled'
-                        ? '这项任务已取消。' : '任务没有完成，请稍后重试。'));
+                    return normalizeTerminalRun(run);
                 }
                 if (Date.now() - pollStartedAt >= 90000) {
                     updateChatBubble(replyBubble, '任务处理时间较长，正在继续等待…');
@@ -3725,6 +3769,8 @@
         if (activeFoodGroup && /^(?:我)?(?:不想|不愿意|不吃|不去|不选|不要|别去|别吃)(?:去|吃|选|找|在)?(?:食堂|餐厅|快餐)/.test(compactText)) {
             return true;
         }
+        if (/^(?:换一批|换一家|再换一批|再换一家|再来一批|还有别的吗)$/.test(compactText)
+                && /(请选择|选择.*地点|候选)/.test(state.pendingServerQuestion || '')) return true;
         // An origin plus "take me there" answers the pending origin question;
         // an added weather request must not detach it from the saved destination.
         if (/(起点|出发|从哪里|在哪儿|在哪里)/.test(state.pendingServerQuestion || '')
@@ -4098,11 +4144,14 @@
             }
         } catch (err) {
             if (conversationEpoch !== state.conversationEpoch) return;
-            // 所有错误都走对话气泡，不弹错误窗
             hideWelcomeElements();
-            var errMsg = (err && err.message) || '出了点小问题，再试一次吧～';
-            updateChatBubble(thinkingBubble, errMsg);
-            addConversationTurn(query, { task_type: 'error', message: errMsg }, turnId);
+            var recoveryQuestion = '刚才这一步暂时没有完成。你的原始需求还在，可以重试这条请求，也可以补充或修改条件。';
+            updateChatBubble(thinkingBubble, recoveryQuestion);
+            renderClarifyOptions([{ label: '重试刚才的需求', query: String(query || '') }], null, null);
+            addConversationTurn(query, {
+                task_type: 'chat', response_kind: 'chat',
+                message: recoveryQuestion, reply: recoveryQuestion,
+            }, turnId);
         } finally { /* Each task updates its own reply bubble. */ }
     }
 
@@ -4811,17 +4860,20 @@
         chatContent.appendChild(row);
 
         options.slice(0, 5).forEach(function (opt) {
+            var label = typeof opt === 'string' ? opt : opt && opt.label;
+            if (!label) return;
+            var answer = typeof opt === 'string' ? opt : (opt.query || label);
             var btn = document.createElement('button');
             btn.type = 'button';
             btn.className = 'clarify-chip';
-            btn.textContent = opt;
+            btn.textContent = label;
             btn.addEventListener('click', function () {
                 // “其他”不是一个地点。把输入焦点交还给用户，并保留
                 // 当前澄清任务，避免把它提交成固定 POI 查询。
-                if (/^其他(?:球类|运动)?$/.test(String(opt || '').trim())) {
+                if (/^其他(?:球类|运动)?$/.test(String(label || '').trim())) {
                     var input = document.getElementById('nl-input');
                     if (input) {
-                        input.placeholder = /球/.test(opt)
+                        input.placeholder = /球/.test(label)
                             ? '请补充球类，例如排球、网球…'
                             : '请补充运动类型，例如游泳、瑜伽…';
                         input.focus();
@@ -4831,11 +4883,11 @@
                     return;
                 }
                 wrap.querySelectorAll('.clarify-chip').forEach(function (b) { b.disabled = true; });
-                trackEvent('clarify_answer', { answer: opt });
+                trackEvent('clarify_answer', { answer: label });
                 var continuation = taskId && Number.isInteger(taskRevision)
                     ? { continuation_task_id: taskId, base_revision: taskRevision }
                     : null;
-                handleNlSubmit(opt, false, null, continuation);
+                handleNlSubmit(answer, false, null, continuation);
             });
             wrap.appendChild(btn);
         });

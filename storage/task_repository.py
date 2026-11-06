@@ -843,7 +843,8 @@ def _finish_run(
         pending = deepcopy(result.get("completed_place_request") or result.get("place_request"))
         message = "路网、地点或路况在计算期间发生变化，旧路线未交付。请重新查询并选择下一站。"
         if isinstance(pending, dict):
-            pending.update({"candidate_poi_ids": [], "candidate_places": [], "selected_poi_id": None})
+            pending.update({"candidate_poi_ids": [], "candidate_places": [],
+                            "candidate_pool": [], "selected_poi_id": None})
             if pending.get("pending_slot") in ("selection", "follow_up", None):
                 pending["pending_slot"] = "follow_up"
             elif pending.get("pending_slot") == "destination":

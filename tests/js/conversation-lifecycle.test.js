@@ -527,7 +527,10 @@ test('older no-route reply cannot clear a newer displayed route', async () => {
 
 test('failed request keeps route and settles its bubble', async () => {
     const h=harness(); h.state.routeStore.replace(existingRoute()); h.setApi(async () => { throw Error('断网'); });
-    await h.submit('查天气'); assert.equal(h.clearCount(),0); assert.equal(h.bubbles[0].text,'断网');
+    await h.submit('查天气');
+    assert.equal(h.clearCount(),0);
+    assert.match(h.bubbles[0].text, /原始需求还在/);
+    assert.doesNotMatch(h.bubbles[0].text, /断网/);
 });
 test('desktop route feedback gives one useful overview with endpoints, strategy, distance, time and stop count', async () => {
     const h = harness();
@@ -887,6 +890,33 @@ test('clarification answer continues its server task while an unrelated weather 
     assert.equal(sent.continuation_task_id, undefined);
     assert.equal(h.state.pendingServerTaskId, 'pending-task-2');
 });
+
+test('换一批 continues the active candidate task instead of starting a new search', async () => {
+    const h = harness();
+    h.state.serverConversationId = 'candidate-session';
+    h.state.pendingServerTaskId = 'candidate-task';
+    h.state.pendingServerTaskRevision = 4;
+    h.state.pendingServerQuestion = '请选择一个地点继续规划路线。';
+    const submitted = [];
+    h.setQueuedApi(async (url, body) => {
+        if (url.endsWith('/messages')) {
+            submitted.push(body);
+            return { run_id: 'next-batch-run' };
+        }
+        if (url.includes('/api/runs/next-batch-run?')) {
+            return { status: 'completed', task_id: 'candidate-task', current_task_revision: 5,
+                result: { task_type: 'path_planning', response_kind: 'candidates',
+                    message: '下一批候选。', candidates: [] } };
+        }
+        throw new Error('unexpected request ' + url);
+    });
+
+    await h.submit('换一批');
+
+    assert.equal(submitted.length, 1);
+    assert.equal(submitted[0].continuation_task_id, 'candidate-task');
+    assert.equal(submitted[0].base_revision, 4);
+});
 test('free-form location answer continues the original pending task', async () => {
     const h = harness();
     h.state.pendingServerTaskId = 'pending-route';
@@ -1216,6 +1246,47 @@ test('polling recovers from a temporary network failure without losing the accep
     assert.equal(result.route_state.route_id, 'recovered');
     assert.equal(polls, 2);
     assert.equal(h.state.activeRuns['run-retry'], undefined);
+});
+
+test('a failed run becomes a recoverable clarification and hides internal error text', async () => {
+    const h = harness();
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations') return { conversation_id: 'recover-session' };
+        if (url.endsWith('/messages')) return { run_id: 'run-failed', status: 'queued' };
+        if (url.includes('/api/runs/run-failed?')) return {
+            status: 'failed', task_id: 'task-failed', current_task_revision: 3,
+            error: { code: 'provider_internal', message: 'private stack and provider response' },
+        };
+        throw new Error('unexpected request ' + url);
+    });
+
+    const result = await h.queued('换一批', {}, { text: 'waiting' }, 0);
+
+    assert.equal(result.response_kind, 'clarify');
+    assert.equal(result._task_id, 'task-failed');
+    assert.equal(result._task_revision, 3);
+    assert.match(result.message, /保留了当前需求/);
+    assert.doesNotMatch(result.message, /任务没有完成|private stack|provider_internal/);
+    assert.equal(h.state.activeRuns['run-failed'], undefined);
+});
+
+test('a submission failure stays conversational and offers to retry the original request', async () => {
+    const h = harness();
+    h.state.productMode = 'planning';
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations') return { conversation_id: 'submit-recovery-session' };
+        if (url.endsWith('/messages')) {
+            const error = new Error('private database exception');
+            error.code = 'unexpected_server_error';
+            throw error;
+        }
+        throw new Error('unexpected request ' + url);
+    });
+
+    await h.submit('我在信图，想去总图附近干饭');
+
+    assert.match(h.bubbles.at(-1).text, /原始需求还在/);
+    assert.doesNotMatch(h.bubbles.at(-1).text, /private database exception|unexpected_server_error/);
 });
 
 test('a lost submit response retries the same request identity and recovers the original run', async () => {
