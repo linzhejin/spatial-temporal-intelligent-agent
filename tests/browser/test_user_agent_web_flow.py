@@ -344,8 +344,8 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         expect(candidate).to_contain_text("\u6d4b\u8bd5\u6a44\u6984\u7403\u5019\u9009\u70b9")
         assert len(messages) == 5
         assert messages[4]["query"] == "\u6a44\u6984\u7403"
-        assert messages[4]["continuation_task_id"] == "local-other-ball-task"
-        assert messages[4]["base_revision"] == 1
+        assert "continuation_task_id" not in messages[4]
+        assert "base_revision" not in messages[4]
 
         input_box.fill("比较三种走法")
         with page.expect_response(lambda response: "/api/runs/local-run-6?" in response.url):

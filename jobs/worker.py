@@ -73,11 +73,6 @@ def process_next_run(database_url, worker_id, graph, lease_seconds=30):
         )
         if status not in {"completed", "partial", "failed", "needs_input"}:
             status = "completed"
-        if status == "failed" and result.get("response_kind") not in {
-                "route", "route_comparison", "candidates", "no_route", "clarify"}:
-            run_context = get_run_input(database_url, run_id) or {}
-            result = _recoverable_failure_result(run_context, result)
-            status = "needs_input"
         finished = finish_run(
             database_url, run_id, worker_id, status=status, result=result, return_status=True,
         )
@@ -92,46 +87,25 @@ def process_next_run(database_url, worker_id, graph, lease_seconds=30):
         except Exception:
             logger.exception("Could not load accepted context for failed run (%s)", run_id)
             run_context = {}
-        recovery = _recoverable_failure_result(run_context)
+        message = "本轮处理遇到服务故障，已保留当前需求，请重试。"
+        recovery = {"task_type": "chat", "response_kind": "chat", "message": message,
+                    "reply": message, "execution_status": "failed", "failure_code": "worker_error"}
+        task = run_context.get("task") or {}
+        if isinstance(task, dict) and isinstance(task.get("place_request"), dict):
+            recovery["place_request"] = task["place_request"]
+        recovery_status = "failed"
         finished = finish_run(
-            database_url, run_id, worker_id, status="needs_input",
+            database_url, run_id, worker_id, status=recovery_status,
             result=recovery, return_status=True,
         )
         return {
             "run_id": run_id,
-            "status": finished if isinstance(finished, str) else "needs_input" if finished else "lease_lost",
+            "status": finished if isinstance(finished, str) else recovery_status if finished else "lease_lost",
             "error_type": type(error).__name__,
         }
     finally:
         heartbeat_stop.set()
         heartbeat.join(timeout=2)
-
-
-def _recoverable_failure_result(run_context, previous_result=None):
-    """Keep accepted task state and turn internal failures into a conversational recovery step."""
-    task = run_context.get("task") if isinstance(run_context, dict) else None
-    task = task if isinstance(task, dict) else {}
-    pending = task.get("place_request")
-    previous_result = previous_result if isinstance(previous_result, dict) else {}
-    if not isinstance(pending, dict):
-        pending = previous_result.get("place_request")
-    if isinstance(previous_result.get("candidates"), list) and previous_result["candidates"]:
-        candidates = previous_result["candidates"]
-        message = "我保留了这批已核对候选。你可以先选择其中一个，或说“换一批”继续。"
-        return {**previous_result, "task_type": previous_result.get("task_type", "path_planning"),
-                "response_kind": "candidates", "message": message, "reply": message,
-                "place_request": pending or previous_result.get("place_request"),
-                "execution_status": "partial"}
-    question = "刚才这一步暂时没有完成，我保留了当前需求和已确认条件。你想按原条件继续，还是调整区域或类型？"
-    recovery = {
-        "task_type": "unknown", "response_kind": "clarify", "message": question,
-        "reply": question,
-        "clarify": {"question": question, "options": ["按原条件继续", "调整区域或类型"], "slot": "other"},
-        "needs_input": True, "execution_status": "needs_input",
-    }
-    if isinstance(pending, dict):
-        recovery["place_request"] = pending
-    return recovery
 
 
 def _worker_loop(database_url, idle_seconds, slot):

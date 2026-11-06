@@ -110,7 +110,7 @@ def test_strategy_is_visible_before_route_and_food_candidates_can_be_paged(stati
         browser.close()
 
 
-def test_failed_run_shows_contextual_recovery_options_instead_of_an_error(static_site):
+def test_failed_run_shows_retry_and_cancel_without_exposing_internal_error(static_site):
     messages = []
 
     def json_response(route, data, status=200):
@@ -153,13 +153,14 @@ def test_failed_run_shows_contextual_recovery_options_instead_of_an_error(static
         page.locator("#nl-input").fill("我在信图，想去总图附近干饭")
         page.locator("#submit-btn").click()
 
-        expect(page.get_by_text("我保留了当前需求和已确认条件", exact=False)).to_be_visible(timeout=15000)
-        expect(page.get_by_text("任务没有完成", exact=False)).to_have_count(0)
+        expect(page.get_by_text("本轮处理未完成，请稍后重试。", exact=False)).to_be_visible(timeout=15000)
         expect(page.get_by_text("private provider traceback", exact=False)).to_have_count(0)
-        page.get_by_role("button", name="按原条件继续").click()
+        expect(page.get_by_role("button", name="取消", exact=True)).to_be_visible()
+        page.get_by_role("button", name="重试", exact=True).click()
         expect(page.get_by_text("已按原条件继续。", exact=False)).to_be_visible(timeout=15000)
         assert messages[1]["continuation_task_id"] == "recovery-task"
         assert messages[1]["base_revision"] == 2
+        assert messages[1]["ui_action"]["type"] == "retry"
         browser.close()
 
 
@@ -200,9 +201,9 @@ def test_required_viewport_widths_fit_without_horizontal_page_scroll(static_site
 
 
 
-@pytest.mark.parametrize("subcategory,should_continue", [("restaurant", True), ("field", False)],
+@pytest.mark.parametrize("subcategory", ["restaurant", "field"],
                          ids=["food", "unrelated-sport"])
-def test_food_revision_only_continues_its_matching_candidate_task(static_site, subcategory, should_continue):
+def test_free_text_revision_does_not_preselect_a_task_in_the_browser(static_site, subcategory):
     messages = []
     def handle(route):
         request = route.request
@@ -245,9 +246,6 @@ def test_food_revision_only_continues_its_matching_candidate_task(static_site, s
         page.locator("#submit-btn").click()
         expect(page.locator(".chat-bubble-reply .chat-bubble-text").last).to_contain_text("已收到", timeout=15000)
         assert len(messages) == 2
-        if should_continue:
-            assert messages[-1].get("continuation_task_id") == "first-task"
-            assert messages[-1].get("base_revision") == 1
-        else:
-            assert not messages[-1].get("continuation_task_id")
+        assert not messages[-1].get("continuation_task_id")
+        assert not messages[-1].get("base_revision")
         browser.close()

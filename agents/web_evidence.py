@@ -15,7 +15,9 @@ API_BASE = "https://api.deepseek.com/v1/tools"
 
 
 def _client():
-    return httpx.Client(timeout=httpx.Timeout(connect=3.0, read=12.0, write=5.0, pool=3.0))
+    from agents.deadline import limited_timeout
+    return httpx.Client(timeout=httpx.Timeout(connect=limited_timeout(3.0), read=limited_timeout(12.0),
+                                              write=limited_timeout(5.0), pool=limited_timeout(3.0)))
 
 
 def _request(endpoint: str, payload: dict) -> dict:

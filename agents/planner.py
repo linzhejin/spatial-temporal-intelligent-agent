@@ -1990,7 +1990,10 @@ def run_agent(query: str, context: dict = None, history: list = None,
               uid: str = None, travel_mode: str = None,
               coord_waypoints: list = None,
               proof_identity: dict = None,
-              tool_trace_callback: Callable[[dict], None] | None = None) -> dict:
+              tool_trace_callback: Callable[[dict], None] | None = None,
+              bind_task_callback: Callable[..., dict] | None = None,
+              read_result_callback: Callable[..., dict] | None = None,
+              deadline_monotonic: float | None = None) -> dict:
     """Agent 主循环。
 
     Returns:
@@ -2118,6 +2121,7 @@ def run_agent(query: str, context: dict = None, history: list = None,
             coord_end=coord_end, coord_waypoints=coord_waypoints,
             travel_mode=travel_mode, uid=uid, execute_tool=execute_tool,
             client_factory=_make_client, trace=tool_trace_callback,
+            bind_task=bind_task_callback, read_result=read_result_callback, deadline_monotonic=deadline_monotonic,
         )
         response["provenance"] = _provenance.finish(
             response_kind=response.get("response_kind"), turns=response.get("turns"),

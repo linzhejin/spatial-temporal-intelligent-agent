@@ -6,13 +6,29 @@ const routeState = require('../../static/js/route-state.js');
 
 // Run the real app control flow. Only DOM/map/network boundaries are replaced;
 // exposing lexical functions here avoids shipping test hooks in the application.
-function harness(storage = new Map()) {
+function harness(storage = new Map(), nativeSession = null) {
     const bubbles = [], rendered = [], candidateRenders = [], clarifyRenders = [], comparisonRenders = [], requests = [], userBubbles = [];
     let clears = 0, stopped = 0, locationCalls = 0, reloads = 0;
     const localStorage = {
         getItem: k => storage.get(k) ?? null,
         setItem: (k,v) => storage.set(k,v),
         removeItem: k => storage.delete(k),
+    };
+    // Convert the older fixture shorthand into a current tab session. This is
+    // test setup, not an application migration from old shared storage.
+    const tabKey = 'test-tab:whu_walker:active_session';
+    if (!nativeSession && !storage.has(tabKey) && storage.has('whu_walker:active_session')) {
+        storage.set(tabKey, storage.get('whu_walker:active_session'));
+    }
+    if (!nativeSession && storage.has('whu_walker:server_conversation')) {
+        const active = storage.get(tabKey) || 'sess_fixture';
+        storage.set(tabKey, active);
+        storage.set('whu_walker:server_conversation:' + active, storage.get('whu_walker:server_conversation'));
+    }
+    const sessionStorage = {
+        getItem: k => storage.get('test-tab:' + k) ?? null,
+        setItem: (k,v) => storage.set('test-tab:' + k,v),
+        removeItem: k => storage.delete('test-tab:' + k),
     };
     const noop = () => {};
     const element = () => ({ hidden: false, style: {}, children: [], innerHTML: '', scrollTop: 0, clientHeight: 100, scrollHeight: 100,
@@ -25,7 +41,8 @@ function harness(storage = new Map()) {
     const context = vm.createContext({
         console, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
         localStorage, navigator: { userAgent: 'desktop', platform: 'Win32' },
-        window: { localStorage, WHURouteState: routeState, location: { reload: () => { reloads++; } } },
+        window: { localStorage, sessionStorage, WHURouteState: routeState, location: { reload: () => { reloads++; } },
+            WhuWalkerSession: nativeSession ? { getId: () => nativeSession } : undefined },
         document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [],
             createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, children: [], textContent: '', disabled: false,
                 addEventListener(name, fn) { this['on' + name] = fn; },
@@ -82,7 +99,6 @@ function harness(storage = new Map()) {
         renderCandidateCards = boundaries.renderCandidateCards;
         renderClarifyOptions = boundaries.renderClarifyOptions;
         renderRouteComparisonCard = boundaries.renderRouteComparison;
-        ensureUserLocation = boundaries.ensureUserLocation;
         apiRequest = boundaries.apiRequest;
         var realSubmitQueuedMessage = submitQueuedMessage;
         globalThis.app = { state: state, init: init, submit: handleNlSubmit, reset: handleReset,
@@ -124,6 +140,64 @@ function harness(storage = new Map()) {
 }
 const existingRoute = () => ({ route_id: 'existing', start: { name: '星湖园' }, end: { name: '科技门' }, travel_mode: 'walk' });
 const routeResult = id => ({ task_type: 'path_planning', response_kind: 'route', recommended: [[1,2],[2,3]], route_state: { ...existingRoute(), route_id: id }, explanation: id });
+
+test('model delivery text is displayed and saved without a client-side rewrite', async () => {
+    const h = harness();
+    const text = '路线已规划。提示：未实地确认道路当前可通行。';
+    h.setApi(async () => ({...routeResult('server route'), assistant_text: text}));
+    await h.submit('从这里去图书馆');
+    assert.equal(h.bubbles[0].text, text);
+    assert.equal(h.state.conversationHistory.at(-1).content, text);
+});
+
+test('native launch identity restores only the current app launch across page reload', async () => {
+    const storage = new Map([['whu_walker:active_session', 'sess_old']]);
+    const first = harness(storage, 'launch-A');
+    await first.init();
+    assert.notEqual(first.state.sessionId, 'sess_old');
+    first.state.conversationHistory = [{role: 'user', content: '当前会话'}];
+    first.save();
+    const reload = harness(storage, 'launch-A');
+    await reload.init();
+    assert.equal(reload.state.sessionId, first.state.sessionId);
+    assert.equal(reload.state.conversationHistory[0].content, '当前会话');
+    const reopened = harness(storage, 'launch-B');
+    await reopened.init();
+    assert.notEqual(reopened.state.sessionId, first.state.sessionId);
+    assert.equal(reopened.state.conversationHistory.length, 0);
+});
+
+test('page reload restores the current completed candidate selection', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => {
+        if (url === '/api/conversations/server-c1') return {
+            messages: [{seq: 1, role: 'user', task_id: 'task-1', content: '找吃饭地点'},
+                {seq: 2, role: 'assistant', task_id: 'task-1', content: '请选择', metadata: {response_kind: 'candidates'}}],
+            tasks: [{task_id: 'task-1', revision: 2, status: 'needs_input', state: {
+                place_request: {candidate_places: [{poi_id: 'poi_001', name: '候选地点'}]}, pending_questions: ['请选择']}}],
+            active_runs: [],
+        };
+        return {};
+    });
+    await h.init();
+    assert.equal(h.candidateRenders.length, 1);
+    assert.equal(h.candidateRenders[0].taskId, 'task-1');
+    assert.equal(h.candidateRenders[0].revision, 2);
+    assert.equal(h.candidateRenders[0].candidates[0].poi_id, 'poi_001');
+});
+
+test('page reload does not reactivate a candidate card superseded by a newer user message', async () => {
+    const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
+    h.setQueuedApi(async url => url === '/api/conversations/server-c1' ? {
+        messages: [{seq: 1, role: 'user', task_id: 'task-1', content: '找吃饭地点'},
+            {seq: 2, role: 'assistant', task_id: 'task-1', content: '请选择', metadata: {response_kind: 'candidates'}},
+            {seq: 3, role: 'user', task_id: null, content: '先查天气'}],
+        tasks: [{task_id: 'task-1', revision: 2, status: 'needs_input', state: {
+            place_request: {candidate_places: [{poi_id: 'poi_001', name: '候选地点'}]}}}], active_runs: [],
+    } : {});
+    await h.init();
+    assert.equal(h.candidateRenders.length, 0);
+});
 function deferred() { let resolve, reject; const promise = new Promise((a,b) => { resolve=a; reject=b; }); return { promise, resolve, reject }; }
 
 test('an over-time shortest reference is not drawn as a selectable comparison', () => {
@@ -165,7 +239,7 @@ test('R starts a clean conversation without reloading the page', () => {
     assert.equal(h.state.conversationHistory.length, 0);
     assert.equal(h.storage.has('whu_walker:server_conversation'), false);
     assert.equal(h.storage.has('whu_walker:explicit_reset_session'), false);
-    const activeSessionId = h.storage.get('whu_walker:active_session');
+    const activeSessionId = h.storage.get('test-tab:whu_walker:active_session');
     assert.ok(activeSessionId);
     const savedContext = JSON.parse(h.storage.get('whu_walker:context:' + activeSessionId));
     assert.deepEqual(savedContext.history, []);
@@ -200,7 +274,7 @@ test('explicit refresh clears old history but later browser reload restores only
     assert.equal(first.state.conversationHistory[0].content, '旧聊天');
 
     first.refreshPage();
-    const freshSessionId = storage.get('whu_walker:active_session');
+    const freshSessionId = storage.get('test-tab:whu_walker:active_session');
     assert.ok(freshSessionId && freshSessionId !== 'sess_previous');
     assert.equal(storage.has('whu_walker:explicit_reset_session'), false);
     assert.equal(first.state.conversationHistory.length, 0);
@@ -407,7 +481,7 @@ test('nearby recommendation does not reuse stale, coarse, or provisional GPS as 
     }
 });
 
-test('nearby recommendation may use only a recent accurate GPS fix as its origin', async () => {
+test('a recent accurate GPS fix is sent as an observation rather than an assumed origin', async () => {
     const h = harness();
     h.state.userLocation = { lng: 114.3, lat: 30.5, accuracy: 35 };
     h.state._dispFix = { lat: 30.5, lng: 114.3, acc: 35, ts: Date.now(), provisional: false };
@@ -419,10 +493,11 @@ test('nearby recommendation may use only a recent accurate GPS fix as its origin
 
     await h.submit('我想吃美食');
 
-    assert.deepEqual(
-        { lng: sent.coord_start.lng, lat: sent.coord_start.lat, name: sent.coord_start.name },
-        { lng: 114.3, lat: 30.5, name: '我的位置' },
-    );
+    assert.equal(sent.coord_start, undefined);
+    assert.deepEqual({lng: sent.location_observation.lng, lat: sent.location_observation.lat,
+        accuracy_m: sent.location_observation.accuracy_m, crs: sent.location_observation.crs},
+        {lng: 114.3, lat: 30.5, accuracy_m: 35, crs: 'WGS84'});
+    assert.ok(Date.parse(sent.location_observation.observed_at));
 });
 
 test('clicking a candidate keeps a typed origin while GPS and map origins stay attached by state', () => {
@@ -438,9 +513,9 @@ test('R shortcut and header button both start a new conversation', () => {
     const html = fs.readFileSync(require.resolve('../../static/index.html'), 'utf8');
     const app = fs.readFileSync(require.resolve('../../static/js/app.js'), 'utf8');
 
-    assert.match(html, /data-kbd="refresh">R<\/kbd><span class="kbd-label">刷新<\/span>/);
-    assert.match(html, /↻ 清空路线与对话<\/span><kbd>R<\/kbd>/);
-    assert.match(html, /id="reset-btn"[^>]*aria-label="刷新路线与对话"[^>]*title="清空当前路线和聊天，开始新一轮规划"[^>]*>刷新<\/button>/);
+    assert.match(html, /data-kbd="refresh">R<\/kbd><span class="kbd-label">新建会话<\/span>/);
+    assert.match(html, /↻ 新建会话<\/span><kbd>R<\/kbd>/);
+    assert.match(html, /id="reset-btn"[^>]*aria-label="新建会话"[^>]*>新建会话<\/button>/);
     assert.match(app, /resetBtn\.addEventListener\('click', refreshPage\)/);
     assert.match(app, /function refreshPage\(\)\s*\{[\s\S]*?beginExplicitRefreshSession\(\);\s*handleReset\(\);\s*state\.restoredActiveRuns = \[\];\s*\}/);
     assert.doesNotMatch(app.match(/function refreshPage\(\)\s*\{[\s\S]*?\n    \}/)[0], /location\.reload/);
@@ -844,13 +919,13 @@ test('new weather query does not silently discard an independent route result', 
     b.resolve({task_type:'chat',reply:'晴'}); await pb; a.resolve(routeResult('A')); await pa;
     assert.equal(h.rendered.length,1); assert.equal(h.bubbles[1].text,'晴');
 });
-test('start clarification retries GPS once in the same request without duplicate bubbles', async () => {
+test('start clarification does not trigger a lexical GPS retry', async () => {
     const h=harness(); h.state.productMode='navigation'; let count=0;
     h.setApi(async()=> { if (++count>3) throw Error('recursion'); return { response_kind:'clarify', clarify:{question:'起点在哪？',options:[]} }; });
     await h.submit('去图书馆'); await new Promise(resolve=>setTimeout(resolve,10));
-    assert.equal(count,2); assert.equal(h.locationCount(),1); assert.equal(h.bubbles.length,1); assert.equal(h.userBubbles.length,1);
+    assert.equal(count,1); assert.equal(h.locationCount(),0); assert.equal(h.bubbles.length,1); assert.equal(h.userBubbles.length,1);
 });
-test('automatic GPS answer continues the pending server task', async () => {
+test('a location clarification is shown without silently resubmitting', async () => {
     const h = harness(); h.state.productMode = 'navigation';
     const sent = [];
     h.setApi(async (_url, body) => {
@@ -861,26 +936,23 @@ test('automatic GPS answer continues the pending server task', async () => {
             : routeResult('gps-continued');
     });
     await h.submit('帮我规划去樱顶，顺便查天气');
-    assert.equal(sent.length, 2);
-    assert.equal(sent[1].continuation_task_id, 'original-task');
-    assert.equal(sent[1].base_revision, 1);
-    assert.deepEqual({ lng: sent[1].coord_start.lng, lat: sent[1].coord_start.lat },
-        { lng: 114.3, lat: 30.5 });
+    assert.equal(sent.length, 1);
+    assert.equal(h.state.pendingServerTaskId, 'original-task');
 });
 test('PC clarification never asks for device location', async () => {
     const h=harness(); h.context.reply={response_kind:'clarify',clarify:{question:'起点在哪？',options:[]}};
     await h.submit('去图书馆'); assert.equal(h.locationCount(),0);
 });
-test('clarification answer continues its server task while an unrelated weather query does not', async () => {
+test('free text leaves task selection to the model; an accepted result can close its clarification', async () => {
     const h = harness();
     h.state.pendingServerTaskId = 'pending-task';
     h.state.pendingServerTaskRevision = 4;
     h.state.pendingServerQuestion = '你想从哪里出发？';
     let sent;
-    h.setApi(async (_url, body) => { sent = body; return routeResult('resumed'); });
+    h.setApi(async (_url, body) => { sent = body; return {...routeResult('resumed'), _task_id:'pending-task'}; });
     await h.submit('从樱顶出发');
-    assert.equal(sent.continuation_task_id, 'pending-task');
-    assert.equal(sent.base_revision, 4);
+    assert.equal(sent.continuation_task_id, undefined);
+    assert.equal(sent.base_revision, undefined);
     assert.equal(h.state.pendingServerTaskId, null);
 
     h.state.pendingServerTaskId = 'pending-task-2';
@@ -891,7 +963,7 @@ test('clarification answer continues its server task while an unrelated weather 
     assert.equal(h.state.pendingServerTaskId, 'pending-task-2');
 });
 
-test('换一批 continues the active candidate task instead of starting a new search', async () => {
+test('换一批 is sent as plain text for the model to choose the task', async () => {
     const h = harness();
     h.state.serverConversationId = 'candidate-session';
     h.state.pendingServerTaskId = 'candidate-task';
@@ -914,8 +986,8 @@ test('换一批 continues the active candidate task instead of starting a new se
     await h.submit('换一批');
 
     assert.equal(submitted.length, 1);
-    assert.equal(submitted[0].continuation_task_id, 'candidate-task');
-    assert.equal(submitted[0].base_revision, 4);
+    assert.equal(submitted[0].continuation_task_id, undefined);
+    assert.equal(submitted[0].base_revision, undefined);
 });
 test('free-form location answer continues the original pending task', async () => {
     const h = harness();
@@ -925,8 +997,8 @@ test('free-form location answer continues the original pending task', async () =
     let sent;
     h.setApi(async (_url, body) => { sent = body; return routeResult('continued'); });
     await h.submit('我在信息学部');
-    assert.equal(sent.continuation_task_id, 'pending-route');
-    assert.equal(sent.base_revision, 3);
+    assert.equal(sent.continuation_task_id, undefined);
+    assert.equal(sent.base_revision, undefined);
 });
 test('origin plus weather and anaphoric destination continues the pending route task', async () => {
     const h = harness();
@@ -938,8 +1010,8 @@ test('origin plus weather and anaphoric destination continues the pending route 
 
     await h.submit('我在武汉大学科技门，查天气后再带我过去');
 
-    assert.equal(sent.continuation_task_id, 'pending-route');
-    assert.equal(sent.base_revision, 3);
+    assert.equal(sent.continuation_task_id, undefined);
+    assert.equal(sent.base_revision, undefined);
 });
 test('free-form ball type answer continues the pending activity task', async () => {
     const h = harness();
@@ -952,8 +1024,8 @@ test('free-form ball type answer continues the pending activity task', async () 
     await h.submit('橄榄球');
 
     assert.equal(sent.query, '橄榄球');
-    assert.equal(sent.continuation_task_id, 'sports-task');
-    assert.equal(sent.base_revision, 3);
+    assert.equal(sent.continuation_task_id, undefined);
+    assert.equal(sent.base_revision, undefined);
 });
 test('ball clarification renders all five choices and leaves other ball types for free input', () => {
     const h = harness();
@@ -1100,7 +1172,7 @@ test('a short place-name answer continues a pending route clarification', async 
     h.setRawApi(async url => url.startsWith('/api/pois?keyword=') ? { pois: [{ name: '樱顶', aliases: ['樱花顶'] }] } : {});
     h.setApi(async (_url, body) => { sent = body; return routeResult('resumed'); });
     await h.submit('樱顶');
-    assert.equal(sent.continuation_task_id, 'pending-route');
+    assert.equal(sent.continuation_task_id, undefined);
 });
 test('a short independent question does not continue a pending route clarification', async () => {
     const h = harness();
@@ -1248,7 +1320,7 @@ test('polling recovers from a temporary network failure without losing the accep
     assert.equal(h.state.activeRuns['run-retry'], undefined);
 });
 
-test('a failed run becomes a recoverable clarification and hides internal error text', async () => {
+test('a failed run reports failure rather than a semantic clarification and hides internal errors', async () => {
     const h = harness();
     h.setQueuedApi(async url => {
         if (url === '/api/conversations') return { conversation_id: 'recover-session' };
@@ -1262,10 +1334,10 @@ test('a failed run becomes a recoverable clarification and hides internal error 
 
     const result = await h.queued('换一批', {}, { text: 'waiting' }, 0);
 
-    assert.equal(result.response_kind, 'clarify');
+    assert.equal(result.response_kind, 'chat');
     assert.equal(result._task_id, 'task-failed');
     assert.equal(result._task_revision, 3);
-    assert.match(result.message, /保留了当前需求/);
+    assert.equal(result.execution_status, 'failed');
     assert.doesNotMatch(result.message, /任务没有完成|private stack|provider_internal/);
     assert.equal(h.state.activeRuns['run-failed'], undefined);
 });

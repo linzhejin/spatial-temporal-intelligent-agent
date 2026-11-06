@@ -98,7 +98,7 @@ def test_new_task_commits_distinct_start_and_search_anchor_before_spatial_tools(
             "search_anchor": {"type": "poi", "name": "总图"},
             "area": "总图", "keywords": ["餐饮"], "activities": ["meal"],
             "subcategories": ["restaurant", "canteen", "fastfood"], "limit": 1,
-        }),
+        }, search_poi_candidates={"keyword": "餐饮", "area": "总图"}),
         reply(present_places={"introduction": "以下地点来自本次地图检索。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "位于总图附近的餐饮候选。"},
         ]}),
@@ -108,20 +108,16 @@ def test_new_task_commits_distinct_start_and_search_anchor_before_spatial_tools(
 
     first_call = model.call_args_list[0].kwargs
     first_tool_names = {item["function"]["name"] for item in first_call["tools"]}
-    assert first_tool_names == {"update_task"}
-    assert first_call["tool_choice"] == {
-        "type": "function", "function": {"name": "update_task"},
-    }
+    assert {"update_task", "search_poi_candidates", "plan_route", "get_weather"} <= first_tool_names
+    assert "tool_choice" not in first_call
     assert model.call_count == 2
     assert calls[0][0] == "search_poi_candidates"
     assert calls[0][1]["start"]["name"] == "信息学部图书馆"
     assert calls[0][1]["search_anchor"]["name"] == "总图"
     next_call = model.call_args_list[1].kwargs
     next_tool_names = {item["function"]["name"] for item in next_call["tools"]}
-    assert next_tool_names == {"present_places"}
-    assert next_call["tool_choice"] == {
-        "type": "function", "function": {"name": "present_places"},
-    }
+    assert {"present_places", "search_poi_candidates"} <= next_tool_names
+    assert "tool_choice" not in next_call
     assert candidate["name"] in str(next_call["messages"])
     assert result["place_request"]["start"]["name"] == "信息学部图书馆"
     assert result["place_request"]["search_anchor"]["name"] == "总图"
@@ -168,7 +164,8 @@ def test_full_dining_requirements_reach_model_and_it_selects_the_delivered_place
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "goal": query,
                            "requirements": ["独立门店", "不含食堂档口", "三人聚餐"],
-                           "budget_per_person": 50, "keywords": ["火锅"], "subcategories": ["restaurant"]}),
+                           "budget_per_person": 50, "keywords": ["火锅"], "subcategories": ["restaurant"]},
+              search_poi_candidates={"keyword": "火锅"}),
         reply(present_places={"introduction": "找到一个可进一步核对的选择，人均消费暂未核实。",
                               "places": [{"poi_id": "amap:B123", "reason": "地图记录为火锅餐厅，是否独立门店仍需确认。"}]}),
     ]
@@ -193,7 +190,7 @@ def test_general_recommendation_does_not_require_origin_before_model(model, monk
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search",
                            "goal": "推荐校内适合聚餐的火锅店", "area": "武汉大学",
-                           "keywords": ["火锅"]}),
+                           "keywords": ["火锅"]}, search_poi_candidates={"keyword": "火锅", "area": "武汉大学"}),
         reply(present_places={"introduction": "先按校内目录与地图结果筛选。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "符合本次火锅关键词检索。"},
         ]}),
@@ -253,6 +250,11 @@ def test_next_batch_reuses_unseen_candidates_and_keeps_the_search_anchor(model, 
     PlaceRequestState.model_validate(state)
     monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda name, *_args: pytest.fail(
         f"next batch must reuse saved candidates, not call {name}"))
+    model.side_effect = [
+        reply(update_task={"relation": "continue", "operation": "place_search", "candidate_action": "next_batch"}),
+        reply(present_places={"introduction": "继续展示候选。", "places": [
+            {"poi_id": row["poi_id"], "reason": "目录候选"} for row in places[2:]]}),
+    ]
     result = planner.run_agent("换一批", context={"place_request": state})
 
     assert result["response_kind"] == "candidates"
@@ -265,7 +267,7 @@ def test_next_batch_reuses_unseen_candidates_and_keeps_the_search_anchor(model, 
         row["poi_id"] for row in places]
     assert result["place_request"]["semantic_request"]["shown_ids"] == [
         row["poi_id"] for row in places]
-    assert model.call_count == 0
+    assert model.call_count == 2
 
 
 def test_ambiguous_place_followup_asks_before_searching(model, monkeypatch):
@@ -300,9 +302,8 @@ def test_ambiguous_place_followup_asks_before_searching(model, monkeypatch):
     assert result["place_request"]["start"] == state["start"]
     assert model.call_count == 1
     assert calls == ["ask_user"]
-    assert {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]} == {
-        "update_task", "ask_user",
-    }
+    assert {"update_task", "ask_user", "search_poi_candidates", "plan_route"} <= {
+        tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
 
 
 def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypatch):
@@ -328,17 +329,15 @@ def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypat
         captured.update({"name": name, "args": args})
         return route, {"route": route, "route_kind": "direct"}
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
-    model.side_effect = [reply("已按你选的桂园餐厅规划路线。")]
+    model.side_effect = [reply(plan_route={"end": {"type": "poi", "poi_id": candidate_id, "name": "桂园餐厅"}}),
+                         reply("已按你选的桂园餐厅规划路线。")]
 
     result = planner.run_agent("去这家", context={"place_request": state, "selected_poi_id": candidate_id})
 
     assert result["response_kind"] == "route"
     first_tool_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
-    assert "resolve_poi" not in first_tool_names
-    assert "search_poi_candidates" not in first_tool_names
-    assert first_tool_names == {"get_weather", "list_road_conditions"}
-    assert model.call_count == 1
-    assert "plan_multimodal_route" not in first_tool_names
+    assert {"resolve_poi", "search_poi_candidates", "get_weather", "list_road_conditions", "plan_route"} <= first_tool_names
+    assert model.call_count == 2
     assert captured["args"]["end"]["poi_id"] == candidate_id
     assert candidate_id in str(model.call_args_list[0].kwargs["messages"])
 
@@ -382,6 +381,7 @@ def test_changing_search_area_refreshes_before_ignoring_a_stale_search_call(mode
         reply(update_task={"relation": "continue", "operation": "place_search", "area": "桂园",
                            "keywords": ["操场"], "activities": ["running"], "subcategories": ["field"]},
               search_poi_candidates={"keyword": "餐饮", "area": "梅园"}),
+        reply(search_poi_candidates={"keyword": "操场", "area": "桂园"}),
         reply(present_places={"introduction": "桂园有匹配的运动场候选。", "places": [
             {"poi_id": gui_yuan_candidate["poi_id"], "reason": "已按桂园和跑步条件重新查询。"},
         ]}),
@@ -392,6 +392,7 @@ def test_changing_search_area_refreshes_before_ignoring_a_stale_search_call(mode
     assert result["response_kind"] == "candidates"
     assert [item[2] for item in searches] == ["桂园"]
     assert searches[0][1]["keyword"] == "操场"
+    assert "task_update_required" in str(model.call_args_list[1].kwargs["messages"])
     assert result["candidates"][0]["poi_id"] == "poi_085"
 
 
@@ -412,7 +413,7 @@ def test_switching_from_place_search_to_route_keeps_the_accepted_candidate():
     assert dialogue.pending["candidate_poi_ids"] == [candidate["poi_id"]]
 
 
-def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(model, monkeypatch):
+def test_model_can_choose_any_tool_after_interpreting_place_search(model, monkeypatch):
     from agents import tools as spatial_tools
 
     candidates = [place("amap:SHOP123", "测试火锅")]
@@ -420,7 +421,7 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
         {"status": "ok", "candidates": candidates}, {"candidates": candidates}))
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "goal": "推荐火锅店",
-                           "keywords": ["火锅"], "limit": 1}),
+                           "keywords": ["火锅"], "limit": 1}, search_poi_candidates={"keyword": "火锅"}),
         reply(present_places={"introduction": "找到一条地图候选，价格待核实。",
                               "places": [{"poi_id": "amap:SHOP123", "reason": "地图目录匹配火锅检索词。"}]}),
     ]
@@ -430,14 +431,10 @@ def test_place_search_task_gets_only_relevant_tools_after_llm_interprets_it(mode
     assert result["response_kind"] == "candidates"
     first_names = {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]}
     second_names = {tool["function"]["name"] for tool in model.call_args_list[1].kwargs["tools"]}
-    assert first_names == {"update_task"}
-    assert model.call_args_list[0].kwargs["tool_choice"] == {
-        "type": "function", "function": {"name": "update_task"},
-    }
-    assert second_names == {"present_places"}
-    assert model.call_args_list[1].kwargs["tool_choice"] == {
-        "type": "function", "function": {"name": "present_places"},
-    }
+    assert {"update_task", "search_poi_candidates", "get_weather", "plan_route"} <= first_names
+    assert {"present_places", "search_web", "plan_route"} <= second_names
+    assert "tool_choice" not in model.call_args_list[0].kwargs
+    assert "tool_choice" not in model.call_args_list[1].kwargs
 
 
 def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(model, monkeypatch):
@@ -462,8 +459,9 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"],
                            "area": "武汉大学", "limit": 1, "web_research_requested": True,
-                           "web_page_read_requested": True}),
-        reply(search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
+                           "web_page_read_requested": True}, search_web={"query": "武汉大学 火锅"}),
+        reply(read_web_page={"source_id": "Sfact123"},
+              search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
         reply(present_places={"introduction": "下面几家都是地图核对到的实际地点。门店消费信息参考网页来源。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "地图目录中匹配到的候选记录；消费信息以来源为准。",
              "source_ids": ["Sfact123"]},
@@ -474,11 +472,9 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
 
     assert result["response_kind"] == "candidates"
     assert model.call_count == 3
-    expected = ["update_task", "search_poi_candidates", "present_places"]
-    assert [{tool["function"]["name"] for tool in call.kwargs["tools"]} for call in model.call_args_list] == [
-        {"update_task"}, {"search_poi_candidates"}, {"present_places"},
-    ]
-    assert [call.kwargs["tool_choice"]["function"]["name"] for call in model.call_args_list] == expected
+    assert all({"update_task", "search_poi_candidates", "present_places", "search_web", "read_web_page"} <=
+               {tool["function"]["name"] for tool in call.kwargs["tools"]} for call in model.call_args_list)
+    assert all("tool_choice" not in call.kwargs for call in model.call_args_list)
     assert len(spatial_calls) == 1
     assert spatial_calls[0][1]["candidate_names"] == ["测试火锅店"]
     assert [call[0] for call in web_calls] == ["search_web", "read_web_page"]
@@ -520,7 +516,7 @@ def test_general_food_search_uses_web_search_snippets_without_fetching_page(mode
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["餐饮"],
                            "area": "总图", "web_research_requested": True,
-                           "web_page_read_requested": False}),
+                           "web_page_read_requested": False}, search_web={"query": "武汉大学 总图附近 餐饮"}),
         reply(search_poi_candidates={"candidate_names": ["校园餐饮"], "area": "总图"}),
         reply(present_places={"introduction": "以下是地图匹配的附近候选。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "位于本次查询范围内。"},
@@ -535,7 +531,7 @@ def test_general_food_search_uses_web_search_snippets_without_fetching_page(mode
     assert result["place_request"]["candidate_pool"][0]["poi_id"] == candidate["poi_id"]
 
 
-def test_web_flow_falls_back_to_grounded_map_search_when_model_skips_map_step(model, monkeypatch):
+def test_model_cannot_present_an_unsearched_place_without_forced_search(model, monkeypatch):
     from agents import web_evidence
 
     candidate = place("amap:FALLBACK123", "附近火锅店")
@@ -559,23 +555,21 @@ def test_web_flow_falls_back_to_grounded_map_search_when_model_skips_map_step(mo
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"],
                            "area": "武汉大学", "web_research_requested": True}),
-        # The only available stage tool is search_poi_candidates; this stale
-        # task edit must not consume another model turn or alter the request.
         reply(update_task={"relation": "continue", "operation": "place_search", "area": "工学部"}),
         reply(present_places={"introduction": "地图核对到附近候选，网页提供参考。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "名称与位置已由地图核对。",
              "source_ids": ["Sfact987"]},
         ]}),
+        reply("暂时没有核对到可展示的候选。"),
     ]
 
     result = planner.run_agent("推荐武大附近火锅店")
 
-    assert result["response_kind"] == "candidates"
-    assert result["turns"] == 3
-    assert len(spatial_calls) == 1
-    assert spatial_calls[0][0] == "search_poi_candidates"
-    assert spatial_calls[0][1].get("candidate_names") is None
-    assert result["candidates"][0]["source_ids"] == ["Sfact987"]
+    assert result["response_kind"] == "chat"
+    assert result["turns"] == 4
+    assert not spatial_calls
+    assert not result.get("candidates")
+    assert "unknown_place" in str(model.call_args_list[3].kwargs["messages"])
 
 
 def test_empty_map_retries_end_with_a_clear_no_results_message(model, monkeypatch):
@@ -591,17 +585,18 @@ def test_empty_map_retries_end_with_a_clear_no_results_message(model, monkeypatc
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["干饭"],
                            "area": "总图", "limit": 1}),
         reply(search_poi_candidates={"keyword": "餐饮", "area": "总图"}),
+        reply("这次没有找到可核对的地点。"),
     ]
 
     result = planner.run_agent("推荐总图附近吃饭的地方")
 
-    assert model.call_count == 2
-    assert executed == ["search_poi_candidates", "search_poi_candidates"]
+    assert model.call_count == 3
+    assert executed == ["search_poi_candidates"]
     assert "没有找到可核对的地点" in result["message"]
     assert result.get("failed") is not True
 
 
-def test_place_search_stops_when_enough_candidates_are_already_available():
+def test_model_can_request_additional_searches_after_candidates_are_available():
     from agents.dialogue import Dialogue
 
     calls = []
@@ -619,9 +614,9 @@ def test_place_search_stops_when_enough_candidates_are_already_available():
     re_resolved = dialogue.spatial("resolve_poi", {"name": "火锅甲"})
 
     assert len(first["candidates"]) == 2
-    assert repeated["error"] == "candidate_search_complete"
-    assert re_resolved["error"] == "candidate_search_complete"
-    assert len(calls) == 1
+    assert len(repeated["candidates"]) == 2
+    assert len(re_resolved["candidates"]) == 2
+    assert len(calls) == 3
 
 
 def test_model_cannot_create_coordinates_for_search_anchor(model, monkeypatch):
@@ -659,16 +654,16 @@ def test_presenter_rejects_a_model_invented_poi(model, monkeypatch):
     assert "unknown_place" in str(model.call_args_list[2].kwargs["messages"])
 
 
-def test_model_failure_keeps_the_request_and_returns_a_recoverable_question(model):
+def test_model_failure_keeps_the_request_and_reports_a_retryable_failure(model):
     model.side_effect = TimeoutError("test")
     result = planner.run_agent("我在总图，想吃饭")
     assert model.call_count == 1
-    assert result["execution_status"] == "needs_input"
-    assert result["response_kind"] == "clarify"
-    assert result["needs_input"] is True
+    assert result["execution_status"] == "failed"
+    assert result["response_kind"] == "chat"
+    assert not result.get("needs_input")
     assert result["model_status"] == "unavailable"
     assert not result.get("candidates")
-    assert result["clarify"]["options"]
+    assert result["failure_code"] == "model_timeout"
     assert "任务没有完成" not in result["message"]
 
 
@@ -821,7 +816,7 @@ def test_dialogue_bounds_repeated_place_searches():
 
     dialogue = Dialogue("找附近餐厅", execute_tool=lambda *_args: pytest.fail("search must be blocked"),
                         client_factory=lambda: None, trace=lambda *_args: None)
-    dialogue.place_search_count = 6
+    dialogue.place_search_count = 8
 
     result = dialogue.spatial("search_poi_candidates", {"keyword": "火锅"})
 

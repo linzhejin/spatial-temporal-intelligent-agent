@@ -85,7 +85,8 @@ def fetch_weather_live(force: bool = False) -> Optional[dict]:
     })
     url = f"{WEATHER_API}?{params}"
     try:
-        with urllib.request.urlopen(url, timeout=8) as resp:
+        from agents.deadline import limited_timeout
+        with urllib.request.urlopen(url, timeout=limited_timeout(8)) as resp:
             data = json.loads(resp.read())
         if data.get("status") != "1":
             logger.warning("天气 API 返回异常: %s", data.get("info"))

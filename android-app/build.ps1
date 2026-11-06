@@ -1,17 +1,21 @@
 ﻿# 珞珈智行 APK 手工构建链：aapt2 → javac → d8 → aapt add → zipalign → apksigner
 # 无 Gradle / 无第三方依赖，签名密钥保存在本目录（勿提交）
+param(
+    [string]$ToolsRoot = (Join-Path $PSScriptRoot "..\tools"),
+    [string]$SigningDirectory = $PSScriptRoot
+)
 $ErrorActionPreference = "Stop"
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
 $proj = $root
-$tools = Join-Path $root "..\tools"
+$tools = $ToolsRoot
 $bt    = Join-Path $tools "android-14"                    # build-tools 34
 $platJar = Join-Path $tools "android-35\android.jar"      # platform 35
 $jdkBin  = Join-Path $tools "jdk-17.0.20.1+1\bin"
 $env:JAVA_HOME = Join-Path $tools "jdk-17.0.20.1+1"
 $env:PATH = "$env:JAVA_HOME\bin;$env:PATH"
 
-$verCode = 6
-$verName = "1.4.1"
+$verCode = 7
+$verName = "1.4.2"
 $build = Join-Path $proj "build"
 Remove-Item -Recurse -Force $build -ErrorAction SilentlyContinue
 New-Item -ItemType Directory -Force -Path "$build\classes", "$build\dex", "$build\assets" | Out-Null
@@ -63,9 +67,9 @@ Write-Host "== 6. zipalign =="
 if ($LASTEXITCODE -ne 0) { throw "zipalign failed" }
 
 Write-Host "== 7. keytool (首次生成签名密钥) =="
-$ks = Join-Path $proj "whu-walker.keystore"
+$ks = Join-Path $SigningDirectory "whu-walker.keystore"
 if (-not (Test-Path $ks)) {
-    $pwFile = Join-Path $proj "keystore-password.txt"
+    $pwFile = Join-Path $SigningDirectory "keystore-password.txt"
     if (Test-Path $pwFile) { $ksPass = (Get-Content $pwFile -Raw).Trim() }
     else {
         $ksPass = "Ww-" + [Guid]::NewGuid().ToString("N").Substring(0, 20)
@@ -78,7 +82,7 @@ if (-not (Test-Path $ks)) {
         -dname "CN=WHU Walker, OU=Engineering, O=WHU-Walker, L=Wuhan, ST=Hubei, C=CN"
     if ($LASTEXITCODE -ne 0) { throw "keytool failed" }
 } else {
-    $ksPass = (Get-Content (Join-Path $proj "keystore-password.txt") -Raw).Trim()
+    $ksPass = (Get-Content (Join-Path $SigningDirectory "keystore-password.txt") -Raw).Trim()
 }
 
 Write-Host "== 8. apksigner sign =="

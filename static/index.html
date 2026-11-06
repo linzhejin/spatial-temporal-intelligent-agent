@@ -151,7 +151,7 @@
                 </span>
                 <span class="header-tagline">武大校园 · 出行向导</span>
                 <button id="road-report-btn" class="road-report-btn" aria-label="上报路况" title="上报施工/活动/管制">🚧</button>
-                <button type="button" id="reset-btn" class="reset-btn" aria-label="刷新路线与对话" title="清空当前路线和聊天，开始新一轮规划">刷新</button>
+                <button type="button" id="reset-btn" class="reset-btn" aria-label="新建会话" title="开始新的路线与对话">新建会话</button>
                 <button id="help-btn" class="help-btn" aria-label="帮助引导" title="查看引导">?</button>
             </div>
         </header>
@@ -321,7 +321,7 @@
                 <kbd data-kbd="chip:distance_first">D</kbd><span class="kbd-label">最短</span>
             </div>
             <div class="kbd-row">
-                <kbd data-kbd="refresh">R</kbd><span class="kbd-label">刷新</span>
+                <kbd data-kbd="refresh">R</kbd><span class="kbd-label">新建会话</span>
                 <kbd data-kbd="focus">/</kbd><span class="kbd-label">聚焦</span>
                 <kbd data-kbd="help">?</kbd><span class="kbd-label">帮助</span>
             </div>
@@ -356,7 +356,7 @@
                 <div class="kbd-help-row"><span>🌸 风景优先</span><kbd>F</kbd></div>
                 <div class="kbd-help-row"><span>🪜 平坦优先</span><kbd>S</kbd></div>
                 <div class="kbd-help-row"><span>⚡ 最短路径</span><kbd>D</kbd></div>
-                <div class="kbd-help-row"><span>↻ 清空路线与对话</span><kbd>R</kbd></div>
+                <div class="kbd-help-row"><span>↻ 新建会话</span><kbd>R</kbd></div>
                 <div class="kbd-help-row"><span>聚焦输入框</span><kbd>/</kbd></div>
                 <div class="kbd-help-row"><span>⏎ 发送 / ⇧⏎ 换行</span><kbd>Enter</kbd></div>
                 <div class="kbd-help-row"><span>关闭弹窗</span><kbd>Esc</kbd></div>
@@ -586,6 +586,6 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261106-dialogue-recovery-v1"></script>
+    <script src="/js/app.js?v=20261106-model-session-v1"></script>
 </body>
 </html>

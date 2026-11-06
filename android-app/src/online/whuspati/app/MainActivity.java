@@ -57,6 +57,7 @@ import java.security.MessageDigest;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.UUID;
 
 /**
  * 珞珈智行 Android 壳应用：全屏 WebView 加载 https://whuspati.online/
@@ -89,6 +90,8 @@ public class MainActivity extends Activity {
     private static final long UPDATE_SKIP_WINDOW_MS = 24L * 60 * 60 * 1000; // "以后再说"24h 内不打扰
 
     private WebView webView;
+    private String launchSessionId;
+    private static final String STATE_LAUNCH_SESSION = "whu_launch_session";
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private TextToSpeech tts;
     private boolean ttsMuted = false;
@@ -129,6 +132,8 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        launchSessionId = savedInstanceState == null ? null : savedInstanceState.getString(STATE_LAUNCH_SESSION);
+        if (launchSessionId == null) launchSessionId = UUID.randomUUID().toString();
 
         // Android 6.0+ 定位权限必须运行时申请；未授予也不阻塞页面（网页自己有降级提示）
         if (checkSelfPermission(Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -181,12 +186,13 @@ public class MainActivity extends Activity {
         s.setMediaPlaybackRequiresUserGesture(false);
         s.setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         // UA 追加标识：网页据此抑制"安装到主屏幕"横幅（已在 App 内无需再装）
-        s.setUserAgentString(s.getUserAgentString() + " WHUWalkerApp/1.4.1");
+        s.setUserAgentString(s.getUserAgentString() + " WHUWalkerApp/1.4.2");
 
         webView.addJavascriptInterface(new TtsBridge(), "WhuWalkerTts");
         webView.addJavascriptInterface(new VoiceBridge(), "WhuWalkerVoice");
         webView.addJavascriptInterface(new ScreenBridge(), "WhuWalkerScreen");
         webView.addJavascriptInterface(new LocationBridge(), "WhuWalkerLocation");
+        webView.addJavascriptInterface(new SessionBridge(), "WhuWalkerSession");
 
         webView.setWebViewClient(new WebViewClient());
         webView.setWebChromeClient(new WebChromeClient() {
@@ -211,6 +217,11 @@ public class MainActivity extends Activity {
                 checkForAppUpdate();
             }
         }, 4000);
+    }
+
+    private class SessionBridge {
+        @JavascriptInterface
+        public String getId() { return launchSessionId; }
     }
 
     // ============ 应用内更新 ============
@@ -1493,6 +1504,7 @@ public class MainActivity extends Activity {
     @Override
     protected void onSaveInstanceState(Bundle outState) {
         super.onSaveInstanceState(outState);
+        outState.putString(STATE_LAUNCH_SESSION, launchSessionId);
         if (webView != null) webView.saveState(outState);
     }
 

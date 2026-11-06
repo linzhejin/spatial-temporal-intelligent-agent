@@ -76,11 +76,15 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
     schemas.extend([
         _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
+             "task_id": {"type": "string", "description": "续接或恢复时填写服务器提供的任务 ID"},
+             "task_revision": {"type": "integer", "minimum": 0, "description": "所选任务的当前版本"},
              "operation": {"type": "string", "enum": list(_OPERATION_TOOL_NAMES),
                            "description": "本轮语义任务类型；按主要用户目标选择"},
              "goal": {"type": "string"},
              "start": {**_ENDPOINT_SCHEMA, "description": "实际出发地点，不能用搜索中心代替"},
              "search_anchor": {**_ENDPOINT_SCHEMA, "description": "附近查询参照点，可与起点不同"},
+             "search_radius_m": {"type": "integer", "minimum": 100, "maximum": 5000},
+             "expand_search_radius": {"type": "boolean", "description": "用户只说扩大范围且未指定幅度时设为 true；服务器翻倍，最高 5 公里"},
              "mode": {"type": "string", "enum": ["walk", "bike", "drive"]},
              "strategy": {"type": "string", "enum": ["shortest", "recommended", "flat", "scenery"]},
              "requirements": {"type": "array", "items": {"type": "string"}, "description": "完整保留否定、用途及其他条件"},
@@ -109,35 +113,28 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
                   {"query": {"type": "string"}}, ("query",)),
         _function("read_web_page", "读取本轮搜索返回的某个来源，核对内容、日期与分店。",
                   {"source_id": {"type": "string"}}, ("source_id",)),
+        _function("browse_candidates", "查看已接受候选池中具体地点及分页状态；默认只显示尚未展示的地点。",
+                  {"offset": {"type": "integer", "minimum": 0},
+                   "limit": {"type": "integer", "minimum": 1, "maximum": 12},
+                   "include_shown": {"type": "boolean"}}),
+        _function("read_result", "读取本会话历史结果引用；路线几何与候选按页返回。",
+                  {"run_id": {"type": "string"},
+                   "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
+                   "offset": {"type": "integer", "minimum": 0},
+                   "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("run_id", "section")),
     ])
-    allowed = _OPERATION_TOOL_NAMES.get(operation) if isinstance(operation, str) else None
-    if allowed and operation == "place_search" and web_research_requested and web_search_available:
-        allowed = {"search_web"}
-    elif allowed and operation == "place_search" and web_research_requested and web_fetch_available:
-        allowed = {"read_web_page"}
-    elif allowed and operation == "place_search" and web_map_search_pending:
-        allowed = {"search_poi_candidates"}
-    elif allowed and operation == "place_search" and ready_to_present:
-        allowed = {"present_places"}
-    elif allowed and operation == "place_search" and not allow_place_search:
-        allowed = allowed - {"search_poi_candidates", "find_reachable_places", "resolve_poi"}
-    if allowed and selected_place:
-        allowed = {"update_task", "plan_route", "plan_via_route", "plan_itinerary",
-                   "get_weather", "list_road_conditions"}
-    if allowed and route_preplanned:
-        allowed = {"get_weather", "list_road_conditions"}
-    return [item for item in schemas if item["function"]["name"] in allowed] if allowed else schemas
+    return schemas
 
 
 def _compact(value):
     """Keep complete JSON and useful facts; omit geometry rather than cut JSON."""
     if isinstance(value, list):
-        return [_compact(item) for item in value[:20]]
+        return [_compact(item) for item in value]
     if isinstance(value, dict):
         omitted = {"recommended", "shortest", "recommended_edge_ids", "shortest_edge_ids",
                    "steps", "pois", "geometry", "route_reuse_proof", "reuse_certificate"}
         return {key: _compact(item) for key, item in value.items() if key not in omitted}
-    return value[:7000] if isinstance(value, str) else value
+    return value
 
 
 _MODEL_PLACE_FIELDS = (
@@ -148,6 +145,24 @@ _MODEL_PLACE_FIELDS = (
     "distance_m", "network_distance_m", "distance_basis", "distance_reference_name",
     "estimated_duration_min", "access_link_verified", "step_access_status", "accessibility",
 )
+
+
+def _model_task_view(task):
+    """Keep shown candidates and task state; fetch unshown records on demand."""
+    item = deepcopy(task)
+    state = item.get("state") if isinstance(item, dict) else None
+    pending = state.get("place_request") if isinstance(state, dict) else None
+    if isinstance(pending, dict):
+        pool = pending.pop("candidate_pool", None) or []
+        shown = set((pending.get("semantic_request") or {}).get("shown_ids") or [])
+        pending["shown_candidates"] = [
+            {key: row[key] for key in _MODEL_PLACE_FIELDS if key in row}
+            for row in pool if isinstance(row, dict) and row.get("poi_id") in shown
+        ]
+        pending["candidate_pool_count"] = len(pool)
+        pending["unshown_candidate_count"] = sum(1 for row in pool if isinstance(row, dict) and row.get("poi_id") not in shown)
+        pending["candidate_pool_ref"] = "browse_candidates"
+    return _compact(item)
 
 
 def _model_tool_content(name, answer):
@@ -244,23 +259,25 @@ def _web_search_query(intent):
     return " ".join(normalized)[:128]
 
 
-_NEXT_BATCH_COMMANDS = {
-    "换一批", "换一批吧", "换一家", "换一家吧", "再换一批", "再换一批吧",
-    "再换一家", "再换一家吧", "再来一批", "再来一批吧", "再来几个",
-    "还有别的吗", "还有其他的吗", "还有其他选择吗", "再推荐几个",
-}
-
-
 class Dialogue:
     def __init__(self, query, *, context=None, history=None, coord_start=None, coord_end=None,
-                 coord_waypoints=None, travel_mode=None, uid=None, execute_tool, client_factory, trace):
+                 coord_waypoints=None, travel_mode=None, uid=None, execute_tool, client_factory, trace,
+                 bind_task=None, read_result=None, deadline_monotonic=None):
         self.query, self.context, self.uid = query, context or {}, uid
         self.requested_mode = travel_mode
+        self.bind_task = bind_task
+        self.read_result = read_result
+        self.bound_task = None
+        self.modified_fields = set()
+        self.deadline_monotonic = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 75
+        self.available_tasks = {str(item.get("task_id")): item for item in self.context.get("available_tasks", [])
+                                if isinstance(item, dict) and item.get("task_id")}
         self.execute_tool, self.client_factory, self.trace = execute_tool, client_factory, trace
         self.pending = deepcopy(self.context.get("place_request") or {})
         self.pending.setdefault("request_id", str(uuid4()))
         self.pending.setdefault("original_query", query[:2000])
         self.pending.setdefault("mode", travel_mode or "walk")
+        self.pending.setdefault("search_radius_m", 1000)
         self.pending.setdefault("constraints", {})
         self.intent = self.pending.setdefault("semantic_request", {}) or {}
         self.pending["semantic_request"] = self.intent
@@ -269,37 +286,43 @@ class Dialogue:
         self.known = {item["poi_id"]: item for item in [
                           *(self.pending.get("candidate_pool") or []),
                           *(self.pending.get("candidate_places") or []),
+                          self.pending.get("selected_place"),
                       ]
                       if isinstance(item, dict) and item.get("poi_id")}
         selected_id = self.context.get("selected_poi_id")
         accepted_ids = set(self.pending.get("candidate_poi_ids") or [])
         if selected_id in accepted_ids and selected_id in self.known:
             self.pending["selected_poi_id"] = selected_id
-            complex_follow_up = (self.intent.get("operation") in {"itinerary", "route_comparison"}
-                                 or bool(self.pending.get("completed_legs") or self.pending.get("follow_up_requests")))
-            if not complex_follow_up:
-                self.intent["operation"] = "route"
-                self.direct_route_selection = True
-            else:
-                self.direct_route_selection = False
-        else:
-            self.pending.pop("selected_poi_id", None)
-            self.direct_route_selection = False
+            self.pending["selected_place"] = deepcopy(self.known[selected_id])
+        self.direct_route_selection = False
         self.turn_action = "recommend"
         self._intent_resolved = not bool(self.context.get("place_request")) or self.direct_route_selection
         self.route_preplanned = False
         self.fresh = set()
         self.candidates, self.route, self.route_kind, self.comparison = None, None, None, None
         self.weather = None
+        self.route_tool_failure = None
         self.no_path, self.clarify, self.suggestions = None, None, None
         self.last_search = {}
         self.web_search_count = 0
         self.web_fetch_count = 0
         self.place_search_count = 0
+        self.place_service_error = None
         self._last_task_update_changed_search = False
         self.turns = 0
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         self.original_coords = [point for point in [coord_start, coord_end, *(coord_waypoints or [])] if point]
+        observation = self.context.get("location_observation")
+        if isinstance(observation, dict):
+            from datetime import datetime, timezone
+            try:
+                observed = datetime.fromisoformat(str(observation.get("observed_at")).replace("Z", "+00:00"))
+                age = (datetime.now(timezone.utc) - observed).total_seconds()
+                if (0 <= age <= 120 and 0 < float(observation.get("accuracy_m", 0)) <= 100
+                        and observation.get("crs") == "WGS84"):
+                    self.original_coords.append({"lng": observation["lng"], "lat": observation["lat"]})
+            except (ValueError, TypeError, KeyError):
+                pass
         self.coord_start, self.coord_end, self.coord_waypoints = coord_start, coord_end, coord_waypoints
         self.previous_route = self.context.get("previous_route_state")
         self.spatial_snapshot = None
@@ -307,18 +330,17 @@ class Dialogue:
         if trusted_task.get("candidate_pool"):
             trusted_task["candidate_pool_count"] = len(trusted_task["candidate_pool"])
             trusted_task.pop("candidate_pool", None)
-        trusted = {"active_task": _compact(trusted_task), "previous_route": _compact(self.previous_route),
+        trusted = {"active_task": None if self.bind_task else _compact(trusted_task), "previous_route": _compact(self.previous_route),
                    "route_context_uncertain": bool(self.context.get("route_context_uncertain")),
                    "map_start": coord_start, "map_end": coord_end, "map_waypoints": coord_waypoints,
-                   "selected_poi_id": self.pending.get("selected_poi_id"), "travel_mode": travel_mode}
-        if self.pending.get("selected_poi_id"):
-            self.messages = [{"role": "system", "content": (
-                "本轮有已接受的结构化地点选择。按用户原有出发点直接调用 plan_route，"
-                "终点使用 selected_poi_id 对应候选；不要再次搜索或 resolve_poi。") }]
-        else:
-            self.messages = []
-        transcript = [{"role": item["role"], "content": str(item["content"])[:4000]}
-                      for item in (history or self.context.get("history") or [])[-12:]
+                   "selected_poi_id": self.context.get("selected_poi_id"), "travel_mode": travel_mode,
+                   "available_tasks": [_model_task_view(task) for task in self.available_tasks.values()],
+                   "message_records": _compact(self.context.get("message_records") or []),
+                   "input_action": self.context.get("input_action"),
+                   "location_observation": self.context.get("location_observation")}
+        self.messages = []
+        transcript = [{"role": item["role"], "content": str(item["content"])}
+                      for item in (history or self.context.get("history") or [])
                       if isinstance(item, dict) and item.get("role") in {"user", "assistant"} and item.get("content")]
         self.messages = [*self.messages,
                          {"role": "system", "content": (Path(__file__).parent / "prompts" / "dialogue_system.txt").read_text(encoding="utf-8")},
@@ -331,11 +353,38 @@ class Dialogue:
         relation = args.get("relation")
         if relation not in {"new", "continue", "resume_route"}:
             raise ValueError("relation must be new, continue or resume_route")
+        if self.bind_task and self.bound_task is not None and relation == "new":
+            raise ValueError("a run cannot replace its already bound task")
+        if self.bind_task and self.bound_task is None and relation != "new":
+            chosen = self.available_tasks.get(str(args.get("task_id") or ""))
+            if not chosen or type(args.get("task_revision")) is not int or chosen.get("revision") != args["task_revision"]:
+                raise ValueError("task_version_invalid: 请选择服务器提供的任务及当前版本")
+            state = chosen.get("state") or {}
+            self.previous_route = deepcopy(chosen.get("route_state"))
+            self.pending = deepcopy(state.get("place_request") or {})
+            self.pending.setdefault("request_id", str(uuid4()))
+            self.pending.setdefault("original_query", self.query[:2000])
+            self.pending.setdefault("mode", "walk")
+            self.pending.setdefault("constraints", {})
+            self.intent = self.pending.setdefault("semantic_request", {}) or {}
+            self.pending["semantic_request"] = self.intent
+            self.known = {item["poi_id"]: item for item in [*(self.pending.get("candidate_pool") or []),
+                                                             *(self.pending.get("candidate_places") or []),
+                                                             self.pending.get("selected_place")]
+                          if isinstance(item, dict) and item.get("poi_id")}
+            selected = self.context.get("selected_poi_id")
+            if (selected and str(args.get("task_id")) == str(self.context.get("selected_task_id"))
+                    and selected in (self.pending.get("candidate_poi_ids") or []) and selected in self.known):
+                self.pending["selected_poi_id"] = selected
+                self.pending["selected_place"] = deepcopy(self.known[selected])
+        elif self.bind_task and self.bound_task is not None and args.get("task_id") not in (None, self.bound_task["task_id"]):
+            raise ValueError("a run cannot change its bound task")
         pending = deepcopy(self.pending)
         if relation == "new":
+            self.known = {}
             pending = {"request_id": str(uuid4()), "original_query": self.query[:2000],
                        "mode": self.requested_mode or self.pending.get("mode", "walk"),
-                       "constraints": {}, "semantic_request": {}}
+                       "constraints": {}, "semantic_request": {}, "search_radius_m": 1000}
         if relation == "resume_route":
             if not self.previous_route or self.context.get("route_context_uncertain"):
                 raise ValueError("prior_route_unavailable: 请确认要修改的路线")
@@ -356,6 +405,9 @@ class Dialogue:
                 if field in {"requirements", "keywords", "exclude_terms"}:
                     if not isinstance(value, list) or len(value) > 30 or any(not isinstance(x, str) or len(x) > 500 for x in value):
                         raise ValueError(f"invalid {field}")
+                    if (relation != "new" and field in {"requirements", "exclude_terms"}
+                            and field not in args.get("clear_fields", [])):
+                        value = list(dict.fromkeys([*(intent.get(field) or []), *value]))
                 if field == "goal" and (not isinstance(value, str) or not 0 < len(value) <= 2000):
                     raise ValueError("invalid goal")
                 if field == "limit" and (type(value) is not int or not 1 <= value <= 20):
@@ -372,10 +424,23 @@ class Dialogue:
             intent["web_page_read_requested"] = False
         for field in ("start", "search_anchor", "mode", "strategy", "activities", "subcategories"):
             if field in args:
+                if field in {"start", "search_anchor"} and args[field] is None:
+                    raise ValueError("clear an endpoint only through clear_fields")
                 if field in {"start", "search_anchor"} and args[field] is not None:
                     args[field] = self._endpoint(args[field], allow_pending=relation != "new")
-                changed_search |= args[field] != pending.get(field)
+                if field in {"search_anchor", "activities", "subcategories"}:
+                    changed_search |= args[field] != pending.get(field)
                 pending[field] = deepcopy(args[field])
+        if "search_radius_m" in args:
+            radius = args["search_radius_m"]
+            if type(radius) is not int or not 100 <= radius <= 5000:
+                raise ValueError("invalid search radius")
+            changed_search |= pending.get("search_radius_m") != radius
+            pending["search_radius_m"] = radius
+        elif args.get("expand_search_radius") is True:
+            radius = min(5000, (pending.get("search_radius_m") or 1000) * 2)
+            changed_search |= pending.get("search_radius_m") != radius
+            pending["search_radius_m"] = radius
         if "constraints" in args:
             previous_constraints = HardConstraints.model_validate(pending.get("constraints") or {}).model_dump()
             incoming = dict(args["constraints"])
@@ -384,23 +449,32 @@ class Dialogue:
             for field in ("distance", "scenery"):
                 incoming.pop(field, None)
             pending["constraints"] = HardConstraints.model_validate({**previous_constraints, **incoming}).model_dump()
-            changed_search |= pending["constraints"] != previous_constraints
         for field in args.get("clear_fields", []):
             if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms",
                          "web_page_read_requested"}:
-                intent.pop(field, None)
+                if field not in args:
+                    intent.pop(field, None)
                 changed_search = True
-            elif field in {"start", "search_anchor", "strategy"}:
-                pending.pop(field, None)
+            elif field in {"start", "search_anchor", "strategy", "activities", "subcategories"}:
+                if field not in args:
+                    pending.pop(field, None)
                 changed_search = True
+            elif field == "selected_poi_id":
+                pending.pop("selected_poi_id", None)
+                pending.pop("selected_place", None)
             else:
                 raise ValueError("unsupported clear field")
         self._last_task_update_changed_search = changed_search
         if changed_search:
-            intent["shown_ids"] = []
+            selected_id = pending.get("selected_poi_id")
+            selected_place = self.known.get(selected_id) if selected_id else None
+            if selected_place:
+                pending["selected_place"] = deepcopy(selected_place)
+            if relation == "new" or args.get("expand_search_radius") is not True:
+                intent["shown_ids"] = []
             pending.update({"candidate_poi_ids": [], "candidate_places": [], "candidate_pool": [],
                             "result_dependencies": None})
-            pending.pop("selected_poi_id", None)
+            self.known = {selected_id: selected_place} if selected_place else {}
             self.fresh.clear()
             self.last_search = {}
         pending["semantic_request"] = intent
@@ -418,16 +492,25 @@ class Dialogue:
             self.last_search = {"status": "ok", "online_status": "ok",
                                 "candidates": deepcopy(remaining), "count": len(remaining)}
             self.place_search_count = 2
-            if not remaining:
-                self.clarify = {
-                    "question": "这次检索到的候选已经展示完了。要扩大搜索范围，还是换一种地点类型？",
-                    "options": ["扩大搜索范围", "换一种地点类型"], "slot": "selection",
-                }
         PlaceRequestState.model_validate(pending)
+        changed_fields = ["place_request." + ("search_radius_m" if key == "expand_search_radius" else key)
+                          for key in args if key not in {"relation", "task_id", "task_revision", "clear_fields", "candidate_action"}]
+        changed_fields.extend("place_request." + field for field in args.get("clear_fields", []) if isinstance(field, str))
+        if self.bind_task and self.bound_task is None:
+            self.bound_task = self.bind_task(relation=relation, task_id=args.get("task_id"),
+                                             base_revision=args.get("task_revision"), place_request=pending,
+                                             changed_fields=changed_fields)
+        self.modified_fields.update(changed_fields)
         self.pending, self.intent = pending, intent
         compact_pending = deepcopy(pending)
         compact_pending.pop("candidate_pool", None)
-        return {"accepted_task": _compact(compact_pending)}
+        response = {"accepted_task": _compact(compact_pending)}
+        if self.bound_task:
+            response.update({"task_id": self.bound_task["task_id"], "task_revision": self.bound_task["task_revision"]})
+        if candidate_action == "next_batch":
+            response["candidate_page"] = json.loads(_model_tool_content("search_poi_candidates", self.last_search))
+            response["candidate_page"]["exhausted"] = not bool(self.last_search.get("candidates"))
+        return response
 
     def _endpoint(self, ref, *, allow_pending=True):
         """Never accept invented coordinates or use ambiguous provider identities."""
@@ -455,25 +538,29 @@ class Dialogue:
                 raise ValueError("place_changed: 门店身份或位置未能重新核对，请重新查询")
             self.known[identifier] = {**known, **matched}
             return {"type": "poi", "poi_id": identifier, "name": matched["name"]}
+        if identifier:
+            poi = next((item for item in tools.load_pois() if item.get("id") == identifier), None)
+            if not poi:
+                raise ValueError("unknown_place_id: 请使用已返回的地点 ID，或只填地点名称后调用 resolve_poi")
+            if ref.get("name"):
+                resolved, _ = tools.find_poi_ambiguous(ref["name"])
+                if resolved and resolved.get("id") != identifier:
+                    raise ValueError("place_identity_mismatch: 地点名称与 ID 不一致")
+            return {"type": "poi", "poi_id": identifier, "name": poi.get("name")}
         return ref
 
     def spatial(self, name, args):
         from agents import tools
         args = deepcopy(args)
-        if name == "resolve_poi" and self.intent.get("operation") == "place_search":
-            requested_count = min(self.intent.get("limit", 4), 4)
-            if len(self.last_search.get("candidates") or []) >= requested_count:
-                return {"error": "candidate_search_complete",
-                        "message": "地图已返回足够候选，无需再次核验这些门店；请基于现有候选提交 present_places。"}
         if name in {"search_poi_candidates", "find_reachable_places"}:
-            requested_count = min(self.intent.get("limit", 4), 4)
-            previous_candidates = self.last_search.get("candidates") or []
-            if len(previous_candidates) >= requested_count:
-                return {"error": "candidate_search_complete",
-                        "message": "已有足够候选，请按现有地点资料筛选并立即提交 present_places。价格或独立门店信息没有来源时可说明未核实。"}
-            if self.place_search_count >= 2:
+            if self.place_service_error:
+                return {"error": "place_service_unavailable", "message": "地点服务本轮已报告故障，请稍后重试。"}
+            if (name == "search_poi_candidates" and args.get("area") and self.intent.get("area")
+                    and args["area"] != self.intent["area"]):
+                return {"error": "task_update_required", "message": "检索区域与已接受任务不一致，请核对后重试。"}
+            if self.place_search_count >= 8:
                 return {"error": "place_search_limit",
-                        "message": "本轮已完成两次地点检索；请基于已有候选回答，未证实的事实说明未知。"}
+                        "message": "本轮地点检索次数已达上限，请根据已有结果回答。"}
             self.place_search_count += 1
         context = {"query": self.query, "uid": self.uid, "_model_dialogue": True,
                    "_semantic_request": self.intent, "_known_places": self.known}
@@ -481,6 +568,9 @@ class Dialogue:
             for field in ("start", "search_anchor", "mode", "activities", "subcategories"):
                 if self.pending.get(field) and field not in args:
                     args[field] = deepcopy(self.pending[field])
+            if name == "search_poi_candidates" and self.pending.get("search_anchor"):
+                if args.get("search_anchor") != self.pending["search_anchor"]:
+                    return {"error": "task_update_required", "message": "请先更新任务中的搜索中心。"}
             for field in ("start", "search_anchor"):
                 if args.get(field):
                     args[field] = self._endpoint(args[field])
@@ -488,6 +578,11 @@ class Dialogue:
                 args["keyword"] = " ".join(self.intent["keywords"])
             args.setdefault("exclude_terms", self.intent.get("exclude_terms", []))
             args.setdefault("limit", 20)
+            if name == "search_poi_candidates" and self.pending.get("search_radius_m"):
+                radius = self.pending["search_radius_m"]
+                if args.get("max_distance_m") not in (None, radius):
+                    return {"error": "task_update_required", "message": "请先更新任务中的搜索半径。"}
+                args["max_distance_m"] = radius
             if self.pending.get("constraints"):
                 args["constraints"] = self._constraints(args.get("constraints"))
         route_tools = {"plan_route", "plan_via_route", "plan_itinerary", "plan_multimodal_route", "plan_tour", "compare_routes"}
@@ -520,6 +615,10 @@ class Dialogue:
         if not isinstance(result, dict):
             raise ValueError("invalid_tool_result")
         artifact = artifact or {}
+        if (name in route_tools and result.get("error")
+                and (name != "compare_routes" or self.route_tool_failure is None)):
+            self.route_tool_failure = {"code": str(result["error"]),
+                                       "message": str(result.get("message") or "路线服务未完成计算。")}
         observed = list(artifact.get("candidates") or result.get("candidates") or [])
         if isinstance(result.get("poi"), dict):
             observed.append(result["poi"])
@@ -531,6 +630,10 @@ class Dialogue:
                 self.fresh.add(identifier)
         if name in {"search_poi_candidates", "find_reachable_places"}:
             self.last_search = result
+            provider_status = result.get("online_status")
+            if (provider_status and provider_status not in {"ok", "not_requested", "query_required", "center_unavailable"}
+                    and not result.get("candidates")):
+                self.place_service_error = provider_status
             if self.intent.get("operation") == "place_search":
                 self.pending["candidate_pool"] = [
                     deepcopy(row) for row in (result.get("candidates") or [])
@@ -546,11 +649,18 @@ class Dialogue:
             if (route.get("route_verification") or {}).get("status") != "pass":
                 return {"error": "route_verification_failed", "message": "路线未通过核验，不可展示，请检查参数与约束。"}
             self.route, self.route_kind = route, artifact.get("route_kind") or "direct"
+            self.route_tool_failure = None
             state = route.get("route_state") or {}
             self.pending["start"] = deepcopy(state.get("start") or args.get("start"))
+            end_id = (args.get("end") or {}).get("poi_id")
+            if name in {"plan_route", "plan_via_route"} and end_id in self.known:
+                self.pending["selected_poi_id"] = end_id
+                self.pending["selected_place"] = deepcopy(self.known[end_id])
             self.intent["route_to_modify"] = deepcopy(state)
         if isinstance(artifact.get("route_comparison"), dict):
             self.comparison = artifact["route_comparison"]
+            if not result.get("error"):
+                self.route_tool_failure = None
         if result.get("reason_code") == "graph_no_path":
             self.no_path = result
         if name == "get_weather" and not result.get("error"):
@@ -568,6 +678,22 @@ class Dialogue:
             if value not in (None, False, []):
                 constraints["slope" if key == "avoid_slope" else key] = "avoid" if key == "avoid_slope" else value
         return constraints
+
+    def browse_candidates(self, args):
+        offset = args.get("offset", 0)
+        limit = args.get("limit", 12)
+        include_shown = args.get("include_shown", False)
+        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 12:
+            raise ValueError("invalid candidate page")
+        if type(include_shown) is not bool:
+            raise ValueError("include_shown must be a boolean")
+        shown = set(self.intent.get("shown_ids") or [])
+        pool = [row for row in self.pending.get("candidate_pool") or []
+                if isinstance(row, dict) and (include_shown or row.get("poi_id") not in shown)]
+        page = pool[offset:offset + limit]
+        return {"status": "ok", "candidates": deepcopy(page), "count": len(pool),
+                "offset": offset, "next_offset": offset + len(page),
+                "exhausted": offset + len(page) >= len(pool)}
 
     def present(self, args):
         from agents.result_maintenance import record_candidate_snapshot
@@ -601,19 +727,14 @@ class Dialogue:
         self.candidates = candidates
         self.pending.update({"pending_slot": "selection", "candidate_poi_ids": ids,
                              "candidate_places": deepcopy(candidates)})
-        self.intent["shown_ids"] = list(dict.fromkeys([*self.intent.get("shown_ids", []), *ids]))[-100:]
+        self.intent["shown_ids"] = list(dict.fromkeys([*self.intent.get("shown_ids", []), *ids]))
         if self.last_search.get("data_version"):
             record_candidate_snapshot(self.pending, self.last_search)
         return "\n\n".join(paragraphs)
 
     def result(self, message, *, failed=False):
         from agents.planner import _sanitize_message
-        if failed and not (self.route or self.comparison or self.candidates):
-            question = "刚才这一步暂时没有完成，我保留了当前需求和已确认条件。你想按原条件继续，还是调整区域或类型？"
-            self.clarify = {"question": question,
-                            "options": ["按原条件继续", "调整区域或类型"], "slot": "other"}
-            message = question
-        elif failed and self.candidates:
+        if failed and self.candidates:
             message = "我保留了这批已核对候选。你可以先选择其中一个，或说“换一批”继续。"
         elif failed and self.route:
             message = "路线结果已保留，你可以先查看路线；如果还需要说明，我可以继续补充。"
@@ -622,6 +743,11 @@ class Dialogue:
         kind = "route" if self.route else "route_comparison" if self.comparison else "candidates" if self.candidates else "clarify" if self.clarify else "chat"
         if self.candidates:
             message = _safe_candidate_prose(message)
+            anchor = self.pending.get("search_anchor")
+            radius = self.pending.get("search_radius_m")
+            if isinstance(anchor, dict) and radius:
+                anchor_name = anchor.get("name") or "所选搜索中心"
+                message += f"\n\n搜索范围：以{anchor_name}为中心，半径约 {radius} 米。"
             scope_note = "地点依据：以上为地图/校园目录匹配结果，未现场核实存在性、入口或营业状态。"
             if scope_note not in message:
                 message += "\n\n" + scope_note
@@ -633,335 +759,19 @@ class Dialogue:
                   "clarify": self.clarify, "suggestions": self.suggestions, "route_comparison": self.comparison,
                   "weather": self.weather,
                   "place_request": self.pending, "sources": list(self.sources.values()),
+                  "updated_task_fields": sorted(self.modified_fields),
                   "model_status": "unavailable" if failed else "ok", "model_usage": dict(self.usage)}
         if self.route:
             result["completed_place_request"] = deepcopy(self.pending)
             result["place_request"] = None
         if failed:
-            result["execution_status"] = "partial" if self.route or self.comparison or self.candidates else "needs_input"
-            if result["execution_status"] == "needs_input":
-                result["needs_input"] = True
+            result["execution_status"] = "partial" if (self.route or self.candidates
+                or self.comparison and not self.route_tool_failure) else "failed"
         return result
 
     def run(self):
-        from agents import web_evidence
-        started = time.monotonic()
-        max_seconds = min(120.0, max(20.0, float(os.getenv("AGENT_DIALOGUE_TIMEOUT_S", "90"))))
-        compact_query = re.sub(r"[\s，。！？、,.!?;；:：]+", "", str(self.query or "")).casefold()
-        if (compact_query in _NEXT_BATCH_COMMANDS
-                and self.intent.get("operation") == "place_search"
-                and self.pending.get("pending_slot") == "selection"
-                and not self.direct_route_selection):
-            shown = set(self.intent.get("shown_ids") or [])
-            remaining = []
-            seen = set()
-            for row in self.pending.get("candidate_pool") or []:
-                poi_id = row.get("poi_id") if isinstance(row, dict) else None
-                if poi_id and poi_id not in shown and poi_id not in seen:
-                    remaining.append(row)
-                    seen.add(poi_id)
-            if not remaining:
-                self.clarify = {
-                    "question": "这次检索到的候选已经展示完了。要扩大附近范围，还是换一种地点类型？",
-                    "options": ["扩大搜索范围", "换一种地点类型"], "slot": "selection",
-                }
-                return self.result(self.clarify["question"])
-            limit = min(self.intent.get("limit", 4), 4)
-            selected = remaining[:limit]
-            self.last_search = {"status": "ok", "online_status": "ok",
-                                "candidates": deepcopy(remaining), "count": len(remaining)}
-            self.turn_action = "next_batch"
-            message = self.present({
-                "introduction": "继续按原条件展示本次检索中尚未出现的候选。",
-                "places": [{"poi_id": row["poi_id"],
-                            "reason": "来自本次地点目录检索的其他候选记录。"}
-                           for row in selected],
-            })
-            return self.result(message)
-        if self.direct_route_selection:
-            selected_id = self.pending["selected_poi_id"]
-            selected = self.known[selected_id]
-            route_result = self.spatial("plan_route", {
-                "end": {"type": "poi", "poi_id": selected_id, "name": selected.get("name")},
-            })
-            if not self.route:
-                message = ((self.clarify or {}).get("question")
-                           or route_result.get("message")
-                           or "暂时无法生成到所选地点的可靠路线，请检查起点或稍后重试。")
-                return self.result(message, failed=bool(route_result.get("error")))
-            route_summary = {key: self.route.get(key) for key in (
-                "start_name", "end_name", "mode", "distance_m", "duration_min",
-                "recommended_length_m", "route_verification", "endpoint_access",
-                "road_condition_overview", "strategy",
-            ) if key in self.route}
-            self.messages.append({"role": "system", "content": (
-                "地图工具已按服务端接受的地点 ID 完成路线计算。仅依据以下路线结果作简洁说明；"
-                "不得修改距离、时间、起终点或核验状态。路线摘要："
-                + json.dumps(_compact(route_summary), ensure_ascii=False, default=str)
-            )})
-            self.route_preplanned = True
-        try:
-            if not config.DEEPSEEK_API_KEY:
-                raise RuntimeError("model_not_configured")
-            client = self.client_factory()
-        except Exception:
-            return self.result("对话模型暂时不可用，已保留本轮需求，请稍后重试。", failed=True)
-        for _ in range(12):
-            if time.monotonic() - started > max_seconds or self.usage["total_tokens"] > 40000:
-                return self.result("本轮查询达到执行上限，已保留得到的信息和任务，可以继续或缩小检索范围。", failed=True)
-            operation = self.intent.get("operation")
-            requested_count = min(self.intent.get("limit", 4), 4)
-            candidate_count = len(self.last_search.get("candidates") or [])
-            web_research_requested = self.intent.get("web_research_requested") is True
-            page_read_requested = self.intent.get("web_page_read_requested") is True
-            web_lookup_complete = (web_research_requested and self.web_search_count >= 1
-                                   and (not page_read_requested or self.web_fetch_count >= 1 or not self.sources))
-            web_results_exhausted = (web_lookup_complete and self.place_search_count >= 1
-                                     and ("limit" not in self.intent or self.place_search_count >= 2))
-            if operation == "place_search" and not candidate_count and (
-                    self.place_search_count >= 2
-                    or web_results_exhausted):
-                online_status = self.last_search.get("online_status")
-                message = ("地图地点服务暂时不可用，请稍后重试。"
-                           if online_status not in (None, "ok", "not_requested")
-                           else "这次地图检索没有找到可核对的地点；可以换一个区域或餐饮类型再试。")
-                return self.result(message)
-            self.turns += 1
-            # The existing lease-aware callback also detects cancellation between
-            # model turns; do not swallow errors raised by the workflow callback.
-            self.trace({"tool_name": "model_dialogue", "argument_keys": [], "outcome": "success", "artifact_kind": None})
-            web_candidates_ready = (web_lookup_complete and self.place_search_count >= 1
-                                    and candidate_count > 0 and "limit" not in self.intent)
-            ready_to_present = (candidate_count >= requested_count or self.place_search_count >= 2
-                                or web_candidates_ready)
-            required_tool = None
-            try:
-                web_map_search_pending = (web_research_requested and self.web_search_count >= 1
-                    and (not page_read_requested or self.web_fetch_count >= 1 or not self.sources)
-                    and self.place_search_count < 2
-                    and (self.place_search_count == 0
-                         or "limit" in self.intent and candidate_count < requested_count))
-                schemas = tool_schemas(operation, allow_place_search=(
-                        self.place_search_count < 2 and candidate_count < requested_count),
-                        ready_to_present=ready_to_present,
-                        web_research_requested=web_research_requested,
-                        web_search_available=self.web_search_count < 1,
-                        web_fetch_available=bool(self.sources) and page_read_requested and self.web_fetch_count < 1,
-                        web_map_search_pending=web_map_search_pending,
-                        selected_place=bool(self.pending.get("selected_poi_id")),
-                        route_preplanned=self.route_preplanned)
-                request = {
-                    "model": config.LLM_MODEL,
-                    "messages": deepcopy(self.messages),
-                    "tools": schemas,
-                    "temperature": 0.2,
-                    "max_tokens": 2600,
-                }
-                if not self._intent_resolved:
-                    intent_tools = tool_schemas(None)
-                    request["tools"] = [item for item in intent_tools
-                                        if item["function"]["name"] in {"update_task", "ask_user"}]
-                    request["tool_choice"] = "auto"
-                elif operation not in _OPERATION_TOOL_NAMES:
-                    request["tools"] = [item for item in schemas
-                                        if item["function"]["name"] == "update_task"]
-                    request["tool_choice"] = {
-                        "type": "function", "function": {"name": "update_task"},
-                    }
-                elif self.turn_action == "next_batch" and operation == "place_search":
-                    required_tool = "present_places" if candidate_count else None
-                    request["tools"] = [item for item in tool_schemas(None)
-                                        if item["function"]["name"] == "present_places"]
-                    if required_tool:
-                        request["tool_choice"] = {
-                            "type": "function", "function": {"name": required_tool},
-                        }
-                elif operation == "place_search" and web_research_requested:
-                    if self.web_search_count < 1:
-                        required_tool = "search_web"
-                    elif self.sources and page_read_requested and self.web_fetch_count < 1:
-                        required_tool = "read_web_page"
-                    elif web_map_search_pending:
-                        required_tool = "search_poi_candidates"
-                    elif ready_to_present:
-                        required_tool = "present_places"
-                    request["tool_choice"] = {
-                        "type": "function", "function": {"name": required_tool},
-                    }
-                elif operation == "place_search" and ready_to_present:
-                    request["tool_choice"] = {
-                        "type": "function", "function": {"name": "present_places"},
-                    }
-                available_tool_names = {
-                    item["function"]["name"] for item in request["tools"]
-                }
-                response = client.chat.completions.create(**request)
-            except Exception:
-                return self.result("对话模型暂时没有完成回答，已保留本轮需求和查得信息，请重试。", failed=True)
-            usage = getattr(response, "usage", None)
-            for field in self.usage:
-                self.usage[field] += int(getattr(usage, field, 0) or 0)
-            choices = getattr(response, "choices", None)
-            if not isinstance(choices, (list, tuple)) or not choices or getattr(choices[0], "message", None) is None:
-                return self.result("对话模型返回了空结果，已保留本轮需求，请重试。", failed=True)
-            msg = choices[0].message
-            calls = getattr(msg, "tool_calls", None) or []
-            if not calls and not self._intent_resolved:
-                self.clarify = {
-                    "question": "你是想继续刚才的地点搜索，还是想换一个区域或类型？",
-                    "options": ["继续刚才的搜索", "换区域或类型"], "slot": "other",
-                }
-                return self.result(self.clarify["question"])
-            if (operation == "place_search" and web_research_requested
-                    and required_tool == "search_poi_candidates"):
-                expected_calls = [call for call in calls
-                                  if call.function.name == required_tool]
-                if expected_calls:
-                    # A strict retrieval phase accepts only the requested spatial
-                    # tool. Extra model-proposed task edits cannot revise a search
-                    # after its web evidence has already been gathered.
-                    calls = expected_calls[:1]
-                else:
-                    # If the model declines the required map step, still ground the
-                    # current request against the map before asking it to select.
-                    try:
-                        search_result = self.spatial("search_poi_candidates", {})
-                        self.trace({"tool_name": "search_poi_candidates",
-                                    "argument_keys": [],
-                                    "outcome": "tool_error" if search_result.get("error") else "success",
-                                    "artifact_kind": "candidates"})
-                        self.messages.append({"role": "system", "content": (
-                            "模型本轮没有提交地图检索参数，服务端已按已接受任务完成地图检索。"
-                            "请只从返回的地点 ID 中筛选推荐；检索结果：\n"
-                            + _model_tool_content("search_poi_candidates", search_result)
-                        )})
-                    except (ValueError, TypeError, KeyError) as exc:
-                        return self.result("地图地点检索暂时没有完成，请稍后重试。", failed=True)
-                    continue
-            if (operation == "place_search" and web_research_requested
-                    and required_tool == "present_places"):
-                expected_calls = [call for call in calls
-                                  if call.function.name == required_tool]
-                if not expected_calls:
-                    return self.result("我已核对地图候选，但本轮没有完成推荐整理，请重试。", failed=True)
-                calls = expected_calls[:1]
-            if not calls:
-                text = str(msg.content or "").strip()
-                return self.result(text or "本轮没有形成完整回答，请重试。", failed=not bool(text))
-            record = {"role": "assistant", "content": msg.content or "", "tool_calls": [
-                {"id": call.id, "type": "function", "function": {"name": call.function.name, "arguments": call.function.arguments}} for call in calls]}
-            if getattr(msg, "reasoning_content", None) is not None:
-                record["reasoning_content"] = msg.reasoning_content
-            self.messages.append(record)
-            final = None
-            task_update_applied = False
-            search_intent_changed = False
-            auto_search_done = False
-            # Commit changed intent before any spatial call from the same model
-            # response, so stale arguments cannot search the previous request.
-            ordered_calls = sorted(calls[:8], key=lambda call: call.function.name != "update_task")
-            for call in ordered_calls:
-                name = call.function.name
-                try:
-                    args = json.loads(call.function.arguments)
-                    if not isinstance(args, dict):
-                        raise ValueError("arguments must be an object")
-                    if name not in available_tool_names:
-                        answer = {"error": "tool_not_available",
-                                  "message": "当前阶段未开放此工具，请先完成任务信息提交后再继续。"}
-                    elif name == "update_task":
-                        if task_update_applied:
-                            answer = {"error": "task_already_committed",
-                                      "message": "本轮任务已保存，请基于当前任务继续。"}
-                        else:
-                            answer = self.update(args)
-                            if not answer.get("error"):
-                                task_update_applied = True
-                            search_intent_changed = (
-                                not answer.get("error")
-                                and self._last_task_update_changed_search
-                                and self.intent.get("operation") == "place_search"
-                            )
-                    elif name == "present_places":
-                        final = self.present(args)
-                        answer = {"accepted": True, "poi_ids": self.pending["candidate_poi_ids"]}
-                    elif name in {"search_web", "read_web_page"}:
-                        counter_name = "web_search_count" if name == "search_web" else "web_fetch_count"
-                        if getattr(self, counter_name) >= 1:
-                            answer = {"error": "web_evidence_limit", "message": "本轮网页检索次数已达上限，请基于已查来源回答。"}
-                        else:
-                            setattr(self, counter_name, getattr(self, counter_name) + 1)
-                            answer = web_evidence.execute(name, args, self.sources,
-                                                          original_question=self.query)
-                    elif (name in {"search_poi_candidates", "find_reachable_places"}
-                          and search_intent_changed
-                          and (auto_search_done or self.intent.get("web_research_requested") is True)):
-                        answer = {"error": "search_superseded",
-                                  "message": "任务条件已更新，将按新条件完成网页查证和地图检索；请勿使用旧参数。"}
-                    else:
-                        answer = self.spatial(name, args)
-                except (ValueError, TypeError, KeyError) as exc:
-                    answer = {"error": "invalid_tool_request", "message": str(exc)[:300]}
-                if name in {"update_task", "present_places", "search_web", "read_web_page"}:
-                    self.trace({"tool_name": name, "argument_keys": sorted(args) if isinstance(args, dict) else [],
-                                "outcome": "tool_error" if answer.get("error") else "success", "artifact_kind": None})
-                self.messages.append({"role": "tool", "tool_call_id": call.id,
-                                      "content": _model_tool_content(name, answer)})
-                if (name == "update_task" and not answer.get("error")
-                        and search_intent_changed and not auto_search_done
-                        and self.place_search_count < 2):
-                    if self.turn_action == "next_batch":
-                        auto_search_done = True
-                    elif self.intent.get("web_research_requested") is True:
-                        if self.web_search_count < 1:
-                            self.web_search_count = 1
-                            query = _web_search_query(self.intent)
-                            search_result = web_evidence.execute(
-                                "search_web", {"query": query}, self.sources,
-                                original_question=self.query,
-                            )
-                            self.trace({"tool_name": "search_web", "argument_keys": ["query"],
-                                        "outcome": "tool_error" if search_result.get("error") else "success",
-                                        "artifact_kind": None})
-                            self.messages.append({"role": "system", "content": (
-                                "服务端已按已接受任务调用 DeepSeek 网页搜索。网页只能提供名称和描述线索；"
-                                "不能证明门店位置或现场情况。搜索结果：\n"
-                                + _model_tool_content("search_web", search_result)
-                            )})
-                            source_rows = search_result.get("results") or []
-                            source_id = next((row.get("source_id") for row in source_rows
-                                              if isinstance(row, dict) and row.get("source_id")), None)
-                            if source_id and self.intent.get("web_page_read_requested") is True:
-                                self.web_fetch_count = 1
-                                fetch_result = web_evidence.execute(
-                                    "read_web_page", {"source_id": source_id}, self.sources,
-                                    original_question=self.query,
-                                )
-                                self.trace({"tool_name": "read_web_page",
-                                            "argument_keys": ["source_id"],
-                                            "outcome": "tool_error" if fetch_result.get("error") else "success",
-                                            "artifact_kind": None})
-                                self.messages.append({"role": "system", "content": (
-                                    "服务端读取了一个搜索来源；内容仍需由地图核对地点身份和位置。来源正文：\n"
-                                    + _model_tool_content("read_web_page", fetch_result)
-                                )})
-                        auto_search_done = True
-                    else:
-                        search_result = self.spatial("search_poi_candidates", {})
-                        self.messages.append({"role": "system", "content": (
-                            "服务端已按刚保存的任务调用地图地点检索。只能从以下返回的 poi_id 中提交推荐；"
-                            "来源没有提供的事实应说明未知。检索结果：\n"
-                            + _model_tool_content("search_poi_candidates", search_result)
-                        )})
-                        auto_search_done = True
-                    auto_search_done = True
-                if name == "present_places" and not answer.get("error"):
-                    break
-            if final is not None:
-                return self.result(final)
-            if self.clarify:
-                return self.result(self.clarify.get("question", "请补充具体要求。"))
-        return self.result("本轮检索达到调用上限，已保留需求，请继续说明最重要的条件。", failed=True)
+        from agents.dialogue_loop import run_dialogue_loop
+        return run_dialogue_loop(self)
 
 
 def run_dialogue(query, **kwargs):

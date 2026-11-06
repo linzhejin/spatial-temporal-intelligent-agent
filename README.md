@@ -17,9 +17,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/luojia-system-release-20261105 @ 222ed9f ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-06 18:08
+- 版本：codex/luojia-system-release-20261105 @ 1168c01 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-06 20:58
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v116 ｜ Android 1.4.1 (versionCode 6) ｜ 数据库迁移 15（最新 015）
+- 前端 SW whu-walker-v117 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
 <!-- FACTS:END -->
 
 日常通勤与“最短路径”策略的距离/坡度/景观权重为 `1/0/0`；推荐、风景优先和平坦优先使用其他预设。路线可计算或画出不等于每条边均已实地核实；发布记录见文档目录，当前进度见交接说明。

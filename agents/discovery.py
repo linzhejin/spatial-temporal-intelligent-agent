@@ -93,6 +93,10 @@ def search_places_for_dialogue(args: dict, ctx: dict):
         set(subcategories or []) & tools._ONLINE_DINING_SUBCATEGORIES) or (
         not subcategories and bool(keyword))
     map_keyword = _provider_keyword(keyword, query_state.get("keywords"), activities, candidate_names)
+    if not map_keyword and set(subcategories) & tools._ONLINE_DINING_SUBCATEGORIES:
+        # A structured category is enough to query the provider; no sentence
+        # classification or fabricated candidate name is needed.
+        map_keyword = "餐饮"
     provider_categories = set(subcategories or [])
     if generic_meal:
         provider_categories.update({"restaurant", "fastfood"})
@@ -168,7 +172,10 @@ def search_places_for_dialogue(args: dict, ctx: dict):
         return {"status": "ok" if online_status in {"ok", "not_requested"} else online_status,
                 "candidates": [], "count": 0, "online_status": online_status,
                 "message": ("没有检索到匹配的商户或校园地点；这不代表现实中不存在。"
-                            if online_status in {"ok", "not_requested"} else "地点服务暂时不可用，请换关键词或稍后重试。")}, {"candidates": []}
+                            if online_status in {"ok", "not_requested"} else
+                            "缺少检索词，请提供具体地点类型或关键词。" if online_status == "query_required" else
+                            "搜索中心未能解析，请先核对中心地点。" if online_status == "center_unavailable" else
+                            "地点服务暂时不可用，请稍后重试。")}, {"candidates": []}
 
     # The same accepted route tool computes path distance and applies closure,
     # mode and accessibility filters to this exact server-fetched pool.

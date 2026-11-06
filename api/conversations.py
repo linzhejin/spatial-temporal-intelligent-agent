@@ -180,7 +180,7 @@ def submit_message(conversation_id: str):
     if not isinstance(request_id, str) or not request_id.strip() or len(request_id) > 200:
         return _failure("missing_request_id", "每条消息必须带唯一 request_id。", 422)
     if set(body) - {"query", "request_id", "travel_mode", "coord_start", "coord_end", "coord_waypoints",
-                    "continuation_task_id", "base_revision", "selected_poi_id"}:
+                    "continuation_task_id", "base_revision", "selected_poi_id", "ui_action", "location_observation"}:
         return _failure("invalid_request", "消息包含不支持的字段。", 422)
 
     def location_ref(value, label):
@@ -239,11 +239,39 @@ def submit_message(conversation_id: str):
             continuation_task_id = str(uuid.UUID(continuation_task_id))
         elif base_revision is not None:
             raise ValueError("base_revision 只能与 continuation_task_id 一起使用")
+        action = body.get("ui_action")
+        if action is not None:
+            if (not isinstance(action, dict) or set(action) - {"type", "value", "task_id", "task_revision", "poi_id"}
+                    or action.get("type") not in {"candidate_selection", "clarification_choice", "map_route", "retry"}
+                    or any(not isinstance(value, (str, int)) or isinstance(value, bool) or len(str(value)) > 500
+                           for value in action.values())):
+                raise ValueError("界面操作格式无效")
+            if action.get("type") == "candidate_selection" and (
+                    action.get("task_id") != continuation_task_id or action.get("task_revision") != base_revision
+                    or action.get("poi_id") != selected_poi_id):
+                raise ValueError("候选选择与任务引用不一致")
+        observation = body.get("location_observation")
+        if observation is not None:
+            if (not isinstance(observation, dict)
+                    or set(observation) != {"lng", "lat", "accuracy_m", "observed_at", "crs"}
+                    or observation.get("crs") != "WGS84"):
+                raise ValueError("定位观测格式无效")
+            location_ref({"lng": observation.get("lng"), "lat": observation.get("lat"), "crs": "WGS84"}, "定位")
+            accuracy = observation.get("accuracy_m")
+            if isinstance(accuracy, bool) or not isinstance(accuracy, (int, float)) or not math.isfinite(accuracy) or not 0 < accuracy <= 100000:
+                raise ValueError("定位精度无效")
+            try:
+                observed = datetime.fromisoformat(str(observation["observed_at"]).replace("Z", "+00:00"))
+            except ValueError as exc:
+                raise ValueError("定位时间无效") from exc
+            if observed.tzinfo is None or observed.utcoffset() is None:
+                raise ValueError("定位时间必须包含时区")
         accepted = create_task_run(
             _database_url(), owner_id, conversation_id, query,
             request_id.strip(), deadline, route_spec=route_spec,
             continuation_task_id=continuation_task_id, base_revision=base_revision,
             selected_poi_id=selected_poi_id,
+            ui_action=action, location_observation=observation,
         )
     except TaskContinuationConflict as error:
         return _failure("task_revision_conflict", str(error), 409)

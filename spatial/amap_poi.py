@@ -76,8 +76,15 @@ def _dining_subcategory(raw):
     return 'other'
 
 
+def _provider_get(client, url, **kwargs):
+    from agents.deadline import is_bounded, limited_timeout
+    if is_bounded():
+        kwargs['timeout'] = limited_timeout(3)
+    return client.get(url, **kwargs)
+
+
 def _nearby_pages(client, params, pages):
-    response = client.get('https://restapi.amap.com/v3/place/around',
+    response = _provider_get(client, 'https://restapi.amap.com/v3/place/around',
                           params={**params, 'page': 1})
     response.raise_for_status()
     body = response.json()
@@ -88,7 +95,7 @@ def _nearby_pages(client, params, pages):
     for page in range(2, pages + 1):
         if len(raw_rows) < 25 or len(raw_rows) >= reported_count:
             break
-        response = client.get('https://restapi.amap.com/v3/place/around',
+        response = _provider_get(client, 'https://restapi.amap.com/v3/place/around',
                               params={**params, 'page': page})
         response.raise_for_status()
         body = response.json()
@@ -146,7 +153,7 @@ def search_text(keywords, *, city="420100", pages=3, client=None):
 
 
 def _text_pages(client, params, pages):
-    first = client.get("https://restapi.amap.com/v3/place/text", params={**params, "page": 1})
+    first = _provider_get(client, "https://restapi.amap.com/v3/place/text", params={**params, "page": 1})
     first.raise_for_status()
     body = first.json()
     if str(body.get("status")) != "1":
@@ -155,7 +162,7 @@ def _text_pages(client, params, pages):
     for page in range(2, pages + 1):
         if len(rows) < 25 or len(rows) >= total:
             break
-        response = client.get("https://restapi.amap.com/v3/place/text", params={**params, "page": page})
+        response = _provider_get(client, "https://restapi.amap.com/v3/place/text", params={**params, "page": page})
         response.raise_for_status()
         body = response.json()
         if str(body.get("status")) != "1":
@@ -263,10 +270,10 @@ def lookup_by_id(poi_id, client=None):
     try:
         if client is None:
             with httpx.Client(timeout=httpx.Timeout(3, connect=2)) as request_client:
-                response = request_client.get('https://restapi.amap.com/v3/place/detail',
+                response = _provider_get(request_client, 'https://restapi.amap.com/v3/place/detail',
                                               params=params)
         else:
-            response = client.get('https://restapi.amap.com/v3/place/detail', params=params)
+            response = _provider_get(client, 'https://restapi.amap.com/v3/place/detail', params=params)
         response.raise_for_status()
         body = response.json()
         if str(body.get('status')) != '1':
@@ -326,9 +333,9 @@ def lookup(name, known=None, client=None):
     try:
         if client is None:
             with httpx.Client(timeout=httpx.Timeout(3, connect=2)) as request_client:
-                response = request_client.get('https://restapi.amap.com/v3/place/text', params=params)
+                response = _provider_get(request_client, 'https://restapi.amap.com/v3/place/text', params=params)
         else:
-            response = client.get('https://restapi.amap.com/v3/place/text', params=params)
+            response = _provider_get(client, 'https://restapi.amap.com/v3/place/text', params=params)
         response.raise_for_status()
         body = response.json()
         if str(body.get('status')) != '1':

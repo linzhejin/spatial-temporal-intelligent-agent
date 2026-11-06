@@ -2,9 +2,11 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
+from datetime import datetime, timezone
 import math
 import os
 import re
+import time
 from typing import Any, Callable, TypedDict
 
 from langgraph.graph import END, START, StateGraph
@@ -79,6 +81,45 @@ def _weather_message(weather: dict) -> str:
         parts.append(str(weather["advice"]).strip())
     message = "，".join(parts).rstrip("，")
     return message if message.endswith(("。", "！", "？", "!", "?")) else message + "。"
+
+
+def _model_delivery_text(result: dict) -> str:
+    """Produce the exact assistant text stored and rendered for a model-led run."""
+    text = next((result[key] for key in ("explanation", "reply", "message")
+                 if isinstance(result.get(key), str) and result[key].strip()), "")
+    if result.get("response_kind") != "route":
+        return text
+    verification = result.get("route_verification") or {}
+    if verification.get("status") == "pass" and verification.get("field_truth_verified") is False:
+        notice = "提示：本次核对的是路网和路线约束，未实地确认道路当前可通行。"
+        if notice not in text:
+            text = (text + " " + notice).strip()
+    state = result.get("route_state") or {}
+    constraints = state.get("hard_constraints") or {}
+    statuses = [part.split("+") for part in str(result.get("filter_status") or "").split(";") if part]
+    if (any("steps_unverified" in parts for parts in statuses) or constraints.get("avoid_steps") is True):
+        if not re.search(r"(?:台阶|楼梯).{0,20}(?:尚未|未完全|无法|不能).{0,8}(?:核实|确认|验证)", text):
+            notice = ("提示：已排除路网中标注的台阶，其余路段是否有台阶尚未核实。"
+                      if statuses and all("steps_avoid" in parts for parts in statuses)
+                      else "提示：路线中是否有台阶尚未核实。")
+            text = (text + " " + notice).strip()
+    if result.get("route_events_status") == "unknown":
+        text += " 部分分段的沿途路况暂未核实，请留意现场信息。"
+    else:
+        events = [event for event in result.get("route_events") or []
+                  if isinstance(event, dict) and event.get("action") in {"notice", "slowdown"}]
+        if events:
+            labels = []
+            for event in events[:3]:
+                location = str(event.get("road_name") or event.get("name") or "沿途路段").strip()
+                name = str(event.get("name") or "").strip()[:40]
+                detail = "：" + name if name and name != location else ""
+                labels.append(location + "（" + ("缓行" if event["action"] == "slowdown" else "提示") + detail + "）")
+            text += " 沿途路况：" + "；".join(labels) + (f"等 {len(events)} 条" if len(events) > 3 else "") + "。"
+    question = (result.get("clarify") or {}).get("question") if result.get("needs_input") else None
+    if isinstance(question, str) and question and question not in text:
+        text += "\n" + question
+    return text.strip()
 
 
 def _run_weather_tool():
@@ -194,6 +235,77 @@ def build_agent_workflow(
     def execute_agent(state: AgentRunState, runtime: Runtime[AgentRunContext]):
         _emit(state, runtime, "node_started", "execute_agent", "正在识别需求并调用校园空间工具", database_url)
         data = state["input"]
+        if data.get("model_led"):
+            from storage.task_repository import bind_model_task, read_conversation_result
+
+            request = data.get("request") or {}
+            route_spec = request.get("route_spec") or {}
+            history = data.get("history") or []
+            tasks = data.get("tasks") or []
+            for task in tasks:
+                route = next(((item.get("metadata") or {}).get("route_state") for item in reversed(history)
+                              if item.get("task_id") == task.get("task_id")
+                              and isinstance((item.get("metadata") or {}).get("route_state"), dict)), None)
+                if route:
+                    task["route_state"] = route
+            records = []
+            for item in history:
+                metadata = dict(item.get("metadata") or {})
+                if "route_state" in metadata:
+                    metadata["route_state_ref"] = {"task_id": item.get("task_id"),
+                                                   "run_id": metadata.get("run_id")}
+                    metadata.pop("route_state", None)
+                records.append({**{key: item.get(key) for key in ("seq", "message_id", "task_id", "role")},
+                                "metadata": metadata})
+            context = {
+                "available_tasks": tasks,
+                "message_records": records,
+                "selected_poi_id": request.get("selected_poi_id"),
+                "selected_task_id": request.get("continuation_task_id"),
+                "input_action": request.get("ui_action"),
+                "location_observation": request.get("location_observation"),
+            }
+            proof_identity = {"database_url": database_url, "owner_id": data.get("owner_id"),
+                              "task_id": data.get("task_id"), "task_revision": data.get("task_revision")}
+
+            def bind_task(**proposal):
+                bound = bind_model_task(database_url, state["run_id"], runtime.context["worker_id"], **proposal)
+                proof_identity.update({"task_id": bound["task_id"], "task_revision": bound["task_revision"]})
+                return bound
+
+            def read_result(**reference):
+                return read_conversation_result(database_url, data["conversation_id"], **reference)
+
+            def trace(item):
+                item = item if isinstance(item, dict) else {}
+                payload = {"tool_name": str(item.get("tool_name") or "unknown")[:80],
+                           "argument_keys": [str(key)[:80] for key in (item.get("argument_keys") or [])][:50],
+                           "outcome": str(item.get("outcome") or "unknown")[:80],
+                           "artifact_kind": item.get("artifact_kind"),
+                           "phase": item.get("phase"), "duration_ms": item.get("duration_ms"),
+                           "error_code": item.get("error_code"), "provider_status": item.get("provider_status")}
+                if item.get("phase") == "started":
+                    label = "正在理解完整对话" if item.get("tool_name") == "model_dialogue" else "正在查询和核对信息"
+                    _emit(state, runtime, "node_started", "model_dialogue" if item.get("tool_name") == "model_dialogue" else "spatial_tool", label, database_url)
+                _emit_agent_tool_trace(state, runtime, database_url, "agent_tool_call", payload)
+
+            remaining = max(0.0, (data["deadline_at"] - datetime.now(timezone.utc)).total_seconds())
+            response = agent(
+                data["query"], context=context, history=history,
+                coord_start=_coordinate(route_spec.get("start")), coord_end=_coordinate(route_spec.get("end")),
+                coord_waypoints=[point for point in (_coordinate(item) for item in route_spec.get("stops", [])) if point],
+                travel_mode=route_spec.get("travel_mode"), uid=data.get("owner_id"),
+                proof_identity=proof_identity, tool_trace_callback=trace, bind_task_callback=bind_task,
+                read_result_callback=read_result,
+                deadline_monotonic=time.monotonic() + remaining,
+            )
+            if not isinstance(response, dict):
+                raise TypeError("agent returned a non-object response")
+            response.setdefault("execution_status", "needs_input" if response.get("response_kind") in {"clarify", "candidates"}
+                                else "completed")
+            response["needs_input"] = bool(response.get("needs_input")) or response.get("response_kind") in {"clarify", "candidates"}
+            _emit(state, runtime, "node_completed", "execute_agent", "需求分析与空间工具执行完成", database_url)
+            return {"agent_response": response}
         task = data.get("task") or {}
         route_spec = task.get("route_spec") or {}
         start = _coordinate(route_spec.get("start"))
@@ -456,7 +568,8 @@ def build_agent_workflow(
         from api.routes import _agent_response_to_legacy
 
         data = state["input"]
-        route_spec = (data.get("task") or {}).get("route_spec") or {}
+        route_spec = ((data.get("task") or {}).get("route_spec")
+                      or (data.get("request") or {}).get("route_spec") or {})
         start = _coordinate(route_spec.get("start"))
         end = _coordinate(route_spec.get("end"))
         result = _agent_response_to_legacy(state["agent_response"], start, end)
@@ -465,7 +578,7 @@ def build_agent_workflow(
         provenance_mod.persist(response.get("provenance"))
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
                     "place_request", "candidates", "completed_place_request", "result_maintenance",
-                    "turns", "model_usage"):
+                    "turns", "model_usage", "failure_code", "updated_task_fields"):
             result[key] = response.get(key)
         if response.get("needs_input"):
             result["needs_input"] = True
@@ -474,6 +587,8 @@ def build_agent_workflow(
             result["message"] = response.get("message", result.get("message", ""))
             if result.get("task_type") == "unknown":
                 result["clarify"] = response.get("clarify")
+        if data.get("model_led"):
+            result["assistant_text"] = _model_delivery_text(result)
         _emit(state, runtime, "node_completed", "compose_result", "结果已整理，可以查看", database_url)
         return {"result": result}
 

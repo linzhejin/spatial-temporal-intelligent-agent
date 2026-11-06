@@ -1375,7 +1375,7 @@ def _tool_resolve_poi(args, ctx):
             provider_poi.update({"poi_id": provider_poi.get("id"), "source": "amap_online"})
             return {"found": True, "poi": _poi_public(provider_poi, with_provenance=True),
                     "online_lookup_status": "ok"}, None
-        return {"found": True, "poi": _poi_public(poi)}, None
+        return {"found": True, "poi": _poi_public(poi, with_provenance=True)}, None
     return {
         "found": False,
         "message": f"校内没找到「{args.get('name', '')}」",

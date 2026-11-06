@@ -94,18 +94,28 @@ def create_task_run(
     continuation_task_id: str | None = None,
     base_revision: int | None = None,
     selected_poi_id: str | None = None,
+    ui_action: dict[str, Any] | None = None,
+    location_observation: dict[str, Any] | None = None,
 ) -> dict:
     """Atomically accept a user message, task snapshot and queued run."""
     from agents.state_models import Requirement, RouteSpec, TaskState
     from agents.task_planner import build_task_plan
 
-    message = message.strip()
-    if not message or len(message) > 500:
+    if not isinstance(message, str) or not message.strip() or len(message) > 500:
         raise ValueError("message must contain 1-500 characters")
     if not idempotency_key or len(idempotency_key) > 200:
         raise ValueError("idempotency key is required and must be <= 200 characters")
     route_spec = route_spec or {}
     validated_route_spec = RouteSpec.model_validate(route_spec).model_dump(mode="json")
+    from agents.dialogue import model_dialogue_enabled
+    if model_dialogue_enabled():
+        return _create_model_run(
+            url, owner_id, conversation_id, message, idempotency_key, deadline_at,
+            route_spec=route_spec, continuation_task_id=continuation_task_id,
+            base_revision=base_revision, selected_poi_id=selected_poi_id,
+            ui_action=ui_action, location_observation=location_observation,
+        )
+    message = message.strip()
     if continuation_task_id is not None and (not isinstance(base_revision, int) or base_revision < 0):
         raise ValueError("continuation requires a nonnegative base_revision")
     submission = {"request_id": idempotency_key, "route_spec": route_spec,
@@ -123,7 +133,7 @@ def create_task_run(
         existing = conn.execute(
             "SELECT r.run_id, r.task_id, r.task_revision, r.status, m.content, m.metadata,"
             " t.state, c.owner_id, c.conversation_id "
-            "FROM run r JOIN task t USING (task_id) JOIN conversation c USING (conversation_id) "
+            "FROM run r JOIN task t USING (task_id) JOIN conversation c ON c.conversation_id=t.conversation_id "
             "LEFT JOIN conversation_message m ON m.task_id=t.task_id AND m.role='user'"
             " AND m.metadata->>'request_id'=r.idempotency_key "
             "WHERE r.idempotency_key=%s",
@@ -243,14 +253,210 @@ def create_task_run(
             "status": "queued", "created": True}
 
 
+def _create_model_run(url, owner_id, conversation_id, message, idempotency_key, deadline_at, *,
+                      route_spec, continuation_task_id, base_revision, selected_poi_id,
+                      ui_action, location_observation):
+    """Persist the message and queue work without guessing its task relation."""
+    if continuation_task_id is not None and (type(base_revision) is not int or base_revision < 0):
+        raise ValueError("continuation requires a nonnegative base_revision")
+    if selected_poi_id is not None and (not isinstance(selected_poi_id, str) or not re.fullmatch(
+            r"(?:poi_\d{3,}|amap:[A-Za-z0-9_-]{3,80})", selected_poi_id)):
+        raise ValueError("selected_poi_id must be a stable local or provider ID")
+    submission = {"request_id": idempotency_key, "route_spec": route_spec,
+                  "continuation_task_id": continuation_task_id, "base_revision": base_revision,
+                  "selected_poi_id": selected_poi_id, "ui_action": ui_action,
+                  "location_observation": location_observation}
+    run_id = str(uuid.uuid4())
+    with database.connect(url) as conn:
+        conn.execute("SELECT pg_advisory_xact_lock(hashtextextended(%s, 73518264))", (idempotency_key,))
+        existing = conn.execute(
+            "SELECT r.run_id,r.task_id,r.task_revision,r.status,r.conversation_id,c.owner_id,"
+            " m.content,m.metadata FROM run r JOIN conversation c ON c.conversation_id=r.conversation_id"
+            " LEFT JOIN conversation_message m ON m.conversation_id=r.conversation_id"
+            " AND m.seq=r.input_message_seq WHERE r.idempotency_key=%s", (idempotency_key,),
+        ).fetchone()
+        if existing:
+            if (str(existing["owner_id"]) != owner_id or str(existing["conversation_id"]) != conversation_id
+                    or existing["content"] != message or (existing["metadata"] or {}).get("request") != submission):
+                raise RunConflict("request ID was already used for another submission")
+            return {"task_id": str(existing["task_id"]) if existing["task_id"] else None,
+                    "task_revision": existing["task_revision"], "run_id": str(existing["run_id"]),
+                    "status": existing["status"], "created": False}
+        owned = conn.execute("SELECT 1 FROM conversation WHERE owner_id=%s AND conversation_id=%s FOR UPDATE",
+                             (owner_id, conversation_id)).fetchone()
+        if not owned:
+            raise PermissionError("Conversation is not owned by this identity")
+        if continuation_task_id is not None:
+            task = conn.execute("SELECT revision,state FROM task WHERE conversation_id=%s AND task_id=%s",
+                                (conversation_id, continuation_task_id)).fetchone()
+            if not task or task["revision"] != base_revision:
+                raise TaskContinuationConflict("the referenced card or task is no longer current")
+            if selected_poi_id is not None:
+                pending = (task["state"] or {}).get("place_request") or {}
+                if selected_poi_id not in (pending.get("candidate_poi_ids") or []):
+                    raise TaskContinuationConflict("selected place is not in the current candidate list")
+                latest = conn.execute("SELECT task_id FROM conversation_message WHERE conversation_id=%s"
+                                      " AND role='user' ORDER BY seq DESC LIMIT 1", (conversation_id,)).fetchone()
+                if not latest or str(latest["task_id"]) != continuation_task_id:
+                    raise TaskContinuationConflict("a newer message superseded this candidate card")
+        elif selected_poi_id is not None:
+            raise ValueError("selected_poi_id requires a referenced candidate task")
+        conversation = conn.execute(
+            "UPDATE conversation SET revision=revision+1,updated_at=now() WHERE conversation_id=%s RETURNING revision",
+            (conversation_id,),
+        ).fetchone()
+        seq = conversation["revision"]
+        conn.execute("INSERT INTO conversation_message(conversation_id,seq,message_id,role,content,metadata)"
+                     " VALUES (%s,%s,%s,'user',%s,%s)",
+                     (conversation_id, seq, str(uuid.uuid4()), message,
+                      Jsonb({"request_id": idempotency_key, "request": submission})))
+        conn.execute("INSERT INTO run(run_id,conversation_id,input_message_seq,model_led,status,"
+                     "processing_stage,deadline_at,idempotency_key) VALUES (%s,%s,%s,true,'queued','queued',%s,%s)",
+                     (run_id, conversation_id, seq, deadline_at, idempotency_key))
+    return {"task_id": None, "task_revision": None, "run_id": run_id, "status": "queued", "created": True}
+
+
+def _get_model_run_input(conn, row):
+    message = conn.execute("SELECT seq,message_id,content,metadata FROM conversation_message"
+                           " WHERE conversation_id=%s AND seq=%s AND role='user'",
+                           (row["conversation_id"], row["input_message_seq"])).fetchone()
+    if not message:
+        raise RuntimeError("run has no accepted input message")
+    history = conn.execute("SELECT seq,message_id,task_id,role,content,metadata FROM conversation_message"
+                           " WHERE conversation_id=%s AND seq<%s AND role IN ('user','assistant') ORDER BY seq",
+                           (row["conversation_id"], message["seq"])).fetchall()
+    tasks = conn.execute("SELECT task_id,revision,task_kind,status,state FROM task"
+                         " WHERE conversation_id=%s ORDER BY updated_at DESC,task_id",
+                         (row["conversation_id"],)).fetchall()
+    request = (message["metadata"] or {}).get("request") or {}
+    return {"run_id": str(row["run_id"]), "conversation_id": str(row["conversation_id"]),
+            "owner_id": str(row["owner_id"]), "task_id": str(row["task_id"]) if row["task_id"] else None,
+            "task_revision": row["task_revision"], "query": message["content"],
+            "message_id": str(message["message_id"]), "input_message_seq": message["seq"],
+            "history": [{**item, "message_id": str(item["message_id"]),
+                         "task_id": str(item["task_id"]) if item["task_id"] else None} for item in history],
+            "tasks": [{**item, "task_id": str(item["task_id"])} for item in tasks],
+            "task": row.get("state"), "request": request, "deadline_at": row["deadline_at"],
+            "cancel_requested": row["cancel_requested"], "model_led": True}
+
+
+def read_conversation_result(url, conversation_id, *, run_id, section, offset=0, limit=50):
+    """Read a bounded page of a result from this conversation only."""
+    try:
+        run_id = str(uuid.UUID(str(run_id)))
+    except (ValueError, TypeError, AttributeError):
+        return {"error": "invalid_result_reference", "message": "结果引用格式无效。"}
+    if (section not in {"route_summary", "route_geometry", "candidates"}
+            or type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 100):
+        return {"error": "invalid_result_page", "message": "结果页参数无效。"}
+    with database.connect(url) as conn:
+        row = conn.execute("SELECT result FROM run WHERE run_id=%s AND conversation_id=%s"
+                           " AND status IN ('completed','partial','needs_input')", (run_id, conversation_id)).fetchone()
+    if not row or not isinstance(row["result"], dict):
+        return {"error": "result_reference_unavailable", "message": "本会话没有可读取的该结果。"}
+    result = row["result"]
+    if section == "route_summary":
+        return {"run_id": run_id, "section": section, "result": {
+            key: result[key] for key in ("start", "end", "mode", "strategy", "distance_m",
+                                         "recommended_length_m", "duration_min", "route_verification") if key in result}}
+    rows = result.get("recommended") if section == "route_geometry" else result.get("candidates")
+    rows = rows if isinstance(rows, list) else []
+    page = rows[offset:offset + limit]
+    return {"run_id": run_id, "section": section, "items": page, "offset": offset,
+            "next_offset": offset + len(page), "count": len(rows), "exhausted": offset + len(page) >= len(rows)}
+
+
+def bind_model_task(url, run_id, worker_id, *, relation, place_request, task_id=None, base_revision=None,
+                    changed_fields=None):
+    """Accept the model's proposed relation with lease, ownership and version checks."""
+    from agents.state_models import FieldProvenance, PlaceRequestState, Requirement, RouteSpec, TaskState, utc_now
+
+    if relation not in {"new", "continue", "resume_route"}:
+        raise ValueError("invalid task relation")
+    pending = PlaceRequestState.model_validate(place_request).model_dump(mode="json")
+    with database.connect(url) as conn:
+        run = conn.execute("SELECT r.*,c.owner_id FROM run r JOIN conversation c USING (conversation_id)"
+                           " WHERE r.run_id=%s AND r.worker_id=%s FOR UPDATE OF r",
+                           (run_id, worker_id)).fetchone()
+        if (not run or not run["model_led"] or run["status"] != "running" or run["cancel_requested"]
+                or not run["lease_until"] or run["lease_until"] <= utc_now() or run["deadline_at"] <= utc_now()):
+            raise RunConflict("run lease expired or cancelled")
+        conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (run["conversation_id"],))
+        if conn.execute("SELECT 1 FROM conversation_message WHERE conversation_id=%s AND role='user'"
+                        " AND seq>%s LIMIT 1", (run["conversation_id"], run["input_message_seq"])).fetchone():
+            raise RunConflict("a newer input superseded this run before task binding")
+        if run["task_id"]:
+            task = conn.execute("SELECT revision,state FROM task WHERE task_id=%s AND conversation_id=%s FOR UPDATE",
+                                (run["task_id"], run["conversation_id"])).fetchone()
+            if (not task or task["revision"] != run["task_revision"]
+                    or relation != "new" and str(task_id) != str(run["task_id"])):
+                raise RunConflict("bound task changed during worker recovery")
+            return {"task_id": str(run["task_id"]), "task_revision": run["task_revision"], "task": task["state"]}
+        message = conn.execute("SELECT message_id,content,metadata FROM conversation_message"
+                               " WHERE conversation_id=%s AND seq=%s AND role='user'",
+                               (run["conversation_id"], run["input_message_seq"])).fetchone()
+        if not message:
+            raise RunConflict("input message is missing")
+        request = (message["metadata"] or {}).get("request") or {}
+        if request.get("selected_poi_id") and (
+                relation == "new" or str(task_id) != str(request.get("continuation_task_id"))
+                or base_revision != request.get("base_revision")):
+            raise RunConflict("selected card must bind its referenced task and revision")
+        field_provenance = {str(field): FieldProvenance(
+            source="inference", scope="task", source_message_id=str(message["message_id"]), updated_at=utc_now(),
+        ).model_dump(mode="json") for field in (changed_fields or []) if isinstance(field, str) and len(field) <= 150}
+        if relation == "new":
+            task_id = str(uuid.uuid4())
+            state = TaskState(task_id=task_id, conversation_id=str(run["conversation_id"]),
+                              task_kind="information", status="running",
+                              route_spec=RouteSpec.model_validate(request.get("route_spec") or {}),
+                              place_request=pending, field_provenance=field_provenance,
+                              requirements=[Requirement(requirement_id="message-" + str(message["message_id"]),
+                                                        description=message["content"])]).model_dump(mode="json")
+            revision = 0
+            conn.execute("INSERT INTO task(task_id,conversation_id,revision,task_kind,status,state)"
+                         " VALUES (%s,%s,0,'information','running',%s)",
+                         (task_id, run["conversation_id"], Jsonb(state)))
+        else:
+            if not task_id or type(base_revision) is not int:
+                raise ValueError("continuation requires task_id and task_revision")
+            task = conn.execute("SELECT revision,state FROM task WHERE task_id=%s AND conversation_id=%s FOR UPDATE",
+                                (task_id, run["conversation_id"])).fetchone()
+            if not task or task["revision"] != base_revision:
+                raise RevisionConflict("task revision has changed")
+            current = TaskState.model_validate(task["state"])
+            document = current.model_dump(mode="python")
+            revision = current.revision + 1
+            document.update({"revision": revision, "status": "running", "updated_at": utc_now(),
+                             "place_request": pending, "pending_questions": []})
+            document["field_provenance"].update(field_provenance)
+            state = TaskState.model_validate(document).model_dump(mode="json")
+            conn.execute("UPDATE task SET revision=%s,status='running',state=%s,updated_at=now() WHERE task_id=%s",
+                         (revision, Jsonb(state), task_id))
+        conn.execute("INSERT INTO task_history(task_id,revision,state) VALUES (%s,%s,%s)",
+                     (task_id, revision, Jsonb(state)))
+        conn.execute("UPDATE conversation_message SET task_id=%s WHERE conversation_id=%s AND seq=%s",
+                     (task_id, run["conversation_id"], run["input_message_seq"]))
+        conn.execute("UPDATE run SET task_id=%s,task_revision=%s,processing_stage='tools',updated_at=now()"
+                     " WHERE run_id=%s", (task_id, revision, run_id))
+    return {"task_id": str(task_id), "task_revision": revision, "task": state}
+
+
 def get_run_input(url: str | None, run_id: str) -> dict | None:
     """Read trusted task text and conversation context for a claimed run."""
     with database.connect(url) as conn:
+        model_run = conn.execute(
+            "SELECT r.*,c.owner_id,t.state FROM run r JOIN conversation c USING (conversation_id)"
+            " LEFT JOIN task t ON t.task_id=r.task_id WHERE r.run_id=%s AND r.model_led",
+            (run_id,),
+        ).fetchone()
+        if model_run:
+            return _get_model_run_input(conn, model_run)
         row = conn.execute(
             "SELECT r.run_id, r.task_id, r.task_revision, r.cancel_requested,"
             " t.conversation_id, t.revision, t.state, c.owner_id"
             " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id) WHERE r.run_id=%s",
+            " JOIN conversation c ON c.conversation_id=t.conversation_id WHERE r.run_id=%s",
             (run_id,),
         ).fetchone()
         if not row:
@@ -465,24 +671,25 @@ def list_active_runs(url: str | None, owner_id: str, conversation_id: str) -> li
         if not owned:
             return None
         rows = conn.execute(
-            "SELECT r.run_id, r.task_id, r.status, r.deadline_at, t.revision AS task_revision,"
+            "SELECT r.run_id, r.task_id, r.status, r.deadline_at, r.task_revision, r.processing_stage,"
             " user_message.content AS query, user_message.seq AS message_seq"
-            " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id)"
-            " JOIN LATERAL (SELECT content, seq FROM conversation_message m"
-            "   WHERE m.task_id=t.task_id AND m.role='user' ORDER BY seq DESC LIMIT 1) user_message ON true"
+            " FROM run r JOIN conversation c USING (conversation_id)"
+            " LEFT JOIN LATERAL (SELECT content, seq FROM conversation_message m"
+            "   WHERE m.conversation_id=r.conversation_id AND m.role='user'"
+            "   AND (m.seq=r.input_message_seq OR (r.input_message_seq IS NULL AND m.task_id=r.task_id))"
+            "   ORDER BY seq DESC LIMIT 1) user_message ON true"
             " WHERE c.owner_id=%s AND c.conversation_id=%s"
             " AND r.status IN ('queued','running') ORDER BY r.created_at",
             (owner_id, conversation_id),
         ).fetchall()
-    return [{**row, "run_id": str(row["run_id"]), "task_id": str(row["task_id"]),
+    return [{**row, "run_id": str(row["run_id"]), "task_id": str(row["task_id"]) if row["task_id"] else None,
              "deadline_at": row["deadline_at"].isoformat()} for row in rows]
 
 
 def get_conversation_messages(
-    url: str | None, owner_id: str, conversation_id: str, limit: int = 40,
+    url: str | None, owner_id: str, conversation_id: str, limit: int | None = None,
 ) -> list[dict] | None:
-    if not 1 <= limit <= 200:
+    if limit is not None and not 1 <= limit <= 200:
         raise ValueError("message limit must be between 1 and 200")
     with database.connect(url) as conn:
         owned = conn.execute(
@@ -491,13 +698,12 @@ def get_conversation_messages(
         ).fetchone()
         if not owned:
             return None
-        rows = conn.execute(
-            "SELECT message_id, task_id, seq, role, content, metadata, created_at"
-            " FROM (SELECT message_id, task_id, seq, role, content, metadata, created_at"
-            " FROM conversation_message WHERE conversation_id=%s"
-            " ORDER BY seq DESC LIMIT %s) recent ORDER BY seq",
-            (conversation_id, limit),
-        ).fetchall()
+        query = "SELECT message_id,task_id,seq,role,content,metadata,created_at FROM conversation_message WHERE conversation_id=%s"
+        if limit is None:
+            rows = conn.execute(query + " ORDER BY seq", (conversation_id,)).fetchall()
+        else:
+            rows = conn.execute("SELECT * FROM (" + query + " ORDER BY seq DESC LIMIT %s) recent ORDER BY seq",
+                                (conversation_id, limit)).fetchall()
     return [{**row, "message_id": str(row["message_id"]),
              "task_id": str(row["task_id"]) if row["task_id"] else None} for row in rows]
 
@@ -598,8 +804,33 @@ def _expire_due_runs(conn, run_id: str | None = None) -> None:
     """Close overdue runs even when no worker is available to claim a new one."""
     from agents.state_models import TaskState, utc_now
 
+    unbound = conn.execute(
+        "SELECT r.run_id,r.conversation_id,r.input_message_seq,r.event_seq FROM run r"
+        " WHERE r.task_id IS NULL AND r.model_led AND r.status IN ('queued','running') AND r.deadline_at<=now()"
+        + (" AND r.run_id=%s" if run_id is not None else "") + " FOR UPDATE SKIP LOCKED",
+        (run_id,) if run_id is not None else (),
+    ).fetchall()
+    for item in unbound:
+        error = {"code": "deadline_exceeded", "message": "本轮处理超时，请重试。"}
+        conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (item["conversation_id"],))
+        newer = conn.execute("SELECT 1 FROM conversation_message WHERE conversation_id=%s AND role='user'"
+                             " AND seq>%s LIMIT 1", (item["conversation_id"], item["input_message_seq"])).fetchone()
+        status = "superseded" if newer else "failed"
+        if not newer:
+            seq = conn.execute("UPDATE conversation SET revision=revision+1,updated_at=now()"
+                               " WHERE conversation_id=%s RETURNING revision", (item["conversation_id"],)).fetchone()["revision"]
+            conn.execute("INSERT INTO conversation_message(conversation_id,seq,message_id,role,content,metadata)"
+                         " VALUES (%s,%s,%s,'assistant',%s,%s)",
+                         (item["conversation_id"], seq, str(uuid.uuid4()), error["message"],
+                          Jsonb({"run_id": str(item["run_id"]), "status": status,
+                                 "source_message_seq": item["input_message_seq"], "error": error})))
+        conn.execute("UPDATE run SET status=%s,error=%s,lease_until=NULL,processing_stage=%s,"
+                     "event_seq=event_seq+1,updated_at=now() WHERE run_id=%s",
+                     (status, Jsonb(error), status, item["run_id"]))
+        conn.execute("INSERT INTO run_event(run_id,seq,event_type,payload) VALUES (%s,%s,'run_completed',%s)",
+                     (item["run_id"], item["event_seq"] + 1, Jsonb({"status": status, "error": error})))
     expired = conn.execute(
-        "SELECT r.run_id, r.task_id, r.task_revision, r.event_seq,"
+        "SELECT r.run_id, r.task_id, r.task_revision, r.event_seq,r.model_led,r.input_message_seq,"
         " t.revision AS current_revision, t.state, t.conversation_id"
         " FROM run r JOIN task t USING (task_id)"
         " WHERE r.status IN ('queued','running') AND r.deadline_at <= now()"
@@ -609,10 +840,16 @@ def _expire_due_runs(conn, run_id: str | None = None) -> None:
     ).fetchall()
     for row in expired:
         actual_status = "failed" if row["current_revision"] == row["task_revision"] else "superseded"
-        error = {"code": "deadline_exceeded", "message": "任务超过执行时限。"}
+        if row["model_led"]:
+            conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (row["conversation_id"],))
+            newer = conn.execute("SELECT 1 FROM conversation_message WHERE conversation_id=%s AND role='user'"
+                                 " AND seq>%s LIMIT 1", (row["conversation_id"], row["input_message_seq"])).fetchone()
+            if newer:
+                actual_status = "superseded"
+        error = {"code": "deadline_exceeded", "message": "本轮处理超时，请重试。"}
         conn.execute(
-            "UPDATE run SET status=%s, error=%s, lease_until=NULL, updated_at=now() WHERE run_id=%s",
-            (actual_status, Jsonb(error), row["run_id"]),
+            "UPDATE run SET status=%s, error=%s, lease_until=NULL, processing_stage=%s, updated_at=now() WHERE run_id=%s",
+            (actual_status, Jsonb(error), actual_status, row["run_id"]),
         )
         if actual_status == "failed":
             current = TaskState.model_validate(row["state"])
@@ -635,8 +872,18 @@ def _expire_due_runs(conn, run_id: str | None = None) -> None:
                 "INSERT INTO conversation_message(conversation_id, seq, message_id, task_id, role, content, metadata)"
                 " VALUES (%s, %s, %s, %s, 'assistant', %s, %s)",
                 (row["conversation_id"], conversation["revision"], str(uuid.uuid4()),
-                 row["task_id"], error["message"], Jsonb({"status": "failed", "error": error})),
+                 row["task_id"], error["message"], Jsonb({"status": "failed", "error": error,
+                    "run_id": str(row["run_id"]), "source_message_seq": row["input_message_seq"]})),
             )
+        elif (actual_status == "superseded" and row["model_led"]
+              and row["current_revision"] == row["task_revision"]):
+            current = TaskState.model_validate(row["state"])
+            serialized = current.model_copy(update={"status": "superseded", "revision": current.revision + 1,
+                                                     "updated_at": utc_now()}).model_dump(mode="json")
+            conn.execute("UPDATE task SET revision=%s,status='superseded',state=%s,updated_at=now() WHERE task_id=%s",
+                         (serialized["revision"], Jsonb(serialized), row["task_id"]))
+            conn.execute("INSERT INTO task_history(task_id,revision,state) VALUES (%s,%s,%s)",
+                         (row["task_id"], serialized["revision"], Jsonb(serialized)))
         event_seq = row["event_seq"] + 1
         conn.execute("UPDATE run SET event_seq=%s WHERE run_id=%s", (event_seq, row["run_id"]))
         conn.execute(
@@ -653,20 +900,39 @@ def claim_next_run(url: str | None, worker_id: str, lease_seconds: int = 30) -> 
         _expire_due_runs(conn)
         row = conn.execute(
             "WITH candidate AS ("
-            " SELECT run_id FROM run"
-            " WHERE (status='queued' OR (status='running' AND lease_until < now()))"
-            " AND NOT cancel_requested AND deadline_at > now()"
-            " ORDER BY created_at, run_id FOR UPDATE SKIP LOCKED LIMIT 1"
+            " SELECT r.run_id FROM run r JOIN conversation c ON c.conversation_id=r.conversation_id"
+            " WHERE r.model_led AND (r.status='queued' OR (r.status='running' AND r.lease_until < now()))"
+            " AND NOT r.cancel_requested AND r.deadline_at > now()"
+            " AND (NOT r.model_led OR NOT EXISTS (SELECT 1 FROM run earlier"
+            " WHERE earlier.conversation_id=r.conversation_id AND earlier.model_led"
+            " AND earlier.status IN ('queued','running') AND NOT earlier.cancel_requested"
+            " AND earlier.run_id<>r.run_id AND earlier.input_message_seq<r.input_message_seq))"
+            " ORDER BY r.created_at, r.run_id FOR UPDATE OF c,r SKIP LOCKED LIMIT 1"
             ") UPDATE run r SET status='running', worker_id=%s,"
-            " lease_until=now() + (%s * interval '1 second'), attempt=attempt+1, updated_at=now()"
+            " processing_stage='understanding',lease_until=now() + (%s * interval '1 second'),"
+            " attempt=attempt+1, updated_at=now()"
             " FROM candidate c WHERE r.run_id=c.run_id"
             " RETURNING r.run_id, r.task_id, r.task_revision, r.status, r.deadline_at,"
             " r.lease_until, r.attempt, r.cancel_requested",
             (worker_id, lease_seconds),
         ).fetchone()
+        if not row:
+            # Legacy task-bound clients retain their original independent-run
+            # behavior; model-led messages above are serialized by conversation.
+            row = conn.execute(
+                "WITH candidate AS (SELECT run_id FROM run"
+                " WHERE NOT model_led AND (status='queued' OR (status='running' AND lease_until<now()))"
+                " AND NOT cancel_requested AND deadline_at>now()"
+                " ORDER BY created_at,run_id FOR UPDATE SKIP LOCKED LIMIT 1)"
+                " UPDATE run r SET status='running',worker_id=%s,processing_stage='understanding',"
+                " lease_until=now()+(%s * interval '1 second'),attempt=attempt+1,updated_at=now()"
+                " FROM candidate c WHERE r.run_id=c.run_id"
+                " RETURNING r.run_id,r.task_id,r.task_revision,r.status,r.deadline_at,"
+                " r.lease_until,r.attempt,r.cancel_requested", (worker_id, lease_seconds),
+            ).fetchone()
     if not row:
         return None
-    return {**row, "run_id": str(row["run_id"]), "task_id": str(row["task_id"])}
+    return {**row, "run_id": str(row["run_id"]), "task_id": str(row["task_id"]) if row["task_id"] else None}
 
 
 def heartbeat_run(url: str | None, run_id: str, worker_id: str, lease_seconds: int = 30) -> bool:
@@ -674,7 +940,7 @@ def heartbeat_run(url: str | None, run_id: str, worker_id: str, lease_seconds: i
         row = conn.execute(
             "UPDATE run SET lease_until=now() + (%s * interval '1 second'), updated_at=now() "
             "WHERE run_id=%s AND worker_id=%s AND status='running' AND lease_until > now() "
-            "AND NOT cancel_requested "
+            "AND NOT cancel_requested AND deadline_at > now() "
             "RETURNING run_id",
             (lease_seconds, run_id, worker_id),
         ).fetchone()
@@ -687,11 +953,12 @@ def append_run_event(
 ) -> dict | None:
     with database.connect(url) as conn:
         run = conn.execute(
-            "UPDATE run SET event_seq=event_seq+1, updated_at=now() "
+            "UPDATE run SET event_seq=event_seq+1, processing_stage=CASE WHEN %s='node_started'"
+            " THEN COALESCE(%s,processing_stage) ELSE processing_stage END, updated_at=now() "
             "WHERE run_id=%s AND worker_id=%s AND status='running' AND lease_until > now() "
-            "AND NOT cancel_requested "
+            "AND NOT cancel_requested AND deadline_at > now() "
             "RETURNING event_seq",
-            (run_id, worker_id),
+            (event_type, node_id, run_id, worker_id),
         ).fetchone()
         if not run:
             return None
@@ -835,7 +1102,7 @@ def _finish_run(
     url: str | None, run_id: str, worker_id: str, *, status: str,
     result: dict | None = None, error: dict | None = None, return_status: bool = False,
 ) -> bool | str:
-    from agents.state_models import TaskState, utc_now
+    from agents.state_models import FieldProvenance, TaskState, utc_now
 
     if status not in {"completed", "partial", "failed", "needs_input", "cancelled", "superseded"}:
         raise ValueError("invalid terminal run status")
@@ -870,16 +1137,50 @@ def _finish_run(
                 # poison a later route refresh or historical replay.
                 route_state.pop("reuse_certificate", None)
     with database.connect(url) as conn:
+        unbound = conn.execute(
+            "SELECT r.*,c.owner_id FROM run r JOIN conversation c USING (conversation_id)"
+            " WHERE r.run_id=%s AND r.worker_id=%s AND r.model_led AND r.task_id IS NULL FOR UPDATE OF r",
+            (run_id, worker_id),
+        ).fetchone()
+        if unbound:
+            if (unbound["status"] != "running" or unbound["cancel_requested"] or not unbound["lease_until"]
+                    or unbound["lease_until"] <= utc_now() or unbound["deadline_at"] <= utc_now()):
+                return False
+            conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (unbound["conversation_id"],))
+            newer = conn.execute("SELECT 1 FROM conversation_message WHERE conversation_id=%s"
+                                 " AND role='user' AND seq>%s LIMIT 1",
+                                 (unbound["conversation_id"], unbound["input_message_seq"])).fetchone()
+            actual_status = "superseded" if newer else status
+            if actual_status != "superseded":
+                display = next((result.get(k).strip() for k in ("assistant_text", "explanation", "reply", "message")
+                                if isinstance(result, dict) and isinstance(result.get(k), str) and result[k].strip()), "")
+                if display:
+                    seq = conn.execute("UPDATE conversation SET revision=revision+1,updated_at=now()"
+                                       " WHERE conversation_id=%s RETURNING revision", (unbound["conversation_id"],)).fetchone()["revision"]
+                    conn.execute("INSERT INTO conversation_message(conversation_id,seq,message_id,role,content,metadata)"
+                                 " VALUES (%s,%s,%s,'assistant',%s,%s)",
+                                 (unbound["conversation_id"], seq, str(uuid.uuid4()), display,
+                                  Jsonb({"run_id": run_id, "status": actual_status,
+                                         "source_message_seq": unbound["input_message_seq"]})))
+            conn.execute("UPDATE run SET status=%s,result=%s,error=%s,lease_until=NULL,processing_stage=%s,"
+                         "event_seq=event_seq+1,updated_at=now() WHERE run_id=%s",
+                         (actual_status, Jsonb(result) if result is not None and actual_status != "superseded" else None,
+                          Jsonb(error) if error is not None else None, actual_status, run_id))
+            conn.execute("INSERT INTO run_event(run_id,seq,event_type,payload) VALUES (%s,%s,'run_completed',%s)",
+                         (run_id, unbound["event_seq"] + 1, Jsonb({"status": actual_status})))
+            return actual_status if return_status else True
         run = conn.execute(
             "SELECT r.task_id, r.task_revision, r.event_seq, r.cancel_requested,"
-            " r.status AS run_status, r.lease_until, r.deadline_at,"
+            " r.status AS run_status, r.lease_until, r.deadline_at, r.model_led, r.input_message_seq,"
             " t.revision AS current_revision, t.state, t.conversation_id, c.owner_id,"
             " (SELECT m.seq FROM conversation_message m"
             "  WHERE m.task_id=r.task_id AND m.role='user'"
             "    AND m.metadata->>'request_id'=r.idempotency_key"
-            "  ORDER BY m.seq DESC LIMIT 1) AS source_message_seq"
+            "  ORDER BY m.seq DESC LIMIT 1) AS source_message_seq,"
+            " (SELECT m.message_id FROM conversation_message m"
+            "  WHERE m.conversation_id=r.conversation_id AND m.seq=r.input_message_seq) AS source_message_id"
             " FROM run r JOIN task t USING (task_id)"
-            " JOIN conversation c USING (conversation_id)"
+            " JOIN conversation c ON c.conversation_id=t.conversation_id"
             " WHERE r.run_id=%s AND r.worker_id=%s FOR UPDATE OF r, t",
             (run_id, worker_id),
         ).fetchone()
@@ -888,6 +1189,13 @@ def _finish_run(
                 or run["deadline_at"] <= utc_now()):
             return False
         actual_status = status
+        if run["model_led"]:
+            conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (run["conversation_id"],))
+            newer = conn.execute("SELECT 1 FROM conversation_message WHERE conversation_id=%s"
+                                 " AND role='user' AND seq>%s LIMIT 1",
+                                 (run["conversation_id"], run["input_message_seq"])).fetchone()
+            if newer:
+                actual_status = "superseded"
         if run["current_revision"] != run["task_revision"]:
             actual_status = "superseded"
         if actual_status != "superseded" and actual_status != "cancelled":
@@ -895,6 +1203,12 @@ def _finish_run(
             document = current.model_dump(mode="python")
             document.update({"status": actual_status, "revision": current.revision + 1,
                              "updated_at": utc_now()})
+            if run["model_led"] and run["source_message_id"] and isinstance(result, dict):
+                for field in result.get("updated_task_fields") or []:
+                    if isinstance(field, str) and len(field) <= 150:
+                        document["field_provenance"][field] = FieldProvenance(
+                            source="inference", scope="task", source_message_id=str(run["source_message_id"]),
+                            updated_at=utc_now()).model_dump(mode="python")
             if actual_status == "needs_input" and isinstance(result, dict):
                 clarify = result.get("clarify") or {}
                 question = clarify.get("question") if isinstance(clarify, dict) else None
@@ -903,9 +1217,11 @@ def _finish_run(
                 document["pending_questions"] = [question] if question else []
             if isinstance(result, dict) and isinstance(result.get("place_request"), dict):
                 document["place_request"] = result["place_request"]
-            elif actual_status in {"completed", "partial", "failed"}:
+            elif run["model_led"] and isinstance(result, dict) and isinstance(result.get("completed_place_request"), dict):
+                document["place_request"] = result["completed_place_request"]
+            elif actual_status in {"completed", "partial", "failed"} and not (run["model_led"] and actual_status == "failed"):
                 document["place_request"] = None
-            requirement_results = result.get("requirement_results", {}) if isinstance(result, dict) else {}
+            requirement_results = (result.get("requirement_results") or {}) if isinstance(result, dict) else {}
             for requirement in document.get("requirements", []):
                 requirement_id = requirement["requirement_id"]
                 status_for_requirement = requirement_results.get(requirement_id)
@@ -963,7 +1279,7 @@ def _finish_run(
             )
             display_text = ""
             if result:
-                for key in ("explanation", "reply", "message"):
+                for key in ("assistant_text", "explanation", "reply", "message"):
                     if isinstance(result.get(key), str) and result[key].strip():
                         display_text = result[key].strip()
                         break
@@ -986,15 +1302,30 @@ def _finish_run(
                             if run["source_message_seq"] is not None else {}),
                          **({"task_type": result["task_type"]} if isinstance(result, dict) and result.get("task_type") else {}),
                          **({"response_kind": result["response_kind"]} if isinstance(result, dict) and result.get("response_kind") else {}),
+                         **({"clarify": result["clarify"]} if isinstance(result, dict) and isinstance(result.get("clarify"), dict) else {}),
+                         **({"delivered_candidates": [
+                             {key: item[key] for key in ("poi_id", "name", "subcategory", "source", "distance_m") if key in item}
+                             for item in result["candidates"] if isinstance(item, dict)]}
+                            if isinstance(result, dict) and isinstance(result.get("candidates"), list) else {}),
+                         "task_revision": serialized["revision"],
                          **({"route_state": result["route_state"]}
                             if isinstance(result, dict) and result.get("route_state") else {}),
                      })),
                 )
+        elif (actual_status == "superseded" and run["model_led"]
+              and run["current_revision"] == run["task_revision"]):
+            current = TaskState.model_validate(run["state"])
+            serialized = current.model_copy(update={"status": "superseded", "revision": current.revision + 1,
+                                                     "updated_at": utc_now()}).model_dump(mode="json")
+            conn.execute("UPDATE task SET revision=%s,status='superseded',state=%s,updated_at=now() WHERE task_id=%s",
+                         (serialized["revision"], Jsonb(serialized), run["task_id"]))
+            conn.execute("INSERT INTO task_history(task_id,revision,state) VALUES (%s,%s,%s)",
+                         (run["task_id"], serialized["revision"], Jsonb(serialized)))
         conn.execute(
-            "UPDATE run SET status=%s, result=%s, error=%s, lease_until=NULL, updated_at=now() "
+            "UPDATE run SET status=%s, result=%s, error=%s, lease_until=NULL, processing_stage=%s, updated_at=now() "
             "WHERE run_id=%s",
-            (actual_status, Jsonb(result) if result is not None else None,
-             Jsonb(error) if error is not None else None, run_id),
+            (actual_status, Jsonb(result) if result is not None and actual_status != "superseded" else None,
+             Jsonb(error) if error is not None else None, actual_status, run_id),
         )
         event_seq = run["event_seq"] + 1
         conn.execute("UPDATE run SET event_seq=%s WHERE run_id=%s", (event_seq, run_id))
@@ -1010,20 +1341,36 @@ def cancel_run(url: str | None, owner_id: str, run_id: str) -> dict | None:
 
     with database.connect(url) as conn:
         row = conn.execute(
-            "UPDATE run r SET cancel_requested=CASE WHEN r.status IN"
-            " ('completed','partial','failed','needs_input','cancelled','superseded')"
-            " THEN r.cancel_requested ELSE true END,"
-            " status=CASE WHEN r.status IN ('completed','partial','failed','needs_input','cancelled','superseded')"
-            " THEN r.status ELSE 'cancelled' END, lease_until=NULL, updated_at=now()"
-            " FROM task t JOIN conversation c USING (conversation_id)"
-            " WHERE r.task_id=t.task_id AND r.run_id=%s AND c.owner_id=%s"
-            " RETURNING r.run_id, r.task_id, r.status, r.cancel_requested,"
-            " t.revision AS task_revision, t.state, t.conversation_id",
+            "SELECT r.run_id,r.task_id,r.task_revision AS run_task_revision,r.status,r.cancel_requested,r.conversation_id,"
+            " r.model_led,r.input_message_seq,r.event_seq,"
+            " t.revision AS task_revision,t.state FROM run r JOIN conversation c USING (conversation_id)"
+            " LEFT JOIN task t ON t.task_id=r.task_id"
+            " WHERE r.run_id=%s AND c.owner_id=%s FOR UPDATE OF r",
             (run_id, owner_id),
         ).fetchone()
         if not row:
             return None
-        if row["status"] == "cancelled" and row["state"].get("status") not in {"cancelled", "completed", "partial", "failed"}:
+        if row["status"] not in {"completed", "partial", "failed", "needs_input", "cancelled", "superseded"}:
+            if row["model_led"]:
+                text = "这项任务已停止，你之前确认的条件仍保留。需要继续时告诉我下一步。"
+                conn.execute("SELECT 1 FROM conversation WHERE conversation_id=%s FOR UPDATE", (row["conversation_id"],))
+                seq = conn.execute("UPDATE conversation SET revision=revision+1,updated_at=now()"
+                                   " WHERE conversation_id=%s RETURNING revision", (row["conversation_id"],)).fetchone()["revision"]
+                conn.execute("INSERT INTO conversation_message(conversation_id,seq,message_id,task_id,role,content,metadata)"
+                             " VALUES (%s,%s,%s,%s,'assistant',%s,%s)",
+                             (row["conversation_id"], seq, str(uuid.uuid4()), row["task_id"], text,
+                              Jsonb({"run_id": str(row["run_id"]), "status": "cancelled",
+                                     "source_message_seq": row["input_message_seq"], "ui_action": {"type": "cancel"}})))
+                conn.execute("UPDATE run SET result=%s,event_seq=event_seq+1 WHERE run_id=%s",
+                             (Jsonb({"task_type": "chat", "response_kind": "chat", "message": text,
+                                     "assistant_text": text}), run_id))
+                conn.execute("INSERT INTO run_event(run_id,seq,event_type,payload) VALUES (%s,%s,'run_completed',%s)",
+                             (run_id, row["event_seq"] + 1, Jsonb({"status": "cancelled"})))
+            conn.execute("UPDATE run SET status='cancelled',cancel_requested=true,lease_until=NULL,"
+                         "processing_stage='cancelled',updated_at=now() WHERE run_id=%s", (run_id,))
+            row["status"], row["cancel_requested"] = "cancelled", True
+        if (row["status"] == "cancelled" and row["state"] and row["task_revision"] == row["run_task_revision"]
+                and row["state"].get("status") not in {"cancelled", "completed", "partial", "failed"}):
             current = TaskState.model_validate(row["state"])
             state = current.model_copy(update={
                 "status": "cancelled", "revision": current.revision + 1, "updated_at": utc_now(),
@@ -1037,7 +1384,7 @@ def cancel_run(url: str | None, owner_id: str, run_id: str) -> dict | None:
                 (row["task_id"], state["revision"], Jsonb(state)),
             )
     return {key: row[key] for key in ("run_id", "task_id", "status", "cancel_requested")} | {
-        "run_id": str(row["run_id"]), "task_id": str(row["task_id"]),
+        "run_id": str(row["run_id"]), "task_id": str(row["task_id"]) if row["task_id"] else None,
     }
 
 
@@ -1045,9 +1392,9 @@ def get_run(url: str | None, owner_id: str, run_id: str, after_seq: int = 0) -> 
     with database.connect(url) as conn:
         query = (
             "SELECT r.run_id, r.task_id, r.task_revision, t.revision AS current_task_revision,"
-            " r.status, r.deadline_at, r.lease_until,"
+            " r.status, r.deadline_at, r.lease_until, r.processing_stage,"
             " r.attempt, r.cancel_requested, r.result, r.error FROM run r"
-            " JOIN task t USING (task_id) JOIN conversation c USING (conversation_id)"
+            " JOIN conversation c USING (conversation_id) LEFT JOIN task t ON t.task_id=r.task_id"
             " WHERE c.owner_id=%s AND r.run_id=%s"
         )
         run = conn.execute(query, (owner_id, run_id)).fetchone()
@@ -1061,5 +1408,5 @@ def get_run(url: str | None, owner_id: str, run_id: str, after_seq: int = 0) -> 
             " WHERE run_id=%s AND seq>%s ORDER BY seq",
             (run_id, after_seq),
         ).fetchall()
-    return {**run, "run_id": str(run["run_id"]), "task_id": str(run["task_id"]),
+    return {**run, "run_id": str(run["run_id"]), "task_id": str(run["task_id"]) if run["task_id"] else None,
             "events": events}
