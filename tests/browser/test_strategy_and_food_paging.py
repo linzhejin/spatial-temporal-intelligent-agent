@@ -164,6 +164,51 @@ def test_failed_run_shows_retry_and_cancel_without_exposing_internal_error(stati
         browser.close()
 
 
+def test_partial_tool_failure_keeps_result_and_offers_retry(static_site):
+    messages = []
+
+    def handle(route):
+        url = urlsplit(route.request.url)
+        if url.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+            return
+        if url.path == "/api/conversations" and route.request.method == "POST":
+            data = {"conversation_id": "partial-conversation"}
+        elif url.path.endswith("/messages") and route.request.method == "POST":
+            messages.append(route.request.post_data_json)
+            data = {"run_id": f"partial-run-{len(messages)}"}
+        elif url.path == "/api/runs/partial-run-1":
+            data = {"status": "partial", "events": [], "result": {
+                "task_type": "chat", "response_kind": "chat", "reply": "天气晴；路况暂不可用。",
+                "execution_status": "partial", "failure_code": "road_conditions_unavailable",
+            }}
+        elif url.path == "/api/runs/partial-run-2":
+            data = {"status": "completed", "events": [], "result": {
+                "task_type": "chat", "response_kind": "chat", "reply": "路况已更新。",
+            }}
+        elif url.path.startswith("/api/"):
+            data = {"count": 0, "conditions": []}
+        else:
+            route.continue_()
+            return
+        route.fulfill(status=200, content_type="application/json; charset=utf-8",
+                      body=json.dumps({"data": data}, ensure_ascii=False))
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch()
+        page = browser.new_page(viewport={"width": 390, "height": 844}, service_workers="block")
+        page.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page.route("**/*", handle)
+        page.goto(static_site, wait_until="domcontentloaded")
+        page.locator("#nl-input").fill("天气和路况如何")
+        page.locator("#submit-btn").click()
+        expect(page.get_by_text("天气晴；路况暂不可用。", exact=False)).to_be_visible(timeout=15000)
+        page.get_by_role("button", name="重试", exact=True).click()
+        expect(page.get_by_text("路况已更新。", exact=False)).to_be_visible(timeout=15000)
+        assert messages[1]["ui_action"]["type"] == "retry"
+        browser.close()
+
+
 def test_required_viewport_widths_fit_without_horizontal_page_scroll(static_site):
     with sync_playwright() as p:
         browser = p.chromium.launch()

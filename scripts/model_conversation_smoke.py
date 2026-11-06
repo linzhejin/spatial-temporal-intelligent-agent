@@ -143,15 +143,18 @@ def main():
              "candidate_ids": (pending.get("semantic_request") or {}).get("shown_ids") or []}
         b = {"candidate_ids": []}
     else:
-        first, pending, a = turn("我从信图出发，在总图附近找餐馆，别推荐食堂档口")
+        extended = os.environ.get("LUOJIA_SMOKE_EXTENDED") == "1"
+        first, pending, a = turn("从信图出发，想在总图周边找能坐下吃饭的餐馆，不考虑食堂档口"
+                                 if extended else "我从信图出发，在总图附近找餐馆，别推荐食堂档口")
         if not a["candidate_ids"] or not a["all_original_messages_received"] or a["search_radius_m"] != 1000:
             return 1
-        second, pending, b = turn("再换几家看看")
+        second, pending, b = turn("还有不同的店可以选吗？" if extended else "再换几家看看")
         if (not b["candidate_ids"] or not b["all_original_messages_received"] or b["task_id"] != a["task_id"]
                 or set(a["candidate_ids"]) & set(b["candidate_ids"])
                 or any(b[key] != a[key] for key in ("start", "search_anchor", "activities", "subcategories"))):
             return 2
-    third, pending, c = turn("范围放宽些，其他要求都保持")
+    third, pending, c = turn("能搜得再远一点吗？其他条件照旧" if os.environ.get("LUOJIA_SMOKE_EXTENDED") == "1"
+                             else "范围放宽些，其他要求都保持")
     if (not c["candidate_ids"] or not c["all_original_messages_received"] or c["task_id"] != a["task_id"]
             or c["search_radius_m"] != 2000 or any(c[key] != a[key] for key in ("start", "search_anchor", "activities", "subcategories"))
             or set(a["candidate_ids"] + b["candidate_ids"]) & set(c["candidate_ids"])):
@@ -166,10 +169,23 @@ def main():
             or d["selected_poi_id"] != selected or any(d[key] != a[key] for key in ("start", "search_anchor", "activities", "subcategories"))):
         return 4
     _, _, e = turn("刚才这条路线改成尽量平坦，还是从原来的地方出发")
-    return 0 if (e["kind"] == "route" and e["route_verification"] == "pass"
-                 and e["all_original_messages_received"] and e["selected_poi_id"] == selected
-                 and e["end_name"] == d["end_name"]
-                 and all(e[key] == a[key] for key in ("start", "search_anchor", "activities", "subcategories"))) else 5
+    if not (e["kind"] == "route" and e["route_verification"] == "pass"
+            and e["all_original_messages_received"] and e["selected_poi_id"] == selected
+            and e["end_name"] == d["end_name"]
+            and all(e[key] == a[key] for key in ("start", "search_anchor", "activities", "subcategories"))):
+        return 5
+    if os.environ.get("LUOJIA_SMOKE_EXTENDED") == "1":
+        _, _, f = turn("先不改这个行程，帮我看看今天的天气。")
+        if not (f["history_count"] >= 10 and f["all_original_messages_received"]
+                and f["model_calls"] and "get_weather" in f["tools"] and f["status"] == "completed"):
+            return 6
+        _, _, g = turn("回到刚才去那家店的路线，走最短路，起点不要动。")
+        if not (g["history_count"] >= 12 and g["all_original_messages_received"]
+                and g["kind"] == "route" and g["route_verification"] == "pass"
+                and g["selected_poi_id"] == selected and g["end_name"] == d["end_name"]
+                and g["start"] == a["start"] and g["search_anchor"] == a["search_anchor"]):
+            return 7
+    return 0
 
 
 if __name__ == "__main__":

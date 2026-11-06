@@ -1038,7 +1038,7 @@ def parse():
         if not query or not isinstance(query, str):
             return _err("missing_query", "NL 模式下 query 字段必填且为字符串", 400)
         if len(query) > 500:
-            query = query[:500]
+            return _err("invalid_message", "query 不能超过 500 个字符。", 400)
     elif input_method == "shortcut":
         start = body.get("start")
         end = body.get("end")
@@ -1677,7 +1677,7 @@ def chat():
     if not query or not isinstance(query, str):
         return _err("missing_query", "query 字段必填且为字符串", 400)
     if len(query) > 500:
-        query = query[:500]
+        return _err("invalid_message", "query 不能超过 500 个字符。", 400)
 
     context = _normalize_chat_context(body.get("context"))
     agent_started = time.perf_counter()
@@ -1701,6 +1701,10 @@ def chat():
                     coord_start=body.get("coord_start"),
                     coord_end=body.get("coord_end")))
     except PlannerError as e:
+        from agents.dialogue import model_dialogue_enabled
+        if model_dialogue_enabled():
+            logger.warning("模型对话暂时不可用（%s）", type(e).__name__)
+            return _err("model_unavailable", "对话服务暂时不可用，请稍后重试。", 503)
         fallback_agent_ms = (time.perf_counter() - agent_started) * 1000
         logger.warning("Agent 规划器不可用（%s: %s），落回旧管道", type(e).__name__, e)
     except Exception:

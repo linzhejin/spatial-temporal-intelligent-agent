@@ -19,6 +19,35 @@ def _failure(dialogue, message, code):
     return result
 
 
+def _finish_with_read_failures(dialogue, text, failures, successful_reads):
+    """Keep verified partial results while reporting unresolved service failures."""
+    if not failures:
+        return dialogue.result(text)
+    parts = []
+    if dialogue.candidates:
+        parts.append(text)
+    elif dialogue.route:
+        parts.append("路线已保留，可以查看地图和路线卡片。")
+    elif dialogue.comparison:
+        parts.append("路线比较结果已保留。")
+    weather = successful_reads.get("get_weather")
+    if isinstance(weather, dict) and weather.get("weather") is not None:
+        description = str(weather["weather"])[:100]
+        temperature = weather.get("temperature")
+        parts.append("当前天气：" + description +
+                     ("，气温 " + str(temperature)[:30] + "℃" if temperature is not None else "") + "。")
+    road = successful_reads.get("list_road_conditions")
+    if isinstance(road, dict) and isinstance(road.get("conditions"), list):
+        parts.append(f"路况查询已完成，返回 {len(road['conditions'])} 条记录。")
+    parts.extend(failures.values())
+    dialogue.clarify = None
+    result = dialogue.result("\n\n".join(parts))
+    result["failure_code"] = next(iter(failures))
+    result["execution_status"] = "partial" if (successful_reads or dialogue.route or dialogue.candidates
+                                                  or dialogue.comparison) else "failed"
+    return result
+
+
 def run_dialogue_loop(dialogue):
     from agents.deadline import shared_deadline
     with shared_deadline(dialogue.deadline_monotonic):
@@ -39,6 +68,11 @@ def _run_dialogue_loop(dialogue):
     names = {item["function"]["name"] for item in schemas}
     repeated_errors = {}
     undelivered_candidate_responses = 0
+    read_failures, successful_reads = {}, {}
+    read_errors = {
+        "weather_unavailable": "天气暂时获取不到，请稍后重试。",
+        "road_conditions_unavailable": "路况数据暂不可用，无法确认当前管制信息，请稍后重试。",
+    }
     for _ in range(20):
         remaining = deadline - time.monotonic()
         if remaining <= 0:
@@ -94,6 +128,8 @@ def _run_dialogue_loop(dialogue):
                         f"服务器核对：候选池仍有 {remaining['count']} 条未展示记录。请查看具体候选并用 present_places 交付；"
                         "如果已查看但没有符合条件的地点，调用 conclude_without_places 说明原因，不要声称候选池已空。"})
                     continue
+            if read_failures:
+                return _finish_with_read_failures(dialogue, text, read_failures, successful_reads)
             return dialogue.result(text) if text else _failure(dialogue, "本轮没有形成回答，请重试。", "model_empty_response")
         dialogue.messages.append({"role": "assistant", "content": msg.content or "", "tool_calls": [
             {"id": call.id, "type": "function", "function": {
@@ -192,17 +228,29 @@ def _run_dialogue_loop(dialogue):
                             and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["online_status"]) else None})
             dialogue.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
+            if name in {"get_weather", "list_road_conditions"}:
+                code = answer.get("error")
+                if code in read_errors:
+                    read_failures[code] = read_errors[code]
+                    successful_reads.pop(name, None)
+                elif not code:
+                    successful_reads[name] = answer
+                    expected_error = "weather_unavailable" if name == "get_weather" else "road_conditions_unavailable"
+                    read_failures.pop(expected_error, None)
             if answer.get("error"):
                 fingerprint = (name, str(answer["error"]), str(answer.get("message") or ""))
                 repeated_errors[fingerprint] = repeated_errors.get(fingerprint, 0) + 1
                 if repeated_errors[fingerprint] >= 3:
+                    if answer["error"] in read_errors:
+                        return _finish_with_read_failures(dialogue, "", read_failures, successful_reads)
                     return _failure(dialogue, "本轮结果反复未通过校验，已保留当前需求，请重试。", "repeated_tool_error")
             if answer.get("error") == "place_service_unavailable":
                 return _failure(dialogue, "地点服务暂时不可用，本轮没有查到地点，请稍后重试。", "place_service_unavailable")
             if answer.get("error") == "place_search_limit":
                 return _failure(dialogue, "本轮地点查询次数已用完，已保留当前需求，请重试。", "place_search_limit")
         if final is not None:
-            return dialogue.result(final)
+            return _finish_with_read_failures(dialogue, final, read_failures, successful_reads)
         if dialogue.clarify:
-            return dialogue.result(dialogue.clarify.get("question", "请补充具体要求。"))
+            return _finish_with_read_failures(dialogue, dialogue.clarify.get("question", "请补充具体要求。"),
+                                              read_failures, successful_reads)
     return _failure(dialogue, "本轮处理达到调用上限，已保留当前需求，请重试。", "tool_limit")

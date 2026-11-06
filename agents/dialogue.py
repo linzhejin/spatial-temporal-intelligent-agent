@@ -26,33 +26,10 @@ def _function(name, description, properties, required=()):
                        "additionalProperties": False}}}
 
 
-_COMMON_DIALOGUE_TOOLS = {
-    "update_task", "present_places", "resolve_poi", "get_place_details",
-    "search_web", "read_web_page", "ask_user", "suggest_followup",
-}
-_PLACE_SEARCH_TOOLS = _COMMON_DIALOGUE_TOOLS | {
-    "search_poi_candidates", "find_reachable_places",
-}
-_ROUTE_DIALOGUE_TOOLS = _COMMON_DIALOGUE_TOOLS | {
-    "find_reachable_places", "plan_route", "plan_via_route", "get_weather",
-    "list_road_conditions",
-}
-_OPERATION_TOOL_NAMES = {
-    "place_search": _PLACE_SEARCH_TOOLS,
-    "route": _ROUTE_DIALOGUE_TOOLS,
-    "itinerary": _ROUTE_DIALOGUE_TOOLS | {
-        "search_poi_candidates", "plan_itinerary", "plan_tour", "plan_multimodal_route",
-    },
-    "route_comparison": _ROUTE_DIALOGUE_TOOLS | {"compare_routes"},
-    "weather": _COMMON_DIALOGUE_TOOLS | {"get_weather"},
-    "campus_answer": _COMMON_DIALOGUE_TOOLS | {"search_poi_candidates"},
-}
+_OPERATIONS = ("place_search", "route", "itinerary", "route_comparison", "weather", "campus_answer")
 
 
-def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=False,
-                 web_research_requested=False, web_search_available=True,
-                 web_fetch_available=True, web_map_search_pending=False,
-                 selected_place=False, route_preplanned=False):
+def tool_schemas():
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -78,7 +55,7 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
              "task_id": {"type": "string", "description": "续接或恢复时填写服务器提供的任务 ID"},
              "task_revision": {"type": "integer", "minimum": 0, "description": "所选任务的当前版本"},
-             "operation": {"type": "string", "enum": list(_OPERATION_TOOL_NAMES),
+             "operation": {"type": "string", "enum": list(_OPERATIONS),
                            "description": "本轮语义任务类型；按主要用户目标选择"},
              "goal": {"type": "string"},
              "start": {**_ENDPOINT_SCHEMA, "description": "实际出发地点，不能用搜索中心代替"},
@@ -101,7 +78,7 @@ def tool_schemas(operation=None, *, allow_place_search=True, ready_to_present=Fa
              "limit": {"type": "integer", "minimum": 1, "maximum": 20},
              "constraints": _PREFERENCE_SCHEMA["constraints"],
              "clear_fields": {"type": "array", "items": {"type": "string"},
-                              "description": "仅在用户明确取消时清除已有字段或条件，例如budget_per_person"}},
+                               "description": "仅在用户明确取消时清除已有条件；路线硬约束使用 constraints.avoid_slope、constraints.avoid_steps、constraints.max_distance_m 等字段名"}},
             ("relation", "operation")),
         _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定，理由与来源会和卡片一起展示。只能称地图/校园目录中匹配到的候选记录，不能称为实际存在、实地核实或正在营业。",
             {"introduction": {"type": "string"},
@@ -242,23 +219,28 @@ def _safe_candidate_prose(value):
     return text
 
 
-def _web_search_query(intent):
-    """Build a bounded search query from the model's accepted structured request."""
-    parts = ["武汉大学", intent.get("area")]
-    keywords = intent.get("keywords")
-    if isinstance(keywords, list):
-        parts.extend(keywords[:8])
-    requirements = intent.get("requirements")
-    if isinstance(requirements, list):
-        parts.extend(requirements[:4])
-    normalized = []
-    seen = set()
-    for value in parts:
-        text = " ".join(str(value or "").split())
-        if text and text.casefold() not in seen:
-            seen.add(text.casefold())
-            normalized.append(text)
-    return " ".join(normalized)[:128]
+def _resume_constraints(saved, route_constraints):
+    """Reconcile route-tool preferences with the durable hard-constraint schema."""
+    from agents.state_models import HardConstraints
+
+    if not isinstance(route_constraints, dict):
+        raise ValueError("invalid route constraints")
+    current = HardConstraints.model_validate(saved or {}).model_dump()
+    route = HardConstraints.model_validate({
+        "avoid_slope": route_constraints.get("avoid_slope", route_constraints.get("slope") == "avoid"),
+        "avoid_steps": route_constraints.get("avoid_steps", route_constraints.get("steps") == "avoid"),
+        "require_verified_accessibility": route_constraints.get("require_verified_accessibility", False),
+        "max_distance_m": route_constraints.get("max_distance_m"),
+        "max_duration_s": route_constraints.get("max_duration_s"),
+        "excluded_edge_ids": route_constraints.get("excluded_edge_ids", []),
+    }).model_dump()
+    for field in ("avoid_slope", "avoid_steps", "require_verified_accessibility"):
+        current[field] = current[field] or route[field]
+    for field in ("max_distance_m", "max_duration_s"):
+        if current[field] is None:
+            current[field] = route[field]
+    current["excluded_edge_ids"] = list(dict.fromkeys(current["excluded_edge_ids"] + route["excluded_edge_ids"]))
+    return HardConstraints.model_validate(current).model_dump()
 
 
 class Dialogue:
@@ -296,11 +278,7 @@ class Dialogue:
         if selected_id in accepted_ids and selected_id in self.known:
             self.pending["selected_poi_id"] = selected_id
             self.pending["selected_place"] = deepcopy(self.known[selected_id])
-        self.direct_route_selection = False
         self.turn_action = "recommend"
-        self._intent_resolved = not bool(self.context.get("place_request")) or self.direct_route_selection
-        self.route_preplanned = False
-        self.fresh = set()
         self.candidates, self.route, self.route_kind, self.comparison = None, None, None, None
         self.weather = None
         self.route_tool_failure = None
@@ -311,7 +289,6 @@ class Dialogue:
         self.place_search_count = 0
         self.place_service_error = None
         self._expanded_this_turn = False
-        self._last_task_update_changed_search = False
         self.turns = 0
         self.usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         self.original_coords = [point for point in [coord_start, coord_end, *(coord_waypoints or [])] if point]
@@ -395,7 +372,7 @@ class Dialogue:
                 raise ValueError("prior_route_unavailable: 请确认要修改的路线")
             state = self.previous_route
             pending.update({"start": deepcopy(state["start"]), "mode": state["travel_mode"],
-                            "constraints": deepcopy(state["hard_constraints"])})
+                            "constraints": _resume_constraints(pending.get("constraints"), state["hard_constraints"])})
             strategy = state.get("strategy") or {}
             pending["strategy"] = strategy.get("name", "shortest") if isinstance(strategy, dict) else strategy
             pending.setdefault("semantic_request", {})["route_to_modify"] = deepcopy(state)
@@ -405,7 +382,7 @@ class Dialogue:
                       "web_research_requested", "web_page_read_requested", "budget_per_person", "limit"):
             if field in args:
                 value = args[field]
-                if field == "operation" and (not isinstance(value, str) or value not in _OPERATION_TOOL_NAMES):
+                if field == "operation" and (not isinstance(value, str) or value not in _OPERATIONS):
                     raise ValueError("invalid operation")
                 if field in {"requirements", "keywords", "exclude_terms"}:
                     if not isinstance(value, list) or len(value) > 30 or any(not isinstance(x, str) or len(x) > 500 for x in value):
@@ -433,9 +410,11 @@ class Dialogue:
                     raise ValueError("clear an endpoint only through clear_fields")
                 if field in {"start", "search_anchor"} and args[field] is not None:
                     args[field] = self._endpoint(args[field], allow_pending=relation != "new")
-                if field in {"search_anchor", "activities", "subcategories"}:
+                if field in {"start", "search_anchor", "mode", "activities", "subcategories"}:
                     changed_search |= args[field] != pending.get(field)
                 pending[field] = deepcopy(args[field])
+        changed_search_without_radius = changed_search
+        radius_before_update = pending.get("search_radius_m") or 1000
         radius_note = None
         ignored_radius = False
         expanded_this_update = False
@@ -461,23 +440,45 @@ class Dialogue:
             previous_constraints = HardConstraints.model_validate(pending.get("constraints") or {}).model_dump()
             incoming = dict(args["constraints"])
             if "slope" in incoming:
-                incoming["avoid_slope"] = incoming.pop("slope") == "avoid"
+                slope = incoming.pop("slope")
+                if slope not in {"avoid", "normal", "prefer"}:
+                    raise ValueError("invalid slope preference")
+                if slope == "avoid":
+                    incoming["avoid_slope"] = True
             for field in ("distance", "scenery"):
                 incoming.pop(field, None)
+            for field, value in list(incoming.items()):
+                if previous_constraints.get(field) not in (None, False, []) and value in (None, False, []):
+                    incoming.pop(field)
             pending["constraints"] = HardConstraints.model_validate({**previous_constraints, **incoming}).model_dump()
+            constraints_changed = pending["constraints"] != previous_constraints
+            changed_search |= constraints_changed
+            changed_search_without_radius |= constraints_changed
         for field in args.get("clear_fields", []):
             if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms",
                          "web_page_read_requested"}:
                 if field not in args:
                     intent.pop(field, None)
                 changed_search = True
+                changed_search_without_radius = True
             elif field in {"start", "search_anchor", "strategy", "activities", "subcategories"}:
                 if field not in args:
                     pending.pop(field, None)
                 changed_search = True
+                changed_search_without_radius = True
             elif field == "selected_poi_id":
                 pending.pop("selected_poi_id", None)
                 pending.pop("selected_place", None)
+            elif isinstance(field, str) and field.startswith("constraints."):
+                constraint = field.removeprefix("constraints.")
+                defaults = HardConstraints().model_dump()
+                if constraint not in defaults:
+                    raise ValueError("unsupported clear field")
+                current = HardConstraints.model_validate(pending.get("constraints") or {}).model_dump()
+                current[constraint] = defaults[constraint]
+                pending["constraints"] = current
+                changed_search = True
+                changed_search_without_radius = True
             else:
                 raise ValueError("unsupported clear field")
         candidate_action = args.get("candidate_action") or ("recommend" if changed_search else self.turn_action)
@@ -491,7 +492,9 @@ class Dialogue:
             selected_place = self.known.get(selected_id) if selected_id else None
             if selected_place:
                 pending["selected_place"] = deepcopy(selected_place)
-            if relation == "new" or args.get("expand_search_radius") is not True:
+            expanding_same_search = (relation != "new" and not changed_search_without_radius
+                                     and (pending.get("search_radius_m") or 1000) > radius_before_update)
+            if not expanding_same_search:
                 intent["shown_ids"] = []
             pending.update({"candidate_poi_ids": [], "candidate_places": [], "candidate_pool": [],
                             "result_dependencies": None})
@@ -515,12 +518,8 @@ class Dialogue:
                                              changed_fields=changed_fields)
         if expanded_this_update:
             self._expanded_this_turn = True
-        self._last_task_update_changed_search = changed_search
         self.known, self.last_search = next_known, next_last_search
-        if changed_search:
-            self.fresh.clear()
         self.turn_action = candidate_action
-        self._intent_resolved = True
         if candidate_action == "next_batch":
             self.place_search_count = 2
         self.modified_fields.update(changed_fields)
@@ -655,7 +654,6 @@ class Dialogue:
             if identifier:
                 row = {**row, "poi_id": identifier}
                 self.known[identifier] = row
-                self.fresh.add(identifier)
         if name in {"search_poi_candidates", "find_reachable_places"}:
             self.last_search = result
             if result.get("candidates") and result.get("data_version") and result.get("road_condition_version"):

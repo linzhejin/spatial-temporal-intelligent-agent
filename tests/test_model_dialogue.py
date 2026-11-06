@@ -32,6 +32,53 @@ def test_run_agent_uses_model_dialogue_when_mode_is_unset(monkeypatch):
     assert result["message"] == "模型主流程"
 
 
+def test_legacy_chat_endpoint_does_not_fall_back_to_rules_when_model_fails(monkeypatch):
+    import app as app_module
+    import api.routes as routes
+
+    monkeypatch.setenv("AGENT_DIALOGUE_MODE", "model")
+    monkeypatch.setattr(planner, "run_agent", Mock(side_effect=planner.PlannerError("provider down")))
+    parse = Mock()
+    monkeypatch.setattr(routes, "parse_query", parse)
+    app_module.app.config["TESTING"] = True
+
+    response = app_module.app.test_client().post("/api/chat", json={"query": "从信图到总图"})
+
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "model_unavailable"
+    parse.assert_not_called()
+
+
+def test_legacy_chat_rejects_oversized_input_instead_of_silently_truncating(monkeypatch):
+    import app as app_module
+
+    monkeypatch.setenv("AGENT_DIALOGUE_MODE", "model")
+    run_agent = Mock(return_value={"response_kind": "chat", "message": "已收到"})
+    monkeypatch.setattr(planner, "run_agent", run_agent)
+    app_module.app.config["TESTING"] = True
+
+    response = app_module.app.test_client().post("/api/chat", json={"query": "长" * 501})
+
+    assert response.status_code == 400
+    assert "500" in response.get_json()["message"]
+    run_agent.assert_not_called()
+
+
+def test_legacy_parse_rejects_oversized_input_instead_of_silently_truncating(monkeypatch):
+    import app as app_module
+    import api.routes as routes
+
+    parse = Mock(return_value=SimpleNamespace(model_dump=lambda: {"task_type": "chat"}))
+    monkeypatch.setattr(routes, "parse_query", parse)
+    app_module.app.config["TESTING"] = True
+
+    response = app_module.app.test_client().post("/api/parse", json={"query": "长" * 501})
+
+    assert response.status_code == 400
+    assert "500" in response.get_json()["message"]
+    parse.assert_not_called()
+
+
 def test_model_receives_compact_place_candidates_without_geometry():
     import json
     from agents.dialogue import _model_tool_content

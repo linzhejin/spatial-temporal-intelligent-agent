@@ -277,3 +277,45 @@ def test_worker_model_continues_same_task_and_preserves_distinct_anchors(monkeyp
     assert len(resumed_input["history"]) >= 10
     stored = get_task(DATABASE_URL, owner, task_id)
     assert stored["state"]["field_provenance"]["place_request.search_radius_m"]["source_message_id"] == resumed_input["message_id"]
+
+
+@pytest.mark.parametrize("partial", [False, True], ids=["weather-failed", "road-partial"])
+def test_read_service_failure_is_persisted_as_retryable_worker_result(monkeypatch, partial):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+
+    import config
+    from agents import planner, workflow
+    from jobs.worker import process_next_run
+    from langgraph.checkpoint.memory import InMemorySaver
+    from tests.test_model_dialogue import reply
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    responses = ([reply(get_weather={}), reply(list_road_conditions={}), reply("已查询。")]
+                 if partial else [reply(get_weather={}), reply("暂时查不到。")])
+    model = Mock(side_effect=responses)
+    monkeypatch.setattr(planner, "_make_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=model))))
+
+    def execute(name, _args, _context):
+        if name == "get_weather":
+            return (({"weather": "晴", "temperature": 22}, None) if partial else
+                    ({"error": "weather_unavailable", "message": "天气暂时获取不到"}, None))
+        return {"error": "road_conditions_unavailable", "message": "路况暂不可用"}, None
+
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute)
+    graph = workflow.build_agent_workflow(InMemorySaver(), database_url=DATABASE_URL)
+    owner, _, conversation = create_conversation(DATABASE_URL)
+    accepted = submit(owner, conversation, "天气和路况如何" if partial else "天气如何")
+    expected_status = "partial" if partial else "failed"
+
+    assert process_next_run(DATABASE_URL, "read-failure-worker", graph, lease_seconds=60)["status"] == expected_status
+    run = get_run(DATABASE_URL, owner, accepted["run_id"])
+    assert run["status"] == expected_status
+    assert run["result"]["failure_code"] == (
+        "road_conditions_unavailable" if partial else "weather_unavailable")
+    with database.connect(DATABASE_URL) as conn:
+        messages = conn.execute("SELECT role,content FROM conversation_message WHERE conversation_id=%s ORDER BY seq",
+                                (conversation,)).fetchall()
+    assert messages[-1]["role"] == "assistant"
+    assert messages[-1]["content"] == run["result"]["assistant_text"]

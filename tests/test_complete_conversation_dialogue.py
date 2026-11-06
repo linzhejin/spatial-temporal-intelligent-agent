@@ -192,6 +192,37 @@ def test_expand_radius_keeps_activity_anchors_and_previously_shown_ids():
     assert last_turn.pending["search_radius_m"] == 5000
 
 
+def test_explicit_radius_increase_keeps_previously_shown_places():
+    candidate = place("amap:A123", "甲餐厅")
+    pending = {"request_id": "request", "original_query": "总图附近吃饭", "mode": "walk",
+               "search_anchor": {"type": "poi", "name": "总图"}, "search_radius_m": 1000,
+               "candidate_pool": [candidate], "candidate_poi_ids": [candidate["poi_id"]],
+               "semantic_request": {"operation": "place_search", "shown_ids": [candidate["poi_id"]]}}
+    dialogue, _ = make_dialogue("范围扩大到两公里", context={"place_request": pending})
+
+    dialogue.update({"relation": "continue", "operation": "place_search", "search_radius_m": 2000})
+
+    assert dialogue.pending["search_radius_m"] == 2000
+    assert dialogue.pending["candidate_pool"] == []
+    assert dialogue.intent["shown_ids"] == [candidate["poi_id"]]
+
+
+def test_changing_start_invalidates_candidates_dependent_on_the_old_origin():
+    candidate = place("amap:A123", "甲餐厅")
+    pending = {"request_id": "request", "original_query": "信图附近吃饭", "mode": "walk",
+               "start": {"type": "poi", "name": "信图"},
+               "candidate_pool": [candidate], "candidate_poi_ids": [candidate["poi_id"]],
+               "semantic_request": {"operation": "place_search", "shown_ids": [candidate["poi_id"]]}}
+    dialogue, _ = make_dialogue("现在从总图出发", context={"place_request": pending})
+
+    dialogue.update({"relation": "continue", "operation": "place_search",
+                     "start": {"type": "poi", "name": "总图"}})
+
+    assert dialogue.pending["start"]["name"] == "总图"
+    assert dialogue.pending["candidate_pool"] == []
+    assert dialogue.pending["candidate_poi_ids"] == []
+
+
 def test_unrequested_model_radius_cannot_replace_default_or_existing_radius():
     new, _ = make_dialogue("我从信图出发，在总图附近找三家餐馆")
     accepted = new.update({"relation": "new", "operation": "place_search", "search_radius_m": 1500})
@@ -255,6 +286,82 @@ def test_route_preference_preserves_selected_place_when_search_cache_is_invalida
     assert dialogue.pending["candidate_pool"] == []
 
 
+def test_resuming_flat_route_preserves_search_and_normalizes_route_constraints():
+    selected = place("amap:A123", "已选餐厅")
+    pending = {"request_id": "request", "original_query": "从信图找总图附近的餐馆",
+               "mode": "walk", "start": {"type": "poi", "name": "信图"},
+               "search_anchor": {"type": "poi", "name": "总图"}, "search_radius_m": 2000,
+               "selected_poi_id": selected["poi_id"], "selected_place": selected,
+               "constraints": {"avoid_steps": True, "max_duration_s": 1200},
+               "semantic_request": {"operation": "route", "requirements": ["不推荐食堂"]}}
+    route = {"start": pending["start"], "end": {"type": "poi", "poi_id": selected["poi_id"]},
+             "travel_mode": "walk", "hard_constraints": {"slope": "prefer", "avoid_steps": True},
+             "strategy": {"name": "flat"}}
+    dialogue, _ = make_dialogue("回到之前的路线，改走最短的", context={"available_tasks": [{
+        "task_id": "task", "revision": 9, "state": {"place_request": pending}, "route_state": route,
+    }]})
+    dialogue.bind_task = lambda **_kwargs: {"task_id": "task", "task_revision": 10}
+
+    dialogue.update({"relation": "resume_route", "task_id": "task", "task_revision": 9,
+                     "operation": "route", "strategy": "shortest"})
+
+    assert dialogue.pending["search_anchor"]["name"] == "总图"
+    assert dialogue.pending["search_radius_m"] == 2000
+    assert dialogue.pending["selected_poi_id"] == selected["poi_id"]
+    assert dialogue.pending["semantic_request"]["requirements"] == ["不推荐食堂"]
+    assert dialogue.pending["constraints"]["avoid_steps"] is True
+    assert dialogue.pending["constraints"]["avoid_slope"] is False
+    assert dialogue.pending["constraints"]["max_duration_s"] == 1200
+    assert dialogue.pending["strategy"] == "shortest"
+
+
+def test_resuming_route_restores_legacy_slope_hard_constraint():
+    pending = {"request_id": "request", "original_query": "从信图去总图", "mode": "walk",
+               "constraints": {"avoid_steps": True}, "semantic_request": {"operation": "route"}}
+    route = {"start": {"type": "poi", "name": "信图"}, "travel_mode": "walk",
+             "hard_constraints": {"slope": "avoid", "max_distance_m": 2500},
+             "strategy": {"name": "shortest"}}
+    dialogue, _ = make_dialogue("继续路线", context={"available_tasks": [{
+        "task_id": "task", "revision": 4, "state": {"place_request": pending}, "route_state": route,
+    }]})
+    dialogue.bind_task = lambda **_kwargs: {"task_id": "task", "task_revision": 5}
+
+    dialogue.update({"relation": "resume_route", "task_id": "task", "task_revision": 4,
+                     "operation": "route"})
+
+    assert dialogue.pending["constraints"]["avoid_slope"] is True
+    assert dialogue.pending["constraints"]["avoid_steps"] is True
+    assert dialogue.pending["constraints"]["max_distance_m"] == 2500
+
+
+def test_soft_route_preference_does_not_silently_clear_existing_hard_constraints():
+    pending = {"request_id": "request", "original_query": "规划无台阶且避坡的路线", "mode": "walk",
+               "constraints": {"avoid_slope": True, "avoid_steps": True, "max_duration_s": 1200},
+               "semantic_request": {"operation": "route"}}
+    dialogue, _ = make_dialogue("尽量平坦", context={"place_request": pending})
+
+    dialogue.update({"relation": "continue", "operation": "route", "strategy": "flat",
+                     "constraints": {"slope": "prefer", "avoid_steps": False}})
+
+    assert dialogue.pending["constraints"]["avoid_slope"] is True
+    assert dialogue.pending["constraints"]["avoid_steps"] is True
+    assert dialogue.pending["constraints"]["max_duration_s"] == 1200
+
+
+def test_explicitly_clearing_route_constraints_preserves_other_conditions():
+    pending = {"request_id": "request", "original_query": "规划无台阶且避坡的路线", "mode": "walk",
+               "constraints": {"avoid_slope": True, "avoid_steps": True, "max_duration_s": 1200},
+               "semantic_request": {"operation": "route"}}
+    dialogue, _ = make_dialogue("不再要求避坡和无台阶", context={"place_request": pending})
+
+    dialogue.update({"relation": "continue", "operation": "route",
+                     "clear_fields": ["constraints.avoid_slope", "constraints.avoid_steps"]})
+
+    assert dialogue.pending["constraints"]["avoid_slope"] is False
+    assert dialogue.pending["constraints"]["avoid_steps"] is False
+    assert dialogue.pending["constraints"]["max_duration_s"] == 1200
+
+
 def test_provider_failure_is_reported_without_repeated_network_calls(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     calls = []
@@ -271,6 +378,73 @@ def test_provider_failure_is_reported_without_repeated_network_calls(monkeypatch
     assert result["execution_status"] == "failed"
     assert result["failure_code"] == "place_service_unavailable"
     assert result["response_kind"] != "clarify"
+
+
+def test_weather_failure_is_retryable_even_if_model_answers_normally(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, _ = make_dialogue("天气怎么样", replies=[
+        reply(get_weather={}), reply("天气暂时查不到。"),
+    ])
+    dialogue.execute_tool = lambda name, args, context: (
+        {"error": "weather_unavailable", "message": "天气暂时获取不到"}, None,
+    )
+
+    result = dialogue.run()
+
+    assert result["execution_status"] == "failed"
+    assert result["failure_code"] == "weather_unavailable"
+    assert result["response_kind"] != "clarify"
+    assert "天气" in result["message"]
+
+
+def test_successful_tool_retry_clears_earlier_weather_failure(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, _ = make_dialogue("天气怎么样", replies=[
+        reply(get_weather={}), reply(get_weather={}), reply("当前晴朗。"),
+    ])
+    outcomes = iter([
+        ({"error": "weather_unavailable", "message": "天气暂时获取不到"}, None),
+        ({"weather": "晴"}, None),
+    ])
+    dialogue.execute_tool = lambda name, args, context: next(outcomes)
+
+    result = dialogue.run()
+
+    assert result.get("execution_status") != "failed"
+    assert result["weather"]["weather"] == "晴"
+
+
+def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, model = make_dialogue("天气如何", replies=[reply(get_weather={}) for _ in range(3)])
+    dialogue.execute_tool = lambda name, args, context: (
+        {"error": "weather_unavailable", "message": "天气暂时获取不到"}, None,
+    )
+
+    result = dialogue.run()
+
+    assert model.call_count == 3
+    assert result["failure_code"] == "weather_unavailable"
+    assert result["execution_status"] == "failed"
+    assert "天气" in result["message"]
+
+
+def test_road_failure_keeps_successful_weather_as_partial_result(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, _ = make_dialogue("天气和路况如何", replies=[
+        reply(get_weather={}), reply(list_road_conditions={}), reply("天气晴，路况暂不可用。"),
+    ])
+    dialogue.execute_tool = lambda name, args, context: (
+        ({"weather": "晴"}, None) if name == "get_weather"
+        else ({"error": "road_conditions_unavailable", "message": "路况暂不可用"}, None)
+    )
+
+    result = dialogue.run()
+
+    assert result["execution_status"] == "partial"
+    assert result["failure_code"] == "road_conditions_unavailable"
+    assert result["weather"]["weather"] == "晴"
+    assert "路况" in result["message"]
 
 
 def test_later_empty_search_does_not_discard_candidate_snapshot(monkeypatch):

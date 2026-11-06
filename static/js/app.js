@@ -3815,6 +3815,9 @@
                 updateChatBubble(thinkingBubble, '地图选点已更新，这条旧路线已取消显示。请按当前选点继续规划。');
                 return;
             }
+            if (result.execution_status === 'partial' && result.failure_code) {
+                renderFailureActions(thinkingBubble, query, requestBody, result);
+            }
 
             if (result.response_kind === 'clarify') {
                 var acceptedClarification = setPendingServerClarification(
