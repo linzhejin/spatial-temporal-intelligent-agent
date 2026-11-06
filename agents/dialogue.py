@@ -244,6 +244,13 @@ def _web_search_query(intent):
     return " ".join(normalized)[:128]
 
 
+_NEXT_BATCH_COMMANDS = {
+    "换一批", "换一批吧", "换一家", "换一家吧", "再换一批", "再换一批吧",
+    "再换一家", "再换一家吧", "再来一批", "再来一批吧", "再来几个",
+    "还有别的吗", "还有其他的吗", "还有其他选择吗", "再推荐几个",
+}
+
+
 class Dialogue:
     def __init__(self, query, *, context=None, history=None, coord_start=None, coord_end=None,
                  coord_waypoints=None, travel_mode=None, uid=None, execute_tool, client_factory, trace):
@@ -640,6 +647,37 @@ class Dialogue:
         from agents import web_evidence
         started = time.monotonic()
         max_seconds = min(120.0, max(20.0, float(os.getenv("AGENT_DIALOGUE_TIMEOUT_S", "90"))))
+        compact_query = re.sub(r"[\s，。！？、,.!?;；:：]+", "", str(self.query or "")).casefold()
+        if (compact_query in _NEXT_BATCH_COMMANDS
+                and self.intent.get("operation") == "place_search"
+                and self.pending.get("pending_slot") == "selection"
+                and not self.direct_route_selection):
+            shown = set(self.intent.get("shown_ids") or [])
+            remaining = []
+            seen = set()
+            for row in self.pending.get("candidate_pool") or []:
+                poi_id = row.get("poi_id") if isinstance(row, dict) else None
+                if poi_id and poi_id not in shown and poi_id not in seen:
+                    remaining.append(row)
+                    seen.add(poi_id)
+            if not remaining:
+                self.clarify = {
+                    "question": "这次检索到的候选已经展示完了。要扩大附近范围，还是换一种地点类型？",
+                    "options": ["扩大搜索范围", "换一种地点类型"], "slot": "selection",
+                }
+                return self.result(self.clarify["question"])
+            limit = min(self.intent.get("limit", 4), 4)
+            selected = remaining[:limit]
+            self.last_search = {"status": "ok", "online_status": "ok",
+                                "candidates": deepcopy(remaining), "count": len(remaining)}
+            self.turn_action = "next_batch"
+            message = self.present({
+                "introduction": "继续按原条件展示本次检索中尚未出现的候选。",
+                "places": [{"poi_id": row["poi_id"],
+                            "reason": "来自本次地点目录检索的其他候选记录。"}
+                           for row in selected],
+            })
+            return self.result(message)
         if self.direct_route_selection:
             selected_id = self.pending["selected_poi_id"]
             selected = self.known[selected_id]

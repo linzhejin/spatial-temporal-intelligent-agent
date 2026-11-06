@@ -253,27 +253,19 @@ def test_next_batch_reuses_unseen_candidates_and_keeps_the_search_anchor(model, 
     PlaceRequestState.model_validate(state)
     monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda name, *_args: pytest.fail(
         f"next batch must reuse saved candidates, not call {name}"))
-    model.side_effect = [
-        reply(update_task={"relation": "continue", "operation": "place_search",
-                           "candidate_action": "next_batch"}),
-        reply(present_places={"introduction": "继续展示尚未出现的候选。", "places": [
-            {"poi_id": places[2]["poi_id"], "reason": "来自本轮已核对的地图候选。"},
-            {"poi_id": places[3]["poi_id"], "reason": "来自本轮已核对的地图候选。"},
-        ]}),
-    ]
-
     result = planner.run_agent("换一批", context={"place_request": state})
 
     assert result["response_kind"] == "candidates"
-    assert [row["poi_id"] for row in result["candidates"]] == ["amap:MEAL3", "amap:MEAL4"]
+    assert [row["poi_id"] for row in result["candidates"]] == [
+        "amap:MEAL3", "amap:MEAL4", "amap:MEAL5", "amap:MEAL6",
+    ]
     assert result["place_request"]["start"] == state["start"]
     assert result["place_request"]["search_anchor"] == state["search_anchor"]
     assert [row["poi_id"] for row in result["place_request"]["candidate_pool"]] == [
         row["poi_id"] for row in places]
-    assert model.call_count == 2
-    assert {tool["function"]["name"] for tool in model.call_args_list[0].kwargs["tools"]} == {
-        "update_task", "ask_user",
-    }
+    assert result["place_request"]["semantic_request"]["shown_ids"] == [
+        row["poi_id"] for row in places]
+    assert model.call_count == 0
 
 
 def test_ambiguous_place_followup_asks_before_searching(model, monkeypatch):
