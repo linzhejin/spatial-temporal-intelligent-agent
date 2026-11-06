@@ -218,6 +218,21 @@ def test_rich_followup_gets_durable_origin_and_requirements(model, monkeypatch):
     assert result["place_request"]["start"] == state["start"]
 
 
+def test_continuing_a_place_task_preserves_its_web_research_choice():
+    from agents.dialogue import Dialogue
+
+    state = planner._place_request_state("推荐梅园餐饮", pending_slot="selection")
+    state["semantic_request"] = {"operation": "place_search", "area": "梅园",
+                                 "keywords": ["餐饮"], "web_research_requested": True}
+    dialogue = Dialogue("换去桂园找餐厅", context={"place_request": state},
+                        execute_tool=lambda *_args: {}, client_factory=lambda: None,
+                        trace=lambda *_args: None)
+
+    dialogue.update({"relation": "continue", "operation": "place_search", "area": "桂园"})
+
+    assert dialogue.intent["web_research_requested"] is True
+
+
 def test_accepted_card_selection_is_forwarded_to_the_route_tool(model, monkeypatch):
     candidate_id = "amap:B0K3M1Q398"
     state = planner._place_request_state(
@@ -357,8 +372,11 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     from agents import web_evidence
 
     candidate = place("amap:WEB123", "地图检索火锅店")
-    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda *_args: (
-        {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}))
+    spatial_calls = []
+    def execute_map(name, args, _context):
+        spatial_calls.append((name, args))
+        return {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute_map)
     def execute_web(name, args, sources, *, original_question=""):
         if name == "search_web":
             sources["Sfact123"] = {"source_id": "Sfact123", "title": "门店资料", "url": "https://example.org/shop",
@@ -372,6 +390,7 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
                            "area": "武汉大学", "limit": 1, "web_research_requested": True}),
         reply(search_web={"query": "火锅店 人均 营业时间 武汉大学"}),
         reply(read_web_page={"source_id": "Sfact123"}),
+        reply(search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
         reply(present_places={"introduction": "门店消费信息参考网页来源。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "地图核对到该地点；消费信息以来源为准。",
              "source_ids": ["Sfact123"]},
@@ -381,13 +400,15 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     result = planner.run_agent("推荐武大火锅，并核对人均和营业时间")
 
     assert result["response_kind"] == "candidates"
-    assert model.call_count == 4
-    expected = ["update_task", "search_web", "read_web_page", "present_places"]
+    assert model.call_count == 5
+    expected = ["update_task", "search_web", "read_web_page", "search_poi_candidates", "present_places"]
     assert [{tool["function"]["name"] for tool in call.kwargs["tools"]} for call in model.call_args_list] == [
-        {"update_task"}, {"present_places", "search_web"},
-        {"present_places", "read_web_page"}, {"present_places"},
+        {"update_task"}, {"search_web"}, {"read_web_page"}, {"search_poi_candidates"},
+        {"present_places"},
     ]
     assert [call.kwargs["tool_choice"]["function"]["name"] for call in model.call_args_list] == expected
+    assert len(spatial_calls) == 1
+    assert spatial_calls[0][1]["candidate_names"] == ["测试火锅店"]
     assert result["candidates"][0]["source_ids"] == ["Sfact123"]
 
 
@@ -548,6 +569,81 @@ def test_search_center_can_differ_from_route_origin(monkeypatch):
     )
 
     assert result["candidates"][0]["distance_reference_name"] == "总图"
+
+
+def test_web_discovered_names_are_map_verified_and_ranked_from_the_search_center(monkeypatch):
+    from agents import discovery, tools
+
+    store = {"id": "amap:WEB123", "poi_id": "amap:WEB123", "name": "周麻婆(梅园店)",
+             "aliases": [], "coordinates": {"lng": 114.36, "lat": 30.54},
+             "lon": 114.36, "lat": 30.54, "coordinate_system": "GCJ-02",
+             "source": "amap_online", "subcategory": "restaurant", "campus": "",
+             "verification_status": "provider_only"}
+    near_calls = []
+    monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(tools, "_endpoint_target_wgs", lambda *_args: (114.36, 30.54, "总图", None))
+    monkeypatch.setattr(discovery, "wgs84_to_gcj02", lambda lng, lat: (lng, lat))
+    monkeypatch.setattr(discovery.amap_poi, "search_nearby", lambda _center, **kwargs: (
+        near_calls.append(kwargs) or {"status": "ok", "candidates": []}))
+    monkeypatch.setattr(discovery.amap_poi, "lookup", lambda name: store if name == store["name"] else None)
+
+    def reachable(args, context):
+        assert args["start"]["name"] == "总图"
+        assert args["max_distance_m"] == 1000
+        assert [row["poi_id"] for row in context["_candidate_pool"]] == ["amap:WEB123"]
+        return {"start_name": "武汉大学图书馆(总馆)", "candidates": [
+            {"poi_id": "amap:WEB123", "name": store["name"], "distance_m": 460,
+             "network_distance_m": 460},
+        ], "count": 1}, {"candidates": []}
+
+    monkeypatch.setattr(tools, "_tool_find_reachable_places", reachable)
+    result, _artifact = discovery.search_places_for_dialogue(
+        {"area": "武汉大学", "keyword": "食堂 餐厅 吃饭", "candidate_names": [store["name"]],
+         "start": {"type": "poi", "name": "信息学部图书馆"},
+         "search_anchor": {"type": "poi", "name": "总图"}, "subcategories": ["restaurant"]},
+        {"_semantic_request": {"area": "武汉大学", "keywords": ["食堂", "餐厅", "吃饭"],
+                               "subcategories": ["restaurant"]}},
+    )
+
+    assert near_calls[0]["keywords"] == "餐饮"
+    assert result["candidates"][0]["poi_id"] == "amap:WEB123"
+    assert result["candidates"][0]["distance_reference_name"] == "武汉大学图书馆(总馆)"
+
+
+def test_generic_meal_web_candidates_are_not_filtered_as_canteens_only(monkeypatch):
+    from agents import discovery, tools
+
+    store = {"id": "amap:WEB456", "poi_id": "amap:WEB456", "name": "周麻婆(梅园店)",
+             "aliases": [], "coordinates": {"lng": 114.36, "lat": 30.54},
+             "lon": 114.36, "lat": 30.54, "coordinate_system": "GCJ-02",
+             "source": "amap_online", "subcategory": "restaurant", "campus": "",
+             "verification_status": "provider_only"}
+    nearby_calls = []
+    monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(tools, "_endpoint_target_wgs", lambda *_args: (114.36, 30.54, "总图", None))
+    monkeypatch.setattr(discovery, "wgs84_to_gcj02", lambda lng, lat: (lng, lat))
+    monkeypatch.setattr(discovery.amap_poi, "search_nearby", lambda _center, **kwargs: (
+        nearby_calls.append(kwargs) or {"status": "ok", "candidates": []}))
+    monkeypatch.setattr(discovery.amap_poi, "lookup", lambda name: store if name == store["name"] else None)
+
+    def reachable(args, context):
+        assert args["start"]["name"] == "总图"
+        assert context["_candidate_pool"] == [store]
+        return {"start_name": "总图", "candidates": [{
+            "poi_id": "amap:WEB456", "name": store["name"], "distance_m": 460,
+            "network_distance_m": 460,
+        }], "count": 1}, {"candidates": []}
+
+    monkeypatch.setattr(tools, "_tool_find_reachable_places", reachable)
+    result, _artifact = discovery.search_places_for_dialogue(
+        {"area": "武汉大学", "keyword": "食堂 餐厅 吃饭", "candidate_names": [store["name"]],
+         "search_anchor": {"type": "poi", "name": "总图"}, "subcategories": ["canteen"]},
+        {"_semantic_request": {"area": "武汉大学", "keywords": ["食堂", "餐厅", "吃饭"],
+                               "subcategories": ["canteen"]}},
+    )
+
+    assert nearby_calls[0]["keywords"] == "餐饮"
+    assert result["candidates"][0]["poi_id"] == "amap:WEB456"
 
 
 def test_dialogue_bounds_repeated_place_searches():

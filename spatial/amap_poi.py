@@ -36,6 +36,11 @@ def _label(value):
     return re.sub(r'[\s\-—（）()]', '', _normalize_num(value))
 
 
+def _brand_label(value):
+    text = re.sub(r'^(武汉大学|武大)[\s\-—]*', '', _text(value))
+    return _label(re.split(r'[·・/／|（(]', text, maxsplit=1)[0])
+
+
 def normalize_poi(raw):
     center = _coord(raw.get('location'))
     if not center or not _text(raw.get('name')):
@@ -275,14 +280,27 @@ def lookup_by_id(poi_id, client=None):
 
 def choose_match(name, rows, known=None):
     labels = {_label(name)}
+    brand_labels = {_brand_label(name)}
     if known:
-        labels.update(_label(x) for x in [known.get('name', ''), *known.get('aliases', [])])
+        known_labels = [known.get('name', ''), *known.get('aliases', [])]
+        labels.update(_label(x) for x in known_labels)
+        brand_labels.update(_brand_label(x) for x in known_labels)
     labels.discard('')
-    matches = []
+    brand_labels.discard('')
+    exact_matches = []
+    brand_matches = []
     for row in rows:
-        if not row or not labels.intersection(_label(x) for x in [row['name'], *row['aliases']]):
+        if not row:
             continue
-        if known:
+        row_names = [row['name'], *row['aliases']]
+        if labels.intersection(_label(x) for x in row_names):
+            exact_matches.append(row)
+        elif brand_labels.intersection(_brand_label(x) for x in row_names):
+            brand_matches.append(row)
+    matches = exact_matches or brand_matches
+    if known:
+        matches_in_range = []
+        for row in matches:
             center = known.get('coordinates')
             if not isinstance(center, dict):
                 center = {'lng': known.get('lon', known.get('lng')), 'lat': known.get('lat')}
@@ -292,9 +310,9 @@ def choose_match(name, rows, known=None):
                 return None
             if not all(math.isfinite(center[key]) for key in ('lng', 'lat')):
                 return None
-            if _distance(center, row['coordinates']) > 100:
-                continue
-        matches.append(row)
+            if _distance(center, row['coordinates']) <= 100:
+                matches_in_range.append(row)
+        matches = matches_in_range
     return matches[0] if len(matches) == 1 else None
 
 

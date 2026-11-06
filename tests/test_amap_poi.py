@@ -55,6 +55,16 @@ def test_same_name_far_away_or_ambiguous_is_not_selected():
     assert choose_match('体育馆', [row, other]) is None
 
 
+def test_provider_brand_match_can_resolve_one_unique_store_but_not_choose_a_branch():
+    meiyuan = normalize_poi({'id': 'BMEIYUAN', 'name': '周麻婆·川菜小炒(湖北武汉大学店)',
+                             'location': '114.36,30.54'})
+    gongxue = normalize_poi({'id': 'BGONGXUE', 'name': '周麻婆(工学部店)',
+                             'location': '114.37,30.54'})
+
+    assert choose_match('周麻婆(梅园店)', [meiyuan]) is meiyuan
+    assert choose_match('周麻婆(梅园店)', [meiyuan, gongxue]) is None
+
+
 def test_remote_entrance_does_not_override_local_destination():
     row = normalize_poi({'name': '总馆', 'location': '114.36,30.54',
                          'entr_location': '114.38,30.54'})
