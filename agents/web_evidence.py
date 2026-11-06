@@ -52,12 +52,12 @@ def execute(name: str, args: dict, sources: dict, *, original_question: str = ""
         query = re.sub(r"\s+", " ", str(args.get("query") or "")).strip()
         if not 1 <= len(query) <= 128:
             return {"error": "invalid_query", "message": "检索词需在128字以内。"}
-        body = _request("/search", {"query": query, "count": 6, "ori_question": original_question[:128],
+        body = _request("/search", {"query": query, "count": 4, "ori_question": original_question[:128],
                                      "need_content": False})
         if body.get("error"):
             return body
         rows = []
-        for item in (body.get("results") or [])[:6]:
+        for item in (body.get("results") or [])[:4]:
             if not isinstance(item, dict):
                 continue
             url = _public_url(item.get("url"))
@@ -67,7 +67,7 @@ def execute(name: str, args: dict, sources: dict, *, original_question: str = ""
             source_id = existing or "S" + uuid4().hex[:8]
             source = {"source_id": source_id, "title": str(item.get("title") or "网页来源")[:240],
                       "url": url, "site_name": str(item.get("site_name") or "")[:120],
-                      "excerpt": str(item.get("summary") or item.get("snippet") or "")[:900],
+                      "excerpt": str(item.get("summary") or item.get("snippet") or "")[:500],
                       "published_at": item.get("date"), "observed_at": datetime.now(timezone.utc).isoformat(),
                       "authority": item.get("authority"), "rerank_score": item.get("rerank_score"),
                       "fetched": False}
@@ -94,7 +94,7 @@ def execute(name: str, args: dict, sources: dict, *, original_question: str = ""
     if not content:
         return {"error": "empty_source", "message": "该网页没有可读取的正文。"}
     source["title"] = str(body.get("title") or source["title"])[:240]
-    source["content"] = content[:6000]
+    source["content"] = content[:4000]
     source["fetched"] = True
     return {"source_id": source_id, "title": source["title"], "url": url,
             "content": source["content"],

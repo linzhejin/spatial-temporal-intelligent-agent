@@ -37,3 +37,29 @@ def test_fetch_requires_a_source_from_the_current_search(monkeypatch):
     assert calls == [("/fetch", {"url": "https://example.org/shop"})]
     assert accepted["content"] == "日期与门店信息"
     assert sources["S12345678"]["content"] == "日期与门店信息"
+
+
+def test_search_and_fetch_bound_evidence_size(monkeypatch):
+    payloads = []
+    long_excerpt = "摘" * 700
+    long_content = "正文" * 3000
+
+    def request(endpoint, payload):
+        payloads.append((endpoint, payload))
+        if endpoint == "/search":
+            return {"results": [
+                {"title": f"来源{i}", "url": f"https://example.org/{i}", "summary": long_excerpt}
+                for i in range(8)
+            ]}
+        return {"title": "长正文", "content": long_content}
+
+    monkeypatch.setattr(web_evidence, "_request", request)
+    sources = {}
+    search = web_evidence.execute("search_web", {"query": "武大餐饮"}, sources)
+    first_source_id = search["results"][0]["source_id"]
+    fetched = web_evidence.execute("read_web_page", {"source_id": first_source_id}, sources)
+
+    assert payloads[0][1]["count"] == 4
+    assert search["count"] == len(search["results"]) == 4
+    assert all(len(row["excerpt"]) <= 500 for row in search["results"])
+    assert len(fetched["content"]) == len(sources[first_source_id]["content"]) == 4000

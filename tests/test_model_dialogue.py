@@ -373,11 +373,13 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
 
     candidate = place("amap:WEB123", "地图检索火锅店")
     spatial_calls = []
+    web_calls = []
     def execute_map(name, args, _context):
         spatial_calls.append((name, args))
         return {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}
     monkeypatch.setattr(planner.agent_tools, "execute_tool", execute_map)
     def execute_web(name, args, sources, *, original_question=""):
+        web_calls.append((name, args, original_question))
         if name == "search_web":
             sources["Sfact123"] = {"source_id": "Sfact123", "title": "门店资料", "url": "https://example.org/shop",
                                    "excerpt": "网页摘要", "fetched": False}
@@ -388,8 +390,6 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     model.side_effect = [
         reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"],
                            "area": "武汉大学", "limit": 1, "web_research_requested": True}),
-        reply(search_web={"query": "火锅店 人均 营业时间 武汉大学"}),
-        reply(read_web_page={"source_id": "Sfact123"}),
         reply(search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
         reply(present_places={"introduction": "门店消费信息参考网页来源。", "places": [
             {"poi_id": candidate["poi_id"], "reason": "地图核对到该地点；消费信息以来源为准。",
@@ -400,16 +400,61 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     result = planner.run_agent("推荐武大火锅，并核对人均和营业时间")
 
     assert result["response_kind"] == "candidates"
-    assert model.call_count == 5
-    expected = ["update_task", "search_web", "read_web_page", "search_poi_candidates", "present_places"]
+    assert model.call_count == 3
+    expected = ["update_task", "search_poi_candidates", "present_places"]
     assert [{tool["function"]["name"] for tool in call.kwargs["tools"]} for call in model.call_args_list] == [
-        {"update_task"}, {"search_web"}, {"read_web_page"}, {"search_poi_candidates"},
-        {"present_places"},
+        {"update_task"}, {"search_poi_candidates"}, {"present_places"},
     ]
     assert [call.kwargs["tool_choice"]["function"]["name"] for call in model.call_args_list] == expected
     assert len(spatial_calls) == 1
     assert spatial_calls[0][1]["candidate_names"] == ["测试火锅店"]
+    assert [call[0] for call in web_calls] == ["search_web", "read_web_page"]
+    assert "火锅" in web_calls[0][1]["query"]
+    assert "武汉大学" in web_calls[0][1]["query"]
     assert result["candidates"][0]["source_ids"] == ["Sfact123"]
+
+
+def test_web_flow_falls_back_to_grounded_map_search_when_model_skips_map_step(model, monkeypatch):
+    from agents import web_evidence
+
+    candidate = place("amap:FALLBACK123", "附近火锅店")
+    spatial_calls = []
+    def execute_map(name, args, _context):
+        spatial_calls.append((name, args))
+        return {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}
+    monkeypatch.setattr(planner.agent_tools, "_prepare_route_context", lambda _context: ({}, None))
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", execute_map)
+
+    def execute_web(name, args, sources, *, original_question=""):
+        if name == "search_web":
+            sources["Sfact987"] = {"source_id": "Sfact987", "title": "火锅资料",
+                                   "url": "https://example.org/hotpot", "excerpt": "校园火锅店",
+                                   "fetched": False}
+            return {"status": "ok", "results": [{"source_id": "Sfact987", "title": "火锅资料"}]}
+        sources[args["source_id"]].update({"fetched": True, "content": "火锅店资料正文"})
+        return {"source_id": args["source_id"], "content": "火锅店资料正文"}
+    monkeypatch.setattr(web_evidence, "execute", execute_web)
+
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["火锅"],
+                           "area": "武汉大学", "web_research_requested": True}),
+        # The only available stage tool is search_poi_candidates; this stale
+        # task edit must not consume another model turn or alter the request.
+        reply(update_task={"relation": "continue", "operation": "place_search", "area": "工学部"}),
+        reply(present_places={"introduction": "地图核对到附近候选，网页提供参考。", "places": [
+            {"poi_id": candidate["poi_id"], "reason": "名称与位置已由地图核对。",
+             "source_ids": ["Sfact987"]},
+        ]}),
+    ]
+
+    result = planner.run_agent("推荐武大附近火锅店")
+
+    assert result["response_kind"] == "candidates"
+    assert result["turns"] == 3
+    assert len(spatial_calls) == 1
+    assert spatial_calls[0][0] == "search_poi_candidates"
+    assert spatial_calls[0][1].get("candidate_names") is None
+    assert result["candidates"][0]["source_ids"] == ["Sfact987"]
 
 
 def test_empty_map_retries_end_with_a_clear_no_results_message(model, monkeypatch):

@@ -146,6 +146,24 @@ _MODEL_PLACE_FIELDS = (
 
 def _model_tool_content(name, answer):
     """Send recommendation-relevant facts to the model without repeating full POI geometry."""
+    if name == "search_web" and isinstance(answer, dict):
+        result = {key: answer[key] for key in ("status", "error", "message", "count") if key in answer}
+        rows = answer.get("results")
+        if isinstance(rows, list):
+            result["results"] = [
+                {key: str(row.get(key) or "")[:500] if key == "excerpt" else row.get(key)
+                 for key in ("source_id", "title", "site_name", "url", "excerpt", "published_at")
+                 if key in row}
+                for row in rows[:4] if isinstance(row, dict)
+            ]
+        return json.dumps(result, ensure_ascii=False, default=str)
+    if name == "read_web_page" and isinstance(answer, dict):
+        result = {key: answer[key] for key in (
+            "source_id", "title", "url", "error", "message", "trust_note",
+        ) if key in answer}
+        if isinstance(answer.get("content"), str):
+            result["content"] = answer["content"][:4000]
+        return json.dumps(result, ensure_ascii=False, default=str)
     if name not in {"search_poi_candidates", "find_reachable_places"} or not isinstance(answer, dict):
         return json.dumps(_compact(answer), ensure_ascii=False, default=str)
 
@@ -180,6 +198,25 @@ def _model_tool_content(name, answer):
         result["candidate_batch_truncated"] = len(rows) > len(result["candidates"])
         result["candidate_batch_has_more"] = total > len(result["candidates"])
     return json.dumps(result, ensure_ascii=False, default=str)
+
+
+def _web_search_query(intent):
+    """Build a bounded search query from the model's accepted structured request."""
+    parts = ["武汉大学", intent.get("area")]
+    keywords = intent.get("keywords")
+    if isinstance(keywords, list):
+        parts.extend(keywords[:8])
+    requirements = intent.get("requirements")
+    if isinstance(requirements, list):
+        parts.extend(requirements[:4])
+    normalized = []
+    seen = set()
+    for value in parts:
+        text = " ".join(str(value or "").split())
+        if text and text.casefold() not in seen:
+            seen.add(text.casefold())
+            normalized.append(text)
+    return " ".join(normalized)[:128]
 
 
 class Dialogue:
@@ -578,6 +615,7 @@ class Dialogue:
                                     and candidate_count > 0 and "limit" not in self.intent)
             ready_to_present = (candidate_count >= requested_count or self.place_search_count >= 2
                                 or web_candidates_ready)
+            required_tool = None
             try:
                 web_map_search_pending = (web_research_requested and self.web_search_count >= 1
                     and (self.web_fetch_count >= 1 or not self.sources)
@@ -636,6 +674,39 @@ class Dialogue:
                 return self.result("对话模型返回了空结果，已保留本轮需求，请重试。", failed=True)
             msg = choices[0].message
             calls = getattr(msg, "tool_calls", None) or []
+            if (operation == "place_search" and web_research_requested
+                    and required_tool == "search_poi_candidates"):
+                expected_calls = [call for call in calls
+                                  if call.function.name == required_tool]
+                if expected_calls:
+                    # A strict retrieval phase accepts only the requested spatial
+                    # tool. Extra model-proposed task edits cannot revise a search
+                    # after its web evidence has already been gathered.
+                    calls = expected_calls[:1]
+                else:
+                    # If the model declines the required map step, still ground the
+                    # current request against the map before asking it to select.
+                    try:
+                        search_result = self.spatial("search_poi_candidates", {})
+                        self.trace({"tool_name": "search_poi_candidates",
+                                    "argument_keys": [],
+                                    "outcome": "tool_error" if search_result.get("error") else "success",
+                                    "artifact_kind": "candidates"})
+                        self.messages.append({"role": "system", "content": (
+                            "模型本轮没有提交地图检索参数，服务端已按已接受任务完成地图检索。"
+                            "请只从返回的地点 ID 中筛选推荐；检索结果：\n"
+                            + _model_tool_content("search_poi_candidates", search_result)
+                        )})
+                    except (ValueError, TypeError, KeyError) as exc:
+                        return self.result("地图地点检索暂时没有完成，请稍后重试。", failed=True)
+                    continue
+            if (operation == "place_search" and web_research_requested
+                    and required_tool == "present_places"):
+                expected_calls = [call for call in calls
+                                  if call.function.name == required_tool]
+                if not expected_calls:
+                    return self.result("我已核对地图候选，但本轮没有完成推荐整理，请重试。", failed=True)
+                calls = expected_calls[:1]
             if not calls:
                 text = str(msg.content or "").strip()
                 return self.result(text or "本轮没有形成完整回答，请重试。", failed=not bool(text))
@@ -700,14 +771,49 @@ class Dialogue:
                                       "content": _model_tool_content(name, answer)})
                 if (name == "update_task" and not answer.get("error")
                         and search_intent_changed and not auto_search_done
-                        and not self.intent.get("web_research_requested")
                         and self.place_search_count < 2):
-                    search_result = self.spatial("search_poi_candidates", {})
-                    self.messages.append({"role": "system", "content": (
-                        "服务端已按刚保存的任务调用地图地点检索。只能从以下返回的 poi_id 中提交推荐；"
-                        "来源没有提供的事实应说明未知。检索结果：\n"
-                        + _model_tool_content("search_poi_candidates", search_result)
-                    )})
+                    if self.intent.get("web_research_requested") is True:
+                        if self.web_search_count < 1:
+                            self.web_search_count = 1
+                            query = _web_search_query(self.intent)
+                            search_result = web_evidence.execute(
+                                "search_web", {"query": query}, self.sources,
+                                original_question=self.query,
+                            )
+                            self.trace({"tool_name": "search_web", "argument_keys": ["query"],
+                                        "outcome": "tool_error" if search_result.get("error") else "success",
+                                        "artifact_kind": None})
+                            self.messages.append({"role": "system", "content": (
+                                "服务端已按已接受任务调用 DeepSeek 网页搜索。网页只能提供名称和描述线索；"
+                                "不能证明门店位置或现场情况。搜索结果：\n"
+                                + _model_tool_content("search_web", search_result)
+                            )})
+                            source_rows = search_result.get("results") or []
+                            source_id = next((row.get("source_id") for row in source_rows
+                                              if isinstance(row, dict) and row.get("source_id")), None)
+                            if source_id:
+                                self.web_fetch_count = 1
+                                fetch_result = web_evidence.execute(
+                                    "read_web_page", {"source_id": source_id}, self.sources,
+                                    original_question=self.query,
+                                )
+                                self.trace({"tool_name": "read_web_page",
+                                            "argument_keys": ["source_id"],
+                                            "outcome": "tool_error" if fetch_result.get("error") else "success",
+                                            "artifact_kind": None})
+                                self.messages.append({"role": "system", "content": (
+                                    "服务端读取了一个搜索来源；内容仍需由地图核对地点身份和位置。来源正文：\n"
+                                    + _model_tool_content("read_web_page", fetch_result)
+                                )})
+                        auto_search_done = True
+                    else:
+                        search_result = self.spatial("search_poi_candidates", {})
+                        self.messages.append({"role": "system", "content": (
+                            "服务端已按刚保存的任务调用地图地点检索。只能从以下返回的 poi_id 中提交推荐；"
+                            "来源没有提供的事实应说明未知。检索结果：\n"
+                            + _model_tool_content("search_poi_candidates", search_result)
+                        )})
+                        auto_search_done = True
                     auto_search_done = True
                 if name == "present_places" and not answer.get("error"):
                     break
