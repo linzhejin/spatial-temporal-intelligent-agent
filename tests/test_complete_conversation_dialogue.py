@@ -273,6 +273,33 @@ def test_provider_failure_is_reported_without_repeated_network_calls(monkeypatch
     assert result["response_kind"] != "clarify"
 
 
+def test_later_empty_search_does_not_discard_candidate_snapshot(monkeypatch):
+    from agents import route_state, tools
+    from storage.task_repository import _maintenance_snapshot_is_current
+    candidate = place("amap:A123", "候选餐厅")
+    pending = {"request_id": "request", "original_query": "信图出发，总图附近吃饭",
+               "start": {"type": "poi", "name": "信图"}, "search_anchor": {"type": "poi", "name": "总图"},
+               "subcategories": ["restaurant"], "search_radius_m": 1000,
+               "semantic_request": {"operation": "place_search"}}
+    dialogue, _ = make_dialogue("找吃饭地点", context={"place_request": pending})
+    monkeypatch.setattr(tools, "_prepare_route_context", lambda _context: ({}, None))
+    dialogue.execute_tool = Mock(side_effect=[
+        ({"status": "ok", "candidates": [candidate], "data_version": "data-current",
+          "road_condition_version": "roads-current"}, {"candidates": [candidate]}),
+        ({"status": "ok", "candidates": [], "count": 0}, {"candidates": []}),
+    ])
+    dialogue.spatial("search_poi_candidates", {"keyword": "餐馆"})
+    dialogue.spatial("search_poi_candidates", {"keyword": "另一关键词"})
+    assert [row["poi_id"] for row in dialogue.pending["candidate_pool"]] == [candidate["poi_id"]]
+    text = dialogue.present({"introduction": "候选", "places": [
+        {"poi_id": candidate["poi_id"], "reason": "目录候选"}]})
+    result = dialogue.result(text)
+    monkeypatch.setattr(route_state, "current_data_version", lambda: "data-current")
+    monkeypatch.setattr(route_state, "current_road_condition_version", lambda _conditions: "roads-current")
+    monkeypatch.setattr(tools, "list_conditions", lambda **_kwargs: [])
+    assert _maintenance_snapshot_is_current(result)
+
+
 def test_repeated_identical_tool_validation_errors_stop_without_exhausting_the_budget(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     invalid = reply(present_places={"introduction": "候选", "places": [

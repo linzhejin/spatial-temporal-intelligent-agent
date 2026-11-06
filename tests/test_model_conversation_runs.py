@@ -156,6 +156,46 @@ def test_historical_result_pages_are_bounded_and_conversation_scoped():
                                     section="route_geometry")["error"] == "result_reference_unavailable"
 
 
+def test_candidate_delivery_uses_snapshot_from_an_earlier_nonempty_search(monkeypatch):
+    from types import SimpleNamespace
+    from unittest.mock import Mock
+    from langgraph.checkpoint.memory import InMemorySaver
+    from agents import planner, route_state, workflow
+    from jobs.worker import process_next_run
+    from tests.test_model_dialogue import place, reply
+
+    monkeypatch.setattr(planner.config, "DEEPSEEK_API_KEY", "test-only")
+    monkeypatch.setattr(planner.agent_tools, "_prepare_route_context", lambda _context: ({}, None))
+    monkeypatch.setattr(route_state, "current_data_version", lambda: "data-current")
+    monkeypatch.setattr(route_state, "current_road_condition_version", lambda _conditions: "roads-current")
+    monkeypatch.setattr(planner.agent_tools, "list_conditions", lambda **_kwargs: [])
+    candidate = place("amap:A123", "候选餐厅")
+    searches = Mock(side_effect=[
+        ({"status": "ok", "candidates": [candidate], "data_version": "data-current",
+          "road_condition_version": "roads-current"}, {"candidates": [candidate]}),
+        ({"status": "ok", "candidates": [], "count": 0}, {"candidates": []}),
+    ])
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", searches)
+    model = Mock(side_effect=[
+        reply(update_task={"relation": "new", "operation": "place_search", "subcategories": ["restaurant"],
+                           "start": {"type": "poi", "name": "信图"},
+                           "search_anchor": {"type": "poi", "name": "总图"}}),
+        reply(search_poi_candidates={"keyword": "餐馆"}),
+        reply(search_poi_candidates={"keyword": "另一关键词"}),
+        reply(present_places={"introduction": "候选", "places": [
+            {"poi_id": candidate["poi_id"], "reason": "目录候选"}]}),
+    ])
+    monkeypatch.setattr(planner, "_make_client", lambda: SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=model))))
+    owner, _, conversation = create_conversation(DATABASE_URL)
+    run = submit(owner, conversation, "信图出发，总图附近找餐馆")
+    graph = workflow.build_agent_workflow(InMemorySaver(), database_url=DATABASE_URL)
+    assert process_next_run(DATABASE_URL, "snapshot-model-worker", graph, lease_seconds=60)["status"] == "needs_input"
+    delivery = get_run(DATABASE_URL, owner, run["run_id"])["result"]
+    assert delivery["response_kind"] == "candidates"
+    assert delivery["candidates"][0]["poi_id"] == candidate["poi_id"]
+
+
 def test_worker_model_continues_same_task_and_preserves_distinct_anchors(monkeypatch):
     from types import SimpleNamespace
     from unittest.mock import Mock

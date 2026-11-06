@@ -46,8 +46,10 @@ def main():
     graph = workflow.build_agent_workflow(InMemorySaver(), database_url=url)
     captured = []
     presentation_errors = []
+    search_snapshots = []
     factory = planner._make_client
     original_present = Dialogue.present
+    original_spatial = Dialogue.spatial
 
     def monitored_present(self, args):
         try:
@@ -56,6 +58,16 @@ def main():
             presentation_errors.append(str(error).split(":", 1)[0])
             raise
     Dialogue.present = monitored_present
+
+    def monitored_spatial(self, name, args):
+        result = original_spatial(self, name, args)
+        if name in {"search_poi_candidates", "find_reachable_places"}:
+            search_snapshots.append({"tool": name, "count": len(result.get("candidates") or []),
+                                     "has_data_version": bool(result.get("data_version")),
+                                     "has_event_version": bool(result.get("road_condition_version")),
+                                     "error": result.get("error")})
+        return result
+    Dialogue.spatial = monitored_spatial
 
     def monitored_client():
         client = factory()
@@ -77,6 +89,7 @@ def main():
         expected = [{"role": row["role"], "content": row["content"]} for row in inputs["history"]]
         captured.clear()
         presentation_errors.clear()
+        search_snapshots.clear()
         outcome = process_next_run(url, "smoke-" + uuid4().hex, graph, lease_seconds=30)
         run = get_run(url, owner, accepted["run_id"])
         result = run.get("result") or {}
@@ -116,7 +129,8 @@ def main():
                   "end_name": (result.get("end") or {}).get("name"),
                   "candidate_ids": [row.get("poi_id") for row in result.get("candidates") or []],
                   "route_verification": (result.get("route_verification") or {}).get("status"),
-                  "presentation_errors": presentation_errors, "tool_feedback": feedback[-20:],
+                  "presentation_errors": presentation_errors, "search_snapshots": search_snapshots,
+                  "tool_feedback": feedback[-20:],
                   "tools": [event.get("tool_name") for event in events], "model_usage": result.get("model_usage")}
         print(json.dumps(record, ensure_ascii=False), flush=True)
         return run, pending, record

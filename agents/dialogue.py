@@ -658,11 +658,14 @@ class Dialogue:
                 self.fresh.add(identifier)
         if name in {"search_poi_candidates", "find_reachable_places"}:
             self.last_search = result
+            if result.get("candidates") and result.get("data_version") and result.get("road_condition_version"):
+                from agents.result_maintenance import record_candidate_snapshot
+                record_candidate_snapshot(self.pending, result)
             provider_status = result.get("online_status")
             if (provider_status and provider_status not in {"ok", "not_requested", "query_required", "center_unavailable"}
                     and not result.get("candidates")):
                 self.place_service_error = provider_status
-            if self.intent.get("operation") == "place_search":
+            if self.intent.get("operation") == "place_search" and result.get("candidates"):
                 self.pending["candidate_pool"] = [
                     deepcopy(row) for row in (result.get("candidates") or [])
                     if isinstance(row, dict) and row.get("poi_id")
