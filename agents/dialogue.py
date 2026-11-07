@@ -51,10 +51,14 @@ def tool_schemas():
             item["function"]["description"] = ("核对具体地名并查询校园/在线目录记录；多分店返回候选，不擅自选定。"
                 "名称和坐标匹配不代表现场存在、营业或入口可通行。")
         elif name in {"get_weather", "plan_route"}:
-            item["function"]["description"] += (
-                "如果本轮只有这一项任务且无需继续判断，必须在同一批工具调用中同时调用 finish_turn；"
-                "不要等结果返回后再额外生成复述轮。"
-            )
+            parameters = item["function"]["parameters"]
+            parameters["properties"]["end_turn_if_success"] = {
+                "type": "boolean",
+                "description": "只有当前用户请求仅需完成这一项、没有其他子任务且无需详细解释时填 true；否则填 false。服务器只在工具成功并且没有其他未完成工具时才结束本轮。",
+            }
+            required = parameters.setdefault("required", [])
+            if "end_turn_if_success" not in required:
+                required.append("end_turn_if_success")
     schemas.extend([
         _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。参数明确时，可在同一响应中与后续工具一起调用，服务器会先处理更新。已接受的字段不要重复提交。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
@@ -76,7 +80,7 @@ def tool_schemas():
              "web_research_requested": {"type": "boolean", "description": "网页资料能明显补足本轮需求时设为true，例如店铺详情、校园攻略或地图目录可能不全的地点；普通附近推荐在地图候选足够时可不查网页"},
              "web_page_read_requested": {"type": "boolean", "description": "仅当用户明确需要核对门店级详情（如人均、营业时间或近期评价）时设为true；一般附近推荐只需搜索摘要和地图匹配，不必读取网页正文"},
              "candidate_action": {"type": "string", "enum": ["recommend", "next_batch"],
-                                  "description": "用户要求换一批/换一家且继续当前地点条件时设为next_batch；筛选条件变化时设为recommend"},
+                                  "description": "只有地点筛选条件与半径完全不变时才设为next_batch；任何范围、类别、关键词、区域或要求变化都用recommend并重新检索"},
              "activities": {"type": "array", "items": {"type": "string"}},
              "subcategories": {"type": "array", "items": {"type": "string"}},
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
@@ -95,8 +99,10 @@ def tool_schemas():
                   {"query": {"type": "string"}}, ("query",)),
         _function("read_web_page", "读取本轮搜索返回的某个来源，核对内容、日期与分店。",
                   {"source_id": {"type": "string"}}, ("source_id",)),
-        _function("browse_candidates", "查看已接受候选池中具体地点及分页状态；默认只显示尚未展示的地点。",
-                  {"offset": {"type": "integer", "minimum": 0},
+        _function("browse_candidates", "读取已接受候选池中的具体地点。条件未变而要换一批时优先用update_task(candidate_action=next_batch)，其candidate_page已含地点；仅在需要分页读取时调用本工具。若本轮首个操作就是读取候选池，必须提供服务器列出的task_id与task_revision，服务器会校验版本并绑定该任务；搜索条件变化后不得读取旧候选池。默认只显示尚未展示的地点。",
+                  {"task_id": {"type": "string", "description": "本轮尚未绑定任务时，填写服务器列出的候选任务ID"},
+                   "task_revision": {"type": "integer", "minimum": 0, "description": "本轮尚未绑定任务时，填写该任务当前版本"},
+                   "offset": {"type": "integer", "minimum": 0},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 12},
                    "include_shown": {"type": "boolean"}}),
         _function("conclude_without_places", "已查看候选但没有适合本轮条件的地点时，说明无法推荐的原因；不要据此声称候选池为空。",
@@ -106,8 +112,6 @@ def tool_schemas():
                    "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
                    "offset": {"type": "integer", "minimum": 0},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("run_id", "section")),
-        _function("finish_turn", "单独查询天气或规划单条路线，且无需继续判断时，必须与 get_weather/plan_route 放在同一批工具调用中。服务器会在结果成功后交付简短结论。天气加路况、多个路线、需要解释细节或交付地点卡片时不要调用。",
-                  {}),
     ])
     return schemas
 
@@ -473,8 +477,9 @@ class Dialogue:
         candidate_action = args.get("candidate_action") or ("recommend" if changed_search else self.turn_action)
         if candidate_action not in {"recommend", "next_batch"}:
             raise ValueError("invalid candidate_action")
-        if candidate_action == "next_batch" and (relation != "continue" or changed_search):
-            raise ValueError("next_batch requires unchanged place search conditions")
+        normalized_candidate_action = candidate_action == "next_batch" and (relation != "continue" or changed_search)
+        if normalized_candidate_action:
+            candidate_action = "recommend"
         next_known, next_last_search = self.known, self.last_search
         if changed_search:
             selected_id = pending.get("selected_poi_id")
@@ -516,6 +521,8 @@ class Dialogue:
         compact_pending = deepcopy(pending)
         compact_pending.pop("candidate_pool", None)
         response = {"accepted_task": _compact(compact_pending)}
+        if candidate_action == "recommend" and changed_search:
+            response["search_required"] = True
         if radius_note:
             response["radius_note"] = radius_note
         if self.bound_task:
@@ -698,6 +705,21 @@ class Dialogue:
         return constraints
 
     def browse_candidates(self, args):
+        if self.bind_task and self.bound_task is None:
+            task_id = args.get("task_id")
+            task_revision = args.get("task_revision")
+            chosen = self.available_tasks.get(str(task_id or ""))
+            if (not chosen or type(task_revision) is not int
+                    or chosen.get("revision") != task_revision):
+                raise ValueError("task_version_invalid: 请选择服务器提供的候选任务及当前版本")
+            state = chosen.get("state") or {}
+            place_request = state.get("place_request") or {}
+            operation = (place_request.get("semantic_request") or {}).get("operation")
+            if not isinstance(operation, str) or operation not in _OPERATIONS:
+                raise ValueError("candidate_task_requires_explicit_update: 请先用update_task选择任务")
+            self.update({"relation": "continue", "task_id": task_id,
+                         "task_revision": task_revision, "operation": operation,
+                         "candidate_action": "next_batch"})
         offset = args.get("offset", 0)
         limit = args.get("limit", 12)
         include_shown = args.get("include_shown", False)

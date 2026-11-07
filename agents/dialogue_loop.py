@@ -114,9 +114,7 @@ def _failure(dialogue, message, code):
 def _successful_terminal_reply(dialogue, tool_names):
     """Deliver verified terminal tool results without spending a second call to restate them."""
     tool_names = set(tool_names)
-    if "finish_turn" not in tool_names:
-        return None
-    result_tools = tool_names - {"update_task", "finish_turn"}
+    result_tools = tool_names - {"update_task"}
     if "get_weather" in result_tools and result_tools <= {"get_weather"}:
         weather = dialogue.weather
         if not isinstance(weather, dict):
@@ -284,7 +282,7 @@ def _run_dialogue_loop(dialogue):
         ], **({"reasoning_content": msg.reasoning_content}
               if getattr(msg, "reasoning_content", None) is not None else {})})
         final = None
-        finish_requested = False
+        end_turn_requested = False
         response_had_tool_error = False
         parallel = {}
         reads = [call for call in calls if call.function.name in {"get_weather", "list_road_conditions"}]
@@ -322,6 +320,8 @@ def _run_dialogue_loop(dialogue):
             if time.monotonic() >= deadline:
                 return _failure(dialogue, "本轮处理超时，已保留当前需求，请重试。", "deadline_exceeded")
             name, args = call.function.name, {}
+            reported_argument_keys = []
+            end_turn_for_tool = None
             tool_started = parallel[call.id][1] if call.id in parallel else time.monotonic()
             if call.id not in parallel:
                 dialogue.trace({"tool_name": name, "argument_keys": [], "outcome": "success",
@@ -330,16 +330,17 @@ def _run_dialogue_loop(dialogue):
                 args = json.loads(call.function.arguments)
                 if not isinstance(args, dict) or name not in names:
                     raise ValueError("invalid tool or arguments")
+                reported_argument_keys = sorted(args)
+                if name in {"get_weather", "plan_route"}:
+                    end_turn_for_tool = args.pop("end_turn_if_success", False)
+                    if type(end_turn_for_tool) is not bool:
+                        raise ValueError("end_turn_if_success must be a boolean")
+                    end_turn_requested |= end_turn_for_tool
                 if (dialogue.bind_task and dialogue.bound_task is None
-                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page", "read_result", "finish_turn"}):
+                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page", "read_result", "browse_candidates"}):
                     raise ValueError("task_binding_required: 先用 update_task 选择或创建任务")
                 if name == "update_task":
                     answer = dialogue.update(args)
-                elif name == "finish_turn":
-                    if args:
-                        raise ValueError("finish_turn does not accept arguments")
-                    finish_requested = True
-                    answer = {"accepted": True}
                 elif name == "browse_candidates":
                     answer = dialogue.browse_candidates(args)
                 elif name == "read_result":
@@ -370,13 +371,16 @@ def _run_dialogue_loop(dialogue):
                 return _failure(dialogue, "本轮处理超时，已保留当前需求，请重试。", "deadline_exceeded")
             except (ValueError, TypeError, KeyError) as error:
                 answer = {"error": "invalid_tool_request", "message": str(error)[:300]}
-            dialogue.trace({"tool_name": name, "argument_keys": sorted(args) if isinstance(args, dict) else [],
-                            "outcome": "tool_error" if answer.get("error") else "success", "artifact_kind": None,
-                            "phase": "completed", "duration_ms": round((time.monotonic() - tool_started) * 1000),
-                            "error_code": answer.get("error") if isinstance(answer.get("error"), str)
-                            and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["error"]) else None,
-                            "provider_status": answer.get("online_status") if isinstance(answer.get("online_status"), str)
-                            and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["online_status"]) else None})
+            trace_event = {"tool_name": name, "argument_keys": reported_argument_keys,
+                           "outcome": "tool_error" if answer.get("error") else "success", "artifact_kind": None,
+                           "phase": "completed", "duration_ms": round((time.monotonic() - tool_started) * 1000),
+                           "error_code": answer.get("error") if isinstance(answer.get("error"), str)
+                           and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["error"]) else None,
+                           "provider_status": answer.get("online_status") if isinstance(answer.get("online_status"), str)
+                           and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["online_status"]) else None}
+            if end_turn_for_tool is not None:
+                trace_event["end_turn_if_success"] = end_turn_for_tool
+            dialogue.trace(trace_event)
             dialogue.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
             response_had_tool_error |= bool(answer.get("error"))
@@ -405,7 +409,7 @@ def _run_dialogue_loop(dialogue):
         if dialogue.clarify:
             return _finish_with_read_failures(dialogue, dialogue.clarify.get("question", "请补充具体要求。"),
                                               read_failures, successful_reads)
-        if finish_requested and not response_had_tool_error:
+        if end_turn_requested and not response_had_tool_error:
             terminal_reply = _successful_terminal_reply(
                 dialogue, {call.function.name for call in calls}
             )

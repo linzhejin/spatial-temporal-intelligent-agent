@@ -391,19 +391,58 @@ def test_explicit_distance_or_change_can_support_the_model_selected_radius():
         assert dialogue.pending["search_radius_m"] == radius
 
 
-def test_rejected_expand_and_next_batch_update_does_not_consume_the_expansion():
-    import pytest
+def test_expansion_overrides_conflicting_next_batch_and_requires_fresh_search():
     candidate = place("amap:A123", "候选餐厅")
     pending = {"request_id": "request", "original_query": "找餐馆", "search_radius_m": 1000,
-               "candidate_pool": [candidate], "semantic_request": {"operation": "place_search"}}
+               "candidate_pool": [candidate], "candidate_places": [candidate],
+               "candidate_poi_ids": [candidate["poi_id"],],
+               "semantic_request": {"operation": "place_search", "shown_ids": [candidate["poi_id"]]}}
     dialogue, _ = make_dialogue("范围放宽一些", context={"place_request": pending})
-    with pytest.raises(ValueError, match="next_batch requires"):
-        dialogue.update({"relation": "continue", "operation": "place_search",
-                         "candidate_action": "next_batch", "expand_search_radius": True})
-    assert dialogue.pending["search_radius_m"] == 1000
-    assert candidate["poi_id"] in dialogue.known
-    dialogue.update({"relation": "continue", "operation": "place_search", "expand_search_radius": True})
+
+    accepted = dialogue.update({"relation": "continue", "operation": "place_search",
+                                 "candidate_action": "next_batch", "expand_search_radius": True})
+
     assert dialogue.pending["search_radius_m"] == 2000
+    assert dialogue.turn_action == "recommend"
+    assert dialogue.pending["candidate_pool"] == []
+    assert dialogue.pending["candidate_places"] == []
+    assert dialogue.pending["candidate_poi_ids"] == []
+    assert dialogue.intent["shown_ids"] == [candidate["poi_id"]]
+    assert accepted["search_required"] is True
+    assert "candidate_page" not in accepted
+
+
+def test_browse_candidates_can_bind_only_the_explicit_task_revision():
+    import pytest
+
+    shown = place("amap:A123", "已展示餐厅")
+    unshown = place("amap:B123", "未展示餐厅")
+    pending = {"request_id": "request", "original_query": "找餐馆", "search_radius_m": 1000,
+               "candidate_pool": [shown, unshown], "candidate_places": [shown],
+               "candidate_poi_ids": [shown["poi_id"]],
+               "semantic_request": {"operation": "place_search", "shown_ids": [shown["poi_id"]]}}
+    dialogue, _ = make_dialogue("换几家", context={"available_tasks": [{
+        "task_id": "task-123", "revision": 4, "state": {"place_request": pending},
+    }]})
+    bound = []
+    dialogue.bind_task = lambda **proposal: (bound.append(proposal) or {
+        "task_id": proposal["task_id"], "task_revision": 5,
+    })
+
+    page = dialogue.browse_candidates({"task_id": "task-123", "task_revision": 4})
+
+    assert bound[0]["relation"] == "continue"
+    assert bound[0]["task_id"] == "task-123" and bound[0]["base_revision"] == 4
+    assert dialogue.bound_task["task_revision"] == 5
+    assert [row["poi_id"] for row in page["candidates"]] == [unshown["poi_id"]]
+    assert page["exhausted"] is True
+
+    stale, _ = make_dialogue("换几家", context={"available_tasks": [{
+        "task_id": "task-123", "revision": 4, "state": {"place_request": pending},
+    }]})
+    stale.bind_task = lambda **_proposal: pytest.fail("stale candidate pages must not bind a task")
+    with pytest.raises(ValueError, match="task_version_invalid"):
+        stale.browse_candidates({"task_id": "task-123", "task_revision": 3})
 
 
 def test_route_preference_preserves_selected_place_when_search_cache_is_invalidated():
@@ -561,7 +600,7 @@ def test_successful_weather_tool_returns_the_checked_result_without_a_restatemen
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     dialogue, model = make_dialogue("武汉今天的天气怎么样？", replies=[
         reply(update_task={"relation": "new", "operation": "weather"},
-              get_weather={}, finish_turn={}),
+              get_weather={"end_turn_if_success": True}),
     ])
     executed = []
     dialogue.bind_task = lambda **_kwargs: (
@@ -583,7 +622,7 @@ def test_successful_weather_tool_returns_the_checked_result_without_a_restatemen
 def test_weather_is_not_delivered_early_without_model_finish_signal(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     dialogue, model = make_dialogue("武汉今天的天气怎么样？", replies=[
-        reply(get_weather={}), reply("武汉今天晴。"),
+        reply(get_weather={"end_turn_if_success": False}), reply("武汉今天晴。"),
     ])
     dialogue.execute_tool = lambda _name, _args, _context: (
         {"weather": "晴", "temperature": 22}, None,
@@ -601,7 +640,7 @@ def test_verified_direct_route_returns_the_checked_result_without_a_restatement_
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     monkeypatch.setattr(tools, "_prepare_route_context", lambda _context: ({}, None))
     dialogue, model = make_dialogue("尽量走平坦些", replies=[
-        reply(plan_route={}, finish_turn={}), reply("已按平坦偏好规划好路线。"),
+        reply(plan_route={"end_turn_if_success": True}), reply("已按平坦偏好规划好路线。"),
     ])
     route = {"route_verification": {"status": "pass"},
              "route_state": {"strategy": {"name": "flat"}}}
@@ -615,17 +654,22 @@ def test_verified_direct_route_returns_the_checked_result_without_a_restatement_
     assert result["message"] == "已按平坦偏好规划好路线。"
 
 
-def test_finish_turn_schema_is_explicit_and_has_no_user_supplied_content():
+def test_direct_terminal_choice_is_required_on_weather_and_route_tool_calls():
     from agents.dialogue import tool_schemas
 
-    schema = next(item["function"] for item in tool_schemas()
-                  if item["function"]["name"] == "finish_turn")
+    schemas = {item["function"]["name"]: item["function"] for item in tool_schemas()}
+    assert "finish_turn" not in schemas
 
-    assert schema["parameters"] == {
-        "type": "object", "properties": {}, "required": [], "additionalProperties": False,
-    }
-    assert "单独查询天气或规划单条路线" in schema["description"]
-    assert "不要调用" in schema["description"]
+    for name in ("get_weather", "plan_route"):
+        parameters = schemas[name]["parameters"]
+        assert "end_turn_if_success" in parameters["required"]
+        decision = parameters["properties"]["end_turn_if_success"]
+        assert decision["type"] == "boolean"
+        assert "其他子任务" in decision["description"]
+
+    browse = schemas["browse_candidates"]["parameters"]["properties"]
+    assert browse["task_id"]["type"] == "string"
+    assert browse["task_revision"]["type"] == "integer"
 
 
 def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypatch):
@@ -646,7 +690,7 @@ def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypat
 def test_road_failure_keeps_successful_weather_as_partial_result(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     dialogue, _ = make_dialogue("天气和路况如何", replies=[
-        reply(get_weather={}, list_road_conditions={}, finish_turn={}),
+        reply(get_weather={"end_turn_if_success": True}, list_road_conditions={}),
         reply("天气晴，路况暂不可用。"),
     ])
     dialogue.execute_tool = lambda name, args, context: (

@@ -362,11 +362,25 @@ def main():
                     tool_call_names = [call.function.name for call in
                                        (getattr(message, "tool_calls", None) or [])
                                        if getattr(call, "function", None)]
+                    terminal_decisions = []
+                    for call in getattr(message, "tool_calls", None) or []:
+                        function = getattr(call, "function", None)
+                        if not function or function.name not in {"get_weather", "plan_route"}:
+                            continue
+                        try:
+                            arguments = json.loads(function.arguments or "{}")
+                        except (TypeError, ValueError):
+                            arguments = {}
+                        terminal_decisions.append({"tool": function.name,
+                            "end_turn_if_success": arguments.get("end_turn_if_success")
+                            if type(arguments.get("end_turn_if_success")) is bool else None})
+                    captured[-1]["terminal_decisions"] = terminal_decisions
                     returned = {"session": scenario["id"], "call": index, "status": "returned",
                                 "duration_ms": round((time.monotonic() - started_at) * 1000),
                                  "request_id": _safe_request_id(response),
                                 "provider_model": getattr(response, "model", None),
                                 "tool_call_names": tool_call_names,
+                                 "terminal_decisions": terminal_decisions,
                                 "input_tokens": getattr(usage, "prompt_tokens", None),
                                 "output_tokens": getattr(usage, "completion_tokens", None)}
                     with request_journal.open("a", encoding="utf-8") as stream:
@@ -482,6 +496,8 @@ def main():
                 run = submission["run"]
                 result = run.get("result") or {}
                 turn_calls = captured[call_start:]
+                terminal_decisions = [decision for call in turn_calls
+                                      for decision in call.get("terminal_decisions", [])]
                 actual_query = submission.get("query") or query
                 all_accepted_messages_received = bool(turn_calls) and all(
                     _accepted_history_present(call["messages"], submission["history"], actual_query)
@@ -568,6 +584,7 @@ def main():
                           "run_status": run.get("status"), "worker_status": submission["worker_status"],
                           "response_kind": result.get("response_kind"), "failure_code": result.get("failure_code"),
                           "model_calls_this_turn": len(turn_calls), "model_calls_session": tracker["call_count"],
+                          "terminal_decisions": terminal_decisions,
                           "history_count": len(_accepted_model_messages(submission["history"], actual_query)),
                           "all_accepted_messages_received": all_accepted_messages_received,
                           "assistant_text": assistant_text, "assistant_text_length": len(assistant_text),
@@ -661,6 +678,8 @@ def main():
                     or fourth.get("selected_poi_id") != selected or not fourth["all_accepted_messages_received"]
                     or fourth.get("task_id") != first.get("task_id")
                     or not fourth.get("route_line_visible_on_map")
+                    or not any(item == {"tool": "plan_route", "end_turn_if_success": True}
+                               for item in fourth.get("terminal_decisions", []))
                     or (selected_route_state.get("end") or {}).get("poi_id") != selected):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 4, "turns": turns}
 
@@ -670,12 +689,16 @@ def main():
                     or fifth.get("selected_poi_id") != selected or not fifth["all_accepted_messages_received"]
                     or fifth.get("task_id") != first.get("task_id")
                     or not fifth.get("route_line_visible_on_map")
+                    or not any(item == {"tool": "plan_route", "end_turn_if_success": True}
+                               for item in fifth.get("terminal_decisions", []))
                     or (fifth.get("route_state") or {}).get("route_id") != selected_route_state.get("route_id")):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 5, "turns": turns}
 
             _, _, sixth = turn(queries[5], expected_kind="chat")
             turns.append(sixth)
             if ("get_weather" not in sixth["tool_names"] or not sixth["all_accepted_messages_received"]
+                    or not any(item == {"tool": "get_weather", "end_turn_if_success": True}
+                               for item in sixth.get("terminal_decisions", []))
                     or sixth["history_count"] <= 8):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 6, "turns": turns}
 
@@ -685,6 +708,8 @@ def main():
                     or seventh.get("selected_poi_id") != selected or not seventh["all_accepted_messages_received"]
                     or seventh.get("task_id") != first.get("task_id")
                     or not seventh.get("route_line_visible_on_map")
+                    or not any(item == {"tool": "plan_route", "end_turn_if_success": True}
+                               for item in seventh.get("terminal_decisions", []))
                     or (seventh.get("route_state") or {}).get("route_id") != selected_route_state.get("route_id")
                     or seventh["history_count"] <= 8):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 7, "turns": turns}
