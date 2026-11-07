@@ -247,6 +247,12 @@ def _normalize_claim(value):
 
 def _reason_is_supported(reason, place, sources=()):
     """Accept a card reason only when each short claim appears in returned evidence."""
+    if re.search(r"\d+(?:\.\d+)?\s*(?:米|公里|分钟)", reason):
+        return False
+    normalized_reason = _normalize_claim(reason)
+    if any(normalized_reason == _normalize_claim(place.get(field)) for field in (
+            "name", "type_name", "category", "subcategory", "subcategory_label") if place.get(field)):
+        return False
     evidence = []
 
     def collect(value):

@@ -137,17 +137,22 @@ def test_present_places_removes_card_reasons_without_direct_evidence():
     hot_pot = place("amap:HOT123", "呷哺呷哺(武汉武大梅园店)")
     supported = place("amap:MEAL123", "周麻婆")
     supported.update({"description": "川菜小炒", "address": "梅园二路铺位"})
+    address_distance = place("amap:DIST123", "巷口面馆")
+    address_distance["address"] = "汉林东路与珞南一路交叉口东南60米"
     dialogue, _ = make_dialogue("想吃热食", context={"place_request": {
-        "candidate_pool": [hot_pot, supported],
+        "candidate_pool": [hot_pot, supported, address_distance],
     }})
 
     dialogue.present({"places": [
         {"poi_id": hot_pot["poi_id"], "reason": "火锅，可现煮热食"},
         {"poi_id": supported["poi_id"], "reason": "川菜小炒，梅园二路铺位"},
+        {"poi_id": address_distance["poi_id"],
+         "reason": "位于汉林东路与珞南一路交叉口东南60米"},
     ]})
 
     assert dialogue.candidates[0]["recommendation_reason"] == ""
     assert dialogue.candidates[1]["recommendation_reason"] == "川菜小炒，梅园二路铺位"
+    assert dialogue.candidates[2]["recommendation_reason"] == ""
 
 
 def test_present_places_can_ground_card_reasons_in_attached_web_source():
