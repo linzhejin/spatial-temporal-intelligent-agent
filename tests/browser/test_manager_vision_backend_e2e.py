@@ -393,3 +393,62 @@ def test_manager_reviews_persisted_candidate_and_publishes_user_route_event(
         if job_id:
             with database.connect(DATABASE_URL) as conn:
                 conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job_id,))
+
+
+def _vision_manager_http_client(monkeypatch, tmp_path):
+    import api.routes as routes
+    monkeypatch.setenv("DATABASE_URL", DATABASE_URL)
+    from app import create_app
+
+    monkeypatch.setattr(routes.config, "ROAD_CONDITION_ADMIN_PASSWORD", "manager-secret")
+    app = create_app()
+    app.config.update(TESTING=True, SECRET_KEY="test-secret", DATABASE_URL=DATABASE_URL)
+    client = app.test_client()
+    login = client.post("/api/admin/login", json={"password": "manager-secret"})
+    assert login.status_code == 200
+    return client
+
+
+def test_vision_suggested_edges_endpoint(monkeypatch, tmp_path):
+    database.initialize(DATABASE_URL)
+    client = _vision_manager_http_client(monkeypatch, tmp_path)
+    job = vision_repository.create_job(
+        DATABASE_URL,
+        created_by="web",
+        original_name="suggested-edges.png",
+        media_kind="image",
+        media_path="unused.png",
+        sha256="b" * 64,
+        anchor_gcj={"lng": 114.363, "lat": 30.5365},
+    )
+    try:
+        response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
+        assert response.status_code == 200, response.get_json()
+        data = response.get_json()["data"]
+        assert isinstance(data["suggested_edges"], list)
+        assert data["suggested_edges"]
+        assert data["suggested_edges"][0]["road_name"]
+    finally:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
+
+
+def test_vision_suggested_edges_requires_anchor(monkeypatch, tmp_path):
+    database.initialize(DATABASE_URL)
+    client = _vision_manager_http_client(monkeypatch, tmp_path)
+    job = vision_repository.create_job(
+        DATABASE_URL,
+        created_by="web",
+        original_name="no-anchor.png",
+        media_kind="image",
+        media_path="unused.png",
+        sha256="c" * 64,
+        anchor_gcj=None,
+    )
+    try:
+        response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
+        assert response.status_code == 400
+        assert response.get_json()["error"] == "suggestion_anchor_missing"
+    finally:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))

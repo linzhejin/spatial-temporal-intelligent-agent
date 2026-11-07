@@ -68,7 +68,7 @@ from spatial.road_conditions import (
     list_conditions, add_condition, remove_condition, update_condition,
     route_condition_notices,
     rebind_vision_condition_edge,
-    purge_revoked_conditions, snap_to_edge, CONDITION_LABELS, CONDITION_EFFECTS,
+    purge_revoked_conditions, snap_to_edge, nearest_edges, CONDITION_LABELS, CONDITION_EFFECTS,
     SNAP_MAX_DIST_M, TRAVEL_MODE_KEYS, CONDITION_ACTIONS, CONDITION_DIRECTIONS,
     RoadConditionBindingError, RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
     _directional_corridor_edges,
@@ -3867,6 +3867,38 @@ def manager_vision_job(job_id):
     if not job:
         return _err("job_not_found", "影像任务不存在。", 404)
     return _ok({"job": _public_vision_job(job)})
+
+
+@api_bp.route("/manager/vision-jobs/<job_id>/suggested-edges", methods=["GET"])
+def manager_vision_suggested_edges(job_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    try:
+        uuid.UUID(job_id)
+        from storage import database, vision_repository
+        database.initialize(current_app.config.get("DATABASE_URL"))
+        job = vision_repository.get_job(current_app.config.get("DATABASE_URL"), job_id)
+    except ValueError:
+        return _err("invalid_job_id", "影像任务标识无效。", 400)
+    except Exception:
+        logger.exception("读取影像建议路段失败")
+        return _err("vision_storage_unavailable", "影像任务暂时不可用，请稍后重试。", 503)
+    if not job:
+        return _err("job_not_found", "影像任务不存在。", 404)
+    anchor = job.get("anchor_gcj")
+    if not isinstance(anchor, dict) or "lng" not in anchor or "lat" not in anchor:
+        return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+    try:
+        lng = float(anchor["lng"])
+        lat = float(anchor["lat"])
+    except (TypeError, ValueError):
+        return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+    G, err = _ensure_network()
+    if err is not None:
+        return err
+    suggested = nearest_edges(G, lng, lat)
+    return _ok({"suggested_edges": suggested})
 
 
 @api_bp.route("/manager/vision-jobs/<job_id>/preview-frames", methods=["GET"])
