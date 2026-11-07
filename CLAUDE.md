@@ -1,6 +1,6 @@
-# 项目工作指南（2026-10-01）
+# 项目工作指南（2026-11-07）
 
-本文件帮助 AI 编码助手快速进入项目。**代码、数据和当前评测报告优先于历史说明**：[当前进度与基础评测](docs/development/18_项目进度与基础评测_20261001.md)。旧设计和决策保存在 `docs/development/`，不要把其历史数量写成当前事实。
+本文件帮助 AI 编码助手快速进入项目。**当前进度以 [HANDOFF.md](HANDOFF.md) 为准，可核对数字见 [docs/当前事实.md](docs/当前事实.md)（自动生成）**。`docs/development/` 与 `docs/research/` 是历史过程记录（只读），不要把其中历史数量或结论当成当前事实。
 
 ## 当前基线
 
@@ -15,7 +15,7 @@
 
 - 后端 Flask；Agent 工作流位于 `agents/`，LangGraph 编排，工具注册表 `agents/tools.py`（数量见上方自动事实块）。持久会话与任务在 `storage/`，后台执行由 Agent worker 承担。
 - 空间算法在 `spatial/`。正式 POI 为 `data/pois.json`，正式融合路网为 `data/whu_road_network.graphml`，另有校门与人工边覆盖，数量见上方自动事实块。`data/edge_attribute_master.json` 与当前边 ID 全量绑定。
-- 前端在 `static/`，Android WebView 壳在 `android-app/`；管理端入口 `/manager`。视觉分析/审核管线存在，线上视觉 worker 尚未启用。
+- 前端在 `static/`，Android WebView 壳在 `android-app/`；管理端入口 `/manager`。视觉分析/审核管线存在；线上视觉 worker 自 2026-11-06 发布起为 active（以线上服务清单为准）。
 
 ## 关键行为约束
 
@@ -28,7 +28,7 @@
 
 ## 数据质量边界
 
-`validate_all_data.py` 通过只表明结构与基本范围合格。当前发布就绪门槛仍因候选 POI、占位属性、风险边、POI 吸附、路线差异与现场证据不足而失败；详见[评测报告](docs/development/18_项目进度与基础评测_20261001.md)。正式空间数据的来源与核实状态应在每次改动后保持可追溯。高德 API 结果用于线上服务和对照，勿作为可自由再发布的自有路网。
+`validate_all_data.py` 通过只表明结构与基本范围合格。发布就绪门槛的历史审计清单（候选 POI、占位属性、风险边等 11 类）见[评测报告](docs/development/18_项目进度与基础评测_20261001.md)，属长期数据治理项，不是论文主实验前置。正式空间数据的来源与核实状态应在每次改动后保持可追溯。高德 API 结果用于线上服务和对照，勿作为可自由再发布的自有路网。
 
 ## 常用检查
 
