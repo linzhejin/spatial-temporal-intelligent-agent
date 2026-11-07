@@ -447,7 +447,7 @@ def main():
                         page.locator("#nl-input").fill(query)
                         page.locator("#submit-btn").click()
                 accepted_response = accepted_response_info.value
-                if accepted_response.status_code != 202:
+                if accepted_response.status != 202:
                     raise RuntimeError("browser message API rejected the acceptance turn")
                 if len(submissions) != submission_count + 1:
                     raise RuntimeError("browser message submission was not observed by the worker bridge")

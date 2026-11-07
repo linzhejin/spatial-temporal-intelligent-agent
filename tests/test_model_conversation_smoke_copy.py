@@ -1,3 +1,6 @@
+import ast
+from pathlib import Path
+
 from scripts.model_conversation_smoke import _accepted_history_present, _check_user_copy, _point_record
 
 
@@ -47,3 +50,17 @@ def test_model_input_must_keep_the_complete_accepted_conversation_in_order():
     assert not _accepted_history_present([messages[0], *history[1:]], history, "扩大范围")
     reordered = [messages[0], history[1], history[0], history[2], *messages[4:]]
     assert not _accepted_history_present(reordered, history, "扩大范围")
+
+
+def test_browser_acceptance_reads_the_playwright_response_status_property():
+    source_path = Path(__file__).resolve().parents[1] / "scripts" / "model_conversation_smoke.py"
+    tree = ast.parse(source_path.read_text(encoding="utf-8"))
+    accepted_response_properties = {
+        node.attr for node in ast.walk(tree)
+        if isinstance(node, ast.Attribute)
+        and isinstance(node.value, ast.Name)
+        and node.value.id == "accepted_response"
+    }
+
+    assert "status" in accepted_response_properties
+    assert "status_code" not in accepted_response_properties
