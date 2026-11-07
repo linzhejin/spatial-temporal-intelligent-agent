@@ -4,6 +4,7 @@ from pathlib import Path
 from scripts.model_conversation_smoke import (
     _accepted_history_present,
     _accepted_model_messages,
+    _card_reason_is_supported,
     _check_user_copy,
     _failure_frames,
     _has_restaurant_intent,
@@ -27,6 +28,27 @@ def test_acceptance_copy_rejects_long_markdown_source_ids_and_card_repetition():
         "这是一条" + "很长" * 51 + "的回复。",
     ):
         assert not _check_user_copy({"assistant_text": text}, cards=[{"name": "梅园食堂"}])
+
+
+def test_acceptance_copy_hides_lookup_methods_and_unasked_business_status():
+    for text in (
+        "营业情况地图上没登记，去前最好确认。",
+        "地图未登记营业时间。",
+        "已匹配到几条目录记录。",
+    ):
+        assert not _check_user_copy({"assistant_text": text}, query="总图附近找餐馆")
+    assert _check_user_copy(
+        {"assistant_text": "营业情况暂时无法确认。"}, query="这家店现在营业吗？",
+    )
+
+
+def test_acceptance_card_reason_must_be_supported_without_repeating_distance():
+    card = {"name": "周麻婆·川菜小炒(武大店)", "description": "梅园二路铺位"}
+    assert _card_reason_is_supported({**card, "recommendation_reason": "川菜小炒"})
+    assert _card_reason_is_supported({**card, "recommendation_reason": ""})
+    assert not _card_reason_is_supported({**card, "recommendation_reason": "川菜小炒，热菜现炒"})
+    assert not _card_reason_is_supported({**card, "recommendation_reason": "约330米"})
+    assert not _card_reason_is_supported({**card, "recommendation_reason": card["name"]})
 
 
 def test_place_point_reader_handles_provider_rows_and_normalized_coordinates():

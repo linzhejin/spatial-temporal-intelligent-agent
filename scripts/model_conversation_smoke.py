@@ -164,16 +164,47 @@ def _accepted_history_present(model_messages, accepted_history, current_query):
     return bool(expected)
 
 
-def _check_user_copy(record, *, cards=()):
+def _check_user_copy(record, *, cards=(), query=None):
     text = record.get("assistant_text") or ""
     internal = ("来源与位置", "记录来源", "查询时间", "候选池", "search_poi_candidates",
                 "model_dialogue", "路网和路线约束", "未实地确认道路当前可通行",
                 "来源编号", "参考来源", "参考链接", "目录匹配", "处理阶段",
+                "地图上没登记", "地图未登记", "目录记录", "独立门店", "amap_online",
                 "**", "http://", "https://")
     markdown = re.search(r"(?:^|\n)\s*(?:#{1,6}\s|>\s|[-+*]\s|\d+[.)]\s)|`|\[[^\]]+\]\(", text)
+    query = query or record.get("query") or ""
+    asks_business = bool(re.search(r"营业|开门|关门|营业时间|几点|还开吗", query))
+    asks_price = bool(re.search(r"人均|预算|价格|多少钱|消费", query))
+    if not asks_business and re.search(r"营业|开门|关门|营业时间", text):
+        return False
+    if not asks_price and re.search(r"人均|预算|价格|多少钱", text):
+        return False
     return (len(text) <= 100 and not re.search(r"\bS[0-9a-f]{8}\b", text, re.IGNORECASE)
             and not markdown and not any(marker in text for marker in internal)
             and not any(card.get("name") and card["name"] in text for card in cards))
+
+
+def _card_reason_is_supported(card):
+    reason = str(card.get("recommendation_reason") or "").strip()
+    if not reason:
+        return True
+    if re.search(r"\d+(?:\.\d+)?\s*(?:米|公里|分钟)", reason):
+        return False
+    normalize = lambda value: re.sub(r"[\s，。！？、；：:,.·/\\-]+", "", str(value or ""))
+    normalized_reason = normalize(reason)
+    redundant = [card.get(key) for key in (
+        "name", "type_name", "category", "subcategory", "subcategory_label",
+    )]
+    if any(normalized_reason == normalize(value) for value in redundant if value):
+        return False
+    evidence = [card.get(key) for key in (
+        "name", "description", "activities", "activity_basis", "address", "business_area",
+        "accessibility",
+    )]
+    evidence.extend(card.get("activities") if isinstance(card.get("activities"), list) else [])
+    return bool(normalized_reason) and any(
+        normalized_reason in normalize(value) for value in evidence if value
+    )
 
 
 def main():
@@ -599,7 +630,9 @@ def main():
                           "route_line_visible_on_map": route_map_visible,
                           "loaded_real_map_tile_count": loaded_map_tiles,
                           "map_resource_responses": deepcopy(tracker["map_resource_responses"]),
-                          "short_clean_user_copy": _check_user_copy({"assistant_text": assistant_text}, cards=cards),
+                "short_clean_user_copy": _check_user_copy(
+                    {"assistant_text": assistant_text, "query": actual_query}, cards=cards),
+                "candidate_card_reasons_supported": all(_card_reason_is_supported(item) for item in cards),
                           "task_id": run.get("task_id"), "task_revision": run.get("current_task_revision"),
                           "start": deepcopy(pending.get("start")), "search_anchor": deepcopy(pending.get("search_anchor")),
                           "search_radius_m": pending.get("search_radius_m"), "activities": pending.get("activities") or [],
@@ -612,7 +645,8 @@ def main():
                               "coordinates": _point_record(item),
                               "distance_reference_name": item.get("distance_reference_name"),
                               "distance_basis": item.get("distance_basis"),
-                              "recommendation_reason": item.get("recommendation_reason")}
+                              "recommendation_reason": item.get("recommendation_reason"),
+                              "reason_supported": _card_reason_is_supported(item)}
                               for item in cards],
                           "route_verification": (result.get("route_verification") or {}).get("status"),
                           "tool_names": list(dict.fromkeys(item.get("tool_name") for item in events
@@ -746,14 +780,17 @@ def main():
             food_intent_persisted = bool(first.get("food_intent_present")) and all(
                 row.get("food_intent_present") for row in turns[1:5])
             copy_ok = all(row["short_clean_user_copy"] and row["candidate_card_presentation_matches_result"]
+                          and row["candidate_card_reasons_supported"]
                           and row["candidate_map_coordinates_match_cards"]
                           for row in turns[:3])
             browser_delivery_ok = all(row["assistant_text_matches_persisted"]
                                       and row["assistant_text_rendered_in_browser"]
                                       and row["latest_bubble_matches_result"] for row in turns)
             browser_errors_clear = not tracker["browser_errors"]
+            presentation_error_free = not tracker["presentation_errors"]
             complete = (same_anchor and same_start and same_selected and correct_distance_reference
-                        and food_intent_persisted and copy_ok and browser_delivery_ok and browser_errors_clear)
+                        and food_intent_persisted and copy_ok and browser_delivery_ok and browser_errors_clear
+                        and presentation_error_free)
             screenshot = report_dir / (scenario["id"] + "_mobile-browser.png")
             page.screenshot(path=str(screenshot), full_page=True)
             screenshot_hash = sha256(screenshot.read_bytes()).hexdigest()
@@ -766,6 +803,9 @@ def main():
                     "card_distance_reference_matches_anchor": correct_distance_reference,
                     "food_intent_persists_through_selection": food_intent_persisted,
                     "all_recommendation_copy_short_and_clean": copy_ok,
+                    "candidate_card_reasons_supported": all(row["candidate_card_reasons_supported"]
+                                                             for row in turns[:3]),
+                    "presentation_tool_errors_clear": presentation_error_free,
                     "assistant_delivery_matches_persisted_chat": browser_delivery_ok,
                     "browser_errors_clear": browser_errors_clear,
                     "screenshot_sha256": screenshot_hash, "turns": turns}
