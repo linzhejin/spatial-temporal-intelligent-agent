@@ -624,7 +624,7 @@ def test_finish_turn_schema_is_explicit_and_has_no_user_supplied_content():
     assert schema["parameters"] == {
         "type": "object", "properties": {}, "required": [], "additionalProperties": False,
     }
-    assert "天气或已核验路线" in schema["description"]
+    assert "单独查询天气或规划单条路线" in schema["description"]
     assert "不要调用" in schema["description"]
 
 

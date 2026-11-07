@@ -357,10 +357,16 @@ def main():
                     tracker["last_failure_fingerprint"] = None
                     tracker["same_request_failures"] = 0
                     usage = getattr(response, "usage", None)
+                    choice = (getattr(response, "choices", None) or [None])[0]
+                    message = getattr(choice, "message", None)
+                    tool_call_names = [call.function.name for call in
+                                       (getattr(message, "tool_calls", None) or [])
+                                       if getattr(call, "function", None)]
                     returned = {"session": scenario["id"], "call": index, "status": "returned",
                                 "duration_ms": round((time.monotonic() - started_at) * 1000),
                                  "request_id": _safe_request_id(response),
                                 "provider_model": getattr(response, "model", None),
+                                "tool_call_names": tool_call_names,
                                 "input_tokens": getattr(usage, "prompt_tokens", None),
                                 "output_tokens": getattr(usage, "completion_tokens", None)}
                     with request_journal.open("a", encoding="utf-8") as stream:

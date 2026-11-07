@@ -46,9 +46,15 @@ def tool_schemas():
                              "description": "仅填网页来源中明确提到、需要用地图核对的门店名称"},
     })
     for item in schemas:
-        if item["function"]["name"] == "resolve_poi":
+        name = item["function"]["name"]
+        if name == "resolve_poi":
             item["function"]["description"] = ("核对具体地名并查询校园/在线目录记录；多分店返回候选，不擅自选定。"
                 "名称和坐标匹配不代表现场存在、营业或入口可通行。")
+        elif name in {"get_weather", "plan_route"}:
+            item["function"]["description"] += (
+                "如果本轮只有这一项任务且无需继续判断，必须在同一批工具调用中同时调用 finish_turn；"
+                "不要等结果返回后再额外生成复述轮。"
+            )
     schemas.extend([
         _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。参数明确时，可在同一响应中与后续工具一起调用，服务器会先处理更新。已接受的字段不要重复提交。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
@@ -100,7 +106,7 @@ def tool_schemas():
                    "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
                    "offset": {"type": "integer", "minimum": 0},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("run_id", "section")),
-        _function("finish_turn", "仅当本轮所需工具都已明确且天气或已核验路线可直接交付时调用；可与任务更新和对应工具同轮调用。需要继续判断、查询路况、解释细节或交付地点卡片时不要调用。",
+        _function("finish_turn", "单独查询天气或规划单条路线，且无需继续判断时，必须与 get_weather/plan_route 放在同一批工具调用中。服务器会在结果成功后交付简短结论。天气加路况、多个路线、需要解释细节或交付地点卡片时不要调用。",
                   {}),
     ])
     return schemas

@@ -376,7 +376,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         browser.close()
 
 
-def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
+def test_user_can_retry_submission_and_start_a_fresh_session(static_site):
     """Exercise automatic retry after a transient error, cancel, and clean-session behavior."""
     submissions = []
     created_conversations = []
@@ -511,6 +511,115 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
         assert submissions[-1][:2] == ("local-conversation-2", "\u65b0\u4f1a\u8bdd")
         assert "\u7b2c\u4e00\u6b21\u63d0\u4ea4" not in page.locator("#chat-content").inner_text()
 
+        context.close()
+        browser.close()
+
+
+def test_mobile_refresh_restores_the_same_conversation_and_active_run(static_site):
+    created_conversations = []
+    restored_conversations = []
+    submitted_messages = []
+    active_run_polls = 0
+    allow_completion = {"value": False}
+
+    def json_response(route, payload):
+        route.fulfill(status=200, content_type="application/json; charset=utf-8",
+                      body=json.dumps(payload, ensure_ascii=False))
+
+    def handle_request(route):
+        nonlocal active_run_polls
+        request = route.request
+        parsed = urlsplit(request.url)
+        if parsed.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+            return
+
+        if parsed.path == "/api/conversations" and request.method == "POST":
+            conversation_id = "refresh-resume-conversation"
+            created_conversations.append(conversation_id)
+            json_response(route, {"data": {"conversation_id": conversation_id}})
+            return
+        if parsed.path == "/api/conversations/refresh-resume-conversation" and request.method == "GET":
+            restored_conversations.append(parsed.path)
+            json_response(route, {"data": {
+                "messages": [{"seq": 1, "role": "user", "content": "第一句", "task_id": "task-1"}],
+                "tasks": [],
+                "active_runs": [{"run_id": "active-run", "task_id": "task-1",
+                                 "message_seq": 1, "query": "第一句", "status": "running"}],
+            }})
+            return
+        if parsed.path.endswith("/messages") and request.method == "POST":
+            conversation_id = parsed.path.split("/")[3]
+            body = request.post_data_json
+            submitted_messages.append((conversation_id, body["query"]))
+            run_id = "active-run" if body["query"] == "第一句" else "second-run"
+            json_response(route, {"data": {"run_id": run_id}})
+            return
+        if parsed.path == "/api/runs/active-run":
+            active_run_polls += 1
+            if active_run_polls >= 3 and allow_completion["value"]:
+                json_response(route, {"data": {"run_id": "active-run", "task_id": "task-1",
+                    "status": "completed", "events": [],
+                    "result": {"task_type": "chat", "response_kind": "chat", "reply": "首轮已完成"}}})
+            else:
+                json_response(route, {"data": {"run_id": "active-run", "task_id": "task-1",
+                    "status": "running", "events": []}})
+            return
+        if parsed.path == "/api/runs/second-run":
+            json_response(route, {"data": {"run_id": "second-run", "status": "completed", "events": [],
+                "result": {"task_type": "chat", "response_kind": "chat", "reply": "第二轮已完成"}}})
+            return
+        if parsed.path.startswith("/api/"):
+            json_response(route, {"data": {}})
+            return
+        route.continue_()
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True,
+                                     has_touch=True, service_workers="block")
+        context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page = context.new_page()
+        page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
+        page.route("**/*", handle_request)
+        page.goto(static_site, wait_until="domcontentloaded")
+        page.locator("#nl-input").fill("第一句")
+        with page.expect_response(lambda response: response.url.endswith("/messages")
+                                  and response.request.method == "POST"):
+            page.locator("#submit-btn").click()
+        with page.expect_response(lambda response: "/api/runs/active-run?" in response.url):
+            pass
+        status = page.locator("#chat-run-statuses .chat-run-status-row")
+        expect(status).to_be_visible(timeout=10000)
+        expect(status.locator("button")).to_have_text("取消")
+
+        with page.expect_response(lambda response: response.url.endswith(
+                "/api/conversations/refresh-resume-conversation")):
+            page.reload(wait_until="domcontentloaded")
+        with page.expect_response(lambda response: "/api/runs/active-run?" in response.url):
+            pass
+        status = page.locator("#chat-run-statuses .chat-run-status-row")
+        expect(status).to_be_visible(timeout=10000)
+        expect(status.locator("button")).to_have_text("取消")
+        assert page.locator("#chat-run-statuses").evaluate(
+            "element => !document.querySelector('#chat-content').contains(element)")
+        expect(page.locator("#chat-content")).not_to_contain_text("正在处理")
+
+        allow_completion["value"] = True
+        expect(page.locator("#chat-content")).to_contain_text("首轮已完成", timeout=15000)
+        expect(page.locator("#chat-run-statuses")).to_be_hidden(timeout=10000)
+
+        page.locator("#nl-input").fill("第二句")
+        with page.expect_response(lambda response: response.url.endswith("/messages")
+                                  and response.request.method == "POST"):
+            page.locator("#submit-btn").click()
+        expect(page.locator("#chat-content")).to_contain_text("第二轮已完成", timeout=10000)
+
+        assert created_conversations == ["refresh-resume-conversation"]
+        assert restored_conversations == ["/api/conversations/refresh-resume-conversation"]
+        assert submitted_messages == [("refresh-resume-conversation", "第一句"),
+                                      ("refresh-resume-conversation", "第二句")]
+        assert active_run_polls >= 3
         context.close()
         browser.close()
 
