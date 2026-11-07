@@ -133,6 +133,37 @@ def test_presenting_candidates_preserves_all_prior_shown_ids():
     assert dialogue.intent["shown_ids"] == [*old_ids, candidate["poi_id"]]
 
 
+def test_present_places_removes_card_reasons_without_direct_evidence():
+    hot_pot = place("amap:HOT123", "呷哺呷哺(武汉武大梅园店)")
+    supported = place("amap:MEAL123", "周麻婆")
+    supported.update({"description": "川菜小炒", "address": "梅园二路铺位"})
+    dialogue, _ = make_dialogue("想吃热食", context={"place_request": {
+        "candidate_pool": [hot_pot, supported],
+    }})
+
+    dialogue.present({"places": [
+        {"poi_id": hot_pot["poi_id"], "reason": "火锅，可现煮热食"},
+        {"poi_id": supported["poi_id"], "reason": "川菜小炒，梅园二路铺位"},
+    ]})
+
+    assert dialogue.candidates[0]["recommendation_reason"] == ""
+    assert dialogue.candidates[1]["recommendation_reason"] == "川菜小炒，梅园二路铺位"
+
+
+def test_present_places_can_ground_card_reasons_in_attached_web_source():
+    candidate = place("amap:COFFEE123", "校园咖啡店")
+    dialogue, _ = make_dialogue("想找咖啡", context={"place_request": {
+        "candidate_pool": [candidate],
+    }})
+    dialogue.sources["Scoffee123"] = {"source_id": "Scoffee123", "excerpt": "现磨咖啡"}
+
+    dialogue.present({"places": [{"poi_id": candidate["poi_id"],
+                                   "reason": "现磨咖啡", "source_ids": ["Scoffee123"]}]})
+
+    assert dialogue.candidates[0]["recommendation_reason"] == "现磨咖啡"
+    assert dialogue.candidates[0]["source_ids"] == ["Scoffee123"]
+
+
 def test_present_places_preserves_requested_detail_and_rejects_excessive_text():
     import pytest
 

@@ -9,6 +9,7 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
+import re
 import time
 from uuid import uuid4
 
@@ -89,7 +90,7 @@ def tool_schemas():
              "clear_fields": {"type": "array", "items": {"type": "string"},
                                "description": "仅在用户明确取消时清除已有条件；路线硬约束使用 constraints.avoid_slope、constraints.avoid_steps、constraints.max_distance_m 等字段名"}},
             ("relation", "operation")),
-        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定。聊天只写一句简短引导。卡片理由只引用地点记录或有效网页来源直接支持的特点，不重复名称、类别、距离；没有可靠特点时填空字符串。source_ids 只允许使用网页工具返回的source_id；地图记录的source/data_source值不是source_id，没有网页来源时省略该字段。",
+        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定。聊天只写一句中性简短引导，不要把用户的筛选条件总结成候选事实。卡片理由只引用地点记录或有效网页来源直接支持的特点；服务器会清除证据不支持的理由。没有可靠特点时填空字符串。source_ids只允许使用网页工具返回的source_id；地图记录的source/data_source值不是source_id，没有网页来源时省略该字段。",
             {"introduction": {"type": "string", "maxLength": 500},
              "places": {"type": "array", "minItems": 1, "maxItems": 4, "items": {
                  "type": "object", "properties": {"poi_id": {"type": "string"},
@@ -237,6 +238,52 @@ def _resume_constraints(saved, route_constraints):
             current[field] = route[field]
     current["excluded_edge_ids"] = list(dict.fromkeys(current["excluded_edge_ids"] + route["excluded_edge_ids"]))
     return HardConstraints.model_validate(current).model_dump()
+
+
+def _normalize_claim(value):
+    return "".join(character for character in str(value or "").lower()
+                   if character.isalnum() or "\u3400" <= character <= "\u9fff")
+
+
+def _reason_is_supported(reason, place, sources=()):
+    """Accept a card reason only when each short claim appears in returned evidence."""
+    evidence = []
+
+    def collect(value):
+        if isinstance(value, dict):
+            for nested in value.values():
+                collect(nested)
+        elif isinstance(value, (list, tuple, set)):
+            for nested in value:
+                collect(nested)
+        elif isinstance(value, (str, int, float)):
+            evidence.append(_normalize_claim(value))
+
+    for field in ("name", "description", "activities", "activity_basis", "address",
+                  "business_area", "accessibility"):
+        collect(place.get(field))
+    for source in sources:
+        if isinstance(source, dict):
+            for field in ("title", "site_name", "excerpt", "content"):
+                collect(source.get(field))
+
+    clauses = [item.strip() for item in re.split(r"[，,、；;。！？\n]+", reason) if item.strip()]
+    if not clauses:
+        return True
+    for clause in clauses:
+        claim = clause
+        for prefix in ("位于", "坐落于", "处于", "地址在", "在"):
+            if claim.startswith(prefix):
+                claim = claim[len(prefix):]
+                break
+        for suffix in ("方向", "一带", "附近", "周边"):
+            if claim.endswith(suffix):
+                claim = claim[:-len(suffix)]
+                break
+        normalized = _normalize_claim(claim)
+        if not normalized or not any(normalized in item for item in evidence):
+            return False
+    return True
 
 
 class Dialogue:
@@ -768,6 +815,9 @@ class Dialogue:
             source_ids = item.get("source_ids") or []
             if any(source_id not in self.sources for source_id in source_ids):
                 raise ValueError("unknown_source")
+            if reason and not _reason_is_supported(
+                    reason, row, [self.sources[source_id] for source_id in source_ids]):
+                reason = ""
             row.update({"recommendation_reason": reason, "source_ids": source_ids})
             candidates.append(row)
         self.candidates = candidates
