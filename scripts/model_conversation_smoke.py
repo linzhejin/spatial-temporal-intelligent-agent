@@ -169,7 +169,7 @@ def _check_user_copy(record, *, cards=(), query=None):
     internal = ("来源与位置", "记录来源", "查询时间", "候选池", "search_poi_candidates",
                 "model_dialogue", "路网和路线约束", "未实地确认道路当前可通行",
                 "来源编号", "参考来源", "参考链接", "目录匹配", "处理阶段",
-                "地图上没登记", "地图未登记", "目录记录", "独立门店", "amap_online",
+                "地图上没登记", "地图未登记", "目录记录", "独立门店", "独立经营", "正经餐馆", "amap_online",
                 "**", "http://", "https://")
     markdown = re.search(r"(?:^|\n)\s*(?:#{1,6}\s|>\s|[-+*]\s|\d+[.)]\s)|`|\[[^\]]+\]\(", text)
     query = query or record.get("query") or ""
@@ -190,7 +190,9 @@ def _card_reason_is_supported(card):
         return True
     if re.search(r"\d+(?:\.\d+)?\s*(?:米|公里|分钟)", reason):
         return False
-    normalize = lambda value: re.sub(r"[\s，。！？、；：:,.·/\\-]+", "", str(value or ""))
+    def normalize(value):
+        return re.sub(r"[\s，。！？、；：:,.·/\\-]+", "", str(value or ""))
+
     normalized_reason = normalize(reason)
     redundant = [card.get(key) for key in (
         "name", "type_name", "category", "subcategory", "subcategory_label",
@@ -202,9 +204,21 @@ def _card_reason_is_supported(card):
         "accessibility",
     )]
     evidence.extend(card.get("activities") if isinstance(card.get("activities"), list) else [])
-    return bool(normalized_reason) and any(
-        normalized_reason in normalize(value) for value in evidence if value
-    )
+    normalized_evidence = [normalize(value) for value in evidence if value]
+    clauses = [normalize(item) for item in re.split(r"[，,、；;。]", reason) if normalize(item)]
+    for clause in clauses:
+        claim = clause
+        for prefix in ("位于", "坐落于", "处于", "在"):
+            if claim.startswith(prefix):
+                claim = claim[len(prefix):]
+                break
+        for suffix in ("方向", "一带", "附近", "周边", "类"):
+            if claim.endswith(suffix):
+                claim = claim[:-len(suffix)]
+                break
+        if not claim or not any(claim in value for value in normalized_evidence):
+            return False
+    return bool(clauses)
 
 
 def main():

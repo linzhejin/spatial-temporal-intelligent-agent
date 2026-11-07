@@ -35,6 +35,7 @@ def test_acceptance_copy_hides_lookup_methods_and_unasked_business_status():
         "营业情况地图上没登记，去前最好确认。",
         "地图未登记营业时间。",
         "已匹配到几条目录记录。",
+        "总图附近这几家餐馆可以看看，都是独立门店。",
     ):
         assert not _check_user_copy({"assistant_text": text}, query="总图附近找餐馆")
     assert _check_user_copy(
@@ -45,6 +46,11 @@ def test_acceptance_copy_hides_lookup_methods_and_unasked_business_status():
 def test_acceptance_card_reason_must_be_supported_without_repeating_distance():
     card = {"name": "周麻婆·川菜小炒(武大店)", "description": "梅园二路铺位"}
     assert _card_reason_is_supported({**card, "recommendation_reason": "川菜小炒"})
+    assert _card_reason_is_supported({**card, "recommendation_reason": "川菜小炒，梅园二路铺位"})
+    assert _card_reason_is_supported({"name": "蛋挞家的烫饭(武大枫园店)",
+                                      "recommendation_reason": "烫饭类，枫园方向"})
+    assert _card_reason_is_supported({"name": "小肆川(武大店)", "description": "武汉大学梅园",
+                                      "recommendation_reason": "位于梅园"})
     assert _card_reason_is_supported({**card, "recommendation_reason": ""})
     assert not _card_reason_is_supported({**card, "recommendation_reason": "川菜小炒，热菜现炒"})
     assert not _card_reason_is_supported({**card, "recommendation_reason": "约330米"})

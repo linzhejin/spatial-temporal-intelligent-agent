@@ -541,6 +541,7 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     assert "地图只返回地图/校园目录匹配记录" in system_prompt
     assert "卡片理由只摘录地点记录或有效网页来源直接支持的特点" in system_prompt
     assert "没有可靠的卡片特点时把 reason 留空" in system_prompt
+    assert "目录类别不等于经营形态" in system_prompt
     assert "默认" in system_prompt and "100字以内" in system_prompt
     assert "不逐家介绍" in system_prompt
     assert "不重复卡片里的距离" in system_prompt
