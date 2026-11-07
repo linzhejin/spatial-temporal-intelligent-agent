@@ -8,7 +8,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/luojia-system-release-20261105 @ a16c14c ｜ origin/main 本地领先 15 ｜ gitee/main 本地领先 15 ｜ 生成于 2026-11-07 21:43
+- 版本：main @ 498f72a ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-08 00:19
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v120 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
 <!-- FACTS:END -->
@@ -24,7 +24,7 @@
 - POI/高德底图使用 GCJ-02，自有路网使用 WGS-84；坐标系只在边界处转换，不能用转换掩盖缺路、错误线位和不可通行路段。
 - 路线计算、硬约束、距离和前端几何必须引用相同的具体边 ID。校方道路融合不能破坏原有可达性；不把建筑轮廓相交自动判为封路。
 - 服务端会话与任务修订有版本和并发保护；复合任务应有可追踪的部分成功/失败反馈。修改 Agent 状态时同步检查前端迟到响应保护。
-- `static/sw.js` 缓存名以自动事实块为准（事实源为该文件的 `CACHE_NAME`）。本次盘点未发现前端 service worker 注册代码；修改离线/PWA 行为前先核实实际注册状态与缓存策略。
+- `static/index.html` 注册 `/sw.js`；缓存名以自动事实块为准，缓存策略以 `static/sw.js` 为准。修改离线/PWA 行为时同步核对注册与缓存升级。
 
 ## 数据质量边界
 
