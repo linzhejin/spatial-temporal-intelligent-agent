@@ -713,6 +713,10 @@ def test_direct_terminal_choice_is_required_on_weather_and_route_tool_calls():
     update_properties = schemas["update_task"]["parameters"]["properties"]
     assert "搜索区域代替" in update_properties["start"]["description"]
     assert "不能复制start" in update_properties["search_anchor"]["description"]
+    clearable = update_properties["clear_fields"]["items"]["enum"]
+    assert "constraints.avoid_slope" in clearable
+    assert "constraints.slope" not in clearable
+    assert "修改路线偏好只更新strategy" in update_properties["clear_fields"]["description"]
 
 
 def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypatch):

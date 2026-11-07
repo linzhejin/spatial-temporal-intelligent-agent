@@ -31,6 +31,12 @@ _OPERATIONS = ("place_search", "route", "itinerary", "route_comparison", "weathe
 
 def tool_schemas():
     from agents.tools import TOOL_SCHEMAS, _ENDPOINT_SCHEMA, _PREFERENCE_SCHEMA
+    from agents.state_models import HardConstraints
+
+    clearable_fields = ["budget_per_person", "limit", "requirements", "area", "keywords",
+                        "exclude_terms", "web_page_read_requested", "start", "search_anchor",
+                        "strategy", "activities", "subcategories", "selected_poi_id"]
+    clearable_fields.extend(f"constraints.{field}" for field in HardConstraints.model_fields)
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
     search["description"] = ("按模型理解的关键词、区域、类别/用途检索地图或校园目录中的候选记录。"
@@ -87,8 +93,8 @@ def tool_schemas():
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
              "limit": {"type": "integer", "minimum": 1, "maximum": 20},
              "constraints": _PREFERENCE_SCHEMA["constraints"],
-             "clear_fields": {"type": "array", "items": {"type": "string"},
-                               "description": "仅在用户明确取消时清除已有条件；路线硬约束使用 constraints.avoid_slope、constraints.avoid_steps、constraints.max_distance_m 等字段名"}},
+             "clear_fields": {"type": "array", "items": {"type": "string", "enum": clearable_fields},
+                               "description": "仅在用户明确取消时清除已有条件；仅可使用枚举中的字段名。修改路线偏好只更新strategy，不清除硬约束；constraints.slope 不是可清除字段"}},
             ("relation", "operation")),
         _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定。聊天只写一句中性简短引导，不要把用户的筛选条件总结成候选事实。卡片理由只引用地点记录或有效网页来源直接支持的特点；服务器会清除证据不支持的理由。没有可靠特点时填空字符串。source_ids只允许使用网页工具返回的source_id；地图记录的source/data_source值不是source_id，没有网页来源时省略该字段。",
             {"introduction": {"type": "string", "maxLength": 500},
