@@ -5,12 +5,104 @@ from copy import deepcopy
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 import json
+import logging
 import re
 import time
 
 import config
 from agents import web_evidence
 from agents.dialogue import _model_tool_content, tool_schemas
+
+logger = logging.getLogger(__name__)
+
+
+class DiagnosticCallBudgetExceeded(RuntimeError):
+    """A diagnostic harness stopped before making a provider request."""
+
+
+def _request_summary(messages, schemas, *, timeout):
+    roles = {role: 0 for role in ("system", "user", "assistant", "tool")}
+    content_chars = 0
+    for message in messages:
+        role = message.get("role") if isinstance(message, dict) else None
+        if role in roles:
+            roles[role] += 1
+        content = message.get("content") if isinstance(message, dict) else None
+        if isinstance(content, str):
+            content_chars += len(content)
+    return {
+        "model": re.sub(r"[^A-Za-z0-9_.:/-]", "", str(config.LLM_MODEL))[:80],
+        "message_count": sum(roles.values()),
+        "role_counts": roles,
+        "content_chars": content_chars,
+        "tool_count": len(schemas),
+        "temperature": 0.2,
+        "max_tokens": 2600,
+        "timeout_seconds": round(timeout, 2),
+    }
+
+
+def _provider_error_details(error):
+    response = getattr(error, "response", None)
+    status = getattr(error, "status_code", None) or getattr(response, "status_code", None)
+    status = str(status) if isinstance(status, int) and not isinstance(status, bool) else None
+    request_id = getattr(error, "request_id", None)
+    if not request_id:
+        headers = getattr(response, "headers", None)
+        if headers is not None:
+            request_id = headers.get("x-request-id") or headers.get("request-id")
+    request_id = str(request_id) if request_id is not None else None
+    if request_id and not re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", request_id):
+        request_id = None
+    code = getattr(error, "code", None)
+    if not isinstance(code, str) or not re.fullmatch(r"[A-Za-z0-9_-]{1,80}", code):
+        code = "http_" + status if status else type(error).__name__
+    return status, request_id, code
+
+
+def _record_model_failure(dialogue, error, messages, schemas, timeout, started):
+    duration_ms = round((time.monotonic() - started) * 1000)
+    status, request_id, code = _provider_error_details(error)
+    summary = _request_summary(messages, schemas, timeout=timeout)
+    details = {
+        "status": status,
+        "request_id": request_id,
+        "duration_ms": duration_ms,
+        "error_code": code,
+        "request_summary": summary,
+    }
+    dialogue.trace({
+        "tool_name": "model_dialogue", "argument_keys": [], "outcome": "provider_error",
+        "artifact_kind": None, "phase": "completed", "duration_ms": duration_ms,
+        "error_code": code, "provider_status": status, "request_id": request_id,
+        "request_summary": summary,
+    })
+    logger.warning("model_request_failed %s", json.dumps(details, ensure_ascii=True, sort_keys=True))
+
+
+def _road_condition_summary(result):
+    conditions = result.get("conditions") if isinstance(result, dict) else None
+    if not isinstance(conditions, list):
+        return ""
+    messages = []
+    for condition in conditions:
+        if not isinstance(condition, dict):
+            continue
+        action = condition.get("action")
+        road = str(condition.get("road_name") or condition.get("location") or "").strip()[:80]
+        if not road or action not in {"closure", "slowdown", "notice"}:
+            continue
+        if action == "closure":
+            detail = str(condition.get("name") or condition.get("description") or "").strip()[:80]
+            message = road + "禁止通行" + ("（" + detail + "）" if detail and detail not in road else "")
+        elif action == "slowdown":
+            message = road + "有缓行"
+        else:
+            detail = str(condition.get("name") or condition.get("description") or "").strip()[:80]
+            message = road + "有提示" + ("（" + detail + "）" if detail and detail not in road else "")
+        if message not in messages:
+            messages.append(message)
+    return "路况：" + "；".join(messages[:3]) + "。" if messages else ""
 
 
 def _failure(dialogue, message, code):
@@ -36,9 +128,9 @@ def _finish_with_read_failures(dialogue, text, failures, successful_reads):
         temperature = weather.get("temperature")
         parts.append("当前天气：" + description +
                      ("，气温 " + str(temperature)[:30] + "℃" if temperature is not None else "") + "。")
-    road = successful_reads.get("list_road_conditions")
-    if isinstance(road, dict) and isinstance(road.get("conditions"), list):
-        parts.append(f"路况查询已完成，返回 {len(road['conditions'])} 条记录。")
+    road_summary = _road_condition_summary(successful_reads.get("list_road_conditions") or {})
+    if road_summary and road_summary not in text:
+        parts.append(road_summary)
     parts.extend(failures.values())
     dialogue.clarify = None
     result = dialogue.result("\n\n".join(parts))
@@ -62,6 +154,12 @@ def _run_dialogue_loop(dialogue):
             raise RuntimeError("model_not_configured")
         client = dialogue.client_factory()
     except Exception:
+        code = "model_not_configured" if not config.DEEPSEEK_API_KEY else "model_client_init_failed"
+        elapsed = round((time.monotonic() - started) * 1000)
+        dialogue.trace({"tool_name": "model_dialogue", "argument_keys": [],
+                        "outcome": "client_error", "artifact_kind": None, "phase": "completed",
+                        "duration_ms": elapsed, "error_code": code})
+        logger.warning("model_client_unavailable error_code=%s duration_ms=%s", code, elapsed)
         return _failure(dialogue, "对话模型暂时不可用，已保留本轮需求，请稍后重试。", "model_unavailable")
 
     schemas = tool_schemas()
@@ -81,12 +179,24 @@ def _run_dialogue_loop(dialogue):
         model_started = time.monotonic()
         dialogue.trace({"tool_name": "model_dialogue", "argument_keys": [],
                         "outcome": "success", "artifact_kind": None, "phase": "started"})
+        request_timeout = min(25.0, remaining)
         try:
             response = client.chat.completions.create(
                 model=config.LLM_MODEL, messages=deepcopy(dialogue.messages), tools=schemas,
-                temperature=0.2, max_tokens=2600, timeout=min(25.0, remaining),
+                temperature=0.2, max_tokens=2600, timeout=request_timeout,
             )
         except Exception as error:
+            if isinstance(error, DiagnosticCallBudgetExceeded):
+                elapsed = round((time.monotonic() - model_started) * 1000)
+                dialogue.trace({"tool_name": "model_dialogue", "argument_keys": [],
+                                "outcome": "diagnostic_budget_exhausted", "artifact_kind": None,
+                                "phase": "completed", "duration_ms": elapsed,
+                                "error_code": "diagnostic_call_budget_exhausted"})
+                result = _failure(dialogue, "本次验收达到调用预算，已保留当前需求。",
+                                  "diagnostic_call_budget_exhausted")
+                result["model_status"] = "budget_exhausted"
+                return result
+            _record_model_failure(dialogue, error, dialogue.messages, schemas, request_timeout, model_started)
             code = str(getattr(error, "code", "") or "")
             detail = str(error).lower()
             if (code in {"context_length_exceeded", "context_length_exceeded_error"}
@@ -125,8 +235,8 @@ def _run_dialogue_loop(dialogue):
                         return _failure(dialogue, "仍有候选尚未完成筛选，已保留当前需求，请重试。", "candidate_delivery_incomplete")
                     dialogue.messages.append({"role": "assistant", "content": text})
                     dialogue.messages.append({"role": "system", "content":
-                        f"服务器核对：候选池仍有 {remaining['count']} 条未展示记录。请查看具体候选并用 present_places 交付；"
-                        "如果已查看但没有符合条件的地点，调用 conclude_without_places 说明原因，不要声称候选池已空。"})
+                        "服务器核验仍有未展示的候选记录。请调用 browse_candidates 查看具体地点，再用 present_places 交付；"
+                        "如果查看后没有符合条件的地点，调用 conclude_without_places 说明原因。"})
                     continue
             if read_failures:
                 return _finish_with_read_failures(dialogue, text, read_failures, successful_reads)
@@ -199,9 +309,6 @@ def _run_dialogue_loop(dialogue):
                     if not isinstance(reason, str) or not reason.strip() or len(reason) > 1000:
                         raise ValueError("invalid_candidate_conclusion")
                     final = reason.strip()
-                    remaining = dialogue.browse_candidates({})["count"]
-                    if remaining:
-                        final += f" 候选池仍有 {remaining} 条未展示记录。"
                     answer = {"accepted": True}
                 elif name in {"search_web", "read_web_page"}:
                     counter = "web_search_count" if name == "search_web" else "web_fetch_count"

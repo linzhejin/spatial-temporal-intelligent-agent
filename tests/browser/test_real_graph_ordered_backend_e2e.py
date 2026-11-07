@@ -94,7 +94,7 @@ def test_trip_through_real_api_worker_and_graph(monkeypatch, tmp_path, mobile, c
             browser = playwright.chromium.launch()
             context = browser.new_context(viewport={"width": 390, "height": 844} if mobile
                                            else {"width": 1280, "height": 900},
-                                          is_mobile=mobile, has_touch=mobile)
+                                          is_mobile=mobile, has_touch=mobile, service_workers="block")
             context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
             page = context.new_page()
             page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))

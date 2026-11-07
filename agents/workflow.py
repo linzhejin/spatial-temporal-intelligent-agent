@@ -89,11 +89,6 @@ def _model_delivery_text(result: dict) -> str:
                  if isinstance(result.get(key), str) and result[key].strip()), "")
     if result.get("response_kind") != "route":
         return text
-    verification = result.get("route_verification") or {}
-    if verification.get("status") == "pass" and verification.get("field_truth_verified") is False:
-        notice = "提示：本次核对的是路网和路线约束，未实地确认道路当前可通行。"
-        if notice not in text:
-            text = (text + " " + notice).strip()
     state = result.get("route_state") or {}
     constraints = state.get("hard_constraints") or {}
     statuses = [part.split("+") for part in str(result.get("filter_status") or "").split(";") if part]
@@ -103,19 +98,6 @@ def _model_delivery_text(result: dict) -> str:
                       if statuses and all("steps_avoid" in parts for parts in statuses)
                       else "提示：路线中是否有台阶尚未核实。")
             text = (text + " " + notice).strip()
-    if result.get("route_events_status") == "unknown":
-        text += " 部分分段的沿途路况暂未核实，请留意现场信息。"
-    else:
-        events = [event for event in result.get("route_events") or []
-                  if isinstance(event, dict) and event.get("action") in {"notice", "slowdown"}]
-        if events:
-            labels = []
-            for event in events[:3]:
-                location = str(event.get("road_name") or event.get("name") or "沿途路段").strip()
-                name = str(event.get("name") or "").strip()[:40]
-                detail = "：" + name if name and name != location else ""
-                labels.append(location + "（" + ("缓行" if event["action"] == "slowdown" else "提示") + detail + "）")
-            text += " 沿途路况：" + "；".join(labels) + (f"等 {len(events)} 条" if len(events) > 3 else "") + "。"
     question = (result.get("clarify") or {}).get("question") if result.get("needs_input") else None
     if isinstance(question, str) and question and question not in text:
         text += "\n" + question
@@ -284,8 +266,31 @@ def build_agent_workflow(
                            "artifact_kind": item.get("artifact_kind"),
                            "phase": item.get("phase"), "duration_ms": item.get("duration_ms"),
                            "error_code": item.get("error_code"), "provider_status": item.get("provider_status")}
+                request_id = item.get("request_id")
+                if isinstance(request_id, str) and re.fullmatch(r"[A-Za-z0-9_.:-]{1,128}", request_id):
+                    payload["request_id"] = request_id
+                summary = item.get("request_summary")
+                if isinstance(summary, dict):
+                    safe_summary = {}
+                    model = summary.get("model")
+                    if isinstance(model, str) and re.fullmatch(r"[A-Za-z0-9_.:/-]{1,80}", model):
+                        safe_summary["model"] = model
+                    for key in ("message_count", "content_chars", "tool_count", "max_tokens"):
+                        value = summary.get(key)
+                        if isinstance(value, int) and not isinstance(value, bool) and value >= 0:
+                            safe_summary[key] = value
+                    for key in ("temperature", "timeout_seconds"):
+                        value = summary.get(key)
+                        if isinstance(value, (int, float)) and not isinstance(value, bool):
+                            safe_summary[key] = float(value)
+                    role_counts = summary.get("role_counts")
+                    if isinstance(role_counts, dict) and all(
+                            isinstance(role, str) and isinstance(count, int) and not isinstance(count, bool)
+                            and count >= 0 for role, count in role_counts.items()):
+                        safe_summary["role_counts"] = dict(role_counts)
+                    payload["request_summary"] = safe_summary
                 if item.get("phase") == "started":
-                    label = "正在理解完整对话" if item.get("tool_name") == "model_dialogue" else "正在查询和核对信息"
+                    label = "正在处理"
                     _emit(state, runtime, "node_started", "model_dialogue" if item.get("tool_name") == "model_dialogue" else "spatial_tool", label, database_url)
                 _emit_agent_tool_trace(state, runtime, database_url, "agent_tool_call", payload)
 

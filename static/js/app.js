@@ -3085,7 +3085,7 @@
                 if (sharedState && sharedState.strategy && sharedState.strategy.name) {
                     hideWelcomeElements();
                     showUserBubble(query || '打开电脑端规划的路线');
-                    var bubble = showChatBubble('', '我看一下。', { status: true });
+                    var bubble = showChatBubble('', '', { pending: true });
                     showLoading('正在更新路线…');
                     apiRequest('/api/route/replan', {
                         route_state: sharedState,
@@ -3096,11 +3096,9 @@
                         renderRoute(result);
                         showResults(result);
                         trackRouteShown();
-                        finishChatStatus(bubble);
                         updateChatBubble(bubble, buildRouteSummary(result));
                     }).catch(function () {
                         hideLoading();
-                        finishChatStatus(bubble);
                         updateChatBubble(bubble, '路线需要重新规划。');
                         if (query) handleNlSubmit(query);
                     });
@@ -3225,12 +3223,20 @@
         // 路况提示：若有生效的路况事件，在解释下方显示提醒
         var roadNoticeEl = document.getElementById('road-conditions-notice');
         if (roadNoticeEl) {
-            var rcCount = data.road_conditions_applied || 0;
             var alongRoute = routeEventsSummary(data);
-            if (alongRoute || rcCount > 0) {
+            var routeCopy = [data.assistant_text, data.explanation, data.reply, data.message]
+                .filter(function (value) { return typeof value === 'string'; }).join(' ');
+            var eventAlreadyExplained = (Array.isArray(data.route_events) ? data.route_events : []).some(function (event) {
+                if (!event || (event.action !== 'notice' && event.action !== 'slowdown')) return false;
+                var location = String(event.road_name || event.name || '').trim();
+                var detail = String(event.name || '').trim();
+                var action = event.action === 'slowdown' ? '缓行' : '提示';
+                return !!location && routeCopy.includes(location)
+                    && ((detail && routeCopy.includes(detail)) || routeCopy.includes(action));
+            });
+            if (alongRoute && !eventAlreadyExplained) {
                 roadNoticeEl.style.display = 'block';
-                roadNoticeEl.textContent = alongRoute || ('已核对 ' + rcCount
-                    + ' 条当前路况信息；路线是否调整取决于封路或缓行是否影响本路线。');
+                roadNoticeEl.textContent = alongRoute;
             } else {
                 roadNoticeEl.style.display = 'none';
             }
@@ -3534,9 +3540,10 @@
         return result;
     }
 
-    async function submitQueuedMessage(query, requestBody, replyBubble, epoch) {
+    async function submitQueuedMessage(query, requestBody, _replyBubble, epoch) {
         var conversationId = await ensureServerConversation(epoch);
         if (epoch !== state.conversationEpoch) return null;
+        var statusRow = createChatRunStatus();
         var requestId = makeRequestId();
         var payload = Object.assign({ query: query, request_id: requestId }, requestBody || {});
         var accepted;
@@ -3551,7 +3558,7 @@
                         || /网络请求失败|服务器响应格式错误/.test(err.message || ''));
                     if (!transient) throw err;
                     failures++;
-                    updateChatBubble(replyBubble, '连接中断，正在重试…');
+                    updateChatRunStatus(statusRow, '连接中断，重试中…');
                     // Keep the same payload and request_id: the server may have
                     // accepted the previous POST even if its response was lost.
                     await waitForNextPoll(Math.min(5000, 900 * failures));
@@ -3560,54 +3567,95 @@
             return null;
         }
         try {
-            accepted = await postWithRecovery();
-        } catch (err) {
-            if (!err || err.code !== 'conversation_not_found') throw err;
-            // Do not let one stale response invalidate a newer conversation that
-            // a concurrent request has already created.
-            if (state.serverConversationId === conversationId) {
-                state.serverConversationId = null;
-                state.serverConversationCreateRecord = null;
-                try { localStorage.removeItem(getServerConversationKey()); } catch (e) {}
+            try {
+                accepted = await postWithRecovery();
+            } catch (err) {
+                if (!err || err.code !== 'conversation_not_found') throw err;
+                // Do not let one stale response invalidate a newer conversation that
+                // a concurrent request has already created.
+                if (state.serverConversationId === conversationId) {
+                    state.serverConversationId = null;
+                    state.serverConversationCreateRecord = null;
+                    try { localStorage.removeItem(getServerConversationKey()); } catch (e) {}
+                }
+                conversationId = await ensureServerConversation(epoch);
+                if (epoch !== state.conversationEpoch) return null;
+                payload.request_id = makeRequestId();
+                accepted = await postWithRecovery();
             }
-            conversationId = await ensureServerConversation(epoch);
-            if (epoch !== state.conversationEpoch) return null;
-            payload.request_id = makeRequestId();
-            accepted = await postWithRecovery();
+            if (!accepted && epoch !== state.conversationEpoch) return null;
+            var runId = accepted && accepted.run_id;
+            if (!runId) throw new Error('任务没有进入处理队列，请重试。');
+            state.activeRuns[runId] = { conversationId: conversationId, epoch: epoch };
+            if (epoch !== state.conversationEpoch) {
+                apiRequest('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
+                    conversation_id: conversationId,
+                }).catch(function () {});
+                delete state.activeRuns[runId];
+                return null;
+            }
+            addRunCancelButton(statusRow, runId, conversationId);
+            return await pollRun(runId, conversationId, epoch, statusRow);
+        } finally {
+            removeChatRunStatus(statusRow);
         }
-        if (!accepted && epoch !== state.conversationEpoch) return null;
-        var runId = accepted && accepted.run_id;
-        if (!runId) throw new Error('任务没有进入处理队列，请重试。');
-        state.activeRuns[runId] = { conversationId: conversationId, epoch: epoch };
-        if (epoch !== state.conversationEpoch) {
-            apiRequest('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
-                conversation_id: conversationId,
-            }).catch(function () {});
-            delete state.activeRuns[runId];
-            return null;
-        }
-        var cancelButton = addRunCancelButton(replyBubble, runId, conversationId);
-        try { return await pollRun(runId, conversationId, replyBubble, epoch); }
-        finally { if (cancelButton && cancelButton.remove) cancelButton.remove(); }
     }
 
-    function addRunCancelButton(replyBubble, runId, conversationId) {
-        if (!replyBubble || typeof replyBubble.appendChild !== 'function') return null;
+    function createChatRunStatus() {
+        var region = document.getElementById('chat-run-statuses');
+        if (!region) return null;
+        var row = document.createElement('div');
+        var label = document.createElement('span');
+        row.className = 'chat-run-status-row';
+        row.setAttribute('data-run-status', 'active');
+        label.className = 'chat-run-status-label';
+        label.setAttribute('role', 'status');
+        label.setAttribute('aria-live', 'polite');
+        label.textContent = '正在处理…';
+        row._statusLabel = label;
+        row.appendChild(label);
+        region.hidden = false;
+        region.appendChild(row);
+        return row;
+    }
+
+    function updateChatRunStatus(row, text) {
+        if (row && row._statusLabel) row._statusLabel.textContent = text;
+    }
+
+    function removeChatRunStatus(row) {
+        if (!row) return;
+        var region = document.getElementById('chat-run-statuses');
+        if (row.remove) row.remove();
+        else if (region && Array.isArray(region.children)) {
+            var index = Array.prototype.indexOf.call(region.children, row);
+            if (index >= 0) region.children.splice(index, 1);
+        }
+        if (region && !region.children.length) region.hidden = true;
+    }
+
+    function addRunCancelButton(statusRow, runId, conversationId) {
+        if (!statusRow || typeof statusRow.appendChild !== 'function') return null;
         var button = document.createElement('button');
         button.type = 'button';
-        button.className = 'clarify-chip';
-        button.textContent = '取消本次处理';
+        button.className = 'chat-run-status-cancel';
+        button.textContent = '取消';
+        button.setAttribute('aria-label', '取消本次处理');
         button.addEventListener('click', function () {
             button.disabled = true;
+            updateChatRunStatus(statusRow, '正在取消…');
             apiRequest('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
                 conversation_id: conversationId,
-            }).catch(function () { button.disabled = false; });
+            }).catch(function () {
+                button.disabled = false;
+                updateChatRunStatus(statusRow, '正在处理…');
+            });
         });
-        replyBubble.appendChild(button);
+        statusRow.appendChild(button);
         return button;
     }
 
-    async function pollRun(runId, conversationId, replyBubble, epoch) {
+    async function pollRun(runId, conversationId, epoch, statusRow) {
         state.activeRuns[runId] = { conversationId: conversationId, epoch: epoch };
         var afterSeq = 0;
         var terminal = ['completed', 'partial', 'failed', 'needs_input', 'cancelled', 'superseded'];
@@ -3628,7 +3676,7 @@
                         || /网络请求失败|服务器响应格式错误/.test(err.message || ''));
                     if (!transient) throw err;
                     pollFailures++;
-                    updateChatBubble(replyBubble, '连接中断，正在重试…');
+                    updateChatRunStatus(statusRow, '连接中断，重试中…');
                     await waitForNextPoll(Math.min(5000, 900 * pollFailures));
                     continue;
                 }
@@ -3687,8 +3735,8 @@
         var thinkingBubble = continuation && continuation.thinkingBubble;
         if (!continuation) {
             showUserBubble(query);
-            // 每个请求都有自己的结果气泡，互不覆盖。
-            thinkingBubble = showChatBubble(query, '我看一下。', { status: true });
+            // 先预留最终回复的位置，等待状态单独显示在输入区上方。
+            thinkingBubble = showChatBubble(query, '', { pending: true });
         }
 
         try {
@@ -3721,13 +3769,11 @@
             }
             var requestUsesSelectedMapPoints = requestUsesMapPoints(requestBody, selectedPointContext);
             if (requestUsesSelectedMapPoints && selectedPointContext.revision !== state.mapPointRevision) {
-                finishChatStatus(thinkingBubble);
                 updateChatBubble(thinkingBubble, '地图选点刚有变化，请按当前选点重新发送路线需求。');
                 return;
             }
             var result = await submitQueuedMessage(query, requestBody, thinkingBubble, conversationEpoch);
             if (!result) return;
-            finishChatStatus(thinkingBubble);
             if (result.execution_status === 'failed') {
                 updateChatBubble(thinkingBubble, result.assistant_text || result.message || result.reply || '本轮处理未完成，请重试。');
                 addConversationTurn(query, result, turnId, false);
@@ -3890,13 +3936,11 @@
                     if (!reply) {
                         reply = state.productMode === 'planning'
                             ? buildRouteSummary(result)
-                            : appendRouteFieldTruthNotice(result.explanation || buildRouteSummary(result), result);
+                            : appendRouteStepNotice(result.explanation || buildRouteSummary(result), result);
                         if (state.productMode !== 'planning' && result.explanation) {
                             var alongRoute = routeEventsSummary(result);
                             if (alongRoute) reply += ' ' + alongRoute;
                         }
-                        var rankedCandidates = rankedRouteCandidatesSummary(result);
-                        if (rankedCandidates) reply = rankedCandidates + ' ' + reply;
                     }
                     updateChatBubble(thinkingBubble, reply);
                     if (result.needs_input && result._task_id
@@ -3927,7 +3971,6 @@
             }
         } catch (err) {
             if (conversationEpoch !== state.conversationEpoch) return;
-            finishChatStatus(thinkingBubble);
             hideWelcomeElements();
             var recoveryQuestion = '这次没完成，可以重试。';
             updateChatBubble(thinkingBubble, recoveryQuestion);
@@ -3936,7 +3979,9 @@
                 task_type: 'chat', response_kind: 'chat',
                 message: recoveryQuestion, reply: recoveryQuestion,
             }, turnId);
-        } finally { /* Each task updates its own reply bubble. */ }
+        } finally {
+            if (thinkingBubble && thinkingBubble.hidden && thinkingBubble.remove) thinkingBubble.remove();
+        }
     }
 
     // 显示用户输入气泡（靠右，主题色）
@@ -3979,30 +4024,22 @@
 
         var bubble = document.createElement('div');
         bubble.className = 'chat-bubble-row';
-        var isStatus = !!(options && options.status);
-        if (isStatus) bubble.classList.add('chat-status-row');
-        var statusAttributes = isStatus ? ' role="status" aria-live="polite"' : '';
+        var isPending = !!(options && options.pending);
+        if (isPending) {
+            bubble.classList.add('chat-pending-reply');
+            bubble.hidden = true;
+        }
         bubble.innerHTML =
             '<div class="chat-bubble chat-bubble-reply">' +
                 '<div class="chat-bubble-avatar">🌸</div>' +
                 '<div class="chat-bubble-body">' +
-                    '<p class="chat-bubble-text"' + statusAttributes + '>' + escapeHtml(plainAssistantText(reply)) + '</p>' +
+                    '<p class="chat-bubble-text">' + escapeHtml(plainAssistantText(reply)) + '</p>' +
                 '</div>' +
             '</div>';
         chatContent.appendChild(bubble);
         scrollChatToLatest(chatContent, followLatest);
 
         return bubble;
-    }
-
-    function finishChatStatus(bubble) {
-        if (!bubble || !bubble.classList) return;
-        bubble.classList.remove('chat-status-row');
-        var status = bubble.querySelector('[role="status"]');
-        if (status) {
-            status.removeAttribute('role');
-            status.removeAttribute('aria-live');
-        }
     }
 
     function renderRouteComparisonCard(comparison) {
@@ -4116,6 +4153,10 @@
     // 替换已有气泡内容（用于临时状态到最终回复）
     function updateChatBubble(bubble, text) {
         if (!bubble) return;
+        if (bubble.classList && bubble.classList.contains('chat-pending-reply')) {
+            bubble.classList.remove('chat-pending-reply');
+            bubble.hidden = false;
+        }
         var chatContent = document.getElementById('chat-content');
         var followLatest = chatIsNearLatest(chatContent);
         var textEl = bubble.querySelector('.chat-bubble-text');
@@ -4191,12 +4232,6 @@
             .trim();
     }
 
-    function routeFieldTruthNotice(data) {
-        var verification = data && data.route_verification || {};
-        if (verification.status !== 'pass' || verification.field_truth_verified !== false) return '';
-        return '提示：本次核对的是路网和路线约束，未实地确认道路当前可通行。';
-    }
-
     function appendRouteStepNotice(text, data) {
         var summary = String(text || '').trim();
         var route = data && data.route_state || {};
@@ -4217,34 +4252,7 @@
         return summary ? summary + ' ' + notice : notice;
     }
 
-    function appendRouteFieldTruthNotice(text, data) {
-        var summary = String(text || '').trim();
-        var notice = routeFieldTruthNotice(data);
-        if (notice && summary.indexOf(notice) === -1) summary = summary ? summary + ' ' + notice : notice;
-        return appendRouteStepNotice(summary, data);
-    }
-
-    function rankedRouteCandidatesSummary(data) {
-        var candidates = data && data.recommendation_candidates;
-        if (!Array.isArray(candidates) || !candidates.length) return '';
-        var ranked = candidates.slice(0, 4).filter(function (candidate) {
-            return candidate && typeof candidate.name === 'string' && candidate.name.trim();
-        });
-        if (!ranked.length) return '';
-        var labels = ranked.map(function (candidate, index) {
-            var distance = candidate.distance_m;
-            var estimate = typeof distance === 'number' && Number.isFinite(distance) && distance >= 0
-                ? '（约 ' + Math.round(distance) + ' 米）' : '';
-            return (index + 1) + '. ' + candidate.name.trim() + estimate;
-        });
-        return '附近地点按路网与接驳估算从近到远：' + labels.join('；')
-            + '。已规划到' + ranked[0].name.trim() + '。';
-    }
-
     function routeEventsSummary(data) {
-        if (data && data.route_events_status === 'unknown') {
-            return '部分分段的沿途路况暂未核实，请留意现场信息。';
-        }
         var events = Array.isArray(data && data.route_events) ? data.route_events : [];
         var applicable = events.filter(function (event) {
             return event && (event.action === 'notice' || event.action === 'slowdown');
@@ -4263,8 +4271,7 @@
                 event.direction === 'reverse' ? 'B → A 方向' : '';
             return location + '（' + modeInfo + direction + (event.action === 'slowdown' ? '缓行' : '提示') + detail + '）';
         });
-        return '沿途路况：' + labels.join('；')
-            + (applicable.length > labels.length ? '等 ' + applicable.length + ' 条' : '') + '。';
+        return '沿途路况：' + labels.join('；') + '。';
     }
 
     // 电脑端把路线信息合并成一条可读总览，避免统计卡与助手反馈重复报数。
@@ -4314,7 +4321,7 @@
         overview += '；采用' + strategyLabel + '策略。';
         if (data.hard_budget_fallback) overview += ' 原偏好路线超过上限，已采用符合上限的最短路线。';
         if (connectorDisclosure) overview += ' ' + connectorDisclosure;
-        overview = appendRouteFieldTruthNotice(overview, data);
+        overview = appendRouteStepNotice(overview, data);
 
         var facts = [];
         var stopCount = routeOverviewStopCount(routeKind, current, data);
@@ -4332,12 +4339,7 @@
         if (poiCount && routeKind !== 'tour' && routeKind !== 'itinerary') {
             facts.push('沿途可查看 ' + poiCount + ' 处地点');
         }
-        var conditionCount = Number(data.road_conditions_applied || 0);
-        if (conditionCount > 0) facts.push('已核对 ' + conditionCount + ' 条当前生效路况信息');
         if (facts.length) overview += ' ' + facts.join('；') + '。';
-        var alongRoute = routeEventsSummary(data);
-        if (alongRoute) overview += ' ' + alongRoute;
-
         var reason = conciseRouteReason(data.explanation);
         if (reason.length >= 4) overview += ' 路线特点：' + reason;
         if ((Array.isArray(data.steps) && data.steps.length) || poiCount) {
@@ -4539,8 +4541,7 @@
                 var status = document.createElement('span');
                 status.className = 'candidate-page-status';
                 status.setAttribute('aria-live', 'polite');
-                status.textContent = '第 ' + (start + 1) + '–' + (start + visible.length) +
-                    ' 项 · 已获取 ' + candidates.length + ' 项';
+                status.textContent = '地点 ' + (start + 1) + '–' + (start + visible.length);
                 pager.appendChild(status);
                 var previous = document.createElement('button');
                 previous.type = 'button'; previous.className = 'candidate-page-btn'; previous.textContent = '上一批';
@@ -4562,7 +4563,9 @@
                     var lng = p.lon != null ? p.lon : p.lng;
                     var lat = p.lat;
                     if (!Number.isFinite(Number(lng)) || !Number.isFinite(Number(lat)) || lng == null || lat == null) return;
-                    located.push({ place: p, number: start + i + 1, latlng: gcjToLatLng(Number(lng), Number(lat)) });
+                    located.push({ place: p, number: start + i + 1,
+                        coordinates: { lng: Number(lng), lat: Number(lat) },
+                        latlng: gcjToLatLng(Number(lng), Number(lat)) });
                 });
                 var bounds = located.map(function (item) { return item.latlng; });
                 if (bounds.length > 1) state.map.fitBounds(bounds, { padding: [40, 40], maxZoom: 18, animate: false });
@@ -4598,6 +4601,13 @@
                         var html = '<div class="candidate-map-pin' + (numbers.length > 1 ? ' is-group' : '') + '">' +
                             escapeHtml(label) + '</div>';
                         var marker = divMarker(cluster.latlng, html, [40, 40], [20, 20], title).addTo(state.map);
+                        var markerElement = marker.getElement ? marker.getElement() : marker._icon;
+                        if (markerElement) {
+                            markerElement.setAttribute('data-poi-identities', JSON.stringify(cluster.entries.map(function (item) {
+                                return { poi_id: item.place.poi_id || item.place.place_id || null,
+                                    lng: item.coordinates.lng, lat: item.coordinates.lat };
+                            })));
+                        }
                         if (cluster.entries.length === 1) {
                             marker.on('click', function () { choose(cluster.entries[0].place, true); });
                         } else {
@@ -5200,10 +5210,11 @@
                     : !!active.task_id && message._taskId === active.task_id);
             });
             if (!queryAlreadyVisible) showUserBubble(active.query);
-            var bubble = showChatBubble(active.query, '我看一下。', { status: true });
+            var bubble = showChatBubble(active.query, '', { pending: true });
+            var statusRow = createChatRunStatus();
             var conversationId = state.serverConversationId;
             var epoch = state.conversationEpoch;
-            var cancelButton = addRunCancelButton(bubble, active.run_id, conversationId);
+            addRunCancelButton(statusRow, active.run_id, conversationId);
             var userMessage = state.conversationHistory.find(function (message) {
                 return message.role === 'user' && (active.message_seq != null
                     ? Number(message._seq) === Number(active.message_seq)
@@ -5211,9 +5222,8 @@
             });
             var turnId = userMessage ? userMessage._turnId : 0;
             var messageSequence = Number(active.message_seq) || (userMessage && userMessage._seq) || 0;
-            pollRun(active.run_id, conversationId, bubble, epoch).then(function (result) {
+            pollRun(active.run_id, conversationId, epoch, statusRow).then(function (result) {
                 if (!result || epoch !== state.conversationEpoch) return;
-                finishChatStatus(bubble);
                 var isAtLeastAsNewAsTranscript = !state.latestRouteSequence
                     || (messageSequence > 0 && messageSequence >= state.latestRouteSequence);
                 var isAtLeastAsNewAsPending = !state.pendingServerTaskId || turnId >= state.pendingServerTaskTurnId;
@@ -5286,19 +5296,15 @@
                         && restoredReply.indexOf(result.clarify.question) === -1) {
                     restoredReply += '\n' + result.clarify.question;
                 }
-                if (!result.assistant_text && result.task_type === 'path_planning' && result.recommended && result.recommended.length) {
-                    var restoredCandidates = rankedRouteCandidatesSummary(result);
-                    if (restoredCandidates) restoredReply = restoredCandidates + ' ' + restoredReply;
-                }
                 updateChatBubble(bubble, restoredReply);
                 recordRestoredAssistant(active.query, result, active.task_id, turnId);
             }).catch(function () {
                 if (epoch !== state.conversationEpoch) return;
-                finishChatStatus(bubble);
                 updateChatBubble(bubble, '这次没完成，可以重试。');
                 renderClarifyOptions([{ label: '重试刚才的请求', query: active.query }], null, null);
             }).finally(function () {
-                if (cancelButton && cancelButton.remove) cancelButton.remove();
+                removeChatRunStatus(statusRow);
+                if (bubble && bubble.hidden && bubble.remove) bubble.remove();
             });
         });
     }

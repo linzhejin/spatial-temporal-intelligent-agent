@@ -63,7 +63,8 @@ def test_retry_button_continues_same_task_without_selecting_poi(mobile):
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
             options = {"viewport": {"width": 390, "height": 844} if mobile else {"width": 1440, "height": 1000},
-                       "is_mobile": mobile, "has_touch": mobile, "permissions": []}
+                       "is_mobile": mobile, "has_touch": mobile, "permissions": [],
+                       "service_workers": "block"}
             if mobile:
                 options["user_agent"] = ("Mozilla/5.0 (Linux; Android 14; Pixel 7) "
                                          "AppleWebKit/537.36 Chrome/129.0.0.0 Mobile Safari/537.36")

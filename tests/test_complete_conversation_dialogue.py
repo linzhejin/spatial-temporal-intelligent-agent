@@ -95,7 +95,8 @@ def test_model_can_explain_that_unshown_candidates_do_not_satisfy_requirements(m
     result = dialogue.run()
     assert result["response_kind"] == "chat"
     assert "缺少安静程度的依据" in result["message"]
-    assert "仍有 1 条未展示记录" in result["message"]
+    assert "候选池" not in result["message"]
+    assert "条未展示记录" not in result["message"]
 
 
 def test_exhausted_candidates_are_reported_and_cannot_be_represented():
@@ -187,15 +188,127 @@ def test_worker_sends_weather_turn_and_full_history_to_model(monkeypatch):
     assert result["assistant_text"] == result["reply"]
 
 
-def test_model_route_delivery_text_includes_the_displayed_safety_notice():
+def test_model_route_delivery_text_omits_generic_and_named_route_event_appendices():
     from agents.workflow import _model_delivery_text
     result = {"response_kind": "route", "explanation": "路线已规划。",
               "route_verification": {"status": "pass", "field_truth_verified": False},
               "route_events": [{"road_name": "科技路", "name": "人流较多", "action": "slowdown"}]}
     text = _model_delivery_text(result)
     assert text.startswith("路线已规划。")
-    assert "未实地确认道路当前可通行" in text
-    assert "科技路" in text and "人流较多" in text
+    assert "路网和路线约束" not in text
+    assert "未实地确认道路当前可通行" not in text
+    assert "科技路" not in text and "人流较多" not in text
+
+
+def test_model_route_delivery_keeps_only_the_specific_step_access_caveat():
+    from agents.workflow import _model_delivery_text
+    result = {"response_kind": "route", "explanation": "已按你的要求规划好。",
+              "route_state": {"hard_constraints": {"avoid_steps": True}},
+              "filter_status": "no_outside+steps_avoid+steps_unverified"}
+
+    text = _model_delivery_text(result)
+
+    assert "台阶" in text and "尚未核实" in text
+    assert text.count("台阶") == 2
+    assert "路网和路线约束" not in text
+
+
+def test_model_route_delivery_does_not_append_generic_unknown_events_notice():
+    from agents.workflow import _model_delivery_text
+    result = {"response_kind": "route", "explanation": "路线已规划。", "route_events_status": "unknown"}
+
+    assert "沿途路况暂未核实" not in _model_delivery_text(result)
+
+
+def test_read_failure_summary_omits_record_count_and_keeps_named_closure():
+    from agents.dialogue_loop import _finish_with_read_failures
+
+    class DialogueResult:
+        candidates = route = comparison = clarify = None
+
+        @staticmethod
+        def result(message):
+            return {"message": message}
+
+    result = _finish_with_read_failures(
+        DialogueResult(), "", {"weather_unavailable": "天气暂时获取不到，请稍后重试。"},
+        {"list_road_conditions": {"conditions": [{"action": "closure", "action_label": "禁止通行",
+                                                    "road_name": "桂园路", "name": "施工封闭"}],
+                                  "count": 1}},
+    )
+
+    assert "桂园路" in result["message"] and "禁止通行" in result["message"]
+    assert "1 条记录" not in result["message"]
+    assert "weather_unavailable" not in result["message"]
+
+
+def test_provider_failure_records_sanitized_completion_diagnostics(monkeypatch, caplog):
+    import logging
+    import config
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    events = []
+    dialogue, create = make_dialogue("从信图去总图", history=[{"role": "user", "content": "PRIVATE_TEXT"}])
+    error = RuntimeError("PRIVATE_PROVIDER_BODY")
+    error.status_code = 500
+    error.request_id = "req-test-123"
+    create.side_effect = error
+    dialogue.trace = events.append
+
+    with caplog.at_level(logging.WARNING, logger="agents.dialogue_loop"):
+        result = dialogue.run()
+
+    completion = next(event for event in events if event.get("phase") == "completed")
+    assert completion["outcome"] == "provider_error"
+    assert completion["provider_status"] == "500"
+    assert completion["request_id"] == "req-test-123"
+    assert completion["duration_ms"] >= 0
+    assert completion["request_summary"]["message_count"] > 1
+    assert "PRIVATE_TEXT" not in repr(completion)
+    assert "model_request_failed" in caplog.text and "http_500" in caplog.text
+    assert "PRIVATE_PROVIDER_BODY" not in caplog.text
+    assert result["failure_code"] == "model_unavailable"
+    assert "PRIVATE_PROVIDER_BODY" not in result["message"]
+
+
+def test_model_client_initialization_failure_records_terminal_event(monkeypatch, caplog):
+    import logging
+    import config
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "")
+    events = []
+    dialogue, _ = make_dialogue("查一下天气")
+    dialogue.trace = events.append
+    dialogue.client_factory = lambda: (_ for _ in ()).throw(RuntimeError("PRIVATE_INIT_DETAIL"))
+
+    with caplog.at_level(logging.WARNING, logger="agents.dialogue_loop"):
+        result = dialogue.run()
+
+    completion = next(event for event in events if event.get("phase") == "completed")
+    assert completion["outcome"] == "client_error"
+    assert completion["error_code"] == "model_not_configured"
+    assert "PRIVATE_INIT_DETAIL" not in caplog.text
+    assert result["failure_code"] == "model_unavailable"
+
+
+def test_diagnostic_call_budget_is_not_reported_as_provider_failure(monkeypatch, caplog):
+    import logging
+    import config
+    from agents.dialogue_loop import DiagnosticCallBudgetExceeded
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    events = []
+    dialogue, create = make_dialogue("查一下天气")
+    create.side_effect = DiagnosticCallBudgetExceeded("diagnostic cap")
+    dialogue.trace = events.append
+
+    with caplog.at_level(logging.WARNING, logger="agents.dialogue_loop"):
+        result = dialogue.run()
+
+    assert result["failure_code"] == "diagnostic_call_budget_exhausted"
+    assert result["model_status"] == "budget_exhausted"
+    assert not caplog.text
+    assert any(event.get("outcome") == "diagnostic_budget_exhausted" for event in events)
 
 
 def test_expand_radius_keeps_activity_anchors_and_previously_shown_ids():

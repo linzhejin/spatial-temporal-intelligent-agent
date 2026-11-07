@@ -118,7 +118,7 @@ def test_browser_conversation_persists_and_restores_through_real_api_and_worker(
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        context = browser.new_context(viewport={"width": 1280, "height": 900})
+        context = browser.new_context(viewport={"width": 1280, "height": 900}, service_workers="block")
         context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
         page = context.new_page()
         page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))

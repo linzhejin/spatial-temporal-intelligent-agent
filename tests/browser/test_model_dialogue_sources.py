@@ -100,7 +100,8 @@ def test_place_card_keeps_distance_and_reason_without_showing_source_details(loc
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch(headless=True)
-        context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+        context = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
+                                      service_workers="block")
         context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
         page = context.new_page()
         page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
@@ -110,9 +111,10 @@ def test_place_card_keeps_distance_and_reason_without_showing_source_details(loc
 
         page.locator("#nl-input").fill("我在信图，想去总图附近干饭")
         page.locator("#submit-btn").click()
-        status = page.locator(".chat-status-row .chat-bubble-text")
+        status = page.locator("#chat-run-statuses .chat-run-status-label")
         expect(status).to_be_visible(timeout=5000)
-        expect(status).to_have_text("我看一下。")
+        expect(status).to_have_text("正在处理…")
+        expect(page.locator("#chat-content")).not_to_contain_text("我看一下")
         expect(page.get_by_role("button", name="取消本次处理")).to_be_visible()
         expect(page.locator("#chat-content")).not_to_contain_text("search_poi_candidates")
         card = page.locator(".candidate-card").first
@@ -126,7 +128,7 @@ def test_place_card_keeps_distance_and_reason_without_showing_source_details(loc
         expect(page.locator("#chat-content")).to_contain_text("总图附近可以看看这家。")
         expect(page.locator("#chat-content")).not_to_contain_text("**")
         expect(page.locator("#chat-content")).not_to_contain_text("search_poi_candidates")
-        expect(page.locator(".chat-status-row")).to_have_count(0)
+        expect(page.locator("#chat-run-statuses .chat-run-status-row")).to_have_count(0)
         for internal_detail in ("来源与位置", source["source_id"], source["url"], "记录来源", "查询时间"):
             expect(page.locator("#chat-content")).not_to_contain_text(internal_detail)
 
@@ -241,14 +243,15 @@ def test_mobile_wait_cancel_empty_retry_and_conversation_restore(local_site):
 
         page.locator("#nl-input").fill("先试试等待，再取消")
         page.locator("#submit-btn").click()
-        status = page.locator(".chat-status-row .chat-bubble-text")
+        status = page.locator("#chat-run-statuses .chat-run-status-label")
         expect(status).to_be_visible(timeout=5000)
-        expect(status).to_have_text("我看一下。")
+        expect(status).to_have_text("正在处理…")
+        expect(page.locator("#chat-content")).not_to_contain_text("我看一下")
         expect(page.get_by_role("button", name="取消本次处理")).to_be_visible()
         expect(page.locator("#chat-content")).not_to_contain_text("地点检索工具")
         page.get_by_role("button", name="取消本次处理").click()
         expect(page.locator("#chat-content")).to_contain_text("已取消，原有条件已保留。", timeout=10000)
-        expect(page.locator(".chat-status-row")).to_have_count(0)
+        expect(page.locator("#chat-run-statuses .chat-run-status-row")).to_have_count(0)
 
         page.locator("#nl-input").fill("查一下附近的吃饭地点")
         page.locator("#submit-btn").click()

@@ -231,6 +231,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
             "is_mobile": is_mobile,
             "has_touch": is_mobile,
             "permissions": [],
+            "service_workers": "block",
         }
         if user_agent:
             context_args["user_agent"] = user_agent
@@ -297,7 +298,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         basketball.click()
         candidate = page.locator(".candidate-card").nth(0)
         expect(candidate).to_be_visible(timeout=10000)
-        expect(candidate).to_contain_text("255 m")
+        expect(candidate).to_contain_text("255")
         assert len(messages) == 2
         assert messages[1]["query"] == "\u7bee\u7403"
         assert messages[1]["travel_mode"] == "bike"
@@ -313,7 +314,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         assert messages[2]["base_revision"] == 2
         assert messages[2]["selected_poi_id"] == "whu-gongxue-basketball-court"
         assert page.locator("#estimated-duration").inner_text().strip()
-        expect(page.locator("#chat-content")).to_contain_text(
+        expect(page.locator("#chat-content")).not_to_contain_text(
             "\u672a\u5b9e\u5730\u786e\u8ba4\u9053\u8def\u5f53\u524d\u53ef\u901a\u884c",
         )
         expect(page.locator("#chat-content")).to_contain_text("科技路")
@@ -467,7 +468,7 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
 
     with sync_playwright() as playwright:
         browser = playwright.chromium.launch()
-        context = browser.new_context(viewport={"width": 1280, "height": 900})
+        context = browser.new_context(viewport={"width": 1280, "height": 900}, service_workers="block")
         context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
         page = context.new_page()
         page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
@@ -515,8 +516,8 @@ def test_user_can_retry_submission_and_refresh_cancels_old_task(static_site):
 
 
 @pytest.mark.parametrize("mobile", [False, True], ids=["pc", "mobile-web"])
-def test_nearest_place_route_shows_ranked_places_and_route(static_site, mobile):
-    """The combined recommendation and route must both reach the user."""
+def test_nearest_place_route_does_not_repeat_the_shortlist_in_chat(static_site, mobile):
+    """Route delivery stays concise when the result also contains ranked places."""
     result = {
         "task_type": "path_planning", "response_kind": "route",
         "route_kind": "direct", "mode": "walk",
@@ -532,6 +533,10 @@ def test_nearest_place_route_shows_ranked_places_and_route(static_site, mobile):
         "recommended_length_m": 210, "shortest_length_m": 210,
         "duration_min": 3, "shortest_duration_min": 3,
         "strategy": {"name": "shortest"},
+        "road_conditions_applied": 2,
+        "route_events": [
+            {"action": "slowdown", "road_name": "科技路", "name": "行人较多", "direction": "forward"},
+        ],
         "recommendation_candidates": [
             {"poi_id": "a", "name": "食堂甲", "distance_m": 210},
             {"poi_id": "b", "name": "食堂乙", "distance_m": 340},
@@ -572,7 +577,7 @@ def test_nearest_place_route_shows_ranked_places_and_route(static_site, mobile):
         browser = playwright.chromium.launch()
         context = browser.new_context(
             viewport={"width": 390 if mobile else 1440, "height": 844 if mobile else 1000},
-            is_mobile=mobile, has_touch=mobile,
+            is_mobile=mobile, has_touch=mobile, service_workers="block",
         )
         context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
         page = context.new_page()
@@ -583,12 +588,99 @@ def test_nearest_place_route_shows_ranked_places_and_route(static_site, mobile):
         page.locator("#submit-btn").click()
 
         chat = page.locator("#chat-content")
-        expect(chat).to_contain_text("食堂甲（约 210 米）", timeout=10000)
-        expect(chat).to_contain_text("食堂乙（约 340 米）")
-        expect(chat).to_contain_text("食堂丙（约 510 米）")
-        expect(chat).to_contain_text("已规划到食堂甲")
+        expect(chat).not_to_contain_text("食堂乙", timeout=10000)
+        expect(chat).not_to_contain_text("食堂丙")
         expect(chat).to_contain_text("晴")
         expect(chat).to_contain_text("22")
         expect(page.locator("#results-section")).to_be_visible()
+        assistant_reply = page.locator("#chat-content .chat-bubble-reply .chat-bubble-text").last
+        expect(assistant_reply).not_to_contain_text("科技路")
+        road_notice = page.locator("#road-conditions-notice")
+        expect(road_notice).to_be_visible()
+        expect(road_notice).to_contain_text("科技路")
+        expect(road_notice).to_contain_text("行人较多")
+        expect(road_notice).not_to_contain_text("已核对")
+        assert page.locator("body").inner_text().count("科技路") == 1
+
+        result["assistant_text"] = "科技路正在缓行，人流较多。"
+        page.locator("#nl-input").fill("把沿途提醒说得简单些")
+        page.locator("#submit-btn").click()
+        assistant_reply = page.locator("#chat-content .chat-bubble-reply .chat-bubble-text").last
+        expect(assistant_reply).to_contain_text("科技路正在缓行")
+        expect(road_notice).to_be_hidden()
+        assert page.locator("body").inner_text().count("科技路") == 1
+        context.close()
+        browser.close()
+
+
+def test_mobile_wait_status_is_outside_chat_and_supports_retry_and_cancel(static_site):
+    cancelled_runs = []
+    poll_attempts = 0
+
+    def handle_request(route):
+        nonlocal poll_attempts
+        request = route.request
+        parsed = urlsplit(request.url)
+        if parsed.hostname not in {"127.0.0.1", "localhost"}:
+            route.abort()
+            return
+        if parsed.path == "/api/conversations" and request.method == "POST":
+            data = {"conversation_id": "wait-status-test"}
+        elif parsed.path.endswith("/messages") and request.method == "POST":
+            data = {"run_id": "wait-status-run"}
+        elif parsed.path == "/api/runs/wait-status-run" and request.method == "GET":
+            poll_attempts += 1
+            if poll_attempts == 1:
+                route.abort()
+                return
+            data = {
+                "run_id": "wait-status-run",
+                "status": "cancelled" if cancelled_runs else "running",
+                "events": [],
+            }
+        elif parsed.path == "/api/runs/wait-status-run/cancel" and request.method == "POST":
+            cancelled_runs.append(request.post_data_json)
+            data = {"cancelled": True}
+        elif parsed.path.startswith("/api/"):
+            data = {}
+        else:
+            route.continue_()
+            return
+        route.fulfill(status=200, content_type="application/json; charset=utf-8",
+                      body=json.dumps({"data": data}, ensure_ascii=False))
+
+    with sync_playwright() as playwright:
+        browser = playwright.chromium.launch()
+        context = browser.new_context(
+            viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True,
+            service_workers="block",
+        )
+        context.add_init_script("localStorage.setItem('whu_welcome_seen', 'true');")
+        page = context.new_page()
+        page.on("pageerror", lambda error: pytest.fail(f"browser page error: {error}"))
+        page.route("**/*", handle_request)
+        page.goto(static_site, wait_until="domcontentloaded")
+        page.locator("#nl-input").fill("查一下今天武汉的天气")
+        with page.expect_response(lambda response: response.url.endswith("/messages")
+                                  and response.request.method == "POST"):
+            page.locator("#submit-btn").click()
+
+        status = page.locator("#chat-run-statuses .chat-run-status-row")
+        expect(status).to_be_visible(timeout=10000)
+        expect(status).to_contain_text("连接中断，重试中…", timeout=5000)
+        expect(status.locator("button")).to_have_text("取消")
+        assert page.locator("#chat-run-statuses").evaluate(
+            "element => !document.querySelector('#chat-content').contains(element)")
+        expect(page.locator("#chat-content")).not_to_contain_text("我看一下")
+        expect(page.locator("#chat-content")).not_to_contain_text("正在处理")
+        expect(page.locator("#chat-content .chat-pending-reply")).to_be_hidden()
+
+        with page.expect_response(lambda response: response.url.endswith("/wait-status-run/cancel")):
+            status.locator("button").click()
+        expect(page.locator("#chat-content")).to_contain_text(
+            "已取消，原有条件已保留。", timeout=5000,
+        )
+        expect(page.locator("#chat-run-statuses")).to_be_hidden()
+        assert cancelled_runs and cancelled_runs[0]["conversation_id"] == "wait-status-test"
         context.close()
         browser.close()

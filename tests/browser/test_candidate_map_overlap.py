@@ -55,11 +55,16 @@ def test_overlapping_map_places_can_be_chosen_individually(static_site, mobile, 
         page.locator('#submit-btn').click()
         cards = page.locator('.candidate-cards').last
         expect(cards.locator('.candidate-card')).to_have_count(4)
-        expect(cards.locator('.candidate-dist').first).to_contain_text('估算距 总图')
-        assert '路网距' not in cards.locator('.candidate-dist').first.inner_text()
+        distance_text = cards.locator('.candidate-dist').first.inner_text()
+        assert '总图' in distance_text and '101' in distance_text
+        assert '路网距' not in distance_text
         assert cards.locator('.candidate-card').first.bounding_box()['height'] <= 70
         marker = page.locator('.candidate-map-pin')
         expect(marker).to_have_count(1)
+        identities = marker.evaluate(
+            "el => JSON.parse(el.closest('.leaflet-marker-icon').dataset.poiIdentities)")
+        assert [item['poi_id'] for item in identities] == [f'poi_{i}' for i in range(1, 5)]
+        assert all(item['lng'] == 114.36 and item['lat'] == 30.54 for item in identities)
         marker.click()
         choices = page.locator('.candidate-map-choice')
         expect(choices).to_have_count(4)

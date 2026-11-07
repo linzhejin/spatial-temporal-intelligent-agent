@@ -8,9 +8,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/luojia-system-release-20261105 @ 1168c01 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-06 20:58
+- 版本：codex/luojia-system-release-20261105 @ eac3c23 ｜ origin/main 本地领先 2 ｜ gitee/main 本地领先 2 ｜ 生成于 2026-11-07 16:38
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v117 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
+- 前端 SW whu-walker-v120 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
 <!-- FACTS:END -->
 
 - 后端 Flask；Agent 工作流位于 `agents/`，LangGraph 编排，工具注册表 `agents/tools.py`（数量见上方自动事实块）。持久会话与任务在 `storage/`，后台执行由 Agent worker 承担。

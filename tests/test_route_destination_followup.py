@@ -82,19 +82,25 @@ def test_elliptical_followup_does_not_reuse_a_route_from_an_older_task(monkeypat
         def fetchall(self): return self.value
 
     class Connection:
-        def execute(self, sql, _params):
+        def execute(self, sql, params):
             calls.append(sql)
-            values = [
-                {"run_id": "run-2", "task_id": "task-2", "task_revision": 0,
-                 "cancel_requested": False, "conversation_id": "conversation-1",
-                 "revision": 0, "state": {"route_spec": {}}, "owner_id": "owner-1"},
-                {"seq": 30, "content": "桂园操场不行吗"},
-                [{"role": "assistant", "content": "上一轮的回答"}],
-                {"route_state": PREVIOUS, "task_id": "task-1", "source_seq": 20},
-                [],
-                latest,
-            ]
-            return Cursor(values[len(calls) - 1])
+            if "WHERE r.run_id=%s AND r.model_led" in sql:
+                return Cursor(None)
+            if "FROM run r JOIN task t USING (task_id)" in sql:
+                return Cursor({"run_id": "run-2", "task_id": "task-2", "task_revision": 0,
+                               "cancel_requested": False, "conversation_id": "conversation-1",
+                               "revision": 0, "state": {"route_spec": {}}, "owner_id": "owner-1"})
+            if "SELECT seq, content, metadata FROM conversation_message" in sql:
+                return Cursor({"seq": 30, "content": "桂园操场不行吗", "metadata": {}})
+            if "FROM (SELECT m.seq, m.role, m.content" in sql:
+                return Cursor([{"role": "assistant", "content": "上一轮的回答"}])
+            if "prior.metadata ? 'route_state'" in sql:
+                return Cursor({"route_state": PREVIOUS, "task_id": "task-1", "source_seq": 20})
+            if "AND seq>%s AND seq<%s" in sql:
+                return Cursor([])
+            if "SELECT r.status, r.result FROM conversation_message" in sql:
+                return Cursor(latest)
+            raise AssertionError(f"Unexpected get_run_input query: {sql}; params={params!r}")
 
     @contextmanager
     def connect(_url):
@@ -102,6 +108,7 @@ def test_elliptical_followup_does_not_reuse_a_route_from_an_older_task(monkeypat
 
     monkeypatch.setattr(task_repository.database, "connect", connect)
     result = task_repository.get_run_input("postgres://unused", "run-2")
+    assert len(calls) == 7
     assert bool(result["previous_route_state"]) is expected
     assert result["route_context_uncertain"] is (not expected)
 

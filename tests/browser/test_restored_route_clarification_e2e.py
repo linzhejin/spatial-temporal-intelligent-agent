@@ -97,9 +97,9 @@ def test_restored_route_clarification_preserves_question_and_task(static_site, v
         if mobile:
             args["user_agent"] = ("Mozilla/5.0 (Linux; Android 14; Pixel 7) AppleWebKit/537.36 "
                                   "(KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36")
-        context = browser.new_context(**args)
+        context = browser.new_context(**args, service_workers="block")
         context.add_init_script("""localStorage.setItem('whu_welcome_seen', 'true');
-            localStorage.setItem('whu_walker:active_session', 'sess_restore_test');
+            sessionStorage.setItem('whu_walker:active_session', 'sess_restore_test');
             localStorage.setItem('whu_walker:server_conversation:sess_restore_test', 'local-restore-conversation');""")
         page = context.new_page()
         page.route("**/*", handle)

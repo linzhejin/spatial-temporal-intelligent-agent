@@ -21,17 +21,23 @@ def test_original_request_survives_when_short_history_no_longer_contains_it(monk
     class Connection:
         def execute(self, sql, params):
             calls.append((sql, params))
-            values = [
-                {"run_id": "run-1", "task_id": "task-1", "task_revision": 10,
-                 "cancel_requested": False, "conversation_id": "conversation-1",
-                 "revision": 10, "state": {"route_spec": {}}, "owner_id": "owner-1"},
-                {"seq": 25, "content": "从信息学部出发"},
-                {"content": "从玉兰2门到樱顶，经过卓尔体育馆，并查天气"},
-                [{"role": "assistant", "content": "起点是哪里？"}],
-                None,
-                None,
-            ]
-            return Cursor(values[len(calls) - 1])
+            if "WHERE r.run_id=%s AND r.model_led" in sql:
+                return Cursor(None)
+            if "FROM run r JOIN task t USING (task_id)" in sql:
+                return Cursor({"run_id": "run-1", "task_id": "task-1", "task_revision": 10,
+                               "cancel_requested": False, "conversation_id": "conversation-1",
+                               "revision": 10, "state": {"route_spec": {}}, "owner_id": "owner-1"})
+            if "SELECT seq, content, metadata FROM conversation_message" in sql:
+                return Cursor({"seq": 25, "content": "从信息学部出发", "metadata": {}})
+            if "ORDER BY seq ASC LIMIT 1" in sql:
+                return Cursor({"content": "从玉兰2门到樱顶，经过卓尔体育馆，并查天气"})
+            if "FROM (SELECT seq, role, content" in sql:
+                return Cursor([{"role": "assistant", "content": "起点是哪里？"}])
+            if "prior.metadata ? 'route_state'" in sql:
+                return Cursor(None)
+            if "SELECT r.status, r.result FROM conversation_message" in sql:
+                return Cursor(None)
+            raise AssertionError(f"Unexpected get_run_input query: {sql}")
 
     @contextmanager
     def connect(_url):
@@ -40,8 +46,9 @@ def test_original_request_survives_when_short_history_no_longer_contains_it(monk
     monkeypatch.setattr(task_repository.database, "connect", connect)
     result = task_repository.get_run_input("postgres://unused", "run-1")
 
-    assert len(calls) == 6
-    assert "ORDER BY seq ASC LIMIT 1" in calls[2][0]
+    assert len(calls) == 7
+    assert sum("AND r.model_led" in sql for sql, _ in calls) == 1
+    assert any("ORDER BY seq ASC LIMIT 1" in sql for sql, _ in calls)
     assert result["task_origin_query"] == "从玉兰2门到樱顶，经过卓尔体育馆，并查天气"
     assert result["query"] == "从信息学部出发"
     assert result["history"] == [{"role": "assistant", "content": "起点是哪里？"}]
@@ -58,23 +65,30 @@ def test_last_completed_route_can_be_found_past_unrelated_messages(monkeypatch):
     class Connection:
         def execute(self, sql, _params):
             captured.append(sql)
-            values = [
-                {"run_id": "run-2", "task_id": "task-2", "task_revision": 0,
-                 "cancel_requested": False, "conversation_id": "conversation-1",
-                 "revision": 0, "state": {"route_spec": {}}, "owner_id": "owner-1"},
-                {"seq": 30, "content": "刚才的路线再短一点"},
-                [{"role": "user", "content": "今天会下雨吗？"}],
-                {"route_state": {"route_id": "older-route"}, "task_id": "task-1", "source_seq": 20},
-                [],
-                None,
-            ]
-            return Cursor(values[len(captured) - 1])
+            if "WHERE r.run_id=%s AND r.model_led" in sql:
+                return Cursor(None)
+            if "FROM run r JOIN task t USING (task_id)" in sql:
+                return Cursor({"run_id": "run-2", "task_id": "task-2", "task_revision": 0,
+                               "cancel_requested": False, "conversation_id": "conversation-1",
+                               "revision": 0, "state": {"route_spec": {}}, "owner_id": "owner-1"})
+            if "SELECT seq, content, metadata FROM conversation_message" in sql:
+                return Cursor({"seq": 30, "content": "刚才的路线再短一点", "metadata": {}})
+            if "FROM (SELECT m.seq, m.role, m.content" in sql:
+                return Cursor([{"role": "user", "content": "今天会下雨吗？"}])
+            if "prior.metadata ? 'route_state'" in sql:
+                return Cursor({"route_state": {"route_id": "older-route"},
+                               "task_id": "task-1", "source_seq": 20})
+            if "AND seq>%s AND seq<%s" in sql:
+                return Cursor([])
+            if "SELECT r.status, r.result FROM conversation_message" in sql:
+                return Cursor(None)
+            raise AssertionError(f"Unexpected get_run_input query: {sql}")
 
     @contextmanager
     def connect(_url): yield Connection()
 
     monkeypatch.setattr(task_repository.database, "connect", connect)
     result = task_repository.get_run_input("postgres://unused", "run-2")
-    assert "NOT EXISTS" not in captured[-3]
+    assert any("prior.metadata ? 'route_state'" in sql and "NOT EXISTS" not in sql for sql in captured)
     assert result["previous_route_state"]["route_id"] == "older-route"
     assert result["previous_route_state_task_id"] == "task-1"

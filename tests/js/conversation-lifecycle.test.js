@@ -45,6 +45,7 @@ function harness(storage = new Map(), nativeSession = null) {
             WhuWalkerSession: nativeSession ? { getId: () => nativeSession } : undefined },
         document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [],
             createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, children: [], textContent: '', disabled: false,
+                setAttribute: noop,
                 addEventListener(name, fn) { this['on' + name] = fn; },
                 appendChild(child) { this.children.push(child); },
                 querySelectorAll: () => [] }), getElementById: id => {
@@ -52,8 +53,9 @@ function harness(storage = new Map(), nativeSession = null) {
         } },
         boundaries: {
             noop, showUserBubble: q => userBubbles.push(q),
-            showChatBubble: (q,text,options) => { const b = { text, isStatus: !!(options && options.status) }; bubbles.push(b); return b; },
-            updateChatBubble: (b,text) => { b.text = text; },
+            showChatBubble: (q,text,options) => { const b = { text, isStatus: !!(options && options.status),
+                isPending: !!(options && options.pending), visible: !(options && options.pending) }; bubbles.push(b); return b; },
+            updateChatBubble: (b,text) => { b.text = text; b.visible = true; b.isPending = false; },
             clearRouteResult: () => { clears++; stopped++; }, clearMap: () => { clears++; },
             stopNavigation: () => { stopped++; },
             renderRoute: r => { rendered.push(r); context.app.state.routeStore.replace(r.route_state || null); },
@@ -134,7 +136,7 @@ function harness(storage = new Map(), nativeSession = null) {
             focus: focusPoiOnMap };
     })();`, context);
     context.app.state.productMode = 'planning';
-    return { ...context.app, context, bubbles, rendered, candidateRenders, clarifyRenders, comparisonRenders, requests, userBubbles, storage,
+    return { ...context.app, context, bubbles, rendered, candidateRenders, clarifyRenders, comparisonRenders, requests, userBubbles, storage, elements,
         clearCount: () => clears, stopCount: () => stopped, locationCount: () => locationCalls,
         reloadCount: () => reloads };
 }
@@ -632,8 +634,7 @@ test('desktop route feedback gives one useful overview with endpoints, strategy,
     assert.match(reply, /68 分钟/);
     assert.match(reply, /最短路径/);
     assert.match(reply, /3 个途经点/);
-    assert.match(reply, /2 条.*路况/);
-    assert.match(reply, /已核对 2 条当前生效路况信息/);
+    assert.doesNotMatch(reply, /已核对 .*条当前生效路况信息/);
     assert.doesNotMatch(reply, /路况调整路线/);
     assert.match(reply, /4 处地点/);
     assert.doesNotMatch(reply, /沿途地点一|沿途地点二/);
@@ -695,7 +696,7 @@ test('desktop tour feedback identifies the loop and omits generic filler', async
     assert.match(reply, /返回/);
     assert.doesNotMatch(reply, /路线特点：已为你规划好/);
 });
-test('a recommended nearest route also tells the user which places were ranked', async () => {
+test('a recommended nearest route does not repeat the shortlist in the chat reply', async () => {
     const h = harness();
     h.setApi(async () => h.context.reply);
     h.context.reply = {
@@ -711,8 +712,7 @@ test('a recommended nearest route also tells the user which places were ranked',
     await h.submit('推荐附近3个食堂，并规划到最近的一个');
 
     const reply = h.bubbles.at(-1).text;
-    assert.match(reply, /食堂甲.*210.*食堂乙.*340.*食堂丙.*510/);
-    assert.match(reply, /已规划到食堂甲/);
+    assert.doesNotMatch(reply, /食堂乙|食堂丙|210.*340.*510/);
     assert.match(reply, /路线总览/);
 });
 test('route overview separates road-network length from estimated unverified endpoint connectors', () => {
@@ -732,7 +732,7 @@ test('route overview separates road-network length from estimated unverified end
     assert.match(summary, /接驳.*直线.*37.*未核实/);
 });
 
-test('route overview shows only explicitly supplied along-route notices and slowdowns', () => {
+test('route chat summary leaves specific road notices to the route panel', () => {
     const h = harness();
     const summary = h.buildRouteSummary({
         start: { name: '总图' }, end: { name: '桂园操场' }, mode: 'walk',
@@ -742,18 +742,14 @@ test('route overview shows only explicitly supplied along-route notices and slow
             { action: 'notice', road_name: '樱园路', name: '施工提示' },
         ],
     });
-    assert.match(summary, /沿途路况/);
-    assert.match(summary, /科技路.*缓行/);
-    assert.match(summary, /A → B/);
-    assert.match(summary, /樱园路.*提示/);
-    assert.match(summary, /行人较多/);
-    assert.match(summary, /施工提示/);
+    assert.doesNotMatch(summary, /沿途路况|科技路|樱园路|行人较多|施工提示/);
     const noRouteEvent = h.buildRouteSummary({mode: 'walk', road_conditions_applied: 1, route_events: []});
     assert.doesNotMatch(noRouteEvent, /沿途路况/);
+    assert.doesNotMatch(noRouteEvent, /已核对 .*条当前生效路况信息/);
     const unknown = h.buildRouteSummary({mode: 'walk', route_events_status: 'unknown'});
-    assert.match(unknown, /部分分段的沿途路况暂未核实/);
+    assert.doesNotMatch(unknown, /部分分段的沿途路况暂未核实/);
 });
-test('route overview states when route checks do not include field passability verification', () => {
+test('route overview omits generic field passability disclaimer', () => {
     const h = harness();
     const summary = h.buildRouteSummary({
         start: { name: '信息学部' }, end: { name: '卓尔体育馆' },
@@ -762,8 +758,8 @@ test('route overview states when route checks do not include field passability v
         route_verification: { status: 'pass', field_truth_verified: false },
     });
 
-    assert.match(summary, /核对的是路网和路线约束/);
-    assert.match(summary, /未实地确认道路当前可通行/);
+    assert.doesNotMatch(summary, /核对的是路网和路线约束/);
+    assert.doesNotMatch(summary, /未实地确认道路当前可通行/);
 });
 test('route overview does not add an unverified-field caveat when field truth is confirmed', () => {
     const h = harness();
@@ -776,7 +772,7 @@ test('route overview does not add an unverified-field caveat when field truth is
 
     assert.doesNotMatch(summary, /未实地确认道路当前可通行/);
 });
-test('mobile route feedback keeps the route explanation and appends the field-passability limit once', async () => {
+test('mobile route feedback keeps a short route explanation without generic field disclaimer', async () => {
     const h = harness();
     h.state.productMode = 'navigation';
     h.setApi(async () => ({
@@ -789,8 +785,7 @@ test('mobile route feedback keeps the route explanation and appends the field-pa
 
     const reply = h.bubbles.at(-1).text;
     assert.match(reply, /路线约 800 米，预计步行 10 分钟/);
-    assert.match(reply, /未实地确认道路当前可通行/);
-    assert.equal((reply.match(/未实地确认道路当前可通行/g) || []).length, 1);
+    assert.doesNotMatch(reply, /未实地确认道路当前可通行/);
 });
 test('route overview identifies the unverified steps in a multi-leg route', () => {
     const h = harness();
@@ -1579,13 +1574,18 @@ test('refresh resumes polling for an accepted active run', async () => {
     });
     await h.init();
     await new Promise(resolve => setTimeout(resolve, 10));
-    assert.equal(h.bubbles.at(-1).text, '我看一下。');
-    assert.equal(h.bubbles.at(-1).isStatus, true);
+    assert.equal(h.bubbles.at(-1).text, '');
+    assert.equal(h.bubbles.at(-1).isStatus, false);
+    assert.equal(h.bubbles.at(-1).isPending, true);
+    assert.equal(h.elements.get('chat-run-statuses').hidden, false);
+    assert.equal(h.elements.get('chat-run-statuses').children.length, 1);
     await new Promise(resolve => setTimeout(resolve, 950));
     assert.ok(calls.some(call => call.url.includes('/api/runs/active-run?')));
     assert.deepEqual(h.userBubbles, ['从珞珈门到樱顶']);
     assert.equal(h.state.routeStore.current().route_id, 'restored-route');
     assert.equal(h.bubbles.at(-1).text, 'restored-route');
+    assert.equal(h.elements.get('chat-run-statuses').hidden, true);
+    assert.equal(h.elements.get('chat-run-statuses').children.length, 0);
 });
 
 test('browser reload redraws the latest completed route only while its data and road versions match', async () => {

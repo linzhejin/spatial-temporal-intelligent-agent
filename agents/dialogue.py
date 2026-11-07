@@ -67,7 +67,7 @@ def tool_schemas():
              "area": {"type": "string", "description": "检索区域文字，例如梅园、桂园或武汉大学"},
              "keywords": {"type": "array", "items": {"type": "string"}},
              "exclude_terms": {"type": "array", "items": {"type": "string"}},
-             "web_research_requested": {"type": "boolean", "description": "用户请求商户/餐饮推荐、攻略或地图目录可能不全的地点时设为true；地图只能匹配目录中的名称与坐标记录，不能证明现场存在或营业；网页用于发现候选和补充有来源的描述"},
+             "web_research_requested": {"type": "boolean", "description": "网页资料能明显补足本轮需求时设为true，例如店铺详情、校园攻略或地图目录可能不全的地点；普通附近推荐在地图候选足够时可不查网页"},
              "web_page_read_requested": {"type": "boolean", "description": "仅当用户明确需要核对门店级详情（如人均、营业时间或近期评价）时设为true；一般附近推荐只需搜索摘要和地图匹配，不必读取网页正文"},
              "candidate_action": {"type": "string", "enum": ["recommend", "next_batch"],
                                   "description": "用户要求换一批/换一家且继续当前地点条件时设为next_batch；筛选条件变化时设为recommend"},

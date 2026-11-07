@@ -6,12 +6,12 @@
  *   3. network-only       → 第三方资源（高德 JS API / amap.com / amapw.com）
  * =========================================================== */
 
-var CACHE_NAME = 'whu-walker-v119';
+var CACHE_NAME = 'whu-walker-v120';
 var PRECACHE_URLS = [
     '/',
     '/index.html',
-    '/css/style.css?v=20261107-concise-dialogue-v1',
-    '/js/app.js?v=20261107-concise-dialogue-v1',
+    '/css/style.css?v=20261107-concise-dialogue-v2',
+    '/js/app.js?v=20261107-concise-dialogue-v2',
     '/js/config.js',
     '/js/voice-output.js',
     '/js/voice-input.js',
@@ -39,14 +39,16 @@ self.addEventListener('install', function (event) {
 /* ---------- activate: 清理旧版本缓存 ---------- */
 self.addEventListener('activate', function (event) {
     event.waitUntil(
+        Promise.all([
             caches.keys().then(function (keys) {
                 return Promise.all(
                     keys.filter(function (k) { return k.indexOf('whu-walker-') === 0 && k !== CACHE_NAME; })
-                    .map(function (k) { return caches.delete(k); })
-            );
-        })
+                        .map(function (k) { return caches.delete(k); })
+                );
+            }),
+            self.clients.claim(),
+        ])
     );
-    self.clients.claim();
 });
 
 /* ---------- fetch: 三策略分发 ---------- */

@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261107-concise-dialogue-v1">
+    <link rel="stylesheet" href="/css/style.css?v=20261107-concise-dialogue-v2">
 </head>
 <body>
 
@@ -271,8 +271,8 @@
                 <!-- 路线说明 -->
                 <div class="explanation-box" id="explanation-box">
                     <p id="explanation-text">—</p>
-                    <p id="road-conditions-notice" class="road-conditions-notice" style="display:none;"></p>
                 </div>
+                <p id="road-conditions-notice" class="road-conditions-notice" style="display:none;"></p>
                 <p id="road-condition-update-notice" class="road-condition-update-notice" hidden aria-live="polite"></p>
 
                 <!-- 跟进建议 -->
@@ -282,6 +282,8 @@
                 </div>
             </section>
         </div>
+
+        <div class="chat-run-statuses" id="chat-run-statuses" aria-label="当前处理" hidden></div>
 
         <!-- 底部输入区 -->
         <div class="chat-input-bar" id="chat-input-bar">
@@ -583,6 +585,15 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261107-concise-dialogue-v1"></script>
+    <script src="/js/app.js?v=20261107-concise-dialogue-v2"></script>
+    <script>
+        if ('serviceWorker' in navigator && window.isSecureContext) {
+            window.addEventListener('load', function () {
+                navigator.serviceWorker.register('/sw.js').catch(function () {
+                    /* 页面仍可在线使用；缓存不可用时不显示内部错误。 */
+                });
+            });
+        }
+    </script>
 </body>
 </html>
