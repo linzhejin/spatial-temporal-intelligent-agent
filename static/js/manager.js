@@ -2711,18 +2711,33 @@
       locateButton.type = 'button';
       locateButton.className = 'outline-button';
       locateButton.textContent = '在地图定位并预填发布落点';
-      locateButton.addEventListener('click', function () { pickSuggestedEdge(edge); });
+      locateButton.addEventListener('click', function () { pickSuggestedEdge(job, edge); });
       item.append(summary, locateButton);
       section.appendChild(item);
     });
     if (section.children.length > 1) card.appendChild(section);
   }
 
-  function pickSuggestedEdge(edge) {
+  function pickSuggestedEdge(job, edge) {
     var lng = Number(edge.snap_lng_gcj);
     var lat = Number(edge.snap_lat_gcj);
     if (!state.map || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
     clearPickedRoad();
+    clearVisionSource();
+    state.sourceJobId = job.job_id;
+    state.sourceCandidateIndex = null;
+    byId('vision-source-banner').hidden = false;
+    byId('vision-source-label').textContent = '疑似受影响路段：' + (job.original_name || job.job_id) +
+      '。请确认事件类型与处理方式，并填写现场核实依据。';
+    byId('field-confirmation-wrap').hidden = false;
+    byId('field-confirmation').required = true;
+    byId('event-type').value = '';
+    byId('event-action').value = '';
+    resetEventModes();
+    byId('event-name').value = '';
+    byId('event-description').value = '';
+    resetEventValidity();
+    byId('field-confirmation').value = '';
     state.picked = { lng: lng, lat: lat, snap: edge, impactPreview: null, bindingDirection: null, confirmed: false };
     state.map.setView([lat, lng], 18);
     var geometry = Array.isArray(edge.geometry_gcj)
