@@ -908,6 +908,69 @@ def snap_to_edge(
     }
 
 
+def nearest_edges(
+    G: nx.MultiDiGraph,
+    lng_gcj: float,
+    lat_gcj: float,
+    max_dist_m: float = SNAP_MAX_DIST_M,
+    limit: int = 5,
+) -> list[dict]:
+    """返回 anchor 半径内按距离升序的 Top-N 边快照（与 snap_to_edge 同构）。
+
+    只做候选推荐，不落地、不发布；发布仍走 snap_to_edge + 人工闸。
+    """
+    from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
+    from shapely.geometry import Point
+
+    if limit < 1:
+        return []
+    lng_wgs, lat_wgs = gcj02_to_wgs84(lng_gcj, lat_gcj)
+    click = Point(lng_wgs, lat_wgs)
+    cos_lat = __import__("math").cos(__import__("math").radians(lat_wgs))
+
+    within = []  # (dist_m, u, v, k, proj)
+    for u, v, k, data in G.edges(keys=True, data=True):
+        line = _edge_line(G, u, v, data)
+        proj = line.interpolate(line.project(click))
+        dx = (proj.x - lng_wgs) * cos_lat
+        dy = proj.y - lat_wgs
+        dist_m = (dx * dx + dy * dy) ** 0.5 * 111320.0
+        if dist_m <= max_dist_m:
+            within.append((dist_m, u, v, k, proj))
+    within.sort(key=lambda item: item[0])
+
+    results = []
+    seen = set()
+    for dist_m, u, v, k, proj in within:
+        ekey = (min(int(u), int(v)), max(int(u), int(v)), int(k))
+        if ekey in seen:
+            continue
+        seen.add(ekey)
+        snap_lng_gcj, snap_lat_gcj = wgs84_to_gcj02(proj.x, proj.y)
+        try:
+            chain_keys, chain_coords_wgs, chain_len_m, _ = _expand_edge_chain(G, u, v, k)
+        except Exception:
+            line = _edge_line(G, u, v, G.get_edge_data(u, v, k) or {})
+            chain_keys, chain_coords_wgs, chain_len_m = (
+                [(u, v, k)], _line_coords(line),
+                float((G.get_edge_data(u, v, k) or {}).get("length", 0) or 0),
+            )
+        geometry_gcj = [list(wgs84_to_gcj02(x, y)) for x, y in chain_coords_wgs]
+        results.append({
+            "u": int(u), "v": int(v), "key": int(k),
+            "edges": [[int(a), int(b), int(kk)] for a, b, kk in chain_keys],
+            "chain_length_m": round(float(chain_len_m), 1),
+            "road_name": _road_name_of(G.get_edge_data(u, v, k) or {}),
+            "snap_lng_gcj": float(snap_lng_gcj),
+            "snap_lat_gcj": float(snap_lat_gcj),
+            "dist_m": round(float(dist_m), 1),
+            "geometry_gcj": geometry_gcj,
+        })
+        if len(results) >= limit:
+            break
+    return results
+
+
 # ===================== 规划期应用 =====================
 
 def _resolve_edge_keys(G: nx.MultiDiGraph, cond: dict, *, strict: bool = False) -> set:
