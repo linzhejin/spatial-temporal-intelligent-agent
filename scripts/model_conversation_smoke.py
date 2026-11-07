@@ -685,13 +685,15 @@ def main():
 
             _, _, fifth = turn(queries[4], expected_kind="route")
             turns.append(fifth)
+            flat_route_state = fifth.get("route_state") or {}
             if (fifth.get("response_kind") != "route" or fifth.get("route_verification") != "pass"
                     or fifth.get("selected_poi_id") != selected or not fifth["all_accepted_messages_received"]
                     or fifth.get("task_id") != first.get("task_id")
                     or not fifth.get("route_line_visible_on_map")
                     or not any(item == {"tool": "plan_route", "end_turn_if_success": True}
                                for item in fifth.get("terminal_decisions", []))
-                    or (fifth.get("route_state") or {}).get("route_id") != selected_route_state.get("route_id")):
+                    or (flat_route_state.get("strategy") or {}).get("name") != "flat"
+                    or (flat_route_state.get("end") or {}).get("poi_id") != selected):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 5, "turns": turns}
 
             _, _, sixth = turn(queries[5], expected_kind="chat")
@@ -710,7 +712,8 @@ def main():
                     or not seventh.get("route_line_visible_on_map")
                     or not any(item == {"tool": "plan_route", "end_turn_if_success": True}
                                for item in seventh.get("terminal_decisions", []))
-                    or (seventh.get("route_state") or {}).get("route_id") != selected_route_state.get("route_id")
+                    or ((seventh.get("route_state") or {}).get("strategy") or {}).get("name") != "shortest"
+                    or ((seventh.get("route_state") or {}).get("end") or {}).get("poi_id") != selected
                     or seventh["history_count"] <= 8):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 7, "turns": turns}
 

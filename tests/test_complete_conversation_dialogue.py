@@ -670,6 +670,9 @@ def test_direct_terminal_choice_is_required_on_weather_and_route_tool_calls():
     browse = schemas["browse_candidates"]["parameters"]["properties"]
     assert browse["task_id"]["type"] == "string"
     assert browse["task_revision"]["type"] == "integer"
+    update_properties = schemas["update_task"]["parameters"]["properties"]
+    assert "搜索区域代替" in update_properties["start"]["description"]
+    assert "不能复制start" in update_properties["search_anchor"]["description"]
 
 
 def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypatch):
