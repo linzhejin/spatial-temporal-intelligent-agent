@@ -116,14 +116,15 @@ def test_trip_through_real_api_worker_and_graph(monkeypatch, tmp_path, mobile, c
                 expect(meal).to_be_visible(timeout=90000)
                 meal.click()
                 expect(page.locator("#chat-content")).to_contain_text("经武汉大学篮球场", timeout=90000)
+                expect(page.locator("#results-section")).to_be_visible(timeout=90000)
                 assert [row["status"] for row in completed] == [
                     "needs_input", "needs_input", "needs_input", "completed",
                 ]
             else:
                 expect(page.locator("#chat-content")).to_contain_text("卓尔体育馆", timeout=90000)
                 expect(page.locator("#chat-content")).to_contain_text("桂园食堂", timeout=90000)
+                expect(page.locator("#results-section")).to_be_visible(timeout=90000)
                 assert len(completed) == 1 and completed[0]["status"] == "completed"
-            expect(page.locator("#results-section")).to_be_visible(timeout=90000)
             browser.close()
     finally:
         server.shutdown()
