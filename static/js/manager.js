@@ -2616,6 +2616,11 @@
         candidates.appendChild(candidate);
       });
       if (candidates.children.length) card.appendChild(candidates);
+      if (job.status === 'needs_review' && job.anchor_gcj) {
+        request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/suggested-edges', 'GET')
+          .then(function (data) { appendSuggestedEdges(card, job, (data && data.suggested_edges) || []); })
+          .catch(function () { /* 建议路段未就绪或不可用时静默，不影响复核页 */ });
+      }
       if (reviewNote) {
         var dismissButton = document.createElement('button'); dismissButton.type = 'button';
         dismissButton.className = 'outline-button dismiss-vision';
@@ -2684,6 +2689,62 @@
     button.disabled = state.visionDeleteBusy.has(job.job_id);
     button.addEventListener('click', function () { deleteVisionJob(job.job_id); });
     card.appendChild(button);
+  }
+
+  function appendSuggestedEdges(card, job, edges) {
+    var list = Array.isArray(edges) ? edges : [];
+    if (!list.length) return; // 无候选时不渲染，保持复核页整洁
+    var section = document.createElement('div');
+    section.className = 'candidate-list suggested-edges';
+    var heading = document.createElement('strong');
+    heading.textContent = '疑似受影响路段';
+    section.appendChild(heading);
+    list.forEach(function (edge) {
+      if (!edge || !Number.isFinite(Number(edge.snap_lng_gcj)) || !Number.isFinite(Number(edge.snap_lat_gcj))) return;
+      var item = document.createElement('div');
+      item.className = 'candidate-card';
+      var summary = document.createElement('p');
+      summary.textContent = (edge.road_name || '未命名道路') + ' · 吸附偏移约 ' +
+        Math.round(Number(edge.dist_m) || 0) + ' 米' +
+        (edge.chain_length_m ? ' · ' + Math.round(Number(edge.chain_length_m)) + ' 米路段' : '');
+      var locateButton = document.createElement('button');
+      locateButton.type = 'button';
+      locateButton.className = 'outline-button';
+      locateButton.textContent = '在地图定位并预填发布落点';
+      locateButton.addEventListener('click', function () { pickSuggestedEdge(edge); });
+      item.append(summary, locateButton);
+      section.appendChild(item);
+    });
+    if (section.children.length > 1) card.appendChild(section);
+  }
+
+  function pickSuggestedEdge(edge) {
+    var lng = Number(edge.snap_lng_gcj);
+    var lat = Number(edge.snap_lat_gcj);
+    if (!state.map || !Number.isFinite(lng) || !Number.isFinite(lat)) return;
+    clearPickedRoad();
+    state.picked = { lng: lng, lat: lat, snap: edge, impactPreview: null, bindingDirection: null, confirmed: false };
+    state.map.setView([lat, lng], 18);
+    var geometry = Array.isArray(edge.geometry_gcj)
+      ? edge.geometry_gcj.map(function (point) { return [point[1], point[0]]; }) : [];
+    if (geometry.length >= 2) {
+      state.preview = L.polyline(geometry, { color: '#d48943', weight: 8, opacity: .85, lineCap: 'round' }).addTo(state.map);
+      state.pickFeedbackLayers = state.pickFeedbackLayers.concat(addRoadDirectionEndpoints(geometry, state.map));
+    } else {
+      state.preview = L.circleMarker([lat, lng], {
+        radius: 8, color: '#fff', weight: 2, fillColor: '#d48943', fillOpacity: 1,
+      }).addTo(state.map);
+    }
+    var road = edge.road_name || '未命名道路';
+    var length = Number(edge.chain_length_m) ? Math.round(Number(edge.chain_length_m)) + ' 米路段' : '已吸附到一条道路';
+    byId('selected-road').textContent = road + ' · 吸附距离 ' + Number(edge.dist_m || 0).toFixed(1) + ' 米 · ' + length;
+    byId('selected-road').classList.add('is-set');
+    byId('confirm-picked-road').hidden = false;
+    byId('clear-picked-road').hidden = false;
+    updatePublishState();
+    if (byId('road-workspace') && byId('road-workspace').scrollIntoView) {
+      byId('road-workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
   }
 
   async function refreshVisionJobs(force) {
