@@ -61,7 +61,6 @@
         diningCandidatePages: new Map(), // 当前对话内相同餐饮搜索的浏览位置，不持久化
         pendingIntent: null,  // 尚未补全的路线意图；成功路线统一由 routeStore 持有
         activeMode: null,
-        loadingTimer: null,  // 轮播加载语定时器
         roadConditionMonitorTimer: null,
         roadConditionMonitorInFlight: false,
         requestSeq: 0,  // 请求序号：防止先发的请求后返回覆盖后发请求的结果
@@ -161,22 +160,16 @@
             label: '步行',
             color: '#E8929C',
             speedKmh: 4.5,   // 前端兜底估速（后端未返回 duration_min 时用）
-            loadingText: '正在漫步找路…',
-            loadingSub: '穿过樱花大道，慢慢走就好',
         },
         bike: {
             label: '骑行',
             color: '#7BA37B',
             speedKmh: 14,
-            loadingText: '正在规划骑行路线…',
-            loadingSub: '帮你避开台阶和陡坡',
         },
         drive: {
             label: '驾车',
             color: '#6A9FB5',
             speedKmh: 25,
-            loadingText: '正在规划车行路线…',
-            loadingSub: '优先校园车行道，省时省心',
         },
     };
 
@@ -253,9 +246,6 @@
         var draft = input && String(input.value || '').match(/(?:^|[，,；;])\s*全程(风景优先|平坦优先|最短路径)(?=$|[，,；;])/);
         var draftStrategy = draft && { '风景优先': 'scenery', '平坦优先': 'flat', '最短路径': 'shortest' }[draft[1]];
         var strategyName = canReplan && current.strategy ? current.strategy.name : draftStrategy;
-        var hint = document.getElementById('route-strategy-hint');
-        if (hint) hint.textContent = canReplan ? '点击后更新当前路线' :
-            draftStrategy ? '已加入输入框，发送后生效' : '可先选择，也可在路线生成后切换';
         document.querySelectorAll('.route-strategy-btn').forEach(function (btn) {
             var active = btn.getAttribute('data-route-strategy') === strategyName;
             btn.classList.toggle('active', active);
@@ -339,7 +329,7 @@
         var targetMode = change.travel_mode || current.travel_mode;
         var tm = TRAVEL_MODES[targetMode] || TRAVEL_MODES.walk;
         hideError();
-        showLoading((actionText || '更新路线') + '…', '起终点和途经安排保持不变');
+            showLoading((actionText || '更新路线') + '…');
 
         try {
             var result = await apiRequest('/api/route/replan', {
@@ -380,70 +370,6 @@
             if (mySeq === state.requestSeq) {
                 hideLoading();
             }
-        }
-    }
-
-    // ========== 轮播加载语（有人味儿，随出行方式变化） ==========
-    function getLoadingMessages(query) {
-        var mode = TRAVEL_MODES[state.travelMode] ? state.travelMode : 'walk';
-        var first = TRAVEL_MODES[mode];
-        var calcSub = mode === 'bike' ? '帮你避开台阶和陡坡，骑车更省心'
-                   : mode === 'drive' ? '优先校园车行道，避开步行小路'
-                   : '帮你避开那些不好走的路';
-
-        // 根据 query 内容智能匹配 Agent 正在做什么
-        var q = (query || '').toLowerCase();
-        var msgs = [{ text: first.loadingText, sub: first.loadingSub }];
-
-        if (q.indexOf('吃') >= 0 || q.indexOf('饭') >= 0 || q.indexOf('食堂') >= 0 || q.indexOf('饿') >= 0) {
-            msgs.push({ text: '正在搜食堂…', sub: '看看哪个最近' });
-        } else if (q.indexOf('咖啡') >= 0 || q.indexOf('奶茶') >= 0 || q.indexOf('喝') >= 0) {
-            msgs.push({ text: '正在找饮品店…', sub: '给你最近的' });
-        } else if (q.indexOf('逛') >= 0 || q.indexOf('参观') >= 0 || q.indexOf('游览') >= 0 || q.indexOf('旅游') >= 0) {
-            msgs.push({ text: '正在安排游览路线…', sub: '串起最好看的几个点' });
-        } else if (q.indexOf('买') >= 0 || q.indexOf('超市') >= 0 || q.indexOf('快递') >= 0) {
-            msgs.push({ text: '正在找顺路的店…', sub: '不绕路那种' });
-        } else if (q.indexOf('天气') >= 0 || q.indexOf('下雨') >= 0 || q.indexOf('带伞') >= 0) {
-            msgs.push({ text: '正在查天气…', sub: '看适不适合出门' });
-        } else if (q.indexOf('修路') >= 0 || q.indexOf('封') >= 0 || q.indexOf('施工') >= 0) {
-            msgs.push({ text: '正在查路况…', sub: '看看有没有管制' });
-        } else if (q.indexOf('樱花') >= 0 || q.indexOf('赏') >= 0) {
-            msgs.push({ text: '正在安排赏花路线…', sub: '樱花季这条线最美' });
-        } else {
-            msgs.push({ text: '正在查地图…', sub: '珞珈山的路我都熟' });
-        }
-
-        msgs.push({ text: '正在计算最佳路线…', sub: calcSub });
-        msgs.push({ text: '快好了…', sub: '稍等一下下' });
-        return msgs;
-    }
-
-    function startLoadingMessages(query) {
-        var messages = getLoadingMessages(query);
-        var idx = 0;
-        var textEl = document.getElementById('loading-text');
-        var subEl = document.getElementById('loading-subtext');
-        showLoading(messages[0].text, messages[0].sub);
-
-        state.loadingTimer = setInterval(function () {
-            idx = (idx + 1) % messages.length;
-            var msg = messages[idx];
-            // 淡入淡出效果
-            textEl.classList.add('fade');
-            subEl.classList.add('fade');
-            setTimeout(function () {
-                textEl.textContent = msg.text;
-                subEl.textContent = msg.sub;
-                textEl.classList.remove('fade');
-                subEl.classList.remove('fade');
-            }, 200);
-        }, 2200);
-    }
-
-    function stopLoadingMessages() {
-        if (state.loadingTimer) {
-            clearInterval(state.loadingTimer);
-            state.loadingTimer = null;
         }
     }
 
@@ -3159,8 +3085,8 @@
                 if (sharedState && sharedState.strategy && sharedState.strategy.name) {
                     hideWelcomeElements();
                     showUserBubble(query || '打开电脑端规划的路线');
-                    var bubble = showChatBubble('', '🌸 正在恢复电脑端规划的路线…');
-                    showLoading('正在恢复路线…', '保留起终点、途经点和路线偏好');
+                    var bubble = showChatBubble('', '我看一下。', { status: true });
+                    showLoading('正在更新路线…');
                     apiRequest('/api/route/replan', {
                         route_state: sharedState,
                         change: { strategy: sharedState.strategy.name },
@@ -3170,10 +3096,12 @@
                         renderRoute(result);
                         showResults(result);
                         trackRouteShown();
+                        finishChatStatus(bubble);
                         updateChatBubble(bubble, buildRouteSummary(result));
                     }).catch(function () {
                         hideLoading();
-                        updateChatBubble(bubble, '电脑端路线状态已过期，正在按原需求重新规划。');
+                        finishChatStatus(bubble);
+                        updateChatBubble(bubble, '路线需要重新规划。');
                         if (query) handleNlSubmit(query);
                     });
                 } else if (query) {
@@ -3433,20 +3361,19 @@
         state.loading = true;
         var section = document.getElementById('loading-section');
         section.hidden = false;
-        document.getElementById('loading-text').textContent = text || '正在处理…';
+        document.getElementById('loading-text').textContent = text || '处理中…';
         document.getElementById('loading-subtext').textContent = subtext || '请稍候';
     }
 
     function hideLoading() {
         state.loading = false;
-        stopLoadingMessages();
         document.getElementById('loading-section').hidden = true;
     }
 
     function showError(title, message) {
         var section = document.getElementById('error-section');
-        document.getElementById('error-title').textContent = title || '唔，出错了';
-        document.getElementById('error-message').textContent = message || '抱歉，出了点意外状况';
+        document.getElementById('error-title').textContent = title || '操作未完成';
+        document.getElementById('error-message').textContent = message || '请重试。';
         section.hidden = false;
     }
 
@@ -3520,21 +3447,21 @@
 
     function mapError(code, msg) {
         var errorMap = {
-            'missing_query': '嗯？你还没告诉我你想去哪呢～试试输入「从珞珈门到樱顶」',
-            'missing_endpoints': '需要起点和终点才能规划路线哦，在地图上选点或者打字告诉我吧',
-            'missing_poi_names': '起点和终点得有个名字才行～',
-            'poi_not_found': '抱歉，我没找到这个地方😅 试试换个说法？比如「教五」就是「第五教学楼」',
-            'route_not_found': '这条路线走不通…可能是路网数据还不够全，试试换个目的地？',
-            'network_not_initialized': '地图还没加载完，稍等一下下就好～',
-            'network_load_failed': '地图数据加载失败了，刷新一下页面试试？',
-            'parse_failed': '我没太理解你的意思…试试简单一点的说法，比如「从珞珈门到樱顶」',
-            'parse_validation_error': '输入格式有点问题，试试更简洁的描述？',
-            'route_computation_failed': '路线计算出错了，可能是网络不太好，再试一次？',
-            'nearest_node_failed': '这个位置我没法定位，换个附近的地点试试？',
-            'unsupported_task': '这个功能我暂时还不会，试试问路或者查景点吧～',
-            'internal_error': '出了点小问题，稍等一下再试就好',
+            'missing_query': '告诉我你想去哪儿吧。',
+            'missing_endpoints': '请补充起点和终点。',
+            'missing_poi_names': '请补充起点和终点的名称。',
+            'poi_not_found': '没找到这个地点，换个说法试试？',
+            'route_not_found': '这条路线暂时走不通，试试附近的地点？',
+            'network_not_initialized': '地图还在加载，请稍候。',
+            'network_load_failed': '地图加载失败，请重试。',
+            'parse_failed': '我还没听懂，换种说法告诉我吧。',
+            'parse_validation_error': '输入没识别出来，试试简短描述。',
+            'route_computation_failed': '路线暂时没算出来，请重试。',
+            'nearest_node_failed': '这个位置无法用于导航，换个附近地点试试？',
+            'unsupported_task': '我暂时处理不了这个请求，可以试试问路或查附近地点。',
+            'internal_error': '服务暂时不可用，请稍后重试。',
         };
-        return errorMap[code] || msg || '出了点意外，再试一次吧';
+        return errorMap[code] || msg || '请求没完成，请重试。';
     }
 
     function makeRequestId() {
@@ -3583,8 +3510,8 @@
             result = {
                 task_type: 'chat', response_kind: 'chat',
                 message: status === 'cancelled'
-                    ? '这项任务已停止，你之前确认的条件仍保留。需要继续时告诉我下一步。'
-                    : '这项任务已有更新版本，旧结果没有覆盖当前内容。请继续最新任务。',
+                    ? '已取消，原有条件已保留。'
+                    : '这次结果已过期，请查看最新结果。',
             };
         } else if (status === 'failed') {
             var failure = (result && (result.assistant_text || result.message || result.reply))
@@ -3624,7 +3551,7 @@
                         || /网络请求失败|服务器响应格式错误/.test(err.message || ''));
                     if (!transient) throw err;
                     failures++;
-                    updateChatBubble(replyBubble, '连接暂时中断，正在恢复任务…');
+                    updateChatBubble(replyBubble, '连接中断，正在重试…');
                     // Keep the same payload and request_id: the server may have
                     // accepted the previous POST even if its response was lost.
                     await waitForNextPoll(Math.min(5000, 900 * failures));
@@ -3659,31 +3586,32 @@
             delete state.activeRuns[runId];
             return null;
         }
-        var cancelButton = null;
-        if (replyBubble && typeof replyBubble.appendChild === 'function') {
-            cancelButton = document.createElement('button');
-            cancelButton.type = 'button';
-            cancelButton.className = 'clarify-chip';
-            cancelButton.textContent = '取消本次处理';
-            cancelButton.addEventListener('click', function () {
-                cancelButton.disabled = true;
-                apiRequest('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
-                    conversation_id: conversationId,
-                }).catch(function () { cancelButton.disabled = false; });
-            });
-            replyBubble.appendChild(cancelButton);
-        }
+        var cancelButton = addRunCancelButton(replyBubble, runId, conversationId);
         try { return await pollRun(runId, conversationId, replyBubble, epoch); }
         finally { if (cancelButton && cancelButton.remove) cancelButton.remove(); }
+    }
+
+    function addRunCancelButton(replyBubble, runId, conversationId) {
+        if (!replyBubble || typeof replyBubble.appendChild !== 'function') return null;
+        var button = document.createElement('button');
+        button.type = 'button';
+        button.className = 'clarify-chip';
+        button.textContent = '取消本次处理';
+        button.addEventListener('click', function () {
+            button.disabled = true;
+            apiRequest('/api/runs/' + encodeURIComponent(runId) + '/cancel', {
+                conversation_id: conversationId,
+            }).catch(function () { button.disabled = false; });
+        });
+        replyBubble.appendChild(button);
+        return button;
     }
 
     async function pollRun(runId, conversationId, replyBubble, epoch) {
         state.activeRuns[runId] = { conversationId: conversationId, epoch: epoch };
         var afterSeq = 0;
-        var lastLabel = '';
         var terminal = ['completed', 'partial', 'failed', 'needs_input', 'cancelled', 'superseded'];
         var terminalReached = false;
-        var pollStartedAt = Date.now();
         var pollFailures = 0;
         try {
             while (epoch === state.conversationEpoch) {
@@ -3700,23 +3628,16 @@
                         || /网络请求失败|服务器响应格式错误/.test(err.message || ''));
                     if (!transient) throw err;
                     pollFailures++;
-                    updateChatBubble(replyBubble, '连接暂时中断，正在恢复任务…');
+                    updateChatBubble(replyBubble, '连接中断，正在重试…');
                     await waitForNextPoll(Math.min(5000, 900 * pollFailures));
                     continue;
                 }
                 (run.events || []).forEach(function (event) {
                     afterSeq = Math.max(afterSeq, Number(event.seq) || 0);
-                    if (event.event_type === 'node_started' && event.payload && event.payload.label) {
-                        lastLabel = event.payload.label;
-                    }
                 });
-                if (lastLabel) updateChatBubble(replyBubble, '🌸 ' + lastLabel + '…');
                 if (terminal.indexOf(run.status) !== -1) {
                     terminalReached = true;
                     return normalizeTerminalRun(run);
-                }
-                if (Date.now() - pollStartedAt >= 90000) {
-                    updateChatBubble(replyBubble, '任务处理时间较长，正在继续等待…');
                 }
                 await waitForNextPoll();
             }
@@ -3767,7 +3688,7 @@
         if (!continuation) {
             showUserBubble(query);
             // 每个请求都有自己的结果气泡，互不覆盖。
-            thinkingBubble = showChatBubble(query, '🌸 正在为你规划路线…');
+            thinkingBubble = showChatBubble(query, '我看一下。', { status: true });
         }
 
         try {
@@ -3800,11 +3721,13 @@
             }
             var requestUsesSelectedMapPoints = requestUsesMapPoints(requestBody, selectedPointContext);
             if (requestUsesSelectedMapPoints && selectedPointContext.revision !== state.mapPointRevision) {
+                finishChatStatus(thinkingBubble);
                 updateChatBubble(thinkingBubble, '地图选点刚有变化，请按当前选点重新发送路线需求。');
                 return;
             }
             var result = await submitQueuedMessage(query, requestBody, thinkingBubble, conversationEpoch);
             if (!result) return;
+            finishChatStatus(thinkingBubble);
             if (result.execution_status === 'failed') {
                 updateChatBubble(thinkingBubble, result.assistant_text || result.message || result.reply || '本轮处理未完成，请重试。');
                 addConversationTurn(query, result, turnId, false);
@@ -3886,7 +3809,7 @@
 
             if (taskType === 'chat') {
                 hideWelcomeElements();
-                updateChatBubble(thinkingBubble, result.assistant_text || result.reply || result.message || '嗯…这个问题有点难，换个问法试试？');
+                updateChatBubble(thinkingBubble, result.assistant_text || result.reply || result.message || '这次没能规划出来，换个目的地试试？');
                 if (Array.isArray(result.suggestions) && result.suggestions.length) {
                     showSuggestions(result, thinkingBubble);
                 } else {
@@ -3911,7 +3834,7 @@
             if (result.response_kind === 'candidates') {
                 hideWelcomeElements();
                 var cands = result.candidates || [];
-                var candidateMessage = result.assistant_text || result.message || (cands.length ? '帮你找到这些地点，点一个我帮你规划路线～' : '校内没找到匹配的地点，换个说法试试？');
+                var candidateMessage = result.assistant_text || result.message || (cands.length ? '附近可以看看这些地方。' : '附近没找到合适的地点。');
                 updateChatBubble(thinkingBubble, candidateMessage);
                 // 候选本身也是一个待完成任务：保留任务版本，点选时把
                 // 稳定 poi_id 续回后端，避免按名称重新匹配到别的地点。
@@ -3922,14 +3845,9 @@
                 if (acceptedCandidatePending) {
                     saveContext();
                     if (cands.length) {
-                        var presentation = renderCandidateCards(cands, result._task_id, result._task_revision, {
+                        renderCandidateCards(cands, result._task_id, result._task_revision, {
                             query: query, newSearch: !requestBody.continuation_task_id,
-                            sources: result.sources || [],
                         });
-                        if (!result.assistant_text && presentation && presentation.initialPage > 0) {
-                            candidateMessage += ' 本次先展示另一批，可点击“上一批”查看前面的地点。';
-                            updateChatBubble(thinkingBubble, candidateMessage);
-                        }
                     }
                 } else {
                     var staleCandidateMessage = '这组地点选择已过期，请继续最新任务。';
@@ -3991,8 +3909,7 @@
                             saveContext();
                             if (nextQuestion && !result.assistant_text) showChatBubble('', nextQuestion);
                             if (Array.isArray(result.candidates) && result.candidates.length) {
-                                renderCandidateCards(result.candidates, result._task_id, result._task_revision,
-                                    { sources: result.sources || [] });
+                                renderCandidateCards(result.candidates, result._task_id, result._task_revision);
                             } else if (result.clarify && Array.isArray(result.clarify.options)) {
                                 renderClarifyOptions(result.clarify.options,
                                     result._task_id, result._task_revision);
@@ -4005,13 +3922,14 @@
                     addConversationTurn(query, result, turnId, false);
                 }
             } else {
-                updateChatBubble(thinkingBubble, '唔，这条路我没能规划出来😅 试试换个目的地？比如「从珞珈门到樱顶」');
+                updateChatBubble(thinkingBubble, '这条路线暂时走不通，换个目的地试试？');
                 addConversationTurn(query, result, turnId);
             }
         } catch (err) {
             if (conversationEpoch !== state.conversationEpoch) return;
+            finishChatStatus(thinkingBubble);
             hideWelcomeElements();
-            var recoveryQuestion = '刚才这一步暂时没有完成。你的原始需求还在，可以重试这条请求，也可以补充或修改条件。';
+            var recoveryQuestion = '这次没完成，可以重试。';
             updateChatBubble(thinkingBubble, recoveryQuestion);
             renderClarifyOptions([{ label: '重试刚才的需求', query: String(query || '') }], null, null);
             addConversationTurn(query, {
@@ -4040,25 +3958,51 @@
         scrollChatToLatest(chatContent, true);
     }
 
+    function plainAssistantText(value) {
+        return String(value || '')
+            .replace(/\[([^\]]+)\]\(https?:\/\/[^)]+\)/g, '$1')
+            .replace(/^\s{0,3}#{1,6}\s+/gm, '')
+            .replace(/^\s{0,3}(?:[-+*]|\d+[.)])\s+/gm, '')
+            .replace(/(\*\*|__)(.*?)\1/g, '$2')
+            .replace(/(^|[^\w])\*([^*\n]+)\*(?=$|[^\w])/gm, '$1$2')
+            .replace(/`([^`\n]*)`/g, '$1')
+            .replace(/[ \t]+$/gm, '')
+            .replace(/\n{3,}/g, '\n\n')
+            .trim();
+    }
+
     // 在对话流中显示聊天气泡，返回气泡元素供后续 updateChatBubble 替换内容
-    function showChatBubble(query, reply) {
+    function showChatBubble(query, reply, options) {
         var chatContent = document.getElementById('chat-content');
         if (!chatContent) return null;
         var followLatest = chatIsNearLatest(chatContent);
 
         var bubble = document.createElement('div');
         bubble.className = 'chat-bubble-row';
+        var isStatus = !!(options && options.status);
+        if (isStatus) bubble.classList.add('chat-status-row');
+        var statusAttributes = isStatus ? ' role="status" aria-live="polite"' : '';
         bubble.innerHTML =
             '<div class="chat-bubble chat-bubble-reply">' +
                 '<div class="chat-bubble-avatar">🌸</div>' +
                 '<div class="chat-bubble-body">' +
-                    '<p class="chat-bubble-text">' + escapeHtml(reply) + '</p>' +
+                    '<p class="chat-bubble-text"' + statusAttributes + '>' + escapeHtml(plainAssistantText(reply)) + '</p>' +
                 '</div>' +
             '</div>';
         chatContent.appendChild(bubble);
         scrollChatToLatest(chatContent, followLatest);
 
         return bubble;
+    }
+
+    function finishChatStatus(bubble) {
+        if (!bubble || !bubble.classList) return;
+        bubble.classList.remove('chat-status-row');
+        var status = bubble.querySelector('[role="status"]');
+        if (status) {
+            status.removeAttribute('role');
+            status.removeAttribute('aria-live');
+        }
     }
 
     function renderRouteComparisonCard(comparison) {
@@ -4169,14 +4113,14 @@
         scrollChatToLatest(chatContent, followLatest);
     }
 
-    // 替换已有气泡内容（用于"思考中"→最终回复）
+    // 替换已有气泡内容（用于临时状态到最终回复）
     function updateChatBubble(bubble, text) {
         if (!bubble) return;
         var chatContent = document.getElementById('chat-content');
         var followLatest = chatIsNearLatest(chatContent);
         var textEl = bubble.querySelector('.chat-bubble-text');
         if (textEl) {
-            textEl.textContent = text;
+            textEl.textContent = plainAssistantText(text);
         }
         scrollChatToLatest(chatContent, followLatest);
     }
@@ -4541,6 +4485,15 @@
                 nameEl.className = 'candidate-name';
                 nameEl.textContent = p.name || '';
                 btn.appendChild(nameEl);
+                var reasonText = typeof p.recommendation_reason === 'string'
+                    ? plainAssistantText(p.recommendation_reason) : '';
+                if (reasonText) {
+                    btn.setAttribute('aria-label', '选择地点 ' + String(p.name || '') + '。' + reasonText);
+                    var reasonEl = document.createElement('span');
+                    reasonEl.className = 'candidate-reason';
+                    reasonEl.textContent = reasonText;
+                    btn.appendChild(reasonEl);
+                }
                 var metaEl = document.createElement('span');
                 metaEl.className = 'candidate-meta';
 
@@ -4568,74 +4521,16 @@
                     var distEl = document.createElement('span');
                     distEl.className = 'candidate-dist';
                     var distanceText = p.distance_m >= 1000
-                        ? '约 ' + (p.distance_m / 1000).toFixed(1) + ' km'
-                        : '约 ' + Math.round(p.distance_m) + ' m';
+                        ? '约 ' + (p.distance_m / 1000).toFixed(1) + ' 公里'
+                        : '约 ' + Math.round(p.distance_m) + ' 米';
                     var reference = p.distance_reference_name || '';
-                    var distanceLabel = p.distance_basis === 'network_path_plus_unverified_straight_line_access_estimate'
-                        ? '估算距 ' : '距 ';
-                    distEl.textContent = reference ? distanceLabel + reference + ' ' + distanceText : distanceText;
+                    distEl.textContent = reference ? '距' + reference + distanceText : distanceText;
                     metaEl.appendChild(distEl);
                 }
                 if (metaEl.childNodes.length) btn.appendChild(metaEl);
                 btn.addEventListener('click', function () { choose(p, false); });
                 entry.appendChild(btn);
 
-                var sourceName = p.source === 'amap_online' ? '高德地图在线查询'
-                    : (p.source || '校园地点目录');
-                var sourceRefs = Array.isArray(p.source_refs) ? p.source_refs : [];
-                var hasDetails = Boolean(p.description || p.observed_at || sourceRefs.length || p.source);
-                if (hasDetails) {
-                    var details = document.createElement('details');
-                    details.className = 'candidate-details';
-                    var summary = document.createElement('summary');
-                    summary.textContent = '来源与位置';
-                    details.appendChild(summary);
-                    var detailText = document.createElement('div');
-                    detailText.className = 'candidate-details-body';
-                    var sourceEl = document.createElement('p');
-                    sourceEl.textContent = '来源：' + sourceName;
-                    detailText.appendChild(sourceEl);
-                    if (p.description) {
-                        var addressEl = document.createElement('p');
-                        addressEl.textContent = '地址：' + String(p.description);
-                        detailText.appendChild(addressEl);
-                    }
-                    if (p.observed_at) {
-                        var observedEl = document.createElement('p');
-                        var observedDate = new Date(p.observed_at);
-                        observedEl.textContent = '查询时间：' + (Number.isNaN(observedDate.getTime())
-                            ? '未知' : observedDate.toLocaleString('zh-CN', { hour12: false }));
-                        detailText.appendChild(observedEl);
-                    }
-                    if (sourceRefs.length) {
-                        var refEl = document.createElement('p');
-                        refEl.textContent = '记录来源：' + sourceRefs.map(function (ref) {
-                            return typeof ref === 'string' ? ref : (ref.source || ref.id || '已登记来源');
-                        }).join('、');
-                        detailText.appendChild(refEl);
-                    }
-                    var sourceIds = Array.isArray(p.source_ids) ? p.source_ids : [];
-                    var webSources = (Array.isArray(options.sources) ? options.sources : []).filter(function (source) {
-                        return source && sourceIds.indexOf(source.source_id) >= 0
-                            && typeof source.url === 'string' && /^https?:\/\//i.test(source.url);
-                    }).slice(0, 4);
-                    webSources.forEach(function (source) {
-                        var link = document.createElement('a');
-                        link.href = source.url;
-                        link.target = '_blank';
-                        link.rel = 'noopener noreferrer';
-                        link.className = 'candidate-source-link';
-                        link.textContent = String(source.title || source.site_name || '参考网页').slice(0, 160);
-                        detailText.appendChild(link);
-                    });
-                    if (p.access_link_verified === false) {
-                        var accessEl = document.createElement('p');
-                        accessEl.textContent = '地点到道路的末端接驳未现场核实。';
-                        detailText.appendChild(accessEl);
-                    }
-                    details.appendChild(detailText);
-                    entry.appendChild(details);
-                }
                 wrap.appendChild(entry);
             });
             if (candidates.length > pageSize) {
@@ -5035,7 +4930,7 @@
             submitBtn.addEventListener('click', function () {
                 var query = nlInput.value.trim();
                 if (!query) {
-                    showError('嗯？还没说去哪呢', '告诉我你想从哪走到哪吧～比如「从珞珈门到樱顶」');
+                    showError('请补充出发地和目的地', '说一下从哪儿出发、要去哪儿。');
                     nlInput.focus();
                     return;
                 }
@@ -5305,9 +5200,10 @@
                     : !!active.task_id && message._taskId === active.task_id);
             });
             if (!queryAlreadyVisible) showUserBubble(active.query);
-            var bubble = showChatBubble(active.query, '🌸 正在恢复这项任务…');
+            var bubble = showChatBubble(active.query, '我看一下。', { status: true });
             var conversationId = state.serverConversationId;
             var epoch = state.conversationEpoch;
+            var cancelButton = addRunCancelButton(bubble, active.run_id, conversationId);
             var userMessage = state.conversationHistory.find(function (message) {
                 return message.role === 'user' && (active.message_seq != null
                     ? Number(message._seq) === Number(active.message_seq)
@@ -5317,6 +5213,7 @@
             var messageSequence = Number(active.message_seq) || (userMessage && userMessage._seq) || 0;
             pollRun(active.run_id, conversationId, bubble, epoch).then(function (result) {
                 if (!result || epoch !== state.conversationEpoch) return;
+                finishChatStatus(bubble);
                 var isAtLeastAsNewAsTranscript = !state.latestRouteSequence
                     || (messageSequence > 0 && messageSequence >= state.latestRouteSequence);
                 var isAtLeastAsNewAsPending = !state.pendingServerTaskId || turnId >= state.pendingServerTaskTurnId;
@@ -5361,8 +5258,7 @@
                     );
                     if (acceptedCandidates) {
                         saveContext();
-                        renderCandidateCards(result.candidates, candidateTaskId, candidateRevision,
-                            { sources: result.sources || [] });
+                        renderCandidateCards(result.candidates, candidateTaskId, candidateRevision);
                     }
                 } else if (result.response_kind === 'route' && result.needs_input
                         && result.task_type === 'path_planning' && result.recommended && result.recommended.length
@@ -5376,8 +5272,7 @@
                     )) {
                         saveContext();
                         if (Array.isArray(result.candidates) && result.candidates.length) {
-                            renderCandidateCards(result.candidates, routeTaskId, routeRevision,
-                                { sources: result.sources || [] });
+                            renderCandidateCards(result.candidates, routeTaskId, routeRevision);
                         } else if (result.clarify && Array.isArray(result.clarify.options)) {
                             renderClarifyOptions(result.clarify.options, routeTaskId, routeRevision);
                         }
@@ -5397,9 +5292,13 @@
                 }
                 updateChatBubble(bubble, restoredReply);
                 recordRestoredAssistant(active.query, result, active.task_id, turnId);
-            }).catch(function (error) {
+            }).catch(function () {
                 if (epoch !== state.conversationEpoch) return;
-                updateChatBubble(bubble, (error && error.message) || '任务暂时无法恢复，请稍后刷新查看。');
+                finishChatStatus(bubble);
+                updateChatBubble(bubble, '这次没完成，可以重试。');
+                renderClarifyOptions([{ label: '重试刚才的请求', query: active.query }], null, null);
+            }).finally(function () {
+                if (cancelButton && cancelButton.remove) cancelButton.remove();
             });
         });
     }

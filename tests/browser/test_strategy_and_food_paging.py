@@ -78,7 +78,7 @@ def test_strategy_is_visible_before_route_and_food_candidates_can_be_paged(stati
         expect(scenery).to_be_visible()
         scenery.click()
         expect(page.locator("#nl-input")).to_have_value("全程风景优先，")
-        expect(page.locator("#route-strategy-hint")).to_contain_text("发送")
+        expect(scenery).to_have_attribute("aria-pressed", "true")
         assert not messages
         page.locator('.route-strategy-btn[data-route-strategy="shortest"]').click()
         expect(page.locator("#nl-input")).to_have_value("全程最短路径，")

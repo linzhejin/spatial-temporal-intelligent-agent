@@ -222,8 +222,9 @@ def test_full_dining_requirements_reach_model_and_it_selects_the_delivered_place
     assert result["turns"] == 2
     assert result["response_kind"] == "candidates"
     assert [p["poi_id"] for p in result["candidates"]] == ["amap:B123"]
+    assert result["message"] == "找到一个可进一步核对的选择，人均消费暂未核实。"
     assert "测试火锅甲" not in result["message"]
-    assert "测试火锅乙" in result["message"]
+    assert "测试火锅乙" not in result["message"]
     intent = result["place_request"]["semantic_request"]
     assert intent["budget_per_person"] == 50
     assert "不含食堂档口" in intent["requirements"]
@@ -509,8 +510,8 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
                            "web_page_read_requested": True}, search_web={"query": "武汉大学 火锅"}),
         reply(read_web_page={"source_id": "Sfact123"},
               search_poi_candidates={"candidate_names": ["测试火锅店"], "area": "武汉大学"}),
-        reply(present_places={"introduction": "下面几家都是地图核对到的实际地点。门店消费信息参考网页来源。", "places": [
-            {"poi_id": candidate["poi_id"], "reason": "地图目录中匹配到的候选记录；消费信息以来源为准。",
+         reply(present_places={"introduction": "总图附近可以看看这家。", "places": [
+             {"poi_id": candidate["poi_id"], "reason": "想吃火锅时可以看看。",
              "source_ids": ["Sfact123"]},
         ]}),
     ]
@@ -528,16 +529,35 @@ def test_requested_web_facts_keep_a_bounded_search_fetch_then_delivery_flow(mode
     assert "火锅" in web_calls[0][1]["query"]
     assert "武汉大学" in web_calls[0][1]["query"]
     assert result["candidates"][0]["source_ids"] == ["Sfact123"]
-    assert "地图核对到的实际地点" not in result["message"]
-    assert "地图目录中匹配到的候选记录" in result["message"]
-    assert "未现场核实存在性、入口或营业状态" in result["message"]
+    assert result["message"] == "总图附近可以看看这家。"
+    assert result["candidates"][0]["recommendation_reason"] == "想吃火锅时可以看看。"
+    assert result["sources"][0]["source_id"] == "Sfact123"
+    assert result["sources"][0]["url"] == "https://example.org/shop"
+    assert "Sfact123" not in result["message"]
+    assert "https://example.org/shop" not in result["message"]
+    assert "搜索范围：" not in result["message"]
+    assert "地点依据：" not in result["message"]
     system_prompt = model.call_args_list[0].kwargs["messages"][0]["content"]
-    assert "地图返回记录不等于现场存在性核实" in system_prompt
+    assert "地图只返回地图/校园目录匹配记录" in system_prompt
+    assert "卡片理由只写一条有依据的简短特点" in system_prompt
+    assert "默认" in system_prompt and "100字以内" in system_prompt
+    assert "不在聊天里逐家介绍" in system_prompt
     map_schema = next(tool for tool in model.call_args_list[1].kwargs["tools"]
                       if tool["function"]["name"] == "search_poi_candidates")
     assert "不证明现场存在" in map_schema["function"]["description"]
     assert any("evidence_scope" in message.get("content", "")
                for message in model.call_args_list[2].kwargs["messages"])
+
+
+def test_recommendation_tool_limits_chat_and_card_copy():
+    from agents.dialogue import tool_schemas
+
+    recommendation = next(item["function"] for item in tool_schemas()
+                          if item["function"]["name"] == "present_places")
+    properties = recommendation["parameters"]["properties"]
+
+    assert properties["introduction"]["maxLength"] == 500
+    assert properties["places"]["items"]["properties"]["reason"]["maxLength"] == 36
 
 
 def test_general_food_search_uses_web_search_snippets_without_fetching_page(model, monkeypatch):

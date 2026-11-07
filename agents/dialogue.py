@@ -9,7 +9,6 @@ from copy import deepcopy
 import json
 import os
 from pathlib import Path
-import re
 import time
 from uuid import uuid4
 
@@ -80,11 +79,11 @@ def tool_schemas():
              "clear_fields": {"type": "array", "items": {"type": "string"},
                                "description": "仅在用户明确取消时清除已有条件；路线硬约束使用 constraints.avoid_slope、constraints.avoid_steps、constraints.max_distance_m 等字段名"}},
             ("relation", "operation")),
-        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定，理由与来源会和卡片一起展示。只能称地图/校园目录中匹配到的候选记录，不能称为实际存在、实地核实或正在营业。",
-            {"introduction": {"type": "string"},
+        _function("present_places", "提交最终推荐。仅允许已查询的地点ID；顺序由你决定。聊天只写简短概括；每张卡片附一句简短理由。source_ids 只用于后台追溯，不写进聊天文字。",
+            {"introduction": {"type": "string", "maxLength": 500},
              "places": {"type": "array", "minItems": 1, "maxItems": 4, "items": {
                  "type": "object", "properties": {"poi_id": {"type": "string"},
-                     "reason": {"type": "string"}, "source_ids": {"type": "array", "items": {"type": "string"}}},
+                     "reason": {"type": "string", "maxLength": 36}, "source_ids": {"type": "array", "items": {"type": "string"}}},
                  "required": ["poi_id", "reason"], "additionalProperties": False}}}, ("introduction", "places")),
         _function("search_web", "检索校园生活/商户资料，返回带来源与日期的文本；不是已核实的地点或坐标。",
                   {"query": {"type": "string"}}, ("query",)),
@@ -199,24 +198,6 @@ def _model_tool_content(name, answer):
         result["candidate_batch_truncated"] = len(rows) > len(result["candidates"])
         result["candidate_batch_has_more"] = total > len(result["candidates"])
     return json.dumps(result, ensure_ascii=False, default=str)
-
-
-def _safe_candidate_prose(value):
-    """Do not let model prose turn a provider directory match into field verification."""
-    text = str(value or "")
-    text = re.sub(
-        r"(?:地图|高德)(?:地图)?(?:目录)?(?:已|已经)?(?:核对|核验|确认)(?:到|了)?(?:的)?(?:实际|真实)(?:地点|门店|店铺|商户)",
-        "地图目录中匹配到的候选记录", text,
-    )
-    text = re.sub(
-        r"(?:这些|上述|以上)(?:店铺|门店|商户|地点)?(?:都|均)?(?:是|为)(?:地图|高德)?(?:目录中)?(?:真实|实际)(?:存在的)?(?:地点|店铺|门店|商户)",
-        "这些是目录匹配候选，现场存在情况未核实", text,
-    )
-    text = re.sub(
-        r"(?:已|已经)?(?:实地)?(?:核实|确认)(?:了)?(?:这家|该|上述|这些)?(?:门店|店铺|商户|地点)?(?:的)?(?:真实|确实|实际)?(?:存在|营业|开业)",
-        "对应目录记录已匹配，现场存在与营业情况未核实", text,
-    )
-    return text
 
 
 def _resume_constraints(saved, route_constraints):
@@ -739,50 +720,40 @@ class Dialogue:
                 raise ValueError("unknown_place: 只能展示已查得地点")
             if identifier in shown:
                 raise ValueError("already_shown: 换批不得重复推荐，耗尽时请明确说明")
-        introduction = _safe_candidate_prose(str(args.get("introduction") or "")[:2000])
+        introduction = str(args.get("introduction") or "").strip()
+        if len(introduction) > 500:
+            raise ValueError("recommendation_intro_too_long: 请简明回答，用户要求详细介绍时再展开")
         prose = introduction + " ".join(str(item.get("reason", "")) for item in places)
         if any(row.get("name") and row["name"] in prose for key, row in self.known.items() if key not in ids):
             raise ValueError("unselected_place_in_text: 文字不可另推卡片之外的地点")
-        candidates, paragraphs = [], [introduction]
-        for number, item in enumerate(places, 1):
+        candidates = []
+        for item in places:
             row = deepcopy(self.known[item["poi_id"]])
-            reason = _safe_candidate_prose(str(item.get("reason") or "")[:1500])
+            reason = str(item.get("reason") or "").strip()
+            if len(reason) > 36:
+                raise ValueError("recommendation_reason_too_long: 请用一句短话概括")
             source_ids = item.get("source_ids") or []
             if any(source_id not in self.sources for source_id in source_ids):
                 raise ValueError("unknown_source")
             row.update({"recommendation_reason": reason, "source_ids": source_ids})
             candidates.append(row)
-            paragraphs.append(f"{number}. **{row['name']}**：{reason}")
         self.candidates = candidates
         self.pending.update({"pending_slot": "selection", "candidate_poi_ids": ids,
                              "candidate_places": deepcopy(candidates)})
         self.intent["shown_ids"] = list(dict.fromkeys([*self.intent.get("shown_ids", []), *ids]))
         if self.last_search.get("data_version"):
             record_candidate_snapshot(self.pending, self.last_search)
-        return "\n\n".join(paragraphs)
+        return introduction
 
     def result(self, message, *, failed=False):
         from agents.planner import _sanitize_message
         if failed and self.candidates:
-            message = "我保留了这批已核对候选。你可以先选择其中一个，或说“换一批”继续。"
+            message = "结果已保留，可以选择地点或换一批。"
         elif failed and self.route:
-            message = "路线结果已保留，你可以先查看路线；如果还需要说明，我可以继续补充。"
+            message = "路线已保留，请稍后重试。"
         self.intent["sources"] = list(self.sources.values())[-12:]
         self.pending["semantic_request"] = self.intent
         kind = "route" if self.route else "route_comparison" if self.comparison else "candidates" if self.candidates else "clarify" if self.clarify else "chat"
-        if self.candidates:
-            message = _safe_candidate_prose(message)
-            anchor = self.pending.get("search_anchor")
-            radius = self.pending.get("search_radius_m")
-            if isinstance(anchor, dict) and radius:
-                anchor_name = anchor.get("name") or "所选搜索中心"
-                message += f"\n\n搜索范围：以{anchor_name}为中心，半径约 {radius} 米。"
-            scope_note = "地点依据：以上为地图/校园目录匹配结果，未现场核实存在性、入口或营业状态。"
-            if scope_note not in message:
-                message += "\n\n" + scope_note
-        if self.sources:
-            source_list = " · ".join(f"[{source['source_id']}]({source['url']})" for source in self.sources.values())
-            message += "\n\n参考来源：" + source_list
         result = {"response_kind": kind, "message": _sanitize_message(message), "turns": self.turns,
                   "route": self.route, "route_kind": self.route_kind, "candidates": self.candidates,
                   "clarify": self.clarify, "suggestions": self.suggestions, "route_comparison": self.comparison,

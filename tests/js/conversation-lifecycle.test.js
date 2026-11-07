@@ -52,7 +52,7 @@ function harness(storage = new Map(), nativeSession = null) {
         } },
         boundaries: {
             noop, showUserBubble: q => userBubbles.push(q),
-            showChatBubble: (q,text) => { const b = { text }; bubbles.push(b); return b; },
+            showChatBubble: (q,text,options) => { const b = { text, isStatus: !!(options && options.status) }; bubbles.push(b); return b; },
             updateChatBubble: (b,text) => { b.text = text; },
             clearRouteResult: () => { clears++; stopped++; }, clearMap: () => { clears++; },
             stopNavigation: () => { stopped++; },
@@ -83,7 +83,7 @@ function harness(storage = new Map(), nativeSession = null) {
         var realRenderRoute = renderRoute;
         var realRenderClarifyOptions = renderClarifyOptions;
         var realShowSuggestions = showSuggestions;
-        [${['hideError','startLoadingMessages','hideWelcomeElements','stopLoadingMessages','hideLoading',
+        [${['hideError','hideWelcomeElements','hideLoading',
             'renderClarifyOptions','renderCandidateCards','renderRouteComparison','renderRouteComparisonCard','syncModeFromServer','showResults','trackRouteShown','showTopBanner',
             'applyProductMode','loadTravelMode','bindEvents','syncTravelModeUI','syncRouteStrategyUI',
             'startRoadConditionVersionMonitor',
@@ -604,7 +604,7 @@ test('failed request keeps route and settles its bubble', async () => {
     const h=harness(); h.state.routeStore.replace(existingRoute()); h.setApi(async () => { throw Error('断网'); });
     await h.submit('查天气');
     assert.equal(h.clearCount(),0);
-    assert.match(h.bubbles[0].text, /原始需求还在/);
+    assert.equal(h.bubbles[0].text, '这次没完成，可以重试。');
     assert.doesNotMatch(h.bubbles[0].text, /断网/);
 });
 test('desktop route feedback gives one useful overview with endpoints, strategy, distance, time and stop count', async () => {
@@ -1291,7 +1291,7 @@ test('durable submission stores the accepted query and polls independent progres
         travel_mode: 'bike', coord_start: { lng: 114.36, lat: 30.53, name: '地图起点' },
     }, bubble, 0);
     assert.equal(result.route_state.route_id, 'durable');
-    assert.equal(bubble.text, '🌸 正在识别需求…');
+    assert.equal(bubble.text, 'waiting', 'run phase labels must not replace the short waiting status');
     assert.equal(calls[0].url, '/api/conversations');
     assert.equal(calls[1].body.travel_mode, 'bike');
     assert.equal(calls[1].body.coord_start.lng, 114.36);
@@ -1357,7 +1357,7 @@ test('a submission failure stays conversational and offers to retry the original
 
     await h.submit('我在信图，想去总图附近干饭');
 
-    assert.match(h.bubbles.at(-1).text, /原始需求还在/);
+    assert.equal(h.bubbles.at(-1).text, '这次没完成，可以重试。');
     assert.doesNotMatch(h.bubbles.at(-1).text, /private database exception|unexpected_server_error/);
 });
 
@@ -1555,6 +1555,7 @@ test('expired server conversation is replaced after a rejected message', async (
 test('refresh resumes polling for an accepted active run', async () => {
     const h = harness(new Map([['whu_walker:server_conversation', 'server-c1']]));
     const calls = [];
+    let runPolls = 0;
     h.setQueuedApi(async (url, body, method) => {
         calls.push({ url, method });
         if (url === '/api/conversations/server-c1') return {
@@ -1563,14 +1564,24 @@ test('refresh resumes polling for an accepted active run', async () => {
             tasks: [],
             active_runs: [{ run_id: 'active-run', task_id: 'active-task', query: '从珞珈门到樱顶', status: 'running' }],
         };
-        if (url.includes('/api/runs/active-run?')) return {
+        if (url.includes('/api/runs/active-run?')) {
+            runPolls++;
+            if (runPolls === 1) return {
+                status: 'running', events: [{ seq: 1, event_type: 'node_started',
+                    payload: { label: '执行地点检索工具' } }],
+            };
+            return {
             status: 'completed', task_id: 'active-task', current_task_revision: 1,
             events: [], result: routeResult('restored-route'),
-        };
+            };
+        }
         throw new Error('unexpected request ' + url);
     });
     await h.init();
-    await new Promise(resolve => setTimeout(resolve, 5));
+    await new Promise(resolve => setTimeout(resolve, 10));
+    assert.equal(h.bubbles.at(-1).text, '我看一下。');
+    assert.equal(h.bubbles.at(-1).isStatus, true);
+    await new Promise(resolve => setTimeout(resolve, 950));
     assert.ok(calls.some(call => call.url.includes('/api/runs/active-run?')));
     assert.deepEqual(h.userBubbles, ['从珞珈门到樱顶']);
     assert.equal(h.state.routeStore.current().route_id, 'restored-route');

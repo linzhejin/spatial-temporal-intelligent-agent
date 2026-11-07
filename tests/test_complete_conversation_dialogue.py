@@ -132,6 +132,36 @@ def test_presenting_candidates_preserves_all_prior_shown_ids():
     assert dialogue.intent["shown_ids"] == [*old_ids, candidate["poi_id"]]
 
 
+def test_present_places_preserves_requested_detail_and_rejects_excessive_text():
+    import pytest
+
+    candidate = place("amap:SHORT123", "简短餐厅")
+    dialogue, _ = make_dialogue("请详细介绍附近餐厅", context={"place_request": {
+        "candidate_pool": [candidate],
+    }})
+
+    detailed_intro = "详细介绍" * 35
+    assert dialogue.present({"introduction": detailed_intro, "places": [
+        {"poi_id": candidate["poi_id"], "reason": "坐下吃饭"},
+    ]}) == detailed_intro
+
+    dialogue, _ = make_dialogue("请详细介绍附近餐厅", context={"place_request": {
+        "candidate_pool": [candidate],
+    }})
+    with pytest.raises(ValueError, match="recommendation_intro_too_long"):
+        dialogue.present({"introduction": "详细介绍" * 126, "places": [
+            {"poi_id": candidate["poi_id"], "reason": "坐下吃饭"},
+        ]})
+
+    dialogue, _ = make_dialogue("请详细介绍附近餐厅", context={"place_request": {
+        "candidate_pool": [candidate],
+    }})
+    with pytest.raises(ValueError, match="recommendation_reason_too_long"):
+        dialogue.present({"introduction": "附近可以看看这家。", "places": [
+            {"poi_id": candidate["poi_id"], "reason": "详细介绍" * 10},
+        ]})
+
+
 def test_worker_sends_weather_turn_and_full_history_to_model(monkeypatch):
     from datetime import datetime, timedelta, timezone
     from langgraph.checkpoint.memory import InMemorySaver

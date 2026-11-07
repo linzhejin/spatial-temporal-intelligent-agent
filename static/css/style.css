@@ -613,12 +613,6 @@ body {
     font-size: 0.73rem;
     font-weight: 700;
 }
-.route-strategy-heading span:last-child {
-    color: var(--ink-light);
-    font-size: 0.68rem;
-    font-weight: 400;
-    text-align: right;
-}
 .route-strategy-switch {
     display: flex;
     gap: 6px;
@@ -1930,6 +1924,10 @@ body.is-planning-mode .desktop-route-workbench {
     line-height: 1.65;
 }
 
+.chat-status-row .chat-bubble-avatar { display: none; }
+.chat-status-row .chat-bubble-body { padding: 4px 0; background: transparent; box-shadow: none; }
+.chat-status-row .chat-bubble-text { color: var(--ink-light); font-size: 0.82rem; }
+
 /* 用户气泡（靠右，主题色） */
 .chat-bubble-user {
     display: flex;
@@ -3014,11 +3012,7 @@ body { background: #F4F7F7; }
 .candidate-page-status { color: #52656D; font-size: 12px; }
 .candidate-page-btn { border-color: #C9D9D6; color: #176B5B; font-size: 13px; }
 .candidate-page-btn:not(:disabled):hover { background: #EAF3F1; }
-.candidate-details { margin: 0 10px 8px 44px; border-top: 1px solid #EEF2F1; }
-.candidate-details summary { min-height: 34px; padding: 8px 0; color: #176B5B; font-size: 12px; cursor: pointer; }
-.candidate-details-body { padding: 0 0 5px; color: #52656D; font-size: 12px; line-height: 1.55; overflow-wrap: anywhere; }
-.candidate-details-body p { margin: 0 0 4px; }
-.candidate-source-link { display: block; width: fit-content; max-width: 100%; margin: 3px 0; color: var(--color-poi); font-size: 12px; overflow-wrap: anywhere; }
+.candidate-reason { flex: 1 0 100%; margin-top: 2px; color: #52656D; font-size: 12px; line-height: 1.45; }
 .candidate-map-pin { border-color: #fff; background: #176B5B; box-shadow: 0 3px 10px rgba(23,43,50,.28); }
 .candidate-map-pin.is-group { background: #2563EB; }
 .candidate-map-choice { min-height: 44px; border-color: #DDE6E5; color: #172B32; }
@@ -3043,5 +3037,4 @@ button:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-
     .candidate-cards { padding-left: 0; width: 100%; }
     .candidate-pager { padding-left: 0; }
     .candidate-map-pin { width: 38px; height: 38px; }
-    .candidate-details { margin-left: 43px; }
 }

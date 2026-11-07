@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261106-model-discovery-v1">
+    <link rel="stylesheet" href="/css/style.css?v=20261107-concise-dialogue-v1">
 </head>
 <body>
 
@@ -151,8 +151,8 @@
                 </span>
                 <span class="header-tagline">武大校园 · 出行向导</span>
                 <button id="road-report-btn" class="road-report-btn" aria-label="上报路况" title="上报施工/活动/管制">🚧</button>
-                <button type="button" id="reset-btn" class="reset-btn" aria-label="新建会话" title="开始新的路线与对话">新建会话</button>
-                <button id="help-btn" class="help-btn" aria-label="帮助引导" title="查看引导">?</button>
+                <button type="button" id="reset-btn" class="reset-btn" aria-label="新建会话" title="开始新对话">新建会话</button>
+                <button id="help-btn" class="help-btn" aria-label="帮助引导" title="查看快捷键">?</button>
             </div>
         </header>
 
@@ -165,7 +165,6 @@
             </div>
             <div class="route-strategy-heading">
                 <span>路线偏好</span>
-                <span id="route-strategy-hint" aria-live="polite">可先选择，也可在路线生成后切换</span>
             </div>
             <div class="route-strategy-switch" id="route-strategy-switch" role="group" aria-label="路线偏好切换">
                 <button type="button" class="route-strategy-btn" data-route-strategy="shortest" aria-pressed="false">最短路径</button>
@@ -181,7 +180,7 @@
                 <div class="desktop-mode-card__icon" aria-hidden="true">🖥️</div>
                 <div class="desktop-mode-card__body">
                     <strong>电脑规划模式</strong>
-                    <p>电脑端不使用定位。输入地点，或点地图右上角设置起点、途经点和终点；点选中的标记可删除。</p>
+                    <p>输入地点，或在地图上设置起点、途经点和终点。</p>
                 </div>
                 <span class="desktop-mode-card__status">手动选点</span>
             </aside>
@@ -190,8 +189,8 @@
             <div class="welcome-bubble" id="welcome-bubble">
                 <div class="bubble-avatar">🌸</div>
                 <div class="bubble-body">
-                    <p class="bubble-greeting">嗨！我是珞珈智行～</p>
-                    <p class="bubble-text">要去哪里？输入起点和终点，也可以加上想看风景、少爬坡或赶时间。</p>
+                    <p class="bubble-greeting">珞珈智行</p>
+                    <p class="bubble-text">想去哪儿？告诉我起点和终点，也可以加上路线偏好。</p>
                 </div>
             </div>
 
@@ -332,7 +331,7 @@
     <section class="loading-section" id="loading-section" hidden>
         <div class="loading-overlay">
             <div class="loading-spinner"></div>
-            <p class="loading-text" id="loading-text">正在理解你的需求…</p>
+            <p class="loading-text" id="loading-text">处理中…</p>
             <p class="loading-subtext" id="loading-subtext">请稍候</p>
         </div>
     </section>
@@ -341,8 +340,8 @@
     <section class="error-section" id="error-section" hidden>
         <div class="error-card">
             <div class="error-icon">🌸</div>
-            <h3 class="error-title" id="error-title">唔，出错了</h3>
-            <p class="error-message" id="error-message">抱歉，出了点意外状况</p>
+            <h3 class="error-title" id="error-title">操作未完成</h3>
+            <p class="error-message" id="error-message">请重试。</p>
             <button class="error-close-btn" id="error-close-btn" type="button">知道了</button>
         </div>
     </section>
@@ -350,7 +349,7 @@
     <!-- ====== 快捷键帮助弹窗 ====== -->
     <section class="kbd-help-section" id="kbd-help-section" hidden>
         <div class="kbd-help-card">
-            <h3>⌨ 快捷键指南</h3>
+            <h3>快捷键</h3>
             <div class="kbd-help-grid">
                 <div class="kbd-help-row"><span>🚶 步行 / 🚴 骑行 / 🚗 驾车</span><kbd>1</kbd><kbd>2</kbd><kbd>3</kbd></div>
                 <div class="kbd-help-row"><span>🌸 风景优先</span><kbd>F</kbd></div>
@@ -469,7 +468,7 @@
             </button>
             <header class="welcome-header">
                 <h1 class="welcome-title">🌸 珞珈智行</h1>
-                <p class="welcome-subtitle">武大校园 · 问路 · 查景点 · 推荐路线</p>
+                <p class="welcome-subtitle">校园问路、地点查询和路线规划</p>
             </header>
             <section class="welcome-shortcuts" aria-label="快捷查询示例">
                 <button class="shortcut-card sc-accent"
@@ -478,7 +477,7 @@
                     <span class="sc-emoji" aria-hidden="true">🚶</span>
                     <div class="sc-text">
                         <span class="sc-name">经典路线</span>
-                        <small class="sc-desc">珞珈门 → 樱顶 · 走风景最好的主路</small>
+                        <small class="sc-desc">珞珈门 → 樱顶 · 风景路线</small>
                     </div>
                 </button>
                 <button class="shortcut-card sc-pink"
@@ -487,7 +486,7 @@
                     <span class="sc-emoji" aria-hidden="true">🌸</span>
                     <div class="sc-text">
                         <span class="sc-name">赏樱路线</span>
-                        <small class="sc-desc">珞珈门 → 樱花大道 · 春天打卡必走</small>
+                        <small class="sc-desc">珞珈门 → 樱花大道</small>
                     </div>
                 </button>
                 <button class="shortcut-card sc-jade"
@@ -496,7 +495,7 @@
                     <span class="sc-emoji" aria-hidden="true">🏯</span>
                     <div class="sc-text">
                         <span class="sc-name">景点查询</span>
-                        <small class="sc-desc">樱顶在哪？介绍 + 地图自动定位</small>
+                        <small class="sc-desc">查询樱顶位置和简介</small>
                     </div>
                 </button>
                 <button class="shortcut-card sc-stone"
@@ -505,7 +504,7 @@
                     <span class="sc-emoji" aria-hidden="true">⚡</span>
                     <div class="sc-text">
                         <span class="sc-name">最短路径</span>
-                        <small class="sc-desc">教五 → 总图书馆 · 赶时间最快</small>
+                        <small class="sc-desc">教五 → 总图 · 最短路线</small>
                     </div>
                 </button>
                 <button class="shortcut-card sc-wide"
@@ -514,23 +513,21 @@
                     <span class="sc-emoji" aria-hidden="true">🌟</span>
                     <div class="sc-text">
                         <span class="sc-name">推荐景点</span>
-                        <small class="sc-desc">帮我推荐几个值得去的武大景点</small>
+                        <small class="sc-desc">推荐武大景点</small>
                     </div>
                 </button>
             </section>
             <section class="welcome-tips" aria-label="新手提示">
                 <details class="welcome-tips-details" open>
-                    <summary class="welcome-tips-summary">新手提示 · 快速上手</summary>
+                    <summary class="welcome-tips-summary">使用方法</summary>
                     <div class="welcome-tips-list">
-                        <div class="tip-item"><span class="tip-num">①</span><span class="tip-text">输入起点、终点和偏好，例如：「从珞珈门到樱顶，避开陡坡」</span></div>
-                        <div class="tip-item"><span class="tip-num">②</span><span class="tip-text">点地图上的地点标记，可设为出发点或终点</span></div>
-                        <div class="tip-item"><span class="tip-num">③</span><span class="tip-text">路线生成后，可切换风景优先、平坦优先或最短路径</span></div>
-                        <div class="tip-item"><span class="tip-num">④</span><span class="tip-text">出行方式可在聊天区上方切换：步行、骑行或驾车</span></div>
+                        <div class="tip-item"><span class="tip-num">①</span><span class="tip-text">输入地点和路线偏好，或直接在地图上选点。</span></div>
+                        <div class="tip-item"><span class="tip-num">②</span><span class="tip-text">路线偏好和出行方式都可以随时调整。</span></div>
                     </div>
                 </details>
             </section>
             <footer class="welcome-footer">
-                <button class="btn btn-primary welcome-start" data-close-welcome="true">✨ 开始漫步</button>
+                <button class="btn btn-primary welcome-start" data-close-welcome="true">开始使用</button>
                 <label class="welcome-dont-show">
                     <input type="checkbox" id="welcome_dont_show">
                     <span>以后不再显示</span>
@@ -586,6 +583,6 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261107-model-review-v1"></script>
+    <script src="/js/app.js?v=20261107-concise-dialogue-v1"></script>
 </body>
 </html>
