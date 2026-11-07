@@ -17,7 +17,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：main @ bbfeafc ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-07 20:50
+- 版本：main @ 2cf77d5 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-07 21:01
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v118 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
 <!-- FACTS:END -->
