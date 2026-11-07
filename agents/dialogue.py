@@ -50,7 +50,7 @@ def tool_schemas():
             item["function"]["description"] = ("核对具体地名并查询校园/在线目录记录；多分店返回候选，不擅自选定。"
                 "名称和坐标匹配不代表现场存在、营业或入口可通行。")
     schemas.extend([
-        _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。",
+        _function("update_task", "保存你理解的完整需求或本轮修订。只更新传入字段；继续任务保留其余条件。参数明确时，可在同一响应中与后续工具一起调用，服务器会先处理更新。已接受的字段不要重复提交。",
             {"relation": {"type": "string", "enum": ["new", "continue", "resume_route"]},
              "task_id": {"type": "string", "description": "续接或恢复时填写服务器提供的任务 ID"},
              "task_revision": {"type": "integer", "minimum": 0, "description": "所选任务的当前版本"},
@@ -100,6 +100,8 @@ def tool_schemas():
                    "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
                    "offset": {"type": "integer", "minimum": 0},
                    "limit": {"type": "integer", "minimum": 1, "maximum": 100}}, ("run_id", "section")),
+        _function("finish_turn", "仅当本轮所需工具都已明确且天气或已核验路线可直接交付时调用；可与任务更新和对应工具同轮调用。需要继续判断、查询路况、解释细节或交付地点卡片时不要调用。",
+                  {}),
     ])
     return schemas
 

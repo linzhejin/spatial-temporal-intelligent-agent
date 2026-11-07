@@ -20,6 +20,7 @@ from pathlib import Path
 import re
 import subprocess
 import time
+import traceback
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 import threading
@@ -27,6 +28,9 @@ from uuid import uuid4
 from urllib.parse import urlsplit
 
 from dotenv import dotenv_values
+
+EXPECTED_START_POI_ID = "poi_240"
+EXPECTED_SEARCH_ANCHOR_POI_ID = "poi_015"
 
 _PROVIDER_ENV = dotenv_values(os.environ.get("LUOJIA_PROVIDER_ENV", "/nonexistent"))
 _BUSINESS_DATABASE_URL = os.environ.get("DATABASE_URL") or _PROVIDER_ENV.get("DATABASE_URL")
@@ -124,12 +128,29 @@ def _point_record(row):
             "crs": coordinate.get("crs") or row.get("coordinate_system")}
 
 
-def _accepted_history_present(model_messages, accepted_history, current_query):
-    expected = []
-    for item in [*(accepted_history or []), {"role": "user", "content": current_query}]:
+def _accepted_model_messages(accepted_history, current_query):
+    return [
+        {"role": item["role"], "content": item["content"]}
+        for item in [*(accepted_history or []), {"role": "user", "content": current_query}]
         if (isinstance(item, dict) and item.get("role") in {"user", "assistant"}
-                and isinstance(item.get("content"), str)):
-            expected.append({"role": item["role"], "content": item["content"]})
+            and isinstance(item.get("content"), str))
+    ]
+
+
+def _failure_frames(error):
+    return [{"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+            for frame in traceback.extract_tb(error.__traceback__)[-8:]]
+
+
+def _has_restaurant_intent(place_request):
+    activities = set(place_request.get("activities") or [])
+    subcategories = set(place_request.get("subcategories") or [])
+    return bool(activities & {"restaurant_meal", "fast_food"}
+                or subcategories & {"restaurant", "fastfood"})
+
+
+def _accepted_history_present(model_messages, accepted_history, current_query):
+    expected = _accepted_model_messages(accepted_history, current_query)
     actual = [{"role": item.get("role"), "content": item.get("content")}
               for item in model_messages or [] if isinstance(item, dict)
               and item.get("role") in {"user", "assistant"}
@@ -275,7 +296,7 @@ def main():
             tracker.update({"endpoint_observations": [], "search_snapshots": [], "presentation_errors": [],
                             "call_count": 0, "last_failure_fingerprint": None, "same_request_failures": 0,
                             "conversation_id": None, "browser_errors": [], "map_resource_responses": [],
-                            "map_resource_requests": []})
+                            "map_resource_requests": [], "last_turn_summary": None})
             client = app.test_client()
             captured = []
             submissions = []
@@ -466,6 +487,16 @@ def main():
                           and (event.get("payload") or {}).get("phase") == "completed"]
                 assistant_text = result.get("assistant_text") or result.get("message") or result.get("reply") or ""
                 cards = result.get("candidates") or []
+                tracker["last_turn_summary"] = {
+                    "run_status": run.get("status"),
+                    "worker_status": submission.get("worker_status"),
+                    "response_kind": result.get("response_kind"),
+                    "failure_code": result.get("failure_code"),
+                    "candidate_count": len(cards),
+                    "rendered_card_count": page.locator(".candidate-card").count(),
+                    "assistant_text_length": len(assistant_text),
+                    "history_count": len(_accepted_model_messages(submission["history"], actual_query)),
+                }
                 if assistant_text:
                     expect(page.locator("#chat-content")).to_contain_text(assistant_text, timeout=15000)
                 browser_candidate_ids = []
@@ -531,7 +562,7 @@ def main():
                           "run_status": run.get("status"), "worker_status": submission["worker_status"],
                           "response_kind": result.get("response_kind"), "failure_code": result.get("failure_code"),
                           "model_calls_this_turn": len(turn_calls), "model_calls_session": tracker["call_count"],
-                          "history_count": len(expected),
+                          "history_count": len(_accepted_model_messages(submission["history"], actual_query)),
                           "all_accepted_messages_received": all_accepted_messages_received,
                           "assistant_text": assistant_text, "assistant_text_length": len(assistant_text),
                           "assistant_text_matches_persisted": submission.get("persisted_assistant_text") == assistant_text,
@@ -549,6 +580,8 @@ def main():
                           "task_id": run.get("task_id"), "task_revision": run.get("current_task_revision"),
                           "start": deepcopy(pending.get("start")), "search_anchor": deepcopy(pending.get("search_anchor")),
                           "search_radius_m": pending.get("search_radius_m"), "activities": pending.get("activities") or [],
+                          "subcategories": pending.get("subcategories") or [],
+                          "food_intent_present": _has_restaurant_intent(pending),
                           "selected_poi_id": pending.get("selected_poi_id"),
                           "end": deepcopy(result.get("end")), "route_state": deepcopy(result.get("route_state")),
                           "candidate_cards": [{"poi_id": item.get("poi_id"), "name": item.get("name"),
@@ -574,7 +607,17 @@ def main():
             first_run, first_result, first = turn(queries[0], expected_kind="candidates")
             turns.append(first)
             initial_ids = [item.get("poi_id") for item in first.get("candidate_cards") or []]
-            if (not initial_ids or first.get("search_radius_m") != 1000 or not first.get("activities")
+            first_start_records = [item for item in first["endpoint_observations"]
+                                   if item.get("role") == "start"]
+            first_anchor_records = [item for item in first["endpoint_observations"]
+                                    if item.get("role") == "search_anchor"]
+            if not any(item.get("poi_id") == EXPECTED_START_POI_ID for item in first_start_records):
+                return {"session": scenario["id"], "status": "failed", "failed_at": 1,
+                        "failure_code": "start_identity_mismatch", "turns": turns}
+            if not any(item.get("poi_id") == EXPECTED_SEARCH_ANCHOR_POI_ID for item in first_anchor_records):
+                return {"session": scenario["id"], "status": "failed", "failed_at": 1,
+                        "failure_code": "search_anchor_identity_mismatch", "turns": turns}
+            if (not initial_ids or first.get("search_radius_m") != 1000 or not first.get("food_intent_present")
                     or not first["all_accepted_messages_received"]
                     or not first["candidate_map_coordinates_match_cards"]
                     or first["loaded_real_map_tile_count"] < 1
@@ -586,7 +629,7 @@ def main():
             turns.append(second)
             if (not second.get("candidate_cards") or second.get("search_radius_m") != 1000
                     or second["task_id"] != first["task_id"]
-                    or not set(first["activities"]).issubset(set(second.get("activities") or []))
+                    or not second.get("food_intent_present")
                     or set(initial_ids) & {row["poi_id"] for row in second["candidate_cards"]}
                     or not second["all_accepted_messages_received"]):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 2, "turns": turns}
@@ -595,7 +638,7 @@ def main():
             turns.append(third)
             expanded_ids = {row["poi_id"] for row in third.get("candidate_cards") or []}
             if (third.get("search_radius_m") != 2000 or not expanded_ids
-                    or not set(first["activities"]).issubset(set(third.get("activities") or []))
+                    or not third.get("food_intent_present")
                     or expanded_ids & (set(initial_ids) | {row["poi_id"] for row in second["candidate_cards"]})
                     or third["task_id"] != first["task_id"] or not third["all_accepted_messages_received"]):
                 return {"session": scenario["id"], "status": "failed", "failed_at": 3, "turns": turns}
@@ -650,8 +693,12 @@ def main():
             card_records = [row for record in turns for row in record["candidate_cards"]]
             same_anchor = bool(anchor_identity) and all(_same_endpoint(anchor_identity, item)
                                                         for item in anchor_records[1:])
+            same_anchor = same_anchor and all(item.get("poi_id") == EXPECTED_SEARCH_ANCHOR_POI_ID
+                                              for item in anchor_records)
             same_start = bool(start_records) and all(_same_endpoint(start_records[0], item)
                                                      for item in start_records[1:])
+            same_start = same_start and all(item.get("poi_id") == EXPECTED_START_POI_ID
+                                            for item in start_records)
             selected_card = next((row for row in card_records if row.get("poi_id") == selected), None)
             same_selected = bool(selected_records and selected_card) and all(
                 _same_endpoint({"poi_id": selected, "coordinates": selected_card.get("coordinates")}, item)
@@ -662,9 +709,8 @@ def main():
                 len(distance_cards) == len(card_records) and all(
                 row.get("distance_reference_name") == anchor_identity.get("name") for row in distance_cards)
             )
-            activities = set(first.get("activities") or [])
-            activity_persisted = bool(activities) and all(
-                activities.issubset(set(row.get("activities") or [])) for row in turns[1:5])
+            food_intent_persisted = bool(first.get("food_intent_present")) and all(
+                row.get("food_intent_present") for row in turns[1:5])
             copy_ok = all(row["short_clean_user_copy"] and row["candidate_card_presentation_matches_result"]
                           and row["candidate_map_coordinates_match_cards"]
                           for row in turns[:3])
@@ -673,7 +719,7 @@ def main():
                                       and row["latest_bubble_matches_result"] for row in turns)
             browser_errors_clear = not tracker["browser_errors"]
             complete = (same_anchor and same_start and same_selected and correct_distance_reference
-                        and activity_persisted and copy_ok and browser_delivery_ok and browser_errors_clear)
+                        and food_intent_persisted and copy_ok and browser_delivery_ok and browser_errors_clear)
             screenshot = report_dir / (scenario["id"] + "_mobile-browser.png")
             page.screenshot(path=str(screenshot), full_page=True)
             screenshot_hash = sha256(screenshot.read_bytes()).hexdigest()
@@ -684,7 +730,7 @@ def main():
                     "search_anchor_identity": anchor_identity, "same_start_id_and_coordinates": same_start,
                     "same_anchor_id_and_coordinates": same_anchor, "selected_place_id_and_coordinates": same_selected,
                     "card_distance_reference_matches_anchor": correct_distance_reference,
-                    "meal_activity_persists_through_selection": activity_persisted,
+                    "food_intent_persists_through_selection": food_intent_persisted,
                     "all_recommendation_copy_short_and_clean": copy_ok,
                     "assistant_delivery_matches_persisted_chat": browser_delivery_ok,
                     "browser_errors_clear": browser_errors_clear,
@@ -703,7 +749,11 @@ def main():
                             session_record = {"session": scenario["id"], "status": "failed",
                                               "failure_type": type(error).__name__,
                                               "failure_code": str(getattr(error, "code", "") or "")[:80],
-                                              "provider_status": getattr(error, "status_code", None)}
+                                              "provider_status": getattr(error, "status_code", None),
+                                              "conversation_id": tracker.get("conversation_id"),
+                                              "model_calls": tracker.get("call_count", 0),
+                                              "last_turn_summary": deepcopy(tracker.get("last_turn_summary")),
+                                              "failure_frames": _failure_frames(error)}
                         global_record["sessions"].append(session_record)
                 finally:
                     browser.close()

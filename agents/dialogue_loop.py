@@ -111,6 +111,43 @@ def _failure(dialogue, message, code):
     return result
 
 
+def _successful_terminal_reply(dialogue, tool_names):
+    """Deliver verified terminal tool results without spending a second call to restate them."""
+    tool_names = set(tool_names)
+    if "finish_turn" not in tool_names:
+        return None
+    result_tools = tool_names - {"update_task", "finish_turn"}
+    if "get_weather" in result_tools and result_tools <= {"get_weather"}:
+        weather = dialogue.weather
+        if not isinstance(weather, dict):
+            return None
+        parts = []
+        condition = weather.get("weather")
+        if isinstance(condition, str) and condition.strip():
+            parts.append("武汉今天" + condition.strip() + "。")
+        temperature = weather.get("temperature")
+        if isinstance(temperature, (int, float)) and not isinstance(temperature, bool):
+            parts.append("气温" + str(temperature) + "℃。")
+        if weather.get("slippery") is True:
+            parts.append("路面可能湿滑。")
+        return "".join(parts) if parts else "武汉今天的天气信息已查到。"
+
+    if "plan_route" in result_tools and result_tools <= {"plan_route"}:
+        route = dialogue.route
+        verification = (route or {}).get("route_verification") if isinstance(route, dict) else None
+        if not isinstance(verification, dict) or verification.get("status") != "pass":
+            return None
+        state = route.get("route_state") or {}
+        strategy = state.get("strategy") or {}
+        if strategy.get("name") == "flat":
+            return "已按平坦偏好规划好路线。"
+        if strategy.get("name") == "shortest":
+            return "已按最短路线规划好。"
+        return "路线已规划好。"
+
+    return None
+
+
 def _finish_with_read_failures(dialogue, text, failures, successful_reads):
     """Keep verified partial results while reporting unresolved service failures."""
     if not failures:
@@ -247,6 +284,8 @@ def _run_dialogue_loop(dialogue):
         ], **({"reasoning_content": msg.reasoning_content}
               if getattr(msg, "reasoning_content", None) is not None else {})})
         final = None
+        finish_requested = False
+        response_had_tool_error = False
         parallel = {}
         reads = [call for call in calls if call.function.name in {"get_weather", "list_road_conditions"}]
         if len(reads) == 2 and len({call.function.name for call in reads}) == 2:
@@ -292,10 +331,15 @@ def _run_dialogue_loop(dialogue):
                 if not isinstance(args, dict) or name not in names:
                     raise ValueError("invalid tool or arguments")
                 if (dialogue.bind_task and dialogue.bound_task is None
-                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page", "read_result"}):
+                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page", "read_result", "finish_turn"}):
                     raise ValueError("task_binding_required: 先用 update_task 选择或创建任务")
                 if name == "update_task":
                     answer = dialogue.update(args)
+                elif name == "finish_turn":
+                    if args:
+                        raise ValueError("finish_turn does not accept arguments")
+                    finish_requested = True
+                    answer = {"accepted": True}
                 elif name == "browse_candidates":
                     answer = dialogue.browse_candidates(args)
                 elif name == "read_result":
@@ -335,6 +379,7 @@ def _run_dialogue_loop(dialogue):
                             and re.fullmatch(r"[A-Za-z0-9_-]{1,80}", answer["online_status"]) else None})
             dialogue.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
+            response_had_tool_error |= bool(answer.get("error"))
             if name in {"get_weather", "list_road_conditions"}:
                 code = answer.get("error")
                 if code in read_errors:
@@ -360,4 +405,10 @@ def _run_dialogue_loop(dialogue):
         if dialogue.clarify:
             return _finish_with_read_failures(dialogue, dialogue.clarify.get("question", "请补充具体要求。"),
                                               read_failures, successful_reads)
+        if finish_requested and not response_had_tool_error:
+            terminal_reply = _successful_terminal_reply(
+                dialogue, {call.function.name for call in calls}
+            )
+            if terminal_reply is not None:
+                return dialogue.result(terminal_reply)
     return _failure(dialogue, "本轮处理达到调用上限，已保留当前需求，请重试。", "tool_limit")

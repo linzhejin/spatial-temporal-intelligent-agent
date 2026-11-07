@@ -1,7 +1,14 @@
 import ast
 from pathlib import Path
 
-from scripts.model_conversation_smoke import _accepted_history_present, _check_user_copy, _point_record
+from scripts.model_conversation_smoke import (
+    _accepted_history_present,
+    _accepted_model_messages,
+    _check_user_copy,
+    _failure_frames,
+    _has_restaurant_intent,
+    _point_record,
+)
 
 
 def test_acceptance_copy_allows_short_plain_recommendation_without_repeating_cards():
@@ -50,6 +57,39 @@ def test_model_input_must_keep_the_complete_accepted_conversation_in_order():
     assert not _accepted_history_present([messages[0], *history[1:]], history, "扩大范围")
     reordered = [messages[0], history[1], history[0], history[2], *messages[4:]]
     assert not _accepted_history_present(reordered, history, "扩大范围")
+
+
+def test_accepted_model_messages_count_only_chat_text_and_include_current_query():
+    history = [
+        {"role": "user", "content": "从信图去总图附近吃饭"},
+        {"role": "assistant", "content": "总图附近可以看看这几家。"},
+        {"role": "tool", "content": "内部工具结果"},
+        {"role": "user", "content": None},
+    ]
+
+    assert _accepted_model_messages(history, "扩大范围") == [
+        {"role": "user", "content": "从信图去总图附近吃饭"},
+        {"role": "assistant", "content": "总图附近可以看看这几家。"},
+        {"role": "user", "content": "扩大范围"},
+    ]
+
+
+def test_acceptance_failure_trace_records_locations_without_exception_text():
+    try:
+        raise RuntimeError("sensitive message content")
+    except RuntimeError as error:
+        frames = _failure_frames(error)
+
+    assert frames[-1]["function"] == "test_acceptance_failure_trace_records_locations_without_exception_text"
+    assert all(set(frame) == {"file", "line", "function"} for frame in frames)
+    assert "sensitive message content" not in repr(frames)
+
+
+def test_restaurant_intent_can_be_preserved_as_activity_or_place_category():
+    assert _has_restaurant_intent({"activities": ["restaurant_meal"]})
+    assert _has_restaurant_intent({"subcategories": ["restaurant"]})
+    assert _has_restaurant_intent({"subcategories": ["fastfood"]})
+    assert not _has_restaurant_intent({"activities": [], "subcategories": ["library"]})
 
 
 def test_browser_acceptance_reads_the_playwright_response_status_property():

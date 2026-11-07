@@ -557,6 +557,77 @@ def test_successful_tool_retry_clears_earlier_weather_failure(monkeypatch):
     assert result["weather"]["weather"] == "晴"
 
 
+def test_successful_weather_tool_returns_the_checked_result_without_a_restatement_call(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, model = make_dialogue("武汉今天的天气怎么样？", replies=[
+        reply(update_task={"relation": "new", "operation": "weather"},
+              get_weather={}, finish_turn={}),
+    ])
+    executed = []
+    dialogue.bind_task = lambda **_kwargs: (
+        executed.append("bind_task") or {"task_id": "task", "task_revision": 1}
+    )
+    dialogue.execute_tool = lambda _name, _args, _context: (
+        executed.append("get_weather") or
+        {"weather": "晴", "temperature": 22, "windpower": "微风", "slippery": False}, None,
+    )
+
+    result = dialogue.run()
+
+    assert model.call_count == 1
+    assert executed == ["bind_task", "get_weather"]
+    assert result["weather"]["weather"] == "晴"
+    assert result["message"] == "武汉今天晴。气温22℃。"
+
+
+def test_weather_is_not_delivered_early_without_model_finish_signal(monkeypatch):
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    dialogue, model = make_dialogue("武汉今天的天气怎么样？", replies=[
+        reply(get_weather={}), reply("武汉今天晴。"),
+    ])
+    dialogue.execute_tool = lambda _name, _args, _context: (
+        {"weather": "晴", "temperature": 22}, None,
+    )
+
+    result = dialogue.run()
+
+    assert model.call_count == 2
+    assert result["message"] == "武汉今天晴。"
+
+
+def test_verified_direct_route_returns_the_checked_result_without_a_restatement_call(monkeypatch):
+    from agents import tools
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(tools, "_prepare_route_context", lambda _context: ({}, None))
+    dialogue, model = make_dialogue("尽量走平坦些", replies=[
+        reply(plan_route={}, finish_turn={}), reply("已按平坦偏好规划好路线。"),
+    ])
+    route = {"route_verification": {"status": "pass"},
+             "route_state": {"strategy": {"name": "flat"}}}
+    dialogue.execute_tool = lambda _name, _args, _context: ({"status": "ok"}, {"route": route})
+
+    result = dialogue.run()
+
+    assert model.call_count == 1
+    assert result["response_kind"] == "route"
+    assert result["route"]["route_verification"]["status"] == "pass"
+    assert result["message"] == "已按平坦偏好规划好路线。"
+
+
+def test_finish_turn_schema_is_explicit_and_has_no_user_supplied_content():
+    from agents.dialogue import tool_schemas
+
+    schema = next(item["function"] for item in tool_schemas()
+                  if item["function"]["name"] == "finish_turn")
+
+    assert schema["parameters"] == {
+        "type": "object", "properties": {}, "required": [], "additionalProperties": False,
+    }
+    assert "天气或已核验路线" in schema["description"]
+    assert "不要调用" in schema["description"]
+
+
 def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     dialogue, model = make_dialogue("天气如何", replies=[reply(get_weather={}) for _ in range(3)])
@@ -575,7 +646,8 @@ def test_repeated_weather_failure_reports_service_cause_not_validation(monkeypat
 def test_road_failure_keeps_successful_weather_as_partial_result(monkeypatch):
     monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
     dialogue, _ = make_dialogue("天气和路况如何", replies=[
-        reply(get_weather={}), reply(list_road_conditions={}), reply("天气晴，路况暂不可用。"),
+        reply(get_weather={}, list_road_conditions={}, finish_turn={}),
+        reply("天气晴，路况暂不可用。"),
     ])
     dialogue.execute_tool = lambda name, args, context: (
         ({"weather": "晴"}, None) if name == "get_weather"
