@@ -31,7 +31,7 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：codex/luojia-system-release-20261105 @ eac3c23 ｜ origin/main 本地领先 2 ｜ gitee/main 本地领先 2 ｜ 生成于 2026-11-07 16:38
+- 版本：codex/luojia-system-release-20261105 @ a16c14c ｜ origin/main 本地领先 15 ｜ gitee/main 本地领先 15 ｜ 生成于 2026-11-07 21:43
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v120 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 16（最新 016）
 <!-- FACTS:END -->
