@@ -10,6 +10,7 @@
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
   state.djiSubtitleStatusBase = '';
+  state.djiCameraPose = null;
   state.captureTimeEdited = false;
   state.captureTimeAutoValue = '';
   state.eventPublishBusy = false;
@@ -130,6 +131,7 @@
       gpsPointCount: gps.pointCount,
       gpsTimedPointCount: gps.timedPointCount,
       gpsTrackSampled: gps.pointCount > MAX_DJI_TRACK_DISPLAY_POINTS,
+      cameraPose: parseDjiPoseTrack(value),
     };
   }
 
@@ -183,6 +185,89 @@
     return { pointCount: pointCount, timedPointCount: timedPointCount, points: points };
   }
 
+  function parseDjiPoseTrack(value) {
+    var pointCount = 0;
+    var points = [];
+    var stride = 1;
+    var poseFieldPattern = /\b(latitude|longitude|rel_alt|abs_alt|yaw|gb_yaw|gb_pitch|focal_len)\s*:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
+    function poseFields(line) {
+      var fields = {};
+      var field;
+      poseFieldPattern.lastIndex = 0;
+      while ((field = poseFieldPattern.exec(line))) fields[field[1].toLowerCase()] = Number(field[2]);
+      return fields;
+    }
+    function buildPosePoint(fields, cueTimeSeconds) {
+      return {
+        seconds: cueTimeSeconds,
+        lng: fields.longitude,
+        lat: fields.latitude,
+        rel_alt_m: Number.isFinite(fields.rel_alt) ? fields.rel_alt : null,
+        abs_alt_m: Number.isFinite(fields.abs_alt) ? fields.abs_alt : null,
+        yaw_deg: Number.isFinite(fields.yaw) ? fields.yaw : null,
+        gb_yaw_deg: Number.isFinite(fields.gb_yaw) ? fields.gb_yaw : null,
+        gb_pitch_deg: Number.isFinite(fields.gb_pitch) ? fields.gb_pitch : null,
+        focal_len_35mm: Number.isFinite(fields.focal_len) ? fields.focal_len : null,
+      };
+    }
+    function scanPosePoints(visit) {
+      var linePattern = /[^\r\n]+/g;
+      var lineMatch;
+      var cueTimeSeconds = null;
+      while ((lineMatch = linePattern.exec(value))) {
+        var timecode = /^\s*(\d{2,}):([0-5]\d):([0-5]\d)[,.](\d{1,3})\s*-->/.exec(lineMatch[0]);
+        if (timecode) {
+          cueTimeSeconds = Number(timecode[1]) * 3600 + Number(timecode[2]) * 60
+            + Number(timecode[3]) + Number((timecode[4] + '00').slice(0, 3)) / 1000;
+        }
+        var fields = poseFields(lineMatch[0]);
+        var lat = fields.latitude;
+        var lng = fields.longitude;
+        if (Number.isFinite(lat) && Number.isFinite(lng) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180
+          && !(lat === 0 && lng === 0)) visit(buildPosePoint(fields, cueTimeSeconds));
+      }
+    }
+    scanPosePoints(function (_point) { pointCount += 1; });
+    if (!pointCount) return { parsed: false, pointCount: 0, sampled: false, points: [] };
+    stride = Math.max(1, Math.ceil(pointCount / MAX_DJI_GPS_STORED_POINTS));
+    var sampled = pointCount > MAX_DJI_GPS_STORED_POINTS;
+    var index = 0;
+    var lastPoint = null;
+    var lastStoredIndex = -1;
+    scanPosePoints(function (point) {
+      if (index % stride === 0) {
+        points.push(point);
+        lastStoredIndex = index;
+      }
+      lastPoint = point;
+      index += 1;
+    });
+    if (lastPoint && lastStoredIndex !== pointCount - 1) points.push(lastPoint);
+    return { parsed: true, pointCount: pointCount, sampled: sampled, points: points };
+  }
+
+  function convertPoseForUpload(cameraPose) {
+    return {
+      crs: 'WGS84',
+      parsed: !!cameraPose.parsed,
+      point_count: cameraPose.pointCount,
+      sampled: !!cameraPose.sampled,
+      trajectory: cameraPose.points.map(function (point) {
+        return {
+          seconds: point.seconds,
+          lng: point.lng,
+          lat: point.lat,
+          rel_alt_m: point.rel_alt_m,
+          abs_alt_m: point.abs_alt_m,
+          yaw_deg: point.yaw_deg,
+          gb_yaw_deg: point.gb_yaw_deg,
+          gb_pitch_deg: point.gb_pitch_deg,
+          focal_len_35mm: point.focal_len_35mm,
+        };
+      }),
+    };
+  }
+
   function transformLatitude(x, y) {
     var result = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
     result += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
@@ -227,6 +312,7 @@
     clearDjiTrackPreview();
     state.djiTrackPoints = [];
     state.djiSubtitleStatusBase = '';
+    state.djiCameraPose = null;
     var button = byId('show-dji-track');
     if (button) button.hidden = true;
   }
@@ -363,6 +449,7 @@
         status.textContent = '没有找到有效的拍摄时间，仍可手动填写后提交。'; return;
       }
       state.djiTrackPoints = metadata.gpsPoints;
+      state.djiCameraPose = metadata.cameraPose;
       byId('show-dji-track').hidden = !metadata.gpsPoints.length;
       var captureInput = byId('captured-at');
       var canApply = !state.captureTimeEdited
@@ -386,6 +473,17 @@
           + (metadata.gpsTimedPointCount ? '字幕含视频时间码；如时间范围匹配，播放或拖动视频时会显示时间最近的机身位置。'
             : '字幕没有可用于视频对时的时间码，只显示整段航迹。')
           + '机身航迹仅供查看无人机飞行位置，不能表示镜头拍到的地面位置或道路通行情况。';
+      }
+      if (metadata.cameraPose && metadata.cameraPose.parsed) {
+        var relAlts = metadata.cameraPose.points.map(function (point) { return point.rel_alt_m; })
+          .filter(function (value) { return Number.isFinite(value); });
+        var poseText = ' 读到 ' + metadata.cameraPose.pointCount + ' 个机身姿态点';
+        if (relAlts.length) {
+          poseText += '；高度约 ' + Math.round(Math.min.apply(null, relAlts)) + '–'
+            + Math.round(Math.max.apply(null, relAlts)) + ' 米';
+        }
+        poseText += '。机身姿态仅用于影像地理配准研究，不代表镜头拍到的地面位置。';
+        status.textContent += poseText;
       }
       state.djiSubtitleStatusBase = status.textContent;
       updateDjiSubtitleTimelineStatus();
@@ -1814,7 +1912,7 @@
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance, observationRegions, sceneId) {
+  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance, observationRegions, sceneId, cameraPose) {
     var pending = readPendingVisionUpload();
     var matchingPending = fileMatchesPending(file, pending) &&
       pending.camera_stabilized === cameraStabilized &&
@@ -1850,6 +1948,7 @@
         observation_regions: observationRegions || [],
       };
       if (sceneId) uploadMetadata.scene_id = sceneId;
+      if (cameraPose) uploadMetadata.camera_pose = JSON.stringify(convertPoseForUpload(cameraPose));
       if (state.anchor) {
         uploadMetadata.lng = state.anchor.lng;
         uploadMetadata.lat = state.anchor.lat;
@@ -2828,7 +2927,7 @@
       var data;
       if (video) {
         data = await uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance,
-          observationRegions, state.observationSceneId);
+          observationRegions, state.observationSceneId, state.djiCameraPose || null);
       } else {
         var form = new FormData(); form.append('media', file);
         form.append('camera_stabilized', String(cameraStabilized));
