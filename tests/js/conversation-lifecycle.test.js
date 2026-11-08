@@ -85,6 +85,7 @@ function harness(storage = new Map(), nativeSession = null) {
         var realRenderRoute = renderRoute;
         var realRenderClarifyOptions = renderClarifyOptions;
         var realShowSuggestions = showSuggestions;
+        var realClearMap = clearMap;
         [${['hideError','hideWelcomeElements','hideLoading',
             'renderClarifyOptions','renderCandidateCards','renderRouteComparison','renderRouteComparisonCard','syncModeFromServer','showResults','trackRouteShown','showTopBanner',
             'applyProductMode','loadTravelMode','bindEvents','syncTravelModeUI','syncRouteStrategyUI',
@@ -133,6 +134,7 @@ function harness(storage = new Map(), nativeSession = null) {
             setQueuedApi: function (fn) { apiRequest = fn; submitQueuedMessage = realSubmitQueuedMessage; },
             setRawApi: function (fn) { apiRequest = fn; },
             setFocus: function (fn) { focusPoiOnMap = fn; },
+            clearMap: realClearMap,
             focus: focusPoiOnMap };
     })();`, context);
     context.app.state.productMode = 'planning';
@@ -2317,4 +2319,23 @@ test('focusing a POI leaves route via-point and candidate pins intact', () => {
     assert.deepEqual(h.state.poiMarkers, [viaPin, candidatePin]);
     assert.equal(removed.length, 0);
     assert.ok(h.state.poiFocusMarker);
+});
+
+test('clearing the map removes the focused POI marker and nulls the state field', () => {
+    const h = harness();
+    const removed = [];
+    h.state.map = { setView() {}, removeLayer: marker => removed.push(marker) };
+    h.context.L = {
+        divIcon: options => options,
+        marker: (latlng, options) => ({ latlng, options, addTo() { return this; } }),
+    };
+
+    h.focus({ name: '图书馆', lng: 114.3, lat: 30.5 });
+    const marker = h.state.poiFocusMarker;
+    assert.ok(marker);
+
+    h.clearMap();
+
+    assert.deepEqual(removed, [marker]);
+    assert.equal(h.state.poiFocusMarker, null);
 });

@@ -1811,6 +1811,10 @@
         }
         state.poiMarkers.forEach(function (m) { state.map.removeLayer(m); });
         state.poiMarkers = [];
+        if (state.poiFocusMarker) {
+            state.map.removeLayer(state.poiFocusMarker);
+            state.poiFocusMarker = null;
+        }
     }
 
     // ===================== 路况事件 =====================
