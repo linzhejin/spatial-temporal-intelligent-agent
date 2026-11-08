@@ -2890,16 +2890,31 @@
     refreshImpactPreview();
   }
 
+  function visionJobsInteractionActive(root) {
+    if (!root || !document.activeElement) return false;
+    if (typeof root.contains !== 'function' || !root.contains(document.activeElement)) return false;
+    var active = document.activeElement;
+    var tag = String(active.tagName || active.nodeName || '').toUpperCase();
+    if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
+    var node = active;
+    while (node && node !== root) {
+      if (node.classList && typeof node.classList.contains === 'function' &&
+          node.classList.contains('candidate-card')) return true;
+      var cls = node.className;
+      if (typeof cls === 'string' && /(^|\s)vision-review-/.test(cls)) return true;
+      node = node.parentNode;
+    }
+    return false;
+  }
+
   async function refreshVisionJobs(force) {
     if (!byId('workspace') || byId('workspace').hidden) return;
     if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
-    if (!force && document.activeElement && document.activeElement.classList &&
-        document.activeElement.classList.contains('vision-review-note')) return;
     var root = byId('vision-jobs');
+    if (!force && visionJobsInteractionActive(root)) { visionJobsRefreshDeferred = true; return; }
     try {
       var data = await request('/api/manager/vision-jobs?limit=20', 'GET');
-      if (!force && document.activeElement && document.activeElement.classList &&
-          document.activeElement.classList.contains('vision-review-note')) return;
+      if (!force && visionJobsInteractionActive(root)) { visionJobsRefreshDeferred = true; return; }
       if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
       var jobs = (data.jobs || []).filter(function (job) { return !isVisionJobHidden(job.job_id); });
       if (force) {

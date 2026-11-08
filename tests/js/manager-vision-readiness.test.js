@@ -59,9 +59,13 @@ function managerHarness(sessionSeed = []) {
         toggle: (value, force) => force ? classes.add(value) : classes.delete(value),
       },
       addEventListener: (name, callback) => { listeners[name] = callback; },
-      appendChild(child) { this.children.push(child); return child; },
-      append(...children) { this.children.push(...children); },
-      replaceChildren(...children) { this.children = children; },
+      contains(other) {
+        if (this === other) return true;
+        return (this.children || []).some((child) => child && typeof child.contains === 'function' && child.contains(other));
+      },
+      appendChild(child) { this.children.push(child); if (child) child.parentNode = this; return child; },
+      append(...children) { this.children.push(...children); children.forEach((child) => { if (child) child.parentNode = this; }); },
+      replaceChildren(...children) { this.children = children; children.forEach((child) => { if (child) child.parentNode = this; }); },
       click() { this.clickCount += 1; },
       scrollIntoView() { this.scrollCount += 1; },
       getBoundingClientRect() { return { left: 0, top: 0, width: 100, height: 100 }; },
@@ -1876,4 +1880,58 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
     'the re-snap must re-check the suggested edge snap longitude');
   assert.match(snapCalls[0].url, /lat=30\.53/,
     'the re-snap must re-check the suggested edge snap latitude');
+});
+
+test('vision list refresh defers while the manager focuses a control inside a job card', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'job-focus-button', status: 'needs_review', media_kind: 'image', original_name: '聚焦卡片.png',
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const root = harness.elements.get('vision-jobs');
+  const firstCard = root.children[0];
+  const dismiss = descendants(firstCard).find((node) => node.tagName === 'button' && node.textContent === '排除此候选');
+  assert.ok(dismiss, 'the candidate card should expose its dismiss control');
+  harness.document.activeElement = dismiss;
+  const jobsRequests = () => harness.calls.filter((call) => call.url === '/api/manager/vision-jobs?limit=20').length;
+  const before = jobsRequests();
+  harness.intervalCallbacks[0]();
+  await flush();
+  assert.equal(jobsRequests(), before, 'poll must skip the vision fetch while a job-card control is focused');
+  assert.equal(root.children[0], firstCard, 'poll must not rebuild the list while interacting with a job-card control');
+
+  harness.document.activeElement = null;
+  harness.setVisionJobs([{
+    job_id: 'job-focus-button', status: 'needs_review', media_kind: 'image', original_name: '聚焦卡片-更新.png',
+    result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  assert.notEqual(root.children[0], firstCard, 'poll must apply the queued update once the control is unfocused');
+  assert.match(descendants(root).map((node) => node.textContent || '').join(' '), /聚焦卡片-更新/);
+});
+
+test('vision list refresh still runs when focus sits on the workspace form, not a job card', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'job-workspace-focus', status: 'needs_review', media_kind: 'image', original_name: '卡片.png',
+    result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const root = harness.elements.get('vision-jobs');
+  const firstCard = root.children[0];
+  harness.document.activeElement = harness.elements.get('event-name');
+  harness.setVisionJobs([{
+    job_id: 'job-workspace-focus', status: 'needs_review', media_kind: 'image', original_name: '卡片-更新.png',
+    result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  assert.notEqual(root.children[0], firstCard,
+    'focus outside the vision jobs area must not block the periodic refresh');
 });
