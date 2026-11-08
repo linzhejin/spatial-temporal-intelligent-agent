@@ -150,7 +150,7 @@ Query 参数：`type`（类型）、`season`（spring/summer/autumn/winter）、
 
 ### POST /api/road-conditions ⚠️ 管理员
 
-事件由**服务端吸附到最近路段**（30m 容差），不接受手填 geometry/半径：
+事件由服务端绑定到当前路网（30m 容差），不接受手填 geometry/半径。旧客户端不传边标识时吸附到最近路段：
 
 ```json
 {
@@ -165,12 +165,14 @@ Query 参数：`type`（类型）、`season`（spring/summer/autumn/winter）、
 ```
 
 - `type`：`closure` 封闭 / `construction` 施工 / `flooding` 积水 / `accident` 事故 / `event` 活动
+- 可选 `edge_ref: {"u": 1, "v": 2, "key": 0}` 指定预览时选定的边；必须同时提交该方向预览返回的 `binding_token`。服务端重算边和几何，并校验点击距离、方向和路网版本；双向事件也需要校验该指纹。
+- 指定边已不存在、预览指纹失效或路网变化时返回 409 `road_binding_changed`，客户端需刷新并重新确认；不会自动改绑其他边。边标识格式无效返回 400 `invalid_edge_ref`。
 - 时间均可省略：省略 start=立即生效，省略 end=长期有效；支持 ISO 字符串或时间戳
 - 201 返回 `{"condition": {...}, "snap": {...}}`
 
 ### GET /api/road-conditions/snap ⚠️ 管理员
 
-`?lng=&lat=` 选点预览：把点击点吸附到最近路段，返回边标识、吸附点（GCJ-02）、道路名、几何，供前端画预览线。
+`?lng=&lat=` 选点预览：默认吸附到最近路段。可选同时传入 `u`、`v`、`key`，让服务端验证指定边；不能只传其中一部分。返回当前边标识、吸附点（GCJ-02）、道路名、几何和与方向绑定的 `binding_token`。指定边距离点击点超过 30 米时拒绝；边不存在时返回 409，不回退到其他边。
 
 ### PATCH /api/road-conditions/&lt;id&gt; ⚠️ 管理员
 
@@ -205,12 +207,13 @@ Query 参数：`type`（类型）、`season`（spring/summer/autumn/winter）、
 
 图片继续通过 `POST /api/manager/vision-jobs` 上传，默认上限 24 MiB。视频使用分块续传，默认上限 1 GiB、每块 8 MiB；续传会话 24 小时未更新后过期。以下写接口需要管理员登录和 CSRF token。
 
-- `POST /api/manager/vision-uploads`：JSON 提交 `filename`、`size`、必填 `captured_at`（Unix 秒或带时区 ISO 时间）、可选 `lng`、`lat`、`camera_stabilized` 和归一化 `observation_regions`，返回 `upload_id`、`offset`、`chunk_size`。经纬度可缺省，但发布路况前仍须在地图上确认具体道路。
+- `POST /api/manager/vision-uploads`：JSON 提交 `filename`、`size`、必填 `captured_at`（Unix 秒或带时区 ISO 时间）、可选 `lng`、`lat`、`camera_stabilized`、归一化 `observation_regions` 和 `camera_pose`，返回 `upload_id`、`offset`、`chunk_size`。姿态接受对象或 JSON 字符串；原始 SRT 数据不代表完成标定。经纬度可缺省，但发布路况前仍须在地图上确认具体道路。
 - `GET /api/manager/vision-uploads/<upload_id>`：读取服务器确认的续传偏移 `offset`。
 - `PUT /api/manager/vision-uploads/<upload_id>/chunks`：请求体为当前视频二进制分块，使用 `Upload-Offset` 请求头声明起始字节。服务端只接受与已确认偏移连续的分块。
 - `POST /api/manager/vision-uploads/<upload_id>/complete`：校验文件头和完整长度后，将视频放入影像任务队列。
 - `POST /api/manager/vision-jobs/<job_id>/cancel` 与 `/retry`：取消任务，或从最后完成的视频分段重新排队。
 - `POST /api/manager/vision-jobs/<job_id>/candidates/<index>/review`：逐项确认或排除候选并保存审核依据。
+- `GET /api/manager/vision-jobs/<job_id>/suggested-edges`：返回参考点附近的道路及 `basis: "radius_only"`；没有邻近道路时返回空数组，查询失败返回 503 `road_suggestions_unavailable`。该结果不是已校准的影像定位，仍须人工复核和确认道路。
 - 影像来源路况事件必须关联已确认候选、拍摄时间、管理员选定的道路、现场核实依据和未来结束时间；超出配置时效的影像不能发布为当前路况。
 
 ## 行为埋点
