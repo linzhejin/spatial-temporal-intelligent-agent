@@ -33,6 +33,58 @@ except ImportError:
 RUN_E2E = os.getenv("RUN_MANAGER_VISION_BACKEND_E2E") == "1" and sync_playwright is not None
 
 
+@pytest.fixture(autouse=True)
+def _reset_network_cache(monkeypatch):
+    """每个用例独立加载路网，不借用前用例留下的模块级缓存状态。"""
+    import api.routes as routes
+    from spatial import network
+
+    monkeypatch.setattr(network, "_G", None)
+    monkeypatch.setattr(network, "_annotation_coverage_rate", None)
+    monkeypatch.setattr(routes, "_network_initialized", False)
+
+
+def _real_network_anchor():
+    """从正式路网取一条边的几何中点，转 GCJ 作为稳定 anchor。"""
+    from spatial import network
+    from spatial.coord_transform import wgs84_to_gcj02
+
+    graph = network.get_network()
+    if graph is None:
+        graph = network.load_or_download_network()
+    if graph is None or graph.number_of_edges() == 0:
+        pytest.skip("real road network unavailable")
+
+    try:
+        from shapely import wkt
+        from shapely.geometry import LineString
+    except ImportError:
+        pytest.skip("shapely unavailable for edge geometry")
+
+    for u, v, _, data in graph.edges(keys=True, data=True):
+        geometry = data.get("geometry")
+        if not geometry:
+            continue
+        if isinstance(geometry, str):
+            try:
+                geometry = wkt.loads(geometry)
+            except Exception:
+                geometry = None
+        if geometry is None or not hasattr(geometry, "geom_type"):
+            geometry = LineString([
+                (float(graph.nodes[u]["x"]), float(graph.nodes[u]["y"])),
+                (float(graph.nodes[v]["x"]), float(graph.nodes[v]["y"])),
+            ])
+        if geometry.geom_type != "LineString" or geometry.is_empty:
+            continue
+        midpoint = geometry.interpolate(0.5, normalized=True)
+        wgs_lng, wgs_lat = float(midpoint.x), float(midpoint.y)
+        gcj_lng, gcj_lat = wgs84_to_gcj02(wgs_lng, wgs_lat)
+        return {"lng": gcj_lng, "lat": gcj_lat, "wgs": {"lng": wgs_lng, "lat": wgs_lat}}
+
+    pytest.skip("real road network has no usable edge geometry")
+
+
 @pytest.mark.skipif(
     not RUN_E2E,
     reason="set RUN_MANAGER_VISION_BACKEND_E2E=1 and install Playwright Chromium",
@@ -411,6 +463,7 @@ def _vision_manager_http_client(monkeypatch, tmp_path):
 
 def test_vision_suggested_edges_endpoint(monkeypatch, tmp_path):
     database.initialize(DATABASE_URL)
+    anchor = _real_network_anchor()
     client = _vision_manager_http_client(monkeypatch, tmp_path)
     job = vision_repository.create_job(
         DATABASE_URL,
@@ -419,7 +472,7 @@ def test_vision_suggested_edges_endpoint(monkeypatch, tmp_path):
         media_kind="image",
         media_path="unused.png",
         sha256="b" * 64,
-        anchor_gcj={"lng": 114.363, "lat": 30.5365},
+        anchor_gcj={"lng": anchor["lng"], "lat": anchor["lat"]},
     )
     try:
         response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
@@ -445,9 +498,8 @@ def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
         import vision.registration as reg
     except ImportError:
         reg = None
-    from spatial.coord_transform import gcj02_to_wgs84
 
-    wgs_lng, wgs_lat = gcj02_to_wgs84(114.363, 30.5365)
+    anchor = _real_network_anchor()
     client = _vision_manager_http_client(monkeypatch, tmp_path)
     job = vision_repository.create_job(
         DATABASE_URL,
@@ -456,7 +508,7 @@ def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
         media_kind="image",
         media_path="unused.png",
         sha256="d" * 64,
-        anchor_gcj={"lng": 114.363, "lat": 30.5365, "crs": "GCJ02"},
+        anchor_gcj={"lng": anchor["lng"], "lat": anchor["lat"], "crs": "GCJ02"},
         camera_pose={
             "crs": "WGS84",
             "parsed": True,
@@ -464,8 +516,8 @@ def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
             "sampled": False,
             "trajectory": [{
                 "seconds": 0.0,
-                "lng": wgs_lng,
-                "lat": wgs_lat,
+                "lng": anchor["wgs"]["lng"],
+                "lat": anchor["wgs"]["lat"],
                 "rel_alt_m": 80.0,
                 "yaw_deg": 0.0,
                 "gb_yaw_deg": 0.0,
