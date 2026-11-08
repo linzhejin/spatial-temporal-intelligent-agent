@@ -2796,6 +2796,12 @@
     card.appendChild(button);
   }
 
+  function suggestedBasisLabel(basis) {
+    if (basis === 'mask_projection') return '按影像轮廓投影排序';
+    if (basis === 'pose_footprint') return '按拍摄范围排序';
+    return '邻近路段参考';
+  }
+
   function appendSuggestedEdges(card, job, edges) {
     var list = Array.isArray(edges) ? edges : [];
     if (!list.length) return; // 无候选时不渲染，保持复核页整洁
@@ -2812,12 +2818,18 @@
       summary.textContent = (edge.road_name || '未命名道路') + ' · 吸附偏移约 ' +
         Math.round(Number(edge.dist_m) || 0) + ' 米' +
         (edge.chain_length_m ? ' · ' + Math.round(Number(edge.chain_length_m)) + ' 米路段' : '');
+      var basisLine = document.createElement('p');
+      basisLine.className = 'suggested-basis';
+      basisLine.textContent = suggestedBasisLabel(edge.basis) +
+        (Number.isFinite(edge.score) && edge.score > 0
+          ? ' · 匹配度 ' + Math.round(edge.score * 100) + '%'
+          : '');
       var locateButton = document.createElement('button');
       locateButton.type = 'button';
       locateButton.className = 'outline-button';
       locateButton.textContent = '在地图定位并预填发布落点';
       locateButton.addEventListener('click', function () { pickSuggestedEdge(job, edge); });
-      item.append(summary, locateButton);
+      item.append(summary, basisLine, locateButton);
       section.appendChild(item);
     });
     if (section.children.length > 1) card.appendChild(section);

@@ -428,6 +428,88 @@ def test_vision_suggested_edges_endpoint(monkeypatch, tmp_path):
         assert isinstance(data["suggested_edges"], list)
         assert data["suggested_edges"]
         assert data["suggested_edges"][0]["road_name"]
+        assert isinstance(data["basis"], str)
+        assert data["basis"] in {"mask_projection", "pose_footprint", "radius_only"}
+        for item in data["suggested_edges"]:
+            assert "score" in item and isinstance(item["score"], (int, float))
+            assert 0 <= item["score"] <= 1
+            assert "basis" in item
+    finally:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
+
+
+def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
+    database.initialize(DATABASE_URL)
+    try:
+        import vision.registration as reg
+    except ImportError:
+        reg = None
+    from spatial.coord_transform import gcj02_to_wgs84
+
+    wgs_lng, wgs_lat = gcj02_to_wgs84(114.363, 30.5365)
+    client = _vision_manager_http_client(monkeypatch, tmp_path)
+    job = vision_repository.create_job(
+        DATABASE_URL,
+        created_by="web",
+        original_name="suggested-edges-pose.png",
+        media_kind="image",
+        media_path="unused.png",
+        sha256="d" * 64,
+        anchor_gcj={"lng": 114.363, "lat": 30.5365, "crs": "GCJ02"},
+        camera_pose={
+            "crs": "WGS84",
+            "parsed": True,
+            "point_count": 1,
+            "sampled": False,
+            "trajectory": [{
+                "seconds": 0.0,
+                "lng": wgs_lng,
+                "lat": wgs_lat,
+                "rel_alt_m": 80.0,
+                "yaw_deg": 0.0,
+                "gb_yaw_deg": 0.0,
+                "gb_pitch_deg": -90.0,
+                "focal_len_35mm": 24.0,
+            }],
+        },
+    )
+    try:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute(
+                "UPDATE manager_vision_job SET result=%s WHERE job_id=%s",
+                (
+                    Jsonb({
+                        "media": {"kind": "image", "width": 1000, "height": 1000},
+                        "candidates": [{
+                            "kind": "possible_flooding",
+                            "confidence": 0.8,
+                            "reason": "测试",
+                            "evidence": {
+                                "summary": {
+                                    "region_id": "road-surface",
+                                    "water_evidence_type": "flooded_road",
+                                    "outline_time_seconds": 0.0,
+                                    "outline_polygons": [
+                                        [[0.25, 0.25], [0.75, 0.25], [0.75, 0.75], [0.25, 0.75]],
+                                    ],
+                                },
+                                "segments": [],
+                            },
+                        }],
+                    }),
+                    job["job_id"],
+                ),
+            )
+        response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
+        assert response.status_code == 200, response.get_json()
+        data = response.get_json()["data"]
+        if reg is not None:
+            assert data["basis"] == "mask_projection", data["basis"]
+            assert any(item["score"] > 0 for item in data["suggested_edges"])
+        else:
+            assert data["basis"] in {"pose_footprint", "radius_only"}
+            assert data["suggested_edges"]
     finally:
         with database.connect(DATABASE_URL) as conn:
             conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
