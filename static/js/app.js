@@ -2792,7 +2792,10 @@
         var lat = poi.lat;
         if (lng == null || lat == null) return;
 
-        var pillHtml = '<div class="whu-map-pill whu-map-pill-poi">' + (poi.name || 'POI') + '</div>';
+        // 聚焦单个 POI 前先清掉此前叠加的标记，避免连续查询堆叠。
+        state.poiMarkers.forEach(function (m) { state.map.removeLayer(m); });
+        state.poiMarkers = [];
+        var pillHtml = '<div class="whu-map-pill whu-map-pill-poi">' + escapeHtml(poi.name || 'POI') + '</div>';
         var marker = divMarker(gcjToLatLng(lng, lat), pillHtml, [0, 0], [0, 0], poi.name || '')
             .addTo(state.map);
         state.poiMarkers.push(marker);

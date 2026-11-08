@@ -2241,3 +2241,62 @@ test('a rejected older clarification does not show stale options', async () => {
     assert.equal(h.state.pendingServerTaskId, 'newer-task');
     assert.match(h.bubbles.at(-1).text, /过期/);
 });
+
+test('POI focus escapes the POI name in its map marker label', () => {
+    const h = harness();
+    // The harness document has no DOM, so give escapeHtml a minimal textContent→innerHTML
+    // transform to verify the marker label in this VM environment.
+    h.context.document.createElement = () => {
+        const el = { _text: '' };
+        Object.defineProperties(el, {
+            textContent: {
+                get() { return this._text; },
+                set(value) { this._text = value; },
+            },
+            innerHTML: {
+                get() {
+                    return String(this._text).replace(/[&<>"']/g, c =>
+                        ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+                },
+            },
+        });
+        return el;
+    };
+    const htmls = [];
+    h.state.map = { setView() {}, removeLayer() {} };
+    h.context.L = {
+        divIcon: options => options,
+        marker: (latlng, options) => {
+            const marker = { latlng, options, addTo() { return this; } };
+            htmls.push(options.icon.html);
+            return marker;
+        },
+    };
+
+    h.focus({ name: '<img src=x onerror=alert(1)>', lng: 114.3, lat: 30.5 });
+
+    assert.equal(htmls[0],
+        '<div class="whu-map-pill whu-map-pill-poi">&lt;img src=x onerror=alert(1)&gt;</div>');
+});
+
+test('repeated POI focus removes the previous marker instead of stacking', () => {
+    const h = harness();
+    const removed = [], markers = [];
+    h.state.map = { setView() {}, removeLayer: marker => removed.push(marker) };
+    h.context.L = {
+        divIcon: options => options,
+        marker: (latlng, options) => {
+            const marker = { latlng, options, addTo() { return this; } };
+            markers.push(marker);
+            return marker;
+        },
+    };
+
+    h.focus({ name: '图书馆', lng: 114.3, lat: 30.5 });
+    h.focus({ name: '樱顶', lng: 114.32, lat: 30.52 });
+
+    assert.equal(markers.length, 2);
+    assert.deepEqual(removed, [markers[0]]);
+    assert.equal(h.state.poiMarkers.length, 1);
+    assert.equal(h.state.poiMarkers[0], markers[1]);
+});
