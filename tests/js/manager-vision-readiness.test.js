@@ -286,7 +286,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261105-operations-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261105-operations-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261108-vision-pose-v1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
