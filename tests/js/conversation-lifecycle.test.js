@@ -2279,7 +2279,7 @@ test('POI focus escapes the POI name in its map marker label', () => {
         '<div class="whu-map-pill whu-map-pill-poi">&lt;img src=x onerror=alert(1)&gt;</div>');
 });
 
-test('repeated POI focus removes the previous marker instead of stacking', () => {
+test('repeated POI focus replaces the previous marker instead of stacking', () => {
     const h = harness();
     const removed = [], markers = [];
     h.state.map = { setView() {}, removeLayer: marker => removed.push(marker) };
@@ -2297,6 +2297,24 @@ test('repeated POI focus removes the previous marker instead of stacking', () =>
 
     assert.equal(markers.length, 2);
     assert.deepEqual(removed, [markers[0]]);
-    assert.equal(h.state.poiMarkers.length, 1);
-    assert.equal(h.state.poiMarkers[0], markers[1]);
+    assert.equal(h.state.poiFocusMarker, markers[1]);
+});
+
+test('focusing a POI leaves route via-point and candidate pins intact', () => {
+    const h = harness();
+    const removed = [];
+    const viaPin = { id: 'via' };
+    const candidatePin = { id: 'candidate' };
+    h.state.poiMarkers = [viaPin, candidatePin];
+    h.state.map = { setView() {}, removeLayer: marker => removed.push(marker) };
+    h.context.L = {
+        divIcon: options => options,
+        marker: () => ({ addTo() { return this; } }),
+    };
+
+    h.focus({ name: '图书馆', lng: 114.3, lat: 30.5 });
+
+    assert.deepEqual(h.state.poiMarkers, [viaPin, candidatePin]);
+    assert.equal(removed.length, 0);
+    assert.ok(h.state.poiFocusMarker);
 });

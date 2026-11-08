@@ -44,6 +44,7 @@
         recommendedLine: null,
         shortestLine: null,
         poiMarkers: [],
+        poiFocusMarker: null,   // 聚焦单个 POI 的独立高亮标记，与路线途经点/候选钉共用数组解耦
         activeCandidateMarkerClear: null,
         roadConditionMarkers: [],  // 路况事件标记
         loading: false,
@@ -2792,13 +2793,11 @@
         var lat = poi.lat;
         if (lng == null || lat == null) return;
 
-        // 聚焦单个 POI 前先清掉此前叠加的标记，避免连续查询堆叠。
-        state.poiMarkers.forEach(function (m) { state.map.removeLayer(m); });
-        state.poiMarkers = [];
+        if (state.poiFocusMarker) state.map.removeLayer(state.poiFocusMarker);
         var pillHtml = '<div class="whu-map-pill whu-map-pill-poi">' + escapeHtml(poi.name || 'POI') + '</div>';
         var marker = divMarker(gcjToLatLng(lng, lat), pillHtml, [0, 0], [0, 0], poi.name || '')
             .addTo(state.map);
-        state.poiMarkers.push(marker);
+        state.poiFocusMarker = marker;
         state.map.setView(gcjToLatLng(lng, lat), 17);
     }
 
