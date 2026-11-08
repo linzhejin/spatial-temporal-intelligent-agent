@@ -74,6 +74,7 @@ from spatial.road_conditions import (
     _directional_corridor_edges,
 )
 from spatial import weather as weather_mod
+from spatial.vision_suggest import score_suggested_edges
 from storage import vision_scene_repository
 
 logger = logging.getLogger(__name__)
@@ -3958,8 +3959,24 @@ def manager_vision_suggested_edges(job_id):
     G, err = _ensure_network()
     if err is not None:
         return err
-    suggested = nearest_edges(G, lng, lat)
-    return _ok({"suggested_edges": suggested})
+    try:
+        from vision import registration
+    except ImportError:
+        logger.info("vision.registration 不可用（缺少 numpy），建议路段降级为 footprint/半径圈")
+        registration = None
+    stored_result = job.get("result") if isinstance(job.get("result"), dict) else None
+    media = (stored_result or {}).get("media") if isinstance(stored_result, dict) else None
+    cands = (stored_result or {}).get("candidates") if isinstance(stored_result, dict) else None
+    try:
+        result = score_suggested_edges(G, anchor, camera_pose=job.get("camera_pose"),
+                                       media=media, candidates=cands, registration=registration)
+    except Exception as error:
+        logger.warning("建议路段打分失败，回退半径圈: %s", error)
+        result = {"suggested_edges": [
+            {**item, "score": 0.0, "basis": "radius_only"}
+            for item in nearest_edges(G, lng, lat)
+        ], "basis": "radius_only"}
+    return _ok(result)
 
 
 @api_bp.route("/manager/vision-jobs/<job_id>/preview-frames", methods=["GET"])
