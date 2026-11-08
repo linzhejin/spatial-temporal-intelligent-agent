@@ -322,6 +322,65 @@ def _parse_vision_observation_regions(value) -> list[dict]:
     return normalized
 
 
+def _camera_pose_finite_number(value) -> bool:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except (OverflowError, ValueError):
+        return False
+
+
+def _parse_vision_camera_pose(value) -> dict | None:
+    """宽容解析无人机相机姿态；非法结构或越界点直接丢弃，不中断上传。"""
+    if value is None:
+        return None
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except (TypeError, ValueError):
+            return None
+    if not isinstance(value, dict):
+        return None
+    trajectory = value.get("trajectory")
+    if not isinstance(trajectory, list) or not 1 <= len(trajectory) <= 20000:
+        return None
+    cleaned_points = []
+    for point in trajectory:
+        if not isinstance(point, dict):
+            continue
+        lng, lat = point.get("lng"), point.get("lat")
+        if (not _camera_pose_finite_number(lng) or not _camera_pose_finite_number(lat)
+                or not -180 <= lng <= 180 or not -90 <= lat <= 90):
+            continue
+        rel_alt_m, abs_alt_m = point.get("rel_alt_m"), point.get("abs_alt_m")
+        yaw_deg = point.get("yaw_deg")
+        gb_yaw_deg, gb_pitch_deg = point.get("gb_yaw_deg"), point.get("gb_pitch_deg")
+        focal_len_35mm = point.get("focal_len_35mm")
+        seconds = point.get("seconds")
+        cleaned_points.append({
+            "lng": lng, "lat": lat,
+            "rel_alt_m": rel_alt_m if (_camera_pose_finite_number(rel_alt_m)
+                                       and -500 <= rel_alt_m <= 9000) else None,
+            "abs_alt_m": abs_alt_m if (_camera_pose_finite_number(abs_alt_m)
+                                       and -500 <= abs_alt_m <= 9000) else None,
+            "yaw_deg": yaw_deg if (_camera_pose_finite_number(yaw_deg)
+                                   and -360 <= yaw_deg <= 360) else None,
+            "gb_yaw_deg": gb_yaw_deg if (_camera_pose_finite_number(gb_yaw_deg)
+                                         and -360 <= gb_yaw_deg <= 360) else None,
+            "gb_pitch_deg": gb_pitch_deg if (_camera_pose_finite_number(gb_pitch_deg)
+                                             and -360 <= gb_pitch_deg <= 360) else None,
+            "focal_len_35mm": focal_len_35mm if (
+                _camera_pose_finite_number(focal_len_35mm) and 0 < focal_len_35mm <= 2000) else None,
+            "seconds": seconds if _camera_pose_finite_number(seconds) else None,
+        })
+    if not cleaned_points:
+        return None
+    result = dict(value)
+    result["trajectory"] = cleaned_points
+    return result
+
+
 def _parse_vision_capture_time(value, *, required: bool) -> datetime:
     """Accept an epoch or timezone-aware ISO timestamp; persist every observation in UTC."""
     if value is None or value == "":
@@ -3458,6 +3517,7 @@ def start_manager_vision_upload():
             "capture_time_source": capture_time_source,
             "capture_timezone": capture_timezone,
             "observation_regions": observation_regions,
+            "camera_pose": _parse_vision_camera_pose(body.get("camera_pose")),
             "scene_id": scene_id,
             "created_by": _admin_identity() or "unknown", "created_at": now, "updated_at": now,
         }
@@ -3632,6 +3692,7 @@ def complete_manager_vision_upload(upload_id):
                         "observation_regions", metadata.get("observation_regions") or [],
                     ),
                     observation_scene_id=scene_values.get("scene_id"),
+                    camera_pose=metadata.get("camera_pose"),
                 )
             except Exception:
                 os.replace(target, part_path)

@@ -15,21 +15,23 @@ def create_job(url: str | None, *, created_by: str, original_name: str,
                captured_at=None, capture_time_source: str = "unknown",
                capture_timezone: str | None = None,
                observation_regions: list[dict] | None = None,
-               observation_scene_id: str | None = None) -> dict:
+               observation_scene_id: str | None = None,
+               camera_pose: dict | None = None) -> dict:
     job_id = str(uuid.uuid4())
     with database.connect(url) as conn:
         row = conn.execute(
             "INSERT INTO manager_vision_job(job_id, created_by, original_name, media_kind,"
             " media_path, sha256, anchor_gcj, camera_stabilized, captured_at, capture_time_source,"
             " capture_timezone, observation_regions,"
-            " observation_scene_id, status)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
+            " observation_scene_id, camera_pose, status)"
+            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
             " RETURNING job_id, status, created_at, capture_time_source, capture_timezone",
             (job_id, created_by, original_name, media_kind, media_path, sha256,
              Jsonb(anchor_gcj) if anchor_gcj is not None else None,
              bool(camera_stabilized), captured_at,
              capture_time_source, capture_timezone,
-             Jsonb(observation_regions or []), observation_scene_id),
+             Jsonb(observation_regions or []), observation_scene_id,
+             Jsonb(camera_pose) if camera_pose is not None else None),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])}
 
@@ -51,7 +53,7 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90) -> 
             " lease_until=now()+(%s * interval '1 second'), attempts=attempts+1, updated_at=now()"
             " FROM candidate c WHERE j.job_id=c.job_id"
             " RETURNING j.job_id, j.media_kind, j.media_path, j.anchor_gcj, j.camera_stabilized,"
-            " j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts",
+            " j.camera_pose, j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts",
             (worker_id, lease_seconds),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])} if row else None
@@ -152,7 +154,7 @@ def get_job(url: str | None, job_id: str) -> dict | None:
     with database.connect(url) as conn:
         row = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, media_path, sha256, anchor_gcj, camera_stabilized,"
-            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error,"
             " review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at FROM manager_vision_job WHERE job_id=%s AND deleted_at IS NULL", (job_id,),
         ).fetchone()
@@ -165,7 +167,7 @@ def list_jobs(url: str | None, limit: int = 50) -> list[dict[str, Any]]:
     with database.connect(url) as conn:
         rows = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, anchor_gcj, camera_stabilized,"
-            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, progress, candidate_reviews, cancel_requested, status, attempts,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, candidate_reviews, cancel_requested, status, attempts,"
             " result - 'preview_frames' - 'preview_frame_interval_seconds' AS result,"
             " error, review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at"
