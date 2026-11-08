@@ -1845,7 +1845,7 @@ test('suggested edges are cached across poll refreshes without refetching', asyn
   assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /缓存路/);
 });
 
-test('picking a suggested edge immediately loads its impact preview', async () => {
+test('picking a suggested edge re-snaps it to reconfirm the road binding', async () => {
   const harness = managerHarness();
   await flush();
   harness.setVisionJobs([{
@@ -1866,7 +1866,14 @@ test('picking a suggested edge immediately loads its impact preview', async () =
     && node.textContent === '在地图定位并预填发布落点');
   locate.listeners.click();
   await flush();
-  assert.ok(harness.calls.some((call) => call.url.startsWith('/api/road-conditions/snap')),
-    'picking must refresh the impact preview');
-  assert.equal(harness.elements.get('impact-preview').hidden, false);
+  // A suggested-edge pick carries no event type/action; pickSuggestedEdge resets them before the
+  // immediate refreshImpactPreview. The real side effect is a re-snap + roadBindingIdentity
+  // re-check, not an impact preview (the snap return has none when type is empty), so asserting
+  // the preview box is visible would be a mock artifact.
+  const snapCalls = harness.calls.filter((call) => call.url.startsWith('/api/road-conditions/snap'));
+  assert.equal(snapCalls.length, 1, 'picking a suggested edge must issue a re-snap request');
+  assert.match(snapCalls[0].url, /lng=114\.36002/,
+    'the re-snap must re-check the suggested edge snap longitude');
+  assert.match(snapCalls[0].url, /lat=30\.53/,
+    'the re-snap must re-check the suggested edge snap latitude');
 });
