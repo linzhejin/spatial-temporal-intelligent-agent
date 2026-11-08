@@ -1935,3 +1935,46 @@ test('vision list refresh still runs when focus sits on the workspace form, not 
   assert.notEqual(root.children[0], firstCard,
     'focus outside the vision jobs area must not block the periodic refresh');
 });
+
+test('double-clicking confirm review sends only one review request', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'review-double', status: 'needs_review', media_kind: 'image', original_name: '巡查.png',
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7, reason: '车辆聚集' }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const note = descendants(card).find((node) => node.tagName === 'textarea');
+  const confirm = descendants(card).find((node) => node.tagName === 'button' && node.textContent === '确认此候选');
+  assert.ok(note);
+  assert.ok(confirm);
+  note.value = '逐帧核对发现车辆持续聚集，确认该候选。';
+  confirm.listeners.click();
+  confirm.listeners.click();
+  await flush();
+  const reviewCalls = harness.calls.filter((call) =>
+    call.url.includes('/candidates/0/review') && call.options.method === 'POST');
+  assert.equal(reviewCalls.length, 1);
+});
+
+test('double-clicking retry recovery sends only one recovery request', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'recover-double', status: 'failed', media_kind: 'video', original_name: '失败.mp4',
+    error: { message: '分析失败' }, result: { candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const retry = descendants(card).find((node) => node.tagName === 'button' && node.textContent === '从断点重试');
+  assert.ok(retry);
+  retry.listeners.click();
+  retry.listeners.click();
+  await flush();
+  const recoverCalls = harness.calls.filter((call) =>
+    call.url === '/api/manager/vision-jobs/recover-double/retry' && call.options.method === 'POST');
+  assert.equal(recoverCalls.length, 1);
+});

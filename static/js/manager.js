@@ -20,6 +20,7 @@
   state.roadRebindReason = '';
   state.roadRebindBusy = false;
   state.suggestedEdgesCache = Object.create(null);
+  state.visionActionBusy = new Set();
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
     var node = byId(id);
@@ -2507,11 +2508,14 @@
   }
 
   function reviewJob(job, status, candidateIndex, noteField, feedback) {
+    var busyKey = job.job_id + ':review';
+    if (state.visionActionBusy.has(busyKey)) return;
     var note = noteField.value.trim();
     if (note.length < 8) {
       feedback.textContent = '请先填写至少 8 字的影像复核依据。';
       return;
     }
+    state.visionActionBusy.add(busyKey);
     feedback.textContent = '正在保存审核…';
     var body = { status: status, note: note };
     request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/candidates/' + candidateIndex + '/review', 'POST', body)
@@ -2519,16 +2523,21 @@
         state.reviewDrafts[job.job_id] = '';
         return refreshVisionJobs(true);
       })
-      .catch(function (error) { feedback.textContent = error.message || '审核保存失败。'; });
+      .catch(function (error) { feedback.textContent = error.message || '审核保存失败。'; })
+      .finally(function () { state.visionActionBusy.delete(busyKey); });
   }
 
   async function recoverVisionJob(job, action) {
+    var busyKey = job.job_id + ':' + action;
+    if (state.visionActionBusy.has(busyKey)) return;
     var label = action === 'cancel' ? '取消该影像任务？' : '从最近完成的视频分段重新排队？';
     if (!window.confirm(label)) return;
+    state.visionActionBusy.add(busyKey);
     try {
       await request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/' + action, 'POST', {});
       await refreshVisionJobs(true);
     } catch (error) { window.alert(error.message || '影像任务操作失败。'); }
+    finally { state.visionActionBusy.delete(busyKey); }
   }
 
   function noCandidateFeedback(result, mediaKind) {
