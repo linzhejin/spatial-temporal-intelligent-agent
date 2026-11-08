@@ -137,6 +137,8 @@ def test_create_job_insert_includes_camera_pose(monkeypatch):
     statement = calls["statements"][0]
     assert "camera_pose" in statement
     assert "%s" in statement
+    returning = statement.split("RETURNING", 1)[1]
+    assert "camera_pose" in returning
     jsonb_values = [p.obj for p in calls["params"] if isinstance(p, Jsonb)]
     assert pose in jsonb_values
 

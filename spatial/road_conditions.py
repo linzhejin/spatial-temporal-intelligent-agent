@@ -831,6 +831,20 @@ def _expand_edge_chain(G, u, v, k):
     return ordered_keys, deduped, main_len + fwd_len + bwd_len, len(ordered_keys)
 
 
+def _edge_projection_m(G, u, v, k, data, lng_wgs, lat_wgs):
+    """返回 (dist_m, line, proj)；line=边几何, proj=点击投影点。"""
+    from shapely.geometry import Point
+
+    line = _edge_line(G, u, v, data)
+    click = Point(lng_wgs, lat_wgs)
+    proj = line.interpolate(line.project(click))
+    cos_lat = math.cos(math.radians(lat_wgs))
+    dx = (proj.x - lng_wgs) * cos_lat
+    dy = proj.y - lat_wgs
+    dist_m = (dx * dx + dy * dy) ** 0.5 * 111320.0
+    return dist_m, line, proj
+
+
 def snap_to_edge(
     G: nx.MultiDiGraph,
     lng_gcj: float,
@@ -854,27 +868,19 @@ def snap_to_edge(
         最近边超过 max_dist_m 时返回 None。
     """
     from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
-    from shapely.geometry import Point
 
     lng_wgs, lat_wgs = gcj02_to_wgs84(lng_gcj, lat_gcj)
-    click = Point(lng_wgs, lat_wgs)
-    cos_lat = __import__("math").cos(__import__("math").radians(lat_wgs))
 
-    best = None  # (dist_deg_sq, u, v, k, line, proj_point)
+    best = None  # (dist_m, u, v, k, line, proj)
     for u, v, k, data in G.edges(keys=True, data=True):
-        line = _edge_line(G, u, v, data)
-        proj = line.interpolate(line.project(click))
-        dx = (proj.x - lng_wgs) * cos_lat
-        dy = proj.y - lat_wgs
-        dist_sq = dx * dx + dy * dy
-        if best is None or dist_sq < best[0]:
-            best = (dist_sq, u, v, k, line, proj)
+        dist_m, line, proj = _edge_projection_m(G, u, v, k, data, lng_wgs, lat_wgs)
+        if best is None or dist_m < best[0]:
+            best = (dist_m, u, v, k, line, proj)
 
     if best is None:
         return None
 
-    dist_deg = best[0] ** 0.5
-    dist_m = dist_deg * 111320.0
+    dist_m = best[0]
     if dist_m > max_dist_m:
         return None
 
@@ -920,21 +926,14 @@ def nearest_edges(
     只做候选推荐，不落地、不发布；发布仍走 snap_to_edge + 人工闸。
     """
     from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
-    from shapely.geometry import Point
 
     if limit < 1:
         return []
     lng_wgs, lat_wgs = gcj02_to_wgs84(lng_gcj, lat_gcj)
-    click = Point(lng_wgs, lat_wgs)
-    cos_lat = __import__("math").cos(__import__("math").radians(lat_wgs))
 
     within = []  # (dist_m, u, v, k, proj)
     for u, v, k, data in G.edges(keys=True, data=True):
-        line = _edge_line(G, u, v, data)
-        proj = line.interpolate(line.project(click))
-        dx = (proj.x - lng_wgs) * cos_lat
-        dy = proj.y - lat_wgs
-        dist_m = (dx * dx + dy * dy) ** 0.5 * 111320.0
+        dist_m, _, proj = _edge_projection_m(G, u, v, k, data, lng_wgs, lat_wgs)
         if dist_m <= max_dist_m:
             within.append((dist_m, u, v, k, proj))
     within.sort(key=lambda item: item[0])
@@ -950,6 +949,7 @@ def nearest_edges(
         try:
             chain_keys, chain_coords_wgs, chain_len_m, _ = _expand_edge_chain(G, u, v, k)
         except Exception:
+            logger.warning("边链扩展失败，回退为单条边 (%s,%s,%s)", u, v, k, exc_info=True)
             line = _edge_line(G, u, v, G.get_edge_data(u, v, k) or {})
             chain_keys, chain_coords_wgs, chain_len_m = (
                 [(u, v, k)], _line_coords(line),

@@ -148,12 +148,16 @@ def _gcj_to_local(gcj_points, origin_lng_wgs, origin_lat_wgs) -> np.ndarray:
 
 def fit_pixel_to_gcj(pixel_pts, world_pts_gcj, *,
                      inlier_thresh_m: float = 3.0,
-                     min_inliers: int = 4, iters: int = 200) -> dict:
+                     min_inliers: int = 4, iters: int = 200,
+                     seed: int | None = 0) -> dict:
     """由像素 ↔ 世界 GCJ 对应点估计单应（像素 → 局部平面），RANSAC 抗外点。
+
+    Args:
+        seed: RANSAC 随机数种子；None 表示使用不可复现的默认随机源。默认 0 保持确定性。
 
     Returns:
         {"homography", "residual_m", "inlier_count", "origin": {...}}
-        origin 为第一组 GCJ 点对应的 WGS 原点。
+        origin 为第一组 GCJ 点对应的 WGS 原点；inlier_count==0 时 residual_m 为 None。
     """
     pixel = np.asarray(pixel_pts, dtype=np.float64)
     world = np.asarray(world_pts_gcj, dtype=np.float64)
@@ -175,7 +179,7 @@ def fit_pixel_to_gcj(pixel_pts, world_pts_gcj, *,
     local = _gcj_to_local(world, origin_lng_wgs, origin_lat_wgs)
 
     needed = max(min_inliers, 4)
-    rng = np.random.default_rng(0)
+    rng = np.random.default_rng() if seed is None else np.random.default_rng(seed)
 
     best_indices = None
     best_count = 0
@@ -204,7 +208,7 @@ def fit_pixel_to_gcj(pixel_pts, world_pts_gcj, *,
         inlier_mask = dist <= inlier_thresh_m
 
     inlier_count = int(inlier_mask.sum())
-    residual_m = float(np.sqrt(np.mean(dist[inlier_mask] ** 2))) if inlier_count else 0.0
+    residual_m = float(np.sqrt(np.mean(dist[inlier_mask] ** 2))) if inlier_count else None
 
     return {
         "homography": homography,
@@ -220,12 +224,27 @@ def fit_pixel_to_gcj(pixel_pts, world_pts_gcj, *,
 
 
 def _polygon_to_local(poly, H) -> Polygon:
-    """像素 Polygon → 局部平面 Polygon（顶点齐次乘 H）。"""
-    coords = []
-    for x, y in poly.exterior.coords:
-        projected = H @ np.array([x, y, 1.0])
-        coords.append((projected[0] / projected[2], projected[1] / projected[2]))
-    return Polygon(coords)
+    """像素 Polygon → 局部平面 Polygon（外环与内环逐点齐次乘 H）。
+
+    输入为空或变换后非法（退化/自交）时抛 ValueError；调用方
+    project_mask_to_edges 已有安全网，会降级为空结果。
+    """
+    if poly.is_empty:
+        raise ValueError("mask polygon is empty")
+
+    def _project_ring(ring):
+        out = []
+        for x, y in ring:
+            projected = H @ np.array([x, y, 1.0])
+            out.append((projected[0] / projected[2], projected[1] / projected[2]))
+        return out
+
+    shell = _project_ring(poly.exterior.coords)
+    holes = [_project_ring(ring.coords) for ring in poly.interiors]
+    result = Polygon(shell, holes)
+    if result.is_empty or not result.is_valid:
+        raise ValueError("mask polygon is empty or invalid after projection")
+    return result
 
 
 def _coerce_linestring(geom):
@@ -323,7 +342,13 @@ def project_mask_to_edges(mask_poly_px, transform: dict, G, candidate_edges: lis
         u = candidate.get("u")
         v = candidate.get("v")
         k = candidate.get("k", candidate.get("key", 0))
-        if u is None or v is None:
+        if u is None or v is None or k is None:
+            continue
+        try:
+            u = int(u)
+            v = int(v)
+            k = int(k)
+        except (TypeError, ValueError):
             continue
 
         edge_data = None

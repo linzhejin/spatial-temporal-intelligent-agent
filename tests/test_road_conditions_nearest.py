@@ -46,6 +46,6 @@ def test_nearest_edges_returns_snap_geometry():
     results = nearest_edges(G, *CLICK_GCJ)
     assert results
     for r in results:
-        assert set(r) >= {"u", "v", "key", "edges", "geometry_gcj",
+        assert set(r) >= {"u", "v", "key", "edges", "chain_length_m", "geometry_gcj",
                           "snap_lng_gcj", "snap_lat_gcj", "dist_m", "road_name"}
         assert isinstance(r["geometry_gcj"], list) and r["geometry_gcj"]

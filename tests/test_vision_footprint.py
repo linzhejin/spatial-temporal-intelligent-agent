@@ -146,6 +146,17 @@ def test_invalid_image_dimensions_raise():
         pose_to_footprint(_nadir_pose(), 1000, -1)
 
 
+def test_invalid_sensor_width_raises():
+    with pytest.raises(ValueError, match="sensor"):
+        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=None)
+    with pytest.raises(ValueError, match="sensor"):
+        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=0.0)
+    with pytest.raises(ValueError, match="sensor"):
+        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=-5.0)
+    with pytest.raises(ValueError, match="sensor"):
+        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm="bad")
+
+
 # ---- project_footprint_to_edges ----
 
 def test_project_empty_candidates_returns_empty():

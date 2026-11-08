@@ -25,7 +25,7 @@ def create_job(url: str | None, *, created_by: str, original_name: str,
             " capture_timezone, observation_regions,"
             " observation_scene_id, camera_pose, status)"
             " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
-            " RETURNING job_id, status, created_at, capture_time_source, capture_timezone",
+            " RETURNING job_id, status, created_at, capture_time_source, capture_timezone, camera_pose",
             (job_id, created_by, original_name, media_kind, media_path, sha256,
              Jsonb(anchor_gcj) if anchor_gcj is not None else None,
              bool(camera_stabilized), captured_at,

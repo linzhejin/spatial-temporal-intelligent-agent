@@ -113,7 +113,9 @@ def pose_to_footprint(pose: dict, image_w_px: int, image_h_px: int, *,
 
     focal_candidates = (focal_len_35mm, pose.get("focal_len_35mm"))
     focal = next((float(f) for f in focal_candidates if _positive_number(f)), 24.0)
-    sensor_w = float(sensor_w_mm) if _positive_number(sensor_w_mm) else 36.0
+    if not _positive_number(sensor_w_mm):
+        raise ValueError("sensor width must be a positive number")
+    sensor_w = float(sensor_w_mm)
 
     f_px = focal / sensor_w * image_w
     hfov_half = math.atan((image_w / 2.0) / f_px)

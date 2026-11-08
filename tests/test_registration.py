@@ -137,6 +137,27 @@ def test_fit_pixel_to_gcj_robust_to_wild_outliers():
     assert result["origin"]["lat_gcj"] == pytest.approx(clean_gcj[0][1], abs=1e-12)
 
 
+def test_fit_pixel_to_gcj_seed_parameter_converges():
+    _, pixel, gcj, _ = _ground_truth_points()
+    seeded = fit_pixel_to_gcj(pixel, gcj, seed=0)
+    unseeded = fit_pixel_to_gcj(pixel, gcj, seed=None)
+    for result in (seeded, unseeded):
+        assert result["residual_m"] < 1e-6
+        assert result["inlier_count"] == len(pixel)
+
+
+def test_fit_pixel_to_gcj_all_outliers_residual_none():
+    local, pixel, _, _ = _ground_truth_points()
+    rng = np.random.default_rng(7)
+    displaced = local + rng.normal(0.0, 40.0, size=local.shape)
+    gcj = _local_to_gcj(displaced)
+    result = fit_pixel_to_gcj(
+        pixel, gcj, min_inliers=len(local) + 5, inlier_thresh_m=1e-6,
+    )
+    assert result["inlier_count"] == 0
+    assert result["residual_m"] is None
+
+
 def test_coordinate_roundtrip_stable():
     _, pixel, gcj, _ = _ground_truth_points()
     result = fit_pixel_to_gcj(pixel, gcj)
@@ -315,3 +336,43 @@ def test_project_mask_to_edges_invalid_mask_returns_empty():
         image_w_px=IMAGE_W, image_h_px=IMAGE_H,
     )
     assert results == []
+
+
+def _mask_px_from_local(shell_local, hole_local=None):
+    shell_px = _local_to_pixel(np.asarray(shell_local, dtype=np.float64))
+    if hole_local is None:
+        return Polygon([tuple(p) for p in shell_px])
+    hole_px = _local_to_pixel(np.asarray(hole_local, dtype=np.float64))
+    return Polygon([tuple(p) for p in shell_px], [[tuple(p) for p in hole_px]])
+
+
+def test_project_mask_to_edges_hole_reduces_center_edge_overlap():
+    G = _edge_graph()
+    candidates = [
+        {"u": 1, "v": 2, "k": 0},
+        {"u": 11, "v": 12, "k": 0},
+        {"u": 21, "v": 22, "k": 0},
+    ]
+    shell_local = [(20.0, -8.0), (60.0, -8.0), (60.0, 8.0), (20.0, 8.0)]
+    solid = _mask_px_from_local(shell_local)
+    solid_ratios = {
+        r["u"]: r["overlap_ratio"]
+        for r in project_mask_to_edges(
+            solid, _transform(), G, candidates,
+            image_w_px=IMAGE_W, image_h_px=IMAGE_H, buffer_m=2.0,
+        )
+    }
+    assert solid_ratios[11] > 0
+
+    hole_local = [(28.0, -3.0), (52.0, -3.0), (52.0, 3.0), (28.0, 3.0)]
+    holed = _mask_px_from_local(shell_local, hole_local)
+    holed_ratios = {
+        r["u"]: r["overlap_ratio"]
+        for r in project_mask_to_edges(
+            holed, _transform(), G, candidates,
+            image_w_px=IMAGE_W, image_h_px=IMAGE_H, buffer_m=2.0,
+        )
+    }
+    # 挖洞后中心边仍被报告，但 overlap 显著下降
+    assert holed_ratios[11] > 0
+    assert holed_ratios[11] < solid_ratios[11]

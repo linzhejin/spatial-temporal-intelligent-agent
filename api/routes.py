@@ -3964,7 +3964,9 @@ def manager_vision_suggested_edges(job_id):
     except ImportError:
         logger.info("vision.registration 不可用（缺少 numpy），建议路段降级为 footprint/半径圈")
         registration = None
-    stored_result = job.get("result") if isinstance(job.get("result"), dict) else None
+    stored_result = job.get("result")
+    if not isinstance(stored_result, dict):
+        stored_result = None
     media = (stored_result or {}).get("media") if isinstance(stored_result, dict) else None
     cands = (stored_result or {}).get("candidates") if isinstance(stored_result, dict) else None
     try:
@@ -3972,10 +3974,14 @@ def manager_vision_suggested_edges(job_id):
                                        media=media, candidates=cands, registration=registration)
     except Exception as error:
         logger.warning("建议路段打分失败，回退半径圈: %s", error)
-        result = {"suggested_edges": [
-            {**item, "score": 0.0, "basis": "radius_only"}
-            for item in nearest_edges(G, lng, lat)
-        ], "basis": "radius_only"}
+        try:
+            result = {"suggested_edges": [
+                {**item, "score": 0.0, "basis": "radius_only"}
+                for item in nearest_edges(G, lng, lat)
+            ], "basis": "radius_only"}
+        except Exception:
+            logger.exception("半径圈回退建议失败")
+            result = {"suggested_edges": [], "basis": "radius_only"}
     return _ok(result)
 
 
