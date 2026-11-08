@@ -2730,7 +2730,13 @@
         }
         candidates.appendChild(candidate);
       });
-      if (candidates.children.length) card.appendChild(candidates);
+      if (candidates.children.length) {
+        card.appendChild(candidates);
+      } else if (job.status === 'needs_review' && !job.review_status && !(result.candidates || []).length) {
+        var noCandidates = document.createElement('p'); noCandidates.className = 'vision-job-meta';
+        noCandidates.textContent = '该任务尚无候选说明；原片未检出可复核迹象时不会生成候选，请依据原片与现场情况判断。';
+        card.appendChild(noCandidates);
+      }
       if (job.status === 'needs_review' && job.anchor_gcj) {
         var cacheKey = job.job_id + ':' + job.status + ':' + (job.review_status || '');
         if (state.suggestedEdgesCache[cacheKey]) {

@@ -1257,6 +1257,26 @@ test('short video with no candidates explains the temporal evidence limits and n
   assert.match(terminalText, /依据原片手工登记路况/);
 });
 
+test('a needs_review job with no candidates explains why none were produced', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'review-empty', status: 'needs_review', media_kind: 'image', original_name: '无候选.png',
+    result: { metrics: { peak_vehicle_count: 0 }, candidates: [] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(text, /待复核/);
+  assert.match(text, /该任务尚无候选说明/);
+  assert.match(text, /原片未检出可复核迹象时不会生成候选/);
+  assert.match(text, /请依据原片与现场情况判断/);
+  assert.doesNotMatch(text, /确认此候选/);
+  assert.doesNotMatch(text, /影像复核依据/);
+});
+
 function descendants(node) {
   return [node, ...(node.children || []).flatMap(descendants)];
 }
