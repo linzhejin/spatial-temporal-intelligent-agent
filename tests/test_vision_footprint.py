@@ -5,7 +5,7 @@
 
   - origin WGS (114.3623, 30.5363)。
   - 局部平面：east = (lng_wgs - lng0) * 111320 * cos(lat0), north = (lat_wgs - lat0) * 111320。
-  - nadir（yaw=0、缺 gb_pitch）image 1000x500 focal 24：f_px = 24/36*1000，
+  - nadir（yaw=0、gb_pitch=-90）image 1000x500 focal 24：f_px = 24/36*1000，
     h_w = 100*tan(atan(500/f_px)) = 75 m，h_h = 100*tan(atan(250/f_px)) = 37.5 m。
 """
 
@@ -45,8 +45,10 @@ def _nadir_pose(**overrides):
     pose = {
         "lng": ORIGIN_LNG_WGS,
         "lat": ORIGIN_LAT_WGS,
-        "rel_alt_m": 100.0,
-        "yaw_deg": 0.0,
+        "height_agl_m": 100.0,
+        "gb_yaw_deg": 0.0, "gb_pitch_deg": -90.0, "gb_roll_deg": 0.0,
+        "intrinsics": {"fx_px": 2000 / 3, "fy_px": 2000 / 3,
+                       "cx_px": 500, "cy_px": 250},
     }
     pose.update(overrides)
     return pose
@@ -96,13 +98,12 @@ def test_nadir_centers_on_origin_and_covers_center_edge():
 
 def test_yaw_90_rotates_corners():
     h_w, h_h = _nadir_half_sizes()
-    result = pose_to_footprint(_nadir_pose(yaw_deg=90.0), 1000, 500)
+    result = pose_to_footprint(_nadir_pose(gb_yaw_deg=90.0), 1000, 500)
     coords = list(result["polygon"].exterior.coords)[:-1]
     expected = [(h_h, -h_w), (h_h, h_w), (-h_h, h_w), (-h_h, -h_w)]
     assert len(coords) == 4
-    for (ex, ey), (ax, ay) in zip(coords, expected):
-        assert ex == pytest.approx(ax, abs=1e-6)
-        assert ey == pytest.approx(ay, abs=1e-6)
+    assert {(round(x, 5), round(y, 5)) for x, y in coords} == {
+        (round(x, 5), round(y, 5)) for x, y in expected}
 
 
 def test_pitch_forward_offsets_center_and_changes_coverage():
@@ -114,7 +115,8 @@ def test_pitch_forward_offsets_center_and_changes_coverage():
     result = pose_to_footprint(_nadir_pose(gb_pitch_deg=-45.0), 1000, 500)
     poly = result["polygon"]
     assert poly.centroid.x == pytest.approx(0.0, abs=1e-9)
-    assert poly.centroid.y == pytest.approx(100.0, abs=1e-6)
+    assert poly.bounds[1] == pytest.approx(45.454545, abs=1e-5)
+    assert poly.bounds[3] == pytest.approx(220.0, abs=1e-5)
 
     candidates = [_candidate(1, 2, "投影点附近"), _candidate(3, 4, "正下方")]
     hits = project_footprint_to_edges(poly, result["origin"], G, candidates)
@@ -133,9 +135,9 @@ def test_altitude_missing_or_invalid_raises():
 
 
 def test_pitch_too_shallow_raises():
-    with pytest.raises(ValueError, match="shallow"):
+    with pytest.raises(ValueError, match="horizon"):
         pose_to_footprint(_nadir_pose(gb_pitch_deg=-3.0), 1000, 500)
-    with pytest.raises(ValueError, match="shallow"):
+    with pytest.raises(ValueError, match="orientation"):
         pose_to_footprint(_nadir_pose(gb_pitch_deg=3.0), 1000, 500)
 
 
@@ -146,15 +148,11 @@ def test_invalid_image_dimensions_raise():
         pose_to_footprint(_nadir_pose(), 1000, -1)
 
 
-def test_invalid_sensor_width_raises():
-    with pytest.raises(ValueError, match="sensor"):
-        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=None)
-    with pytest.raises(ValueError, match="sensor"):
-        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=0.0)
-    with pytest.raises(ValueError, match="sensor"):
-        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm=-5.0)
-    with pytest.raises(ValueError, match="sensor"):
-        pose_to_footprint(_nadir_pose(), 1000, 500, sensor_w_mm="bad")
+def test_invalid_camera_intrinsics_raise():
+    for fx in (None, 0.0, -5.0, "bad"):
+        with pytest.raises(ValueError):
+            pose_to_footprint(_nadir_pose(intrinsics={"fx_px": fx, "fy_px": 2000 / 3,
+                                                       "cx_px": 500, "cy_px": 250}), 1000, 500)
 
 
 # ---- project_footprint_to_edges ----

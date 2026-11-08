@@ -5,9 +5,8 @@
   - L1：姿态拍摄范围 footprint（spatial.vision_footprint）
   - L0：半径圈（spatial.road_conditions.nearest_edges）
 
-顶层禁止 import numpy / vision.registration / Flask / storage；registration 由
-调用方（api/routes.py）try-import 后作为参数注入。坐标约定：camera_pose 与路网
-内部 WGS-84，anchor 与输出展示字段 GCJ-02，转换用 spatial.coord_transform。
+此模块仅供隔离验证；生产接口只提供邻近参考。registration 由调用方注入。
+camera_pose 与路网内部为 WGS-84，anchor 与输出展示字段为 GCJ-02。
 """
 
 import logging
@@ -24,9 +23,8 @@ logger = logging.getLogger(__name__)
 _M_PER_DEG = 111320.0
 _MAX_SUGGESTED = 5
 _MAX_OUTLINES = 8
-_L1_FALLBACK_W = 1000
-_L1_FALLBACK_H = 750
 _DEFAULT_ALT_M = 50.0
+_MAX_POSE_TIME_DIFFERENCE_S = 0.5
 
 
 def _finite_number(value) -> bool:
@@ -76,18 +74,15 @@ def _dist_sq_m(point: dict, lng0: float, lat0: float) -> float:
 
 
 def _effective_alt(point: dict):
-    """轨迹点的有效高度（rel_alt_m 优先，其次 abs_alt_m，须为正数）。"""
-    for field in ("rel_alt_m", "abs_alt_m"):
-        value = point.get(field)
-        if _finite_number(value) and float(value) > 0:
-            return float(value)
-    return None
+    """只有经确认的离地高度可用于几何投影。"""
+    value = point.get("height_agl_m")
+    return float(value) if _positive_number(value) else None
 
 
 def _alt_near_anchor(camera_pose, anchor_lng_wgs: float, anchor_lat_wgs: float) -> float:
     """取距 anchor 最近轨迹点的有效高度（全无 → 默认 50.0 米）。"""
     trajectory = camera_pose.get("trajectory") if isinstance(camera_pose, dict) else None
-    points = [pt for pt in (trajectory or []) if _valid_point(pt)]
+    points = [pt for pt in trajectory if _valid_point(pt)] if isinstance(trajectory, list) else []
     if not points:
         return _DEFAULT_ALT_M
     closest = min(points, key=lambda pt: _dist_sq_m(pt, anchor_lng_wgs, anchor_lat_wgs))
@@ -101,7 +96,7 @@ def _alt_near_anchor(camera_pose, anchor_lng_wgs: float, anchor_lat_wgs: float) 
     return _DEFAULT_ALT_M
 
 
-def _pick_pose(camera_pose, anchor, time_seconds=None) -> dict:
+def _pick_pose(camera_pose, anchor, time_seconds=None, *, require_time=False) -> dict:
     """从轨迹挑出与 mask 时间 / anchor 距离最近的姿态点；无可用点抛 ValueError。"""
     anchor_lng_wgs, anchor_lat_wgs = gcj02_to_wgs84(
         float(anchor["lng"]), float(anchor["lat"]))
@@ -112,19 +107,23 @@ def _pick_pose(camera_pose, anchor, time_seconds=None) -> dict:
     if not valid:
         raise ValueError("camera_pose.trajectory has no usable points")
 
-    if time_seconds is not None and _finite_number(time_seconds):
+    if require_time and not _finite_number(time_seconds):
+        raise ValueError("a valid frame timestamp is required")
+    if time_seconds is not None:
+        if not _finite_number(time_seconds):
+            raise ValueError("invalid frame timestamp")
         target = float(time_seconds)
         timed = [pt for pt in valid if _finite_number(pt.get("seconds"))]
-        if timed:
-            t_min = min(float(pt["seconds"]) for pt in timed)
-            t_max = max(float(pt["seconds"]) for pt in timed)
-            if t_min <= target <= t_max:
-                return min(timed, key=lambda pt: abs(float(pt["seconds"]) - target))
-            logger.info("suggested-edges mask time %s outside trajectory range [%s, %s]; "
-                        "falling back to nearest-anchor pose", target, t_min, t_max)
-        else:
-            logger.info("suggested-edges mask time given but trajectory has no seconds; "
-                        "falling back to nearest-anchor pose")
+        if not timed:
+            raise ValueError("trajectory has no timestamps")
+        t_min = min(float(pt["seconds"]) for pt in timed)
+        t_max = max(float(pt["seconds"]) for pt in timed)
+        if not t_min <= target <= t_max:
+            raise ValueError("frame timestamp outside trajectory")
+        closest = min(timed, key=lambda pt: abs(float(pt["seconds"]) - target))
+        if abs(float(closest["seconds"]) - target) > _MAX_POSE_TIME_DIFFERENCE_S:
+            raise ValueError("no sufficiently close camera pose")
+        return closest
 
     return min(valid, key=lambda pt: _dist_sq_m(pt, anchor_lng_wgs, anchor_lat_wgs))
 
@@ -168,9 +167,12 @@ def _outline_polygon(outline, width, height):
         if not isinstance(point, (list, tuple)) or len(point) < 2:
             return None
         try:
-            px = float(point[0]) * (width - 1.0)
-            py = float(point[1]) * (height - 1.0)
-        except (TypeError, ValueError):
+            x, y = float(point[0]), float(point[1])
+            if not math.isfinite(x) or not math.isfinite(y) or not 0 <= x <= 1 or not 0 <= y <= 1:
+                return None
+            px = x * (width - 1.0)
+            py = y * (height - 1.0)
+        except (TypeError, ValueError, OverflowError):
             return None
         coords.append((px, py))
     if len(coords) < 3:
@@ -234,7 +236,7 @@ def _try_mask_projection(G, anchor, pool, pool_index, camera_pose, media,
             polygon = _outline_polygon(outline, width, height)
             if polygon is None:
                 continue
-            pose = _pick_pose(camera_pose, anchor, time_seconds=outline_time)
+            pose = _pick_pose(camera_pose, anchor, time_seconds=outline_time, require_time=True)
             transform = registration.pose_to_homography_init(pose, int(width), int(height))
             for hit in registration.project_mask_to_edges(
                     polygon, transform, G, pool,
@@ -253,13 +255,15 @@ def _try_mask_projection(G, anchor, pool, pool_index, camera_pose, media,
     return _relay(merged, pool_index, basis="mask_projection")
 
 
-def _try_footprint(G, anchor, pool, pool_index, camera_pose, media):
+def _try_footprint(G, anchor, pool, pool_index, camera_pose, media, time_seconds=None):
     """L1：姿态拍摄范围 footprint。无轨迹/无高度/异常 → None（降级 L0）。"""
     try:
-        pose = _pick_pose(camera_pose, anchor)
+        pose = _pick_pose(camera_pose, anchor, time_seconds=time_seconds,
+                          require_time=time_seconds is not None)
         size = _media_size(media)
-        image_w = int(size[0]) if size else _L1_FALLBACK_W
-        image_h = int(size[1]) if size else _L1_FALLBACK_H
+        if size is None:
+            raise ValueError("image dimensions unavailable")
+        image_w, image_h = int(size[0]), int(size[1])
         foot = pose_to_footprint(pose, image_w, image_h)
         hits = project_footprint_to_edges(foot["polygon"], foot["origin"], G, pool)
         if not hits:
@@ -292,6 +296,20 @@ def score_suggested_edges(G, anchor: dict, *, camera_pose=None, media=None,
         return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
     pool_index = _pool_index(pool)
 
+    outlines, outline_time = _flood_outlines(candidates)
+    if outlines is not None:
+        try:
+            _pick_pose(camera_pose, anchor, time_seconds=outline_time, require_time=True)
+        except ValueError as error:
+            logger.info("suggested-edges frame time unavailable; using proximity: %s", error)
+            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+    else:
+        trajectory = camera_pose.get("trajectory") if isinstance(camera_pose, dict) else None
+        valid = [pt for pt in trajectory if _valid_point(pt)] if isinstance(trajectory, list) else []
+        if not isinstance(media, dict) or media.get("kind") != "image" or len(valid) != 1:
+            logger.info("suggested-edges image time or pose ambiguous; using proximity")
+            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+
     # Step 2：L2 配准掩膜投影
     result = _try_mask_projection(
         G, anchor, pool, pool_index, camera_pose, media, candidates, registration)
@@ -299,7 +317,8 @@ def score_suggested_edges(G, anchor: dict, *, camera_pose=None, media=None,
         return result
 
     # Step 3：L1 姿态 footprint
-    result = _try_footprint(G, anchor, pool, pool_index, camera_pose, media)
+    result = _try_footprint(G, anchor, pool, pool_index, camera_pose, media,
+                            time_seconds=outline_time if outlines is not None else None)
     if result is not None:
         return result
 

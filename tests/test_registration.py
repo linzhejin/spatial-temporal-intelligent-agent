@@ -196,10 +196,12 @@ def test_pose_to_homography_init_matches_true_homography():
     alt_m = G_M * f_px
     pose = {
         "lng": ORIGIN_LNG_WGS, "lat": ORIGIN_LAT_WGS,
-        "rel_alt_m": alt_m, "gb_yaw_deg": THETA_DEG,
+        "height_agl_m": alt_m, "gb_yaw_deg": THETA_DEG,
+        "gb_pitch_deg": -90, "gb_roll_deg": 0,
+        "intrinsics": {"fx_px": f_px, "fy_px": f_px, "cx_px": _CX, "cy_px": _CY},
     }
     result = pose_to_homography_init(
-        pose, IMAGE_W, IMAGE_H, focal_len_35mm=24.0, sensor_w_mm=36.0,
+        pose, IMAGE_W, IMAGE_H,
     )
     assert np.allclose(result["homography"], H_TRUE, atol=1e-9)
     assert result["origin"]["lng_wgs"] == pytest.approx(ORIGIN_LNG_WGS)
@@ -214,10 +216,12 @@ def test_pose_to_homography_init_yaw_zero_anchor_points():
     alt_m = 10.0
     pose = {
         "lng": ORIGIN_LNG_WGS, "lat": ORIGIN_LAT_WGS,
-        "rel_alt_m": alt_m, "gb_yaw_deg": 0.0,
+        "height_agl_m": alt_m, "gb_yaw_deg": 0.0,
+        "gb_pitch_deg": -90, "gb_roll_deg": 0,
+        "intrinsics": {"fx_px": f_px, "fy_px": f_px, "cx_px": _CX, "cy_px": _CY},
     }
     result = pose_to_homography_init(
-        pose, IMAGE_W, IMAGE_H, focal_len_35mm=24.0, sensor_w_mm=36.0,
+        pose, IMAGE_W, IMAGE_H,
     )
     H = result["homography"]
     g = alt_m / f_px
@@ -270,9 +274,11 @@ def _transform():
     return pose_to_homography_init(
         {
             "lng": ORIGIN_LNG_WGS, "lat": ORIGIN_LAT_WGS,
-            "rel_alt_m": G_M * f_px, "gb_yaw_deg": THETA_DEG,
+            "height_agl_m": G_M * f_px, "gb_yaw_deg": THETA_DEG,
+            "gb_pitch_deg": -90, "gb_roll_deg": 0,
+            "intrinsics": {"fx_px": f_px, "fy_px": f_px, "cx_px": _CX, "cy_px": _CY},
         },
-        IMAGE_W, IMAGE_H, focal_len_35mm=24.0, sensor_w_mm=36.0,
+        IMAGE_W, IMAGE_H,
     )
 
 

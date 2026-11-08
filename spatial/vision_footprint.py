@@ -1,9 +1,9 @@
-"""L1 姿态拍摄范围打分（纯 shapely，供无 numpy 的生产 api 进程用）。
+"""基于显式标定参数的拍摄范围打分，仅用于隔离验证。
 
 管理端「疑似受影响路段」建议的三级降级：L2-mask / L1-footprint / L0-radius。
 本模块是 L1-footprint 的纯几何实现：
 
-  - pose_to_footprint：把相机姿态（位置、高度、pitch、yaw、焦距、像幅）换算成
+  - pose_to_footprint：把相机位置、离地高度、姿态及像素内参换算成
     「相机拍摄地面范围」的多边形（局部米制平面，以 pose 位置为原点）。
   - project_footprint_to_edges：把候选路网边折算到同一局部平面，与 footprint
     的 buffer 相交，按覆盖比例打分排序。
@@ -17,29 +17,10 @@ import math
 
 from shapely.geometry import LineString, Polygon
 
-from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
+from spatial.coord_transform import gcj02_to_wgs84
+from spatial.camera_projection import camera_ground_homography, project_pixel
 
 _M_PER_DEG = 111320.0
-
-
-def _finite_number(value) -> bool:
-    """数值（排除 bool）且有限。"""
-    if isinstance(value, bool):
-        return False
-    try:
-        return math.isfinite(float(value))
-    except (TypeError, ValueError):
-        return False
-
-
-def _positive_number(value) -> bool:
-    """严格正数且有限。"""
-    if isinstance(value, bool):
-        return False
-    try:
-        return math.isfinite(float(value)) and float(value) > 0
-    except (TypeError, ValueError):
-        return False
 
 
 def _wgs_line_from_geometry(geometry):
@@ -90,91 +71,16 @@ def _road_name(edge_data, candidate) -> str:
     return str(candidate.get("road_name") or "") if isinstance(candidate, dict) else ""
 
 
-def pose_to_footprint(pose: dict, image_w_px: int, image_h_px: int, *,
-                      focal_len_35mm: float | None = None,
-                      sensor_w_mm: float = 36.0) -> dict:
-    """把相机姿态换算成「拍摄地面范围」多边形（局部米制平面，原点 = pose 位置）。
-
-    数学约定（DJI 惯例 gb_pitch=-90 为正下视）：
-      - focal = 传入 focal_len_35mm（有效正数）else pose.focal_len_35mm else 24.0
-      - f_px = focal / sensor_w_mm * image_w_px
-      - hfov_half = atan((image_w/2)/f_px), vfov_half = atan((image_h/2)/f_px)
-      - tilt = 90 - abs(gb_pitch); offset = alt * tan(tilt)
-      - 局部平面（东、北）: right=(cos(yaw), -sin(yaw)), up=(sin(yaw), cos(yaw))
-      - 中心 C = up * offset；四角 = C ± right*h_w ± up*h_h
-
-    Returns:
-        {"polygon": Polygon(局部米制四角), "origin": {lng_wgs, lat_wgs, lng_gcj, lat_gcj}}
-    """
-    if not _positive_number(image_w_px) or not _positive_number(image_h_px):
-        raise ValueError("image dimensions must be positive numbers")
-    image_w = float(image_w_px)
-    image_h = float(image_h_px)
-
-    focal_candidates = (focal_len_35mm, pose.get("focal_len_35mm"))
-    focal = next((float(f) for f in focal_candidates if _positive_number(f)), 24.0)
-    if not _positive_number(sensor_w_mm):
-        raise ValueError("sensor width must be a positive number")
-    sensor_w = float(sensor_w_mm)
-
-    f_px = focal / sensor_w * image_w
-    hfov_half = math.atan((image_w / 2.0) / f_px)
-    vfov_half = math.atan((image_h / 2.0) / f_px)
-
-    alt = None
-    for field in ("rel_alt_m", "abs_alt_m"):
-        value = pose.get(field)
-        if _finite_number(value):
-            alt = float(value)
-            break
-    if alt is None or alt <= 0:
-        raise ValueError("pose altitude missing or invalid")
-
-    gb_pitch_raw = pose.get("gb_pitch_deg")
-    gb_pitch = float(gb_pitch_raw) if _finite_number(gb_pitch_raw) else -90.0
-    tilt_deg = 90.0 - abs(gb_pitch)
-    if tilt_deg > 85.0:
-        raise ValueError("pose pitch too shallow for nadir footprint")
-    tilt_rad = math.radians(tilt_deg)
-    offset = alt * math.tan(tilt_rad)
-
-    yaw = 0.0
-    for field in ("gb_yaw_deg", "yaw_deg"):
-        value = pose.get(field)
-        if _finite_number(value):
-            yaw = float(value)
-            break
-    yaw_rad = math.radians(yaw)
-
-    if not _finite_number(pose.get("lng")) or not _finite_number(pose.get("lat")):
-        raise ValueError("pose position missing or invalid")
-    lng = float(pose["lng"])
-    lat = float(pose["lat"])
-
-    c, s = math.cos(yaw_rad), math.sin(yaw_rad)
-    right = (c, -s)  # 右手（东、北分量）
-    up = (s, c)      # 机头前向（东、北分量）
-    center = (up[0] * offset, up[1] * offset)
-
-    h_w = alt * math.tan(hfov_half)
-    h_h = alt * math.tan(vfov_half)
-
-    corners = [
-        (center[0] + right[0] * h_w + up[0] * h_h,
-         center[1] + right[1] * h_w + up[1] * h_h),
-        (center[0] - right[0] * h_w + up[0] * h_h,
-         center[1] - right[1] * h_w + up[1] * h_h),
-        (center[0] - right[0] * h_w - up[0] * h_h,
-         center[1] - right[1] * h_w - up[1] * h_h),
-        (center[0] + right[0] * h_w - up[0] * h_h,
-         center[1] + right[1] * h_w - up[1] * h_h),
-    ]
-
-    gcj_lng, gcj_lat = wgs84_to_gcj02(lng, lat)
-    return {
-        "polygon": Polygon(corners),
-        "origin": {"lng_wgs": lng, "lat_wgs": lat, "lng_gcj": gcj_lng, "lat_gcj": gcj_lat},
-    }
+def pose_to_footprint(pose: dict, image_w_px: int, image_h_px: int) -> dict:
+    """Project the calibrated image corners onto the local ground plane."""
+    transform = camera_ground_homography(pose, image_w_px, image_h_px)
+    matrix = transform["homography"]
+    corners = [(0, 0), (image_w_px, 0),
+               (image_w_px, image_h_px), (0, image_h_px)]
+    polygon = Polygon([project_pixel(matrix, x, y) for x, y in corners])
+    if polygon.is_empty or not polygon.is_valid or polygon.area <= 0:
+        raise ValueError("camera footprint is invalid")
+    return {"polygon": polygon, "origin": transform["origin"]}
 
 
 def project_footprint_to_edges(footprint_poly: Polygon, origin: dict, G, candidate_edges: list, *,

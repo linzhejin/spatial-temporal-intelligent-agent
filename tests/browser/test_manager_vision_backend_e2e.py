@@ -580,3 +580,25 @@ def test_vision_suggested_edges_requires_anchor(monkeypatch, tmp_path):
     finally:
         with database.connect(DATABASE_URL) as conn:
             conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
+
+
+def test_vision_suggested_edges_failure_is_not_reported_as_empty(monkeypatch, tmp_path):
+    import api.routes as routes
+    database.initialize(DATABASE_URL)
+    client = _vision_manager_http_client(monkeypatch, tmp_path)
+    job = vision_repository.create_job(
+        DATABASE_URL, created_by="web", original_name="failed.png", media_kind="image",
+        media_path="unused.png", sha256="e" * 64,
+        anchor_gcj={"lng": 114.363, "lat": 30.5365},
+    )
+    monkeypatch.setattr(routes, "_ensure_network", lambda: (object(), None))
+    def failed(*_args, **_kwargs):
+        raise RuntimeError("synthetic network failure")
+    monkeypatch.setattr(routes, "nearest_edges", failed)
+    try:
+        response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
+        assert response.status_code == 503
+        assert response.get_json()["error"] == "road_suggestions_unavailable"
+    finally:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))

@@ -182,3 +182,94 @@ def test_legacy_publication_without_direction_keeps_bidirectional_behavior(road_
     condition = response.get_json()["data"]["condition"]
     closed = rc.resolve_condition_effects(graph, [condition], "walk", strict=True)[1]
     assert {(1, 2, 0), (2, 1, 0)} <= closed
+
+
+def _explicit_snap(road_api, edge=(1, 8, 0)):
+    client, graph, _ = road_api
+    lng, lat = wgs84_to_gcj02(graph.nodes[1]["x"], graph.nodes[1]["y"])
+    u, v, key = edge
+    response = client.get(
+        f"/api/road-conditions/snap?lng={lng}&lat={lat}&u={u}&v={v}&key={key}"
+        "&type=closure&action=closure&modes=walk&direction=both",
+        headers={"X-Admin-Token": "direction-test-token"},
+    )
+    return response, lng, lat
+
+
+def test_explicit_intersection_edge_is_used_for_preview_and_publication(road_api):
+    client, _, _ = road_api
+    response, lng, lat = _explicit_snap(road_api)
+    assert response.status_code == 200, response.get_json()
+    snap = response.get_json()["data"]["snap"]
+    assert (snap["u"], snap["v"], snap["key"]) == (1, 8, 0)
+    created = client.post("/api/road-conditions", json={
+        "type": "closure", "name": "交叉路口测试", "lng": lng, "lat": lat,
+        "action": "closure", "affected_modes": ["walk"], "direction": "both",
+        "edge_ref": {"u": 1, "v": 8, "key": 0}, "binding_token": snap["binding_token"],
+    }, headers={"X-Admin-Token": "direction-test-token"})
+    assert created.status_code == 201, created.get_json()
+    edge = created.get_json()["data"]["condition"]["edge"]
+    assert [1, 8, 0] in edge["edges"]
+
+
+@pytest.mark.parametrize("token", [None, "0" * 64])
+def test_explicit_both_direction_requires_valid_binding(road_api, token):
+    client, _, _ = road_api
+    response, lng, lat = _explicit_snap(road_api)
+    assert response.status_code == 200
+    created = client.post("/api/road-conditions", json={
+        "type": "closure", "name": "无效边绑定", "lng": lng, "lat": lat,
+        "action": "closure", "affected_modes": ["walk"], "direction": "both",
+        "edge_ref": {"u": 1, "v": 8, "key": 0}, "binding_token": token,
+    }, headers={"X-Admin-Token": "direction-test-token"})
+    assert created.status_code == 409
+    assert rc.list_conditions(strict=True) == []
+
+
+def test_explicit_edge_rejects_missing_edge_or_far_location(road_api):
+    response, _, _ = _explicit_snap(road_api, (1, 123456, 0))
+    assert response.status_code == 409
+    client, graph, _ = road_api
+    lng, lat = wgs84_to_gcj02(graph.nodes[6]["x"], graph.nodes[6]["y"])
+    response = client.get(
+        f"/api/road-conditions/snap?lng={lng}&lat={lat}&u=1&v=8&key=0",
+        headers={"X-Admin-Token": "direction-test-token"},
+    )
+    assert response.status_code == 400
+
+
+def test_explicit_edge_rejects_stale_graph_fingerprint(road_api):
+    client, graph, _ = road_api
+    response, lng, lat = _explicit_snap(road_api)
+    token = response.get_json()["data"]["snap"]["binding_token"]
+    graph.nodes[8]["y"] -= 0.00001
+    response = client.post("/api/road-conditions", json={
+        "type": "closure", "name": "过期边绑定", "lng": lng, "lat": lat,
+        "action": "closure", "affected_modes": ["walk"], "direction": "both",
+        "edge_ref": {"u": 1, "v": 8, "key": 0}, "binding_token": token,
+    }, headers={"X-Admin-Token": "direction-test-token"})
+    assert response.status_code == 409
+    assert rc.list_conditions(strict=True) == []
+
+
+@pytest.mark.parametrize("edge_ref", [None, {}, {"u": True, "v": 8, "key": 0},
+                                       {"u": 1, "v": 8, "key": "0"}])
+def test_explicit_edge_reference_must_be_an_integer_triple(road_api, edge_ref):
+    client, graph, _ = road_api
+    lng, lat = _mid_12_gcj(graph)
+    response = client.post("/api/road-conditions", json={
+        "type": "closure", "name": "无效边", "lng": lng, "lat": lat,
+        "action": "closure", "affected_modes": ["walk"], "edge_ref": edge_ref,
+    }, headers={"X-Admin-Token": "direction-test-token"})
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_edge_ref"
+    assert rc.list_conditions(strict=True) == []
+
+
+def test_partial_explicit_edge_query_is_rejected(road_api):
+    client, graph, _ = road_api
+    lng, lat = _mid_12_gcj(graph)
+    response = client.get(f"/api/road-conditions/snap?lng={lng}&lat={lat}&u=1&v=2",
+                          headers={"X-Admin-Token": "direction-test-token"})
+    assert response.status_code == 400
+    assert response.get_json()["error"] == "invalid_edge_ref"

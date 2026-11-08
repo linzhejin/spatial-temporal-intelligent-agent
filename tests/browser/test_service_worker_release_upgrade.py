@@ -2,11 +2,13 @@
 from __future__ import annotations
 
 import io
+import os
 from pathlib import Path
 import re
 import subprocess
 import tarfile
 import threading
+import time
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 import pytest
@@ -20,9 +22,9 @@ except ImportError:
 pytestmark = pytest.mark.skipif(sync_playwright is None, reason="Playwright browser is unavailable")
 
 
-def test_production_service_worker_cache_upgrades_to_candidate(tmp_path):
+def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
     repo = Path(__file__).resolve().parents[2]
-    baseline = "bbfeafc942758b29e802d7e0f406fd4d1fd372bf"
+    baseline = "873f576d3b138847dc794a33354807e448f444ed"
     archive = subprocess.check_output(["git", "archive", baseline, "static"], cwd=repo)
     baseline_root = tmp_path / "baseline"
     baseline_root.mkdir()
@@ -49,6 +51,19 @@ def test_production_service_worker_cache_upgrades_to_candidate(tmp_path):
         def log_message(self, *_args):
             pass
 
+    def wait_for_cache(page, present, absent):
+        # wait_for_function treats a Promise object as truthy; poll the awaited
+        # cache keys inside the browser instead of accepting a pending Promise.
+        page.evaluate("""async names => {
+            const until = Date.now() + 30000;
+            while (Date.now() < until) {
+                const keys = await caches.keys();
+                if (keys.includes(names.present) && !keys.includes(names.absent)) return;
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            throw new Error('cache transition timed out: ' + (await caches.keys()).join(','));
+        }""", {"present": present, "absent": absent})
+
     server = ThreadingHTTPServer(("127.0.0.1", 0), DynamicHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -61,8 +76,7 @@ def test_production_service_worker_cache_upgrades_to_candidate(tmp_path):
             page.goto(f"http://127.0.0.1:{server.server_port}/index.html", wait_until="domcontentloaded")
             page.evaluate("navigator.serviceWorker.register('/sw.js')")
             page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=15000)
-            page.wait_for_function("async oldName => (await caches.keys()).includes(oldName)", arg=old_cache,
-                                   timeout=15000)
+            wait_for_cache(page, old_cache, new_cache)
             before = page.evaluate("async () => await caches.keys()")
             assert old_cache in before
 
@@ -70,21 +84,54 @@ def test_production_service_worker_cache_upgrades_to_candidate(tmp_path):
             page.evaluate("() => { window.__controllerChanged = new Promise(resolve => "
                           "navigator.serviceWorker.addEventListener('controllerchange', resolve, {once: true})); return true; }")
             page.evaluate("async () => { const reg = await navigator.serviceWorker.getRegistration(); await reg.update(); }")
-            page.wait_for_function(
-                "async args => { const keys = await caches.keys(); return keys.includes(args.newName) && !keys.includes(args.oldName); }",
-                arg={"oldName": old_cache, "newName": new_cache}, timeout=30000)
-            page.evaluate("() => window.__controllerChanged")
+            wait_for_cache(page, new_cache, old_cache)
+            page.evaluate("""() => Promise.race([
+                window.__controllerChanged,
+                new Promise((_, reject) => setTimeout(() => reject(new Error('controller change timed out')), 15000))
+            ])""")
             page.reload(wait_until="domcontentloaded")
-            page.wait_for_function("async () => navigator.serviceWorker.controller !== null", timeout=10000)
+            page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
 
             result = page.evaluate("""async newName => {
                 const cache = await caches.open(newName);
-                const script = await cache.match('/js/app.js?v=20261108-interaction-v1');
+                const script = await cache.match('/js/app.js?v=20261109-vision-safety-v1');
                 return {keys: await caches.keys(), app: script ? await script.text() : ''};
             }""", new_cache)
             assert result["keys"] == [new_cache]
             assert "appendRouteStepNotice" in result["app"]
             assert "appendRouteFieldTruthNotice" not in result["app"]
+
+            # A rollback must also replace the newly installed shell, not leave
+            # a newer cached manager/client bundle paired with the old backend.
+            page.wait_for_load_state("load")
+            page.evaluate("""async () => {
+                const until = Date.now() + 15000;
+                while (Date.now() < until) {
+                    const reg = await navigator.serviceWorker.getRegistration();
+                    if (reg && reg.active === navigator.serviceWorker.controller && !reg.installing && !reg.waiting) return;
+                    await new Promise(resolve => setTimeout(resolve, 100));
+                }
+                throw new Error('service worker did not settle');
+            }""")
+            page.evaluate("() => { window.__previousController = navigator.serviceWorker.controller; }")
+            # Git checkout updates changed files' mtimes when rolling back.
+            # The extracted baseline otherwise has an older mtime than the
+            # candidate and SimpleHTTPRequestHandler incorrectly returns 304.
+            rollback_mtime = max(time.time(), (new_static / "sw.js").stat().st_mtime) + 2
+            for name in ("sw.js", "index.html", "js/app.js", "css/style.css"):
+                os.utime(old_static / name, (rollback_mtime, rollback_mtime))
+            DynamicHandler.root = old_static
+            page.evaluate("async () => { const reg = await navigator.serviceWorker.getRegistration(); await reg.update(); }")
+            page.wait_for_function("() => navigator.serviceWorker.controller !== window.__previousController", timeout=30000)
+            wait_for_cache(page, old_cache, new_cache)
+            page.reload(wait_until="domcontentloaded")
+            page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
+            rollback = page.evaluate("""async oldName => {
+                const cache = await caches.open(oldName);
+                const script = await cache.match('/js/app.js?v=20261108-interaction-v1');
+                return {keys: await caches.keys(), present: !!script};
+            }""", old_cache)
+            assert rollback == {"keys": [old_cache], "present": True}
             context.close()
             browser.close()
     finally:

@@ -850,6 +850,7 @@ def snap_to_edge(
     lng_gcj: float,
     lat_gcj: float,
     max_dist_m: float = SNAP_MAX_DIST_M,
+    edge_ref: tuple[int, int, int] | None = None,
 ) -> Optional[dict]:
     """
     把管理员点击的 GCJ-02 坐标吸附到最近的路网边。
@@ -872,7 +873,14 @@ def snap_to_edge(
     lng_wgs, lat_wgs = gcj02_to_wgs84(lng_gcj, lat_gcj)
 
     best = None  # (dist_m, u, v, k, line, proj)
-    for u, v, k, data in G.edges(keys=True, data=True):
+    if edge_ref is not None:
+        u, v, k = edge_ref
+        if not G.has_edge(u, v, k):
+            return None
+        candidates = [(u, v, k, G.get_edge_data(u, v, k))]
+    else:
+        candidates = G.edges(keys=True, data=True)
+    for u, v, k, data in candidates:
         dist_m, line, proj = _edge_projection_m(G, u, v, k, data, lng_wgs, lat_wgs)
         if best is None or dist_m < best[0]:
             best = (dist_m, u, v, k, line, proj)

@@ -2436,6 +2436,16 @@ def _road_binding_token(graph, snap: dict, direction: str) -> str:
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
+def _parse_edge_ref(value):
+    """Return a strict road-edge triple; never trust browser-provided geometry."""
+    if not isinstance(value, dict) or set(value) != {"u", "v", "key"}:
+        raise ValueError("invalid edge reference")
+    values = (value["u"], value["v"], value["key"])
+    if any(isinstance(item, bool) or not isinstance(item, int) for item in values):
+        raise ValueError("invalid edge reference")
+    return values
+
+
 @api_bp.route("/road-conditions/snap", methods=["GET"])
 def snap_road_condition():
     """GET /api/road-conditions/snap?lng=&lat= — 管理员选点预览：把点击点吸附到最近路段。
@@ -2470,11 +2480,21 @@ def snap_road_condition():
         lat = float(request.args.get("lat"))
     except (TypeError, ValueError):
         return _err("invalid_lnglat", "lng/lat 必须是数字", 400)
+    if not math.isfinite(lng) or not math.isfinite(lat) or not -180 <= lng <= 180 or not -90 <= lat <= 90:
+        return _err("invalid_lnglat", "经纬度无效。", 400)
+    edge_ref = None
+    if any(name in request.args for name in ("u", "v", "key")):
+        try:
+            edge_ref = _parse_edge_ref({name: int(request.args[name]) for name in ("u", "v", "key")})
+        except (KeyError, TypeError, ValueError):
+            return _err("invalid_edge_ref", "道路标识无效，请重新选择。", 400)
 
     G, err = _ensure_network()
     if err:
         return err
-    snap = snap_to_edge(G, lng, lat)
+    if edge_ref is not None and not G.has_edge(*edge_ref):
+        return _err("road_binding_changed", "道路已变化，请重新选择。", 409)
+    snap = snap_to_edge(G, lng, lat, edge_ref=edge_ref) if edge_ref is not None else snap_to_edge(G, lng, lat)
     if snap is None:
         return _err(
             "too_far_from_road",
@@ -2836,6 +2856,14 @@ def create_road_condition():
 
     try:
         lng_f, lat_f = float(lng), float(lat)
+        if not math.isfinite(lng_f) or not math.isfinite(lat_f) or not -180 <= lng_f <= 180 or not -90 <= lat_f <= 90:
+            return _err("invalid_lnglat", "经纬度无效。", 400)
+        edge_ref = None
+        if "edge_ref" in body:
+            try:
+                edge_ref = _parse_edge_ref(body["edge_ref"])
+            except ValueError:
+                return _err("invalid_edge_ref", "道路标识无效，请重新选择。", 400)
         start_ts = _parse_time_input(body.get("start_time"))
         end_ts = _parse_time_input(body.get("end_time"))
         if start_ts and end_ts and end_ts <= start_ts:
@@ -2847,7 +2875,9 @@ def create_road_condition():
         if err:
             return err
         # 服务端重新吸附，不信任前端坐标
-        snap = snap_to_edge(G, lng_f, lat_f)
+        if edge_ref is not None and not G.has_edge(*edge_ref):
+            return _err("road_binding_changed", "道路已变化，请重新选择。", 409)
+        snap = snap_to_edge(G, lng_f, lat_f, edge_ref=edge_ref) if edge_ref is not None else snap_to_edge(G, lng_f, lat_f)
         if snap is None:
             return _err(
                 "too_far_from_road",
@@ -2855,17 +2885,18 @@ def create_road_condition():
                 400,
             )
 
-        if direction != "both":
+        if direction != "both" or edge_ref is not None:
             supplied_token = body.get("binding_token")
             expected_token = _road_binding_token(G, snap, direction)
             if (not isinstance(supplied_token, str) or not re.fullmatch(r"[0-9a-f]{64}", supplied_token)
                     or not hmac.compare_digest(supplied_token, expected_token)):
                 return _err("road_binding_changed", "道路绑定已变化，请重新选路段并核对方向。", 409)
-            try:
-                if not _directional_corridor_edges(G, snap, direction):
-                    return _err("direction_unavailable", "所选方向没有可确认的路网路段，请重新核对。", 422)
-            except RoadConditionBindingError:
-                return _err("direction_unverifiable", "无法可靠确认所选方向，请重新选路段。", 422)
+            if direction != "both":
+                try:
+                    if not _directional_corridor_edges(G, snap, direction):
+                        return _err("direction_unavailable", "所选方向没有可确认的路网路段，请重新核对。", 422)
+                except RoadConditionBindingError:
+                    return _err("direction_unverifiable", "无法可靠确认所选方向，请重新选路段。", 422)
             if not hmac.compare_digest(supplied_token, _road_binding_token(G, snap, direction)):
                 return _err("road_binding_changed", "道路数据在核对期间发生变化，请重新选路段。", 409)
 
@@ -3968,7 +3999,7 @@ def manager_vision_suggested_edges(job_id):
         ], "basis": "radius_only"}
     except Exception:
         logger.exception("邻近道路建议失败")
-        result = {"suggested_edges": [], "basis": "radius_only"}
+        return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
     return _ok(result)
 
 

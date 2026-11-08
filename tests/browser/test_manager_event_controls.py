@@ -56,6 +56,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         }
         self.context = self.browser.new_context(
             timezone_id="America/New_York", is_mobile=mobile, has_touch=mobile,
+            service_workers="block",  # This suite mocks APIs; cache upgrade is tested separately.
             viewport={"width": 390, "height": 844} if mobile else {"width": 1280, "height": 1000},
         )
         self.page = self.context.new_page()
@@ -74,6 +75,8 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.vision_jobs = []
         self.vision_preview_data = None
         self.vision_preview_requests = []
+        self.hold_suggestions = False
+        self.pending_suggestions = []
         self.page.on("pageerror", lambda error: self.errors.append(str(error)))
         self.page.route("**/api/**", self.api)
         self.page.route("**/*", self.local_only)
@@ -132,6 +135,11 @@ class ManagerEventControlsTest(unittest.TestCase):
             data = {"condition": self.road_conditions[0] if self.road_conditions else {}}
         elif path == "/api/manager/vision-jobs":
             data = {"jobs": self.vision_jobs}
+        elif path.endswith("/suggested-edges"):
+            if self.hold_suggestions:
+                self.pending_suggestions.append(route)
+                return
+            data = {"suggested_edges": [], "basis": "radius_only"}
         elif path.endswith("/preview-frames"):
             self.vision_preview_requests.append(path)
             data = self.vision_preview_data or {
@@ -169,6 +177,22 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page.set_viewport_size({"width": 390, "height": 844})
         self.page.locator("#vision-workspace").scroll_into_view_if_needed()
         self.page.screenshot(path=str(self.qa_dir / "vision-workspace-mobile.png"))
+
+    def test_suggested_roads_show_loading_then_empty_state(self):
+        self.vision_jobs = [{
+            "job_id": "12345678-1234-4234-8234-123456789abc", "status": "needs_review",
+            "media_kind": "image", "original_name": "空道路测试.png",
+            "anchor_gcj": {"lng": 114.363, "lat": 30.5365},
+            "result": {"candidates": [{"kind": "vehicle_cluster_review", "confidence": 0.7}]},
+        }]
+        self.hold_suggestions = True
+        self.page.goto(self.url, wait_until="domcontentloaded")
+        card = self.page.locator(".vision-job").filter(has_text="空道路测试.png")
+        expect(card).to_contain_text("正在查询附近道路", timeout=10000)
+        self.assertEqual(len(self.pending_suggestions), 1)
+        self.pending_suggestions.pop().fulfill(json={"data": {"suggested_edges": [], "basis": "radius_only"}})
+        self.page.wait_for_load_state("networkidle")
+        expect(card).to_contain_text("附近没有可参考的道路", timeout=10000)
 
     def test_event_history_filters_by_name_status_and_beijing_date(self):
         from datetime import datetime, timezone
@@ -336,8 +360,8 @@ class ManagerEventControlsTest(unittest.TestCase):
         expect(card).to_contain_text("原拍摄时间：未知")
         expect(card).to_contain_text("模拟校园道路：校园测试路")
         expect(card).to_contain_text("实验时钟（模拟）")
-        expect(card).to_contain_text("脚本模拟审核，非人工复核")
-        expect(card.locator(".vision-job-state")).to_have_text("脚本模拟审核")
+        expect(card).to_contain_text("脚本模拟复核，非人工复核")
+        expect(card.locator(".vision-job-state")).to_have_text("脚本模拟复核")
         expect(card).to_contain_text("不能发布为当前路况")
         expect(card).not_to_contain_text("校园位置已标注")
         expect(card.locator(".transfer-button")).to_have_count(0)

@@ -1,11 +1,8 @@
-"""L2 影像配准原语：像素 ↔ 地面（GCJ-02）的单应配准与 mask→边重叠打分。
+"""Pixel-to-ground registration primitives for isolated validation.
 
-实现论文创新点「自有路网作为影像配准绝对基准」的离线管线底子：
-  1. pose_to_homography_init   —— 相机姿态 → 近正下视单应初值；
-  2. fit_pixel_to_gcj           —— 像素 ↔ GCJ 对应点的 RANSAC + DLT 单应配准；
-  3. project_mask_to_edges      —— mask → 候选边重叠打分（返回边 ID 排序）。
-
-仅用于论文实验 / 离线评测，不 import 进 worker/api，不自动落边、不接生产链路。
+Production road suggestions currently use proximity only. The pose-based
+transform requires explicit ground-relative altitude, orientation and calibrated
+intrinsics; it does not establish real-world registration accuracy by itself.
 """
 
 from __future__ import annotations
@@ -16,81 +13,16 @@ import numpy as np
 from shapely import wkt
 from shapely.geometry import LineString, Polygon
 
-from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
+from spatial.coord_transform import gcj02_to_wgs84
+from spatial.camera_projection import camera_ground_homography
 
 _M_PER_DEG = 111320.0
 
 
-def pose_to_homography_init(pose: dict, image_w_px: int, image_h_px: int, *,
-                            focal_len_35mm: float | None = None,
-                            sensor_w_mm: float = 36.0) -> dict:
-    """由相机姿态构造近正下视单应初值（像素 → 局部平面）。
-
-    Args:
-        pose: 含 lng / lat（WGS-84）与可用高度（rel_alt_m 优先，其次 abs_alt_m）、
-              可选 yaw（gb_yaw_deg 优先，其次 yaw_deg）与 focal_len_35mm。
-        image_w_px / image_h_px: 图像像素宽高。
-        focal_len_35mm: 35mm 等效焦距；优先于 pose["focal_len_35mm"]，两者都缺省用 24.0。
-        sensor_w_mm: 35mm 等效传感器宽，默认 36.0。
-
-    Returns:
-        {"homography": (3,3) ndarray, "origin": {lng_wgs, lat_wgs, lng_gcj, lat_gcj}}
-    """
-    if image_w_px <= 0 or image_h_px <= 0:
-        raise ValueError("image dimensions must be positive")
-    if sensor_w_mm <= 0:
-        raise ValueError("sensor width must be positive")
-
-    lng = pose.get("lng")
-    lat = pose.get("lat")
-    if lng is None or lat is None:
-        raise ValueError("pose must contain lng and lat (WGS-84)")
-
-    focal = focal_len_35mm
-    if focal is None:
-        focal = pose.get("focal_len_35mm")
-    if not focal:
-        focal = 24.0
-
-    alt_m = pose.get("rel_alt_m")
-    if alt_m is None:
-        alt_m = pose.get("abs_alt_m")
-    if alt_m is None:
-        raise ValueError("pose must contain a usable altitude (rel_alt_m or abs_alt_m)")
-    alt_m = float(alt_m)
-    if alt_m <= 0:
-        raise ValueError("altitude must be positive")
-
-    f_px = float(focal) / float(sensor_w_mm) * float(image_w_px)
-    g = alt_m / f_px
-
-    yaw = pose.get("gb_yaw_deg")
-    if yaw is None:
-        yaw = pose.get("yaw_deg")
-    if yaw is None:
-        yaw = 0.0
-    theta = math.radians(float(yaw))
-
-    cx = float(image_w_px) / 2.0
-    cy = float(image_h_px) / 2.0
-    c, s = math.cos(theta), math.sin(theta)
-
-    homography = np.array([
-        [g * c, -g * s, -g * (cx * c - cy * s)],
-        [-g * s, -g * c, g * (cx * s + cy * c)],
-        [0.0, 0.0, 1.0],
-    ])
-
-    lng_gcj, lat_gcj = wgs84_to_gcj02(float(lng), float(lat))
-    return {
-        "homography": homography,
-        "origin": {
-            "lng_wgs": float(lng),
-            "lat_wgs": float(lat),
-            "lng_gcj": lng_gcj,
-            "lat_gcj": lat_gcj,
-        },
-    }
+def pose_to_homography_init(pose: dict, image_w_px: int, image_h_px: int) -> dict:
+    """Project a calibrated camera onto flat ground for isolated assessment."""
+    result = camera_ground_homography(pose, image_w_px, image_h_px)
+    return {**result, "homography": np.asarray(result["homography"], dtype=np.float64)}
 
 
 def _apply_h(H, pts) -> np.ndarray:

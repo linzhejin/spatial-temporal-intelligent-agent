@@ -29,6 +29,7 @@ function managerHarness(sessionSeed = []) {
   let visionJobs = [];
   const visionPreviewFrames = new Map();
   const visionSuggestedEdges = new Map();
+  let visionSuggestedFailures = 0;
   let visionPreviewFailures = 0;
   let visionScenes = [];
   let roadEvents = [];
@@ -206,6 +207,10 @@ function managerHarness(sessionSeed = []) {
       }
       if (url.match(/^\/api\/manager\/vision-jobs\/[^/]+\/suggested-edges$/)) {
         const jobId = decodeURIComponent(url.split('/')[4] || '');
+        if (visionSuggestedFailures > 0) {
+          visionSuggestedFailures -= 1;
+          return { ok: false, status: 503, json: async () => ({ message: '邻近道路暂时不可用' }) };
+        }
         return { ok: true, json: async () => ({ data: {
           suggested_edges: visionSuggestedEdges.get(jobId) || [], basis: 'pose_footprint',
         } }) };
@@ -229,6 +234,7 @@ function managerHarness(sessionSeed = []) {
       else if (url === '/api/manager/vision-scenes') data = { scenes: visionScenes };
       else if (url.startsWith('/api/road-conditions/snap')) data = {
         snap: { u: 1, v: 2, key: 0, road_name: '测试路', dist_m: 2,
+          edges: [[1, 2, 0]], binding_token: 'b'.repeat(64),
           chain_length_m: 100, snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53,
           geometry_gcj: [[114.36, 30.53], [114.361, 30.53]] },
         impact_preview: {
@@ -257,6 +263,7 @@ function managerHarness(sessionSeed = []) {
     setVisionJobs: (items) => { visionJobs = items; },
     setVisionPreviewFrames: (jobId, value) => { visionPreviewFrames.set(jobId, value); },
     setVisionSuggestedEdges: (jobId, edges) => { visionSuggestedEdges.set(jobId, edges); },
+    failVisionSuggestionRequests: (count) => { visionSuggestedFailures = count; },
     failVisionPreviewRequests: (count) => { visionPreviewFailures = count; },
     setVisionScenes: (items) => { visionScenes = items; },
     setRoadEvents: (items) => { roadEvents = items; },
@@ -276,7 +283,8 @@ function managerHarness(sessionSeed = []) {
         effects_by_mode: {}, sample_routes: {},
       };
       item.resolve({ ok: true, json: async () => ({ data: {
-        snap: { u: 1, v: 2, key: 0, road_name: roadName, chain_length_m: 80,
+        snap: { u: 1, v: 2, key: 0, edges: [[1, 2, 0]], binding_token: 'b'.repeat(64),
+          road_name: roadName, chain_length_m: 80,
           geometry_gcj: [[114.36, 30.53], [114.361, 30.53]] },
         impact_preview: preview,
       } }) });
@@ -297,8 +305,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261108-interaction-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261108-interaction-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261109-vision-safety-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261109-vision-safety-v1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1405,6 +1413,24 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   assert.equal(elements.get('vision-source-banner').hidden, true);
 });
 
+test('legacy whole-job transfer uses its recorded candidate index', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'legacy-confirmed', status: 'needs_review', review_status: 'confirmed',
+    review_candidate_index: 1, media_kind: 'image', original_name: '旧记录.png',
+    result: { candidates: [{ kind: 'possible_crowding' }, { kind: 'vehicle_cluster_review' }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const transfer = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '转入道路事件');
+  assert.ok(transfer);
+  transfer.listeners.click();
+  assert.match(harness.elements.get('vision-source-label').textContent, /已复核影像候选 2/);
+});
+
 test('candidate review shows congestion duration and image-space crowd evidence', async () => {
   const harness = managerHarness();
   await flush();
@@ -1818,7 +1844,7 @@ test('periodic updates preserve an unfinished vision review note and its focus',
     '刚才看到很多车辆，正在核对具体的路段');
 });
 
-test('suggested edges render their projection basis, match score and road name', async () => {
+test('suggested edges show their basis and road name without an unverified match percentage', async () => {
   const harness = managerHarness();
   await flush();
   harness.setVisionJobs([{
@@ -1835,7 +1861,7 @@ test('suggested edges render their projection basis, match score and road name',
   const card = harness.elements.get('vision-jobs').children[0];
   const text = descendants(card).map((node) => node.textContent || '').join(' ');
   assert.match(text, /按影像轮廓投影排序/);
-  assert.match(text, /匹配度 50%/);
+  assert.doesNotMatch(text, /匹配度/);
   assert.match(text, /樱园西路/);
 });
 
@@ -1852,6 +1878,31 @@ test('a job with no suggested edges renders no affected-roads section', async ()
   const card = harness.elements.get('vision-jobs').children[0];
   const text = descendants(card).map((node) => node.textContent || '').join(' ');
   assert.doesNotMatch(text, /疑似受影响路段/);
+  assert.match(text, /附近没有可参考的道路/);
+});
+
+test('failed road suggestions offer a retry without losing the job card', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'suggest-retry', status: 'needs_review', media_kind: 'image', original_name: '待重试.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
+  }]);
+  harness.setVisionSuggestedEdges('suggest-retry', [{
+    u: 1, v: 2, key: 0, road_name: '重试道路', basis: 'radius_only', score: 0,
+    snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53,
+  }]);
+  harness.failVisionSuggestionRequests(1);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const retry = descendants(card).find((node) => node.tagName === 'button' && node.textContent === '重试道路查询');
+  assert.ok(retry);
+  retry.listeners.click();
+  await flush();
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /重试道路/);
+  assert.equal(harness.calls.filter((call) => call.url.endsWith('/suggested-edges')).length, 2);
 });
 
 test('suggested edges are cached across poll refreshes without refetching', async () => {
@@ -1884,10 +1935,11 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
   harness.setVisionJobs([{
     job_id: 'suggest-pick', status: 'needs_review', media_kind: 'image', original_name: '巡查.png',
     anchor_gcj: { lng: 114.36, lat: 30.53 },
+    candidate_reviews: { '0': { status: 'confirmed' } },
     result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
   }]);
   harness.setVisionSuggestedEdges('suggest-pick', [{
-    u: 1, v: 2, key: 0,
+    u: 1, v: 2, key: 0, edges: [[1, 2, 0]],
     road_name: '测试路', basis: 'pose_footprint', score: 0.9,
     snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53, dist_m: 2, chain_length_m: 100,
     geometry_gcj: [[114.36, 30.53], [114.361, 30.53]],
@@ -1895,6 +1947,11 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
   harness.intervalCallbacks[0]();
   await flush();
   const card = harness.elements.get('vision-jobs').children[0];
+  const transfer = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '将此候选转入道路事件');
+  transfer.listeners.click();
+  harness.elements.get('event-name').value = '保留已有草稿';
+  harness.elements.get('field-confirmation').value = '管理员已现场核实这条道路';
   const locate = descendants(card).find((node) => node.tagName === 'button'
     && node.textContent === '在地图定位并预填发布落点');
   locate.listeners.click();
@@ -1909,6 +1966,33 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
     'the re-snap must re-check the suggested edge snap longitude');
   assert.match(snapCalls[0].url, /lat=30\.53/,
     'the re-snap must re-check the suggested edge snap latitude');
+  assert.match(snapCalls[0].url, /[?&]u=1&v=2&key=0/);
+  assert.equal(harness.elements.get('event-name').value, '保留已有草稿');
+  assert.equal(harness.elements.get('field-confirmation').value, '管理员已现场核实这条道路');
+  assert.match(harness.elements.get('vision-source-label').textContent, /已复核影像候选 1/);
+});
+
+test('unconfirmed suggested edge requires selecting a confirmed candidate first', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'unconfirmed-suggestion', status: 'needs_review', media_kind: 'image',
+    original_name: '未确认.png', anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
+  }]);
+  harness.setVisionSuggestedEdges('unconfirmed-suggestion', [{
+    u: 1, v: 2, key: 0, road_name: '测试路', basis: 'radius_only', score: 0,
+    snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53,
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const locate = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '在地图定位并预填发布落点');
+  locate.listeners.click();
+  await flush();
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /先确认.*候选/);
+  assert.equal(harness.calls.filter((call) => call.url.startsWith('/api/road-conditions/snap')).length, 0);
 });
 
 test('vision list refresh defers while the manager focuses a control inside a job card', async () => {
