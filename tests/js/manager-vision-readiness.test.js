@@ -316,6 +316,15 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.doesNotMatch(managerHtml, /id="restore-vision-results"/);
 });
 
+test('visual polish keeps overflow, status and action semantics aligned', () => {
+  assert.match(managerCss, /\.candidate-card p\{margin:5px 0 0[^}]*overflow-wrap:anywhere/);
+  assert.match(managerCss, /\.vision-status\.is-ready\{[^}]*color:#2f6b4f/);
+  assert.match(managerCss, /\.suggested-edges > strong\{[^}]*display:block/);
+  assert.match(managerCss, /\.delete-vision,\s*\.dismiss-vision\{[^}]*color:#8b3a3a/);
+  assert.match(managerHtml, /id="vision-jobs"[\s\S]*?empty-state">正在读取影像任务/);
+  assert.doesNotMatch(source, /审核/);
+});
+
 test('saved observation scene loads only after frame check and lets manager rebind its road', async () => {
   const harness = managerHarness();
   await flush();

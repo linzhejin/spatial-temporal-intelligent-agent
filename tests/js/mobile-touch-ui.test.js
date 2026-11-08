@@ -46,3 +46,15 @@ test('phone guidance uses plain wording and removes slang', () => {
   assert.equal(html.includes('\u8bf4\u4eba\u8bdd'), false);
   assert.ok(html.includes('\u8f93\u5165\u8d77\u70b9\u3001\u7ec8\u70b9\u6216\u8def\u7ebf\u8981\u6c42'));
 });
+
+test('chat bubbles wrap long words and URLs', () => {
+  assert.match(css, /\.chat-bubble-text\s*\{[^}]*overflow-wrap:\s*anywhere/);
+  assert.match(css, /\.bubble-text\s*\{[^}]*overflow-wrap:\s*anywhere/);
+});
+
+test('readable secondary grey and larger header touch targets', () => {
+  assert.doesNotMatch(css, /\.rr-time-hint\s*\{[^}]*#999/);
+  assert.match(css, /\.rr-time-hint\s*\{[^}]*color:\s*var\(--ink-light\)/);
+  assert.ok(Number(cssBlock(css, '.road-report-btn {').match(/width:[ ]*([0-9]+)px/)[1]) >= 40);
+  assert.ok(Number(cssBlock(css, '.help-btn {').match(/width:[ ]*([0-9]+)px/)[1]) >= 40);
+});

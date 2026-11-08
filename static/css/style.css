@@ -427,6 +427,10 @@ body {
     font-weight: 700;
     touch-action: manipulation;
 }
+.help-btn {
+    width: 40px;
+    height: 40px;
+}
 .reset-btn:focus-visible { outline: 3px solid #276E8A; outline-offset: 2px; }
 
 /* ===== Mode bar（出行方式分段选择器，固定不随消息滚动） ===== */
@@ -507,6 +511,7 @@ body {
     font-size: 0.82rem;
     color: var(--ink-soft);
     line-height: 1.65;
+    overflow-wrap: anywhere;
 }
 
 /* ===== Quick chips ===== */
@@ -1878,7 +1883,7 @@ body.is-planning-mode .desktop-route-workbench {
 .rr-time-hint {
     margin: -6px 0 0;
     font-size: 0.72rem;
-    color: var(--ink-faint, #999);
+    color: var(--ink-light);
     line-height: 1.5;
 }
 .road-report-actions {
@@ -1915,8 +1920,8 @@ body.is-planning-mode .desktop-route-workbench {
     min-height: 16px;
 }
 .road-report-btn {
-    width: 26px;
-    height: 26px;
+    width: 40px;
+    height: 40px;
     border-radius: 50%;
     border: 1.5px solid var(--stone);
     background: var(--surface);
@@ -1962,6 +1967,7 @@ body.is-planning-mode .desktop-route-workbench {
     font-size: 0.85rem;
     color: var(--ink);
     line-height: 1.65;
+    overflow-wrap: anywhere;
 }
 
 /* 用户气泡（靠右，主题色） */

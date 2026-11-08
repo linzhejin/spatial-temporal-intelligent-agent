@@ -2516,14 +2516,14 @@
       return;
     }
     state.visionActionBusy.add(busyKey);
-    feedback.textContent = '正在保存审核…';
+    feedback.textContent = '正在保存复核…';
     var body = { status: status, note: note };
     request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/candidates/' + candidateIndex + '/review', 'POST', body)
       .then(function () {
         state.reviewDrafts[job.job_id] = '';
         return refreshVisionJobs(true);
       })
-      .catch(function (error) { feedback.textContent = error.message || '审核保存失败。'; })
+      .catch(function (error) { feedback.textContent = error.message || '复核保存失败。'; })
       .finally(function () { state.visionActionBusy.delete(busyKey); });
   }
 
@@ -2609,12 +2609,12 @@
       completed: '完成', failed: '分析失败', cancelled: '已取消',
     }[job.status] || job.status;
     if (isReplay && replay.review_origin === 'scripted' &&
-        (job.review_status || Object.keys(job.candidate_reviews || {}).length)) stateLabel.textContent = '脚本模拟审核';
+        (job.review_status || Object.keys(job.candidate_reviews || {}).length)) stateLabel.textContent = '脚本模拟复核';
     head.append(title, stateLabel); card.appendChild(head);
     if (isReplay) {
       var replayNotice = document.createElement('p'); replayNotice.className = 'vision-replay-notice';
       replayNotice.textContent = '公开素材历史回放；校园道路和实验时钟均为模拟，不能发布为当前路况。'
-        + (replay.review_origin === 'scripted' ? '脚本模拟审核，非人工复核。' : '审核来源请以记录为准。');
+        + (replay.review_origin === 'scripted' ? '脚本模拟复核，非人工复核。' : '复核来源请以记录为准。');
       card.appendChild(replayNotice);
     }
     if (job.status === 'running' || job.status === 'queued') {
@@ -2765,7 +2765,7 @@
           card.appendChild(transfer);
         } else {
           var ambiguous = document.createElement('p'); ambiguous.className = 'vision-job-meta';
-          ambiguous.textContent = '旧审核未记录具体候选，无法直接作为道路事件来源。';
+          ambiguous.textContent = '旧复核未记录具体候选，无法直接作为道路事件来源。';
           card.appendChild(ambiguous);
         }
       }
