@@ -22,6 +22,7 @@ function loadManagerPoseHelpers() {
       parseDjiSubtitle: parseDjiSubtitle,
       parseDjiPoseTrack: parseDjiPoseTrack,
       convertPoseForUpload: convertPoseForUpload,
+      poseForUpload: poseForUpload,
       MAX_DJI_GPS_STORED_POINTS: MAX_DJI_GPS_STORED_POINTS,
     };
   ` + '\n})();', context);
@@ -132,4 +133,23 @@ test('convertPoseForUpload emits the backend camera_pose contract', () => {
       focal_len_35mm: 240,
     }],
   });
+});
+
+test('poseForUpload returns null for an unparsed or missing pose track', () => {
+  assert.equal(helpers.poseForUpload({ parsed: false, pointCount: 0, sampled: false, points: [] }), null);
+  assert.equal(helpers.poseForUpload(null), null);
+});
+
+test('poseForUpload returns the same contract as convertPoseForUpload and keeps null fields', () => {
+  const pose = helpers.parseDjiPoseTrack(
+    '00:00:02,000 --> 00:00:02,100\n' +
+    '[latitude : 30.535] [longitude : 114.356] [rel_alt : 100 abs_alt : 130]');
+  const result = helpers.poseForUpload(pose);
+  assert.deepEqual(
+    JSON.parse(JSON.stringify(result)),
+    JSON.parse(JSON.stringify(helpers.convertPoseForUpload(pose))));
+  assert.equal(result.trajectory[0].yaw_deg, null);
+  assert.equal(result.trajectory[0].gb_yaw_deg, null);
+  assert.equal(result.trajectory[0].gb_pitch_deg, null);
+  assert.equal(result.trajectory[0].focal_len_35mm, null);
 });

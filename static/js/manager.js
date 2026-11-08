@@ -268,6 +268,11 @@
     };
   }
 
+  function poseForUpload(cameraPose) {
+    if (!cameraPose || !cameraPose.parsed) return null;
+    return convertPoseForUpload(cameraPose);
+  }
+
   function transformLatitude(x, y) {
     var result = -100 + 2 * x + 3 * y + 0.2 * y * y + 0.1 * x * y + 0.2 * Math.sqrt(Math.abs(x));
     result += (20 * Math.sin(6 * x * Math.PI) + 20 * Math.sin(2 * x * Math.PI)) * 2 / 3;
@@ -449,7 +454,7 @@
         status.textContent = '没有找到有效的拍摄时间，仍可手动填写后提交。'; return;
       }
       state.djiTrackPoints = metadata.gpsPoints;
-      state.djiCameraPose = metadata.cameraPose;
+      state.djiCameraPose = metadata.cameraPose.parsed ? metadata.cameraPose : null;
       byId('show-dji-track').hidden = !metadata.gpsPoints.length;
       var captureInput = byId('captured-at');
       var canApply = !state.captureTimeEdited
@@ -1948,7 +1953,8 @@
         observation_regions: observationRegions || [],
       };
       if (sceneId) uploadMetadata.scene_id = sceneId;
-      if (cameraPose) uploadMetadata.camera_pose = JSON.stringify(convertPoseForUpload(cameraPose));
+      var pose = poseForUpload(cameraPose);
+      if (pose) uploadMetadata.camera_pose = JSON.stringify(pose);
       if (state.anchor) {
         uploadMetadata.lng = state.anchor.lng;
         uploadMetadata.lat = state.anchor.lat;
