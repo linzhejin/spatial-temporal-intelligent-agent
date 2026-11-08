@@ -494,11 +494,6 @@ def test_vision_suggested_edges_endpoint(monkeypatch, tmp_path):
 
 def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
     database.initialize(DATABASE_URL)
-    try:
-        import vision.registration as reg
-    except ImportError:
-        reg = None
-
     anchor = _real_network_anchor()
     client = _vision_manager_http_client(monkeypatch, tmp_path)
     job = vision_repository.create_job(
@@ -556,12 +551,11 @@ def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
         response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
         assert response.status_code == 200, response.get_json()
         data = response.get_json()["data"]
-        if reg is not None:
-            assert data["basis"] == "mask_projection", data["basis"]
-            assert any(item["score"] > 0 for item in data["suggested_edges"])
-        else:
-            assert data["basis"] in {"pose_footprint", "radius_only"}
-            assert data["suggested_edges"]
+        # Uncalibrated SRT metadata must not reach the production projection path.
+        assert data["basis"] == "radius_only"
+        assert data["suggested_edges"]
+        assert all(item["basis"] == "radius_only" and item["score"] == 0
+                   for item in data["suggested_edges"])
     finally:
         with database.connect(DATABASE_URL) as conn:
             conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
