@@ -28,6 +28,7 @@ function managerHarness(sessionSeed = []) {
   const videoChunkSizes = [];
   let visionJobs = [];
   const visionPreviewFrames = new Map();
+  const visionSuggestedEdges = new Map();
   let visionPreviewFailures = 0;
   let visionScenes = [];
   let roadEvents = [];
@@ -199,6 +200,12 @@ function managerHarness(sessionSeed = []) {
           media: {}, preview_frame_interval_seconds: 1, preview_frames: [],
         } }) };
       }
+      if (url.match(/^\/api\/manager\/vision-jobs\/[^/]+\/suggested-edges$/)) {
+        const jobId = decodeURIComponent(url.split('/')[4] || '');
+        return { ok: true, json: async () => ({ data: {
+          suggested_edges: visionSuggestedEdges.get(jobId) || [], basis: 'pose_footprint',
+        } }) };
+      }
       if (url.startsWith('/api/road-conditions/') && options.method === 'DELETE') {
         const conditionId = decodeURIComponent(url.split('/').pop() || '');
         roadEvents = roadEvents.filter((event) => event.id !== conditionId);
@@ -245,6 +252,7 @@ function managerHarness(sessionSeed = []) {
     setOptionalModelStatus: (value) => { optionalModelStatus = value; },
     setVisionJobs: (items) => { visionJobs = items; },
     setVisionPreviewFrames: (jobId, value) => { visionPreviewFrames.set(jobId, value); },
+    setVisionSuggestedEdges: (jobId, edges) => { visionSuggestedEdges.set(jobId, edges); },
     failVisionPreviewRequests: (count) => { visionPreviewFailures = count; },
     setVisionScenes: (items) => { visionScenes = items; },
     setRoadEvents: (items) => { roadEvents = items; },
@@ -293,6 +301,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
   assert.match(managerCss, /\.vision-count-caveat\{[^}]*font-size:11px/);
+  assert.match(managerCss, /\.suggested-basis\{[^}]*font-size:12px/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -1774,4 +1783,90 @@ test('periodic updates preserve an unfinished vision review note and its focus',
   await flush();
   assert.equal(descendants(root).find((node) => node.tagName === 'textarea').value,
     '刚才看到很多车辆，正在核对具体的路段');
+});
+
+test('suggested edges render their projection basis, match score and road name', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'suggest-1', status: 'needs_review', media_kind: 'image', original_name: '航拍.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.5 }] },
+  }]);
+  harness.setVisionSuggestedEdges('suggest-1', [{
+    road_name: '樱园西路', basis: 'mask_projection', score: 0.5,
+    snap_lng_gcj: 114.3601, snap_lat_gcj: 30.5301, dist_m: 3.2, chain_length_m: 120,
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(text, /按影像轮廓投影排序/);
+  assert.match(text, /匹配度 50%/);
+  assert.match(text, /樱园西路/);
+});
+
+test('a job with no suggested edges renders no affected-roads section', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'suggest-empty', status: 'needs_review', media_kind: 'image', original_name: '无建议.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.5 }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.doesNotMatch(text, /疑似受影响路段/);
+});
+
+test('suggested edges are cached across poll refreshes without refetching', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'suggest-cache', status: 'needs_review', media_kind: 'image', original_name: '缓存.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.6 }] },
+  }]);
+  harness.setVisionSuggestedEdges('suggest-cache', [{
+    road_name: '缓存路', basis: 'pose_footprint', score: 0.6,
+    snap_lng_gcj: 114.3601, snap_lat_gcj: 30.5301, dist_m: 4, chain_length_m: 80,
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const suggestedRequests = () => harness.calls.filter((call) => call.url.endsWith('/suggested-edges')).length;
+  assert.equal(suggestedRequests(), 1);
+
+  harness.intervalCallbacks[0]();
+  await flush();
+  assert.equal(suggestedRequests(), 1, 'second poll must reuse the cached suggested edges');
+  const card = harness.elements.get('vision-jobs').children[0];
+  assert.match(descendants(card).map((node) => node.textContent || '').join(' '), /缓存路/);
+});
+
+test('picking a suggested edge immediately loads its impact preview', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'suggest-pick', status: 'needs_review', media_kind: 'image', original_name: '巡查.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
+  }]);
+  harness.setVisionSuggestedEdges('suggest-pick', [{
+    u: 1, v: 2, key: 0,
+    road_name: '测试路', basis: 'pose_footprint', score: 0.9,
+    snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53, dist_m: 2, chain_length_m: 100,
+    geometry_gcj: [[114.36, 30.53], [114.361, 30.53]],
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const locate = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '在地图定位并预填发布落点');
+  locate.listeners.click();
+  await flush();
+  assert.ok(harness.calls.some((call) => call.url.startsWith('/api/road-conditions/snap')),
+    'picking must refresh the impact preview');
+  assert.equal(harness.elements.get('impact-preview').hidden, false);
 });

@@ -19,6 +19,7 @@
   state.roadRebindPreview = null;
   state.roadRebindReason = '';
   state.roadRebindBusy = false;
+  state.suggestedEdgesCache = Object.create(null);
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
     var node = byId(id);
@@ -2722,9 +2723,18 @@
       });
       if (candidates.children.length) card.appendChild(candidates);
       if (job.status === 'needs_review' && job.anchor_gcj) {
-        request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/suggested-edges', 'GET')
-          .then(function (data) { appendSuggestedEdges(card, job, (data && data.suggested_edges) || []); })
-          .catch(function () { /* 建议路段未就绪或不可用时静默，不影响复核页 */ });
+        var cacheKey = job.job_id + ':' + job.status + ':' + (job.review_status || '');
+        if (state.suggestedEdgesCache[cacheKey]) {
+          appendSuggestedEdges(card, job, state.suggestedEdgesCache[cacheKey]);
+        } else {
+          request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/suggested-edges', 'GET')
+            .then(function (data) {
+              var edges = (data && data.suggested_edges) || [];
+              state.suggestedEdgesCache[cacheKey] = edges;
+              appendSuggestedEdges(card, job, edges);
+            })
+            .catch(function () { /* 建议路段未就绪或不可用时静默，不影响复核页 */ });
+        }
       }
       if (reviewNote) {
         var dismissButton = document.createElement('button'); dismissButton.type = 'button';
@@ -2877,6 +2887,7 @@
     if (byId('road-workspace') && byId('road-workspace').scrollIntoView) {
       byId('road-workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
+    refreshImpactPreview();
   }
 
   async function refreshVisionJobs(force) {
@@ -2901,6 +2912,9 @@
       var activePreviewJobIds = new Set(jobs.map(function (job) { return String(job.job_id || ''); }));
       visionPreviewStates.forEach(function (_previewState, jobId) {
         if (!activePreviewJobIds.has(jobId)) visionPreviewStates.delete(jobId);
+      });
+      Object.keys(state.suggestedEdgesCache).forEach(function (key) {
+        if (!activePreviewJobIds.has(String(key).split(':')[0])) delete state.suggestedEdgesCache[key];
       });
       root.replaceChildren();
       if (!jobs.length) {
