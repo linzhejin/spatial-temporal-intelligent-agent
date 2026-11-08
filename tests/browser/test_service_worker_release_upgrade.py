@@ -79,7 +79,7 @@ def test_production_service_worker_cache_upgrades_to_candidate(tmp_path):
 
             result = page.evaluate("""async newName => {
                 const cache = await caches.open(newName);
-                const script = await cache.match('/js/app.js?v=20261107-concise-dialogue-v2');
+                const script = await cache.match('/js/app.js?v=20261108-interaction-v1');
                 return {keys: await caches.keys(), app: script ? await script.text() : ''};
             }""", new_cache)
             assert result["keys"] == [new_cache]
