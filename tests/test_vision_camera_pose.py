@@ -23,7 +23,7 @@ def _legal_pose():
                 "lng": 114.36, "lat": 30.53,
                 "rel_alt_m": 12.5, "abs_alt_m": 45.0,
                 "yaw_deg": 90.0, "gb_yaw_deg": 1.5, "gb_pitch_deg": -2.5,
-                "gb_roll_deg": None,
+                "gb_roll_deg": 0.0,
                 "focal_len_35mm": 24.0, "seconds": 0.0,
             },
         ],
@@ -67,7 +67,7 @@ def test_parse_vision_camera_pose_nullifies_invalid_field_values():
     payload = {
         "trajectory": [
             {"lng": 114.36, "lat": 30.53, "rel_alt_m": "high", "seconds": "now",
-             "focal_len_35mm": 0.0, "yaw_deg": 9999},
+             "focal_len_35mm": 0.0, "yaw_deg": 9999, "gb_roll_deg": 9999},
         ],
     }
     result = _parse_vision_camera_pose(payload)
@@ -76,6 +76,7 @@ def test_parse_vision_camera_pose_nullifies_invalid_field_values():
     assert point["seconds"] is None
     assert point["focal_len_35mm"] is None
     assert point["yaw_deg"] is None
+    assert point["gb_roll_deg"] is None
     assert point["lng"] == 114.36 and point["lat"] == 30.53
 
 

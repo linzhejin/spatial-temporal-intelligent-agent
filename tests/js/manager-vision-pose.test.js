@@ -35,7 +35,7 @@ test('a full DJI pose line parses every pose field with its original sign', () =
   const result = helpers.parseDjiPoseTrack(
     '00:00:01,000 --> 00:00:01,100\n' +
     '[latitude : 30.535117] [longitude : 114.356321] [rel_alt : 82.104 abs_alt : 109.538] ' +
-    '[gb_yaw : -92.200000 gb_pitch : -79.300000] [yaw : -92.2] [focal_len : 240]');
+    '[gb_yaw : -92.200000 gb_pitch : -79.300000 gb_roll : 0.300000] [yaw : -92.2] [focal_len : 240]');
   assert.equal(result.parsed, true);
   assert.equal(result.pointCount, 1);
   assert.equal(result.sampled, false);
@@ -48,6 +48,7 @@ test('a full DJI pose line parses every pose field with its original sign', () =
   assert.equal(point.yaw_deg, -92.2);
   assert.equal(point.gb_yaw_deg, -92.2);
   assert.equal(point.gb_pitch_deg, -79.3);
+  assert.equal(point.gb_roll_deg, 0.3);
   assert.equal(point.focal_len_35mm, 240);
 });
 
@@ -63,6 +64,7 @@ test('a pose line missing gimbal and focal fields keeps the point with null fiel
   assert.equal(point.yaw_deg, null);
   assert.equal(point.gb_yaw_deg, null);
   assert.equal(point.gb_pitch_deg, null);
+  assert.equal(point.gb_roll_deg, null);
   assert.equal(point.focal_len_35mm, null);
 });
 
@@ -115,7 +117,7 @@ test('convertPoseForUpload emits the backend camera_pose contract', () => {
   const pose = helpers.parseDjiPoseTrack(
     '00:00:01,000 --> 00:00:01,100\n' +
     '[latitude : 30.5351] [longitude : 114.3563] [rel_alt : 82.1 abs_alt : 109.5] ' +
-    '[gb_yaw : -92.2 gb_pitch : -79.3] [yaw : -91.5] [focal_len : 240]');
+    '[gb_yaw : -92.2 gb_pitch : -79.3 gb_roll : 0.4] [yaw : -91.5] [focal_len : 240]');
   assert.deepEqual(JSON.parse(JSON.stringify(helpers.convertPoseForUpload(pose))), {
     crs: 'WGS84',
     parsed: true,
@@ -130,7 +132,7 @@ test('convertPoseForUpload emits the backend camera_pose contract', () => {
       yaw_deg: -91.5,
       gb_yaw_deg: -92.2,
       gb_pitch_deg: -79.3,
-      gb_roll_deg: null,
+      gb_roll_deg: 0.4,
       focal_len_35mm: 240,
     }],
   });
@@ -152,5 +154,35 @@ test('poseForUpload returns the same contract as convertPoseForUpload and keeps 
   assert.equal(result.trajectory[0].yaw_deg, null);
   assert.equal(result.trajectory[0].gb_yaw_deg, null);
   assert.equal(result.trajectory[0].gb_pitch_deg, null);
+  assert.equal(result.trajectory[0].gb_roll_deg, null);
   assert.equal(result.trajectory[0].focal_len_35mm, null);
+});
+
+test('a whole DJI SRT file parses into capture time, GPS track and upload pose', () => {
+  const path = require('node:path');
+  const srt = fs.readFileSync(
+    path.join(__dirname, '..', 'fixtures', 'dji_flight.srt'), 'utf8');
+  const metadata = helpers.parseDjiSubtitle(srt);
+
+  assert.equal(metadata.captureTime, '2026-11-06T10:12:31');
+  assert.equal(metadata.gpsPointCount, 3);
+  assert.equal(metadata.gpsTimedPointCount, 3);
+  assert.equal(metadata.gpsPoints.length, 3);
+
+  assert.equal(metadata.cameraPose.parsed, true);
+  assert.equal(metadata.cameraPose.pointCount, 3);
+  assert.equal(metadata.cameraPose.sampled, false);
+
+  const upload = JSON.parse(JSON.stringify(helpers.poseForUpload(metadata.cameraPose)));
+  assert.equal(upload.crs, 'WGS84');
+  assert.equal(upload.point_count, 3);
+  assert.deepEqual(upload.trajectory.map((point) => point.seconds), [0, 1, 2]);
+  assert.deepEqual(upload.trajectory.map((point) => point.rel_alt_m), [82.104, 84.5, 86.87]);
+  assert.deepEqual(upload.trajectory.map((point) => point.gb_pitch_deg), [-79.3, -78.9, -88.7]);
+  assert.deepEqual(upload.trajectory.map((point) => point.gb_roll_deg), [0, 0.1, 0]);
+  assert.deepEqual(upload.trajectory.map((point) => point.gb_yaw_deg), [-92.2, -91.5, -90.8]);
+  assert.deepEqual(upload.trajectory.map((point) => point.lat),
+    [30.535117, 30.535209, 30.535301]);
+  assert.deepEqual(upload.trajectory.map((point) => point.lng),
+    [114.356321, 114.356318, 114.356322]);
 });
