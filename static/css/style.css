@@ -348,15 +348,16 @@ body {
     letter-spacing: 0.02em;
 }
 
-.blossom-mark {
+.luojia-mark {
     display: inline-block;
     width: 24px;
     height: 24px;
     flex: 0 0 24px;
     vertical-align: middle;
-    background: url('/icons/blossom-mark.svg') center / contain no-repeat;
+    background: url('/icons/luojia-mark.svg') center / contain no-repeat;
 }
 .title-icon { width: 25px; height: 25px; flex-basis: 25px; }
+.route-mark { display: inline-block; width: 24px; height: 24px; flex: 0 0 24px; color: #176B5B; }
 
 .header-right {
     display: flex;
@@ -488,18 +489,16 @@ body {
     to { opacity: 1; transform: translateY(0); }
 }
 
-.bubble-avatar {
-    width: 38px;
-    height: 38px;
+.bubble-avatar, .chat-bubble-avatar {
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--cherry-soft), #E8DCC8);
+    background: #EAF3F1;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 1.1rem;
     flex-shrink: 0;
-    border: 1px solid var(--stone);
+    border: 1px solid #D6E0DF;
 }
+.bubble-avatar { width: 38px; height: 38px; }
 
 .bubble-body {
     background: var(--surface);
@@ -1467,7 +1466,6 @@ body.is-planning-mode .desktop-route-workbench {
 
 /* Campus-green controls, with a quiet cherry-blossom accent. */
 .floating-header { border-bottom: 2px solid #e9c8c9; }
-.bubble-avatar, .chat-bubble-avatar { background: #f8eceb; border-color: #ead2d0; }
 .mini-card.sc-pink { border-left-color: #bf7c83; background: #fff9f8; }
 .mini-card.sc-accent { border-left-color: #3b7a69; background: #f7fbf9; }
 .reset-btn { color: #356d60; border-color: #c8dcd5; background: #f5faf8; }
@@ -1573,6 +1571,10 @@ body.is-planning-mode .desktop-route-workbench {
     text-align: center;
 }
 .welcome-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
     font-family: "Noto Serif SC", serif;
     font-size: 1.4rem;
     font-weight: 700;
@@ -1961,14 +1963,6 @@ body.is-planning-mode .desktop-route-workbench {
 .chat-bubble-avatar {
     width: 34px;
     height: 34px;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--cherry-soft), #E8DCC8);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1rem;
-    flex-shrink: 0;
-    border: 1px solid var(--stone);
 }
 
 .chat-bubble-body {
@@ -2033,7 +2027,7 @@ body.is-planning-mode .desktop-route-workbench {
     from { opacity: 0; transform: translateX(-50%) translateY(16px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
-.install-banner__icon { font-size: 1.6rem; line-height: 1; }
+.install-banner__icon { width: 32px; height: 32px; flex-basis: 32px; }
 .install-banner__text { flex: 1 1 auto; min-width: 0; }
 .install-banner__title {
     font-family: "Noto Serif SC", "Songti SC", serif;

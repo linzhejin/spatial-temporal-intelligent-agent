@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261109-ui-v2">
+    <link rel="stylesheet" href="/css/style.css?v=20261109-mountain-v1">
 </head>
 <body>
 
@@ -140,7 +140,7 @@
         <header class="floating-header" id="floating-header">
             <div class="header-left">
                 <h1 class="app-title">
-                    <span class="title-icon blossom-mark" aria-hidden="true"></span>
+                    <span class="title-icon luojia-mark" aria-hidden="true"></span>
                     珞珈智行
                 </h1>
             </div>
@@ -187,7 +187,7 @@
 
             <!-- 欢迎语 -->
             <div class="welcome-bubble" id="welcome-bubble">
-                <div class="bubble-avatar" aria-hidden="true"><span class="blossom-mark"></span></div>
+                <div class="bubble-avatar" aria-hidden="true"><span class="luojia-mark"></span></div>
                 <div class="bubble-body">
                     <p class="bubble-greeting">珞珈智行</p>
                     <p class="bubble-text">想去哪儿？告诉我起点和终点，也可以加上路线偏好。</p>
@@ -205,7 +205,7 @@
                 <button class="mini-card sc-pink"
                         data-action="path_planning"
                         data-display-text="从珞珈门到樱花大道，赏樱路线">
-                    <span class="mini-card-icon blossom-mark" aria-hidden="true"></span>
+                    <svg class="mini-card-icon route-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18c0-5.5 11-4.5 11-10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="18" r="2" fill="currentColor"/><circle cx="17" cy="6.5" r="2" fill="currentColor"/></svg>
                     <span class="mini-card-text">赏樱路线 珞珈门→樱花大道</span>
                 </button>
             </div>
@@ -469,7 +469,7 @@
                 </svg>
             </button>
             <header class="welcome-header">
-                <h1 class="welcome-title"><span class="blossom-mark" aria-hidden="true"></span> 珞珈智行</h1>
+                <h1 class="welcome-title"><span class="luojia-mark" aria-hidden="true"></span>珞珈智行</h1>
                 <p class="welcome-subtitle">校园问路、地点查询和路线规划</p>
             </header>
             <section class="welcome-shortcuts" aria-label="快捷查询示例">
@@ -485,7 +485,7 @@
                 <button class="shortcut-card sc-pink"
                         data-action="path_planning"
                         data-display-text="从珞珈门到樱花大道，赏樱路线">
-                    <span class="sc-emoji blossom-mark" aria-hidden="true"></span>
+                    <svg class="sc-emoji route-mark" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 18c0-5.5 11-4.5 11-10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/><circle cx="6" cy="18" r="2" fill="currentColor"/><circle cx="17" cy="6.5" r="2" fill="currentColor"/></svg>
                     <div class="sc-text">
                         <span class="sc-name">赏樱路线</span>
                         <small class="sc-desc">珞珈门 → 樱花大道</small>
@@ -568,7 +568,7 @@
 
     <!-- ====== PWA 安装引导横幅（满足条件时由 app.js 显示） ====== -->
     <div id="install-banner" class="install-banner" hidden>
-        <div class="install-banner__icon">🌸</div>
+        <div class="install-banner__icon luojia-mark" aria-hidden="true"></div>
         <div class="install-banner__text">
             <div class="install-banner__title">把「珞珈智行」装到主屏幕</div>
             <div class="install-banner__sub" id="install-banner-sub">离线可用 · 全屏运行 · 像 App 一样</div>
@@ -585,7 +585,7 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261109-ui-v2"></script>
+    <script src="/js/app.js?v=20261109-mountain-v1"></script>
     <script>
         if ('serviceWorker' in navigator && window.isSecureContext) {
             window.addEventListener('load', function () {

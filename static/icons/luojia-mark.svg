@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
+  <defs>
+    <mask id="route" maskUnits="userSpaceOnUse" x="0" y="0" width="64" height="64">
+      <rect width="64" height="64" fill="#fff"/>
+      <path d="M18 57 C16 49 35 49 35 43 C35 39 28.5 38 31.5 33.5 C33.5 30.5 40 29.5 40 24" fill="none" stroke="#000" stroke-width="5" stroke-linecap="round"/>
+    </mask>
+  </defs>
+  <path d="M5 49.5 L18.4 24.8 Q20.1 21.8 21.9 24.7 L27.2 33 L37.7 10.5 Q39.5 7 41.4 10.5 L59 49.3 Q61.2 54.5 56.3 54.5 H7.7 Q2.6 54.5 5 49.5 Z" fill="#176B5B" mask="url(#route)"/>
+</svg>
