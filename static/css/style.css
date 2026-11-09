@@ -348,7 +348,15 @@ body {
     letter-spacing: 0.02em;
 }
 
-.title-icon { font-size: 0.9rem; }
+.blossom-mark {
+    display: inline-block;
+    width: 24px;
+    height: 24px;
+    flex: 0 0 24px;
+    vertical-align: middle;
+    background: url('/icons/blossom-mark.svg') center / contain no-repeat;
+}
+.title-icon { width: 25px; height: 25px; flex-basis: 25px; }
 
 .header-right {
     display: flex;
@@ -432,6 +440,7 @@ body {
     height: 40px;
 }
 .reset-btn:focus-visible { outline: 3px solid #276E8A; outline-offset: 2px; }
+.reset-btn svg { width: 20px; height: 20px; }
 
 /* ===== Mode bar（出行方式分段选择器，固定不随消息滚动） ===== */
 .mode-bar {
@@ -1455,6 +1464,13 @@ body.is-planning-mode .desktop-route-workbench {
     /* 移动端没人用键盘快捷键，隐藏 */
     .kbd-hint-bar { display: none; }
 }
+
+/* Campus-green controls, with a quiet cherry-blossom accent. */
+.floating-header { border-bottom: 2px solid #e9c8c9; }
+.bubble-avatar, .chat-bubble-avatar { background: #f8eceb; border-color: #ead2d0; }
+.mini-card.sc-pink { border-left-color: #bf7c83; background: #fff9f8; }
+.mini-card.sc-accent { border-left-color: #3b7a69; background: #f7fbf9; }
+.reset-btn { color: #356d60; border-color: #c8dcd5; background: #f5faf8; }
 
 /* ==============================
    RESPONSIVE: Large desktop (≥1200px)

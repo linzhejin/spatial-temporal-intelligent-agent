@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261109-vision-safety-v1">
+    <link rel="stylesheet" href="/css/style.css?v=20261109-ui-v2">
 </head>
 <body>
 
@@ -140,7 +140,7 @@
         <header class="floating-header" id="floating-header">
             <div class="header-left">
                 <h1 class="app-title">
-                    <span class="title-icon">🌸</span>
+                    <span class="title-icon blossom-mark" aria-hidden="true"></span>
                     珞珈智行
                 </h1>
             </div>
@@ -151,7 +151,7 @@
                 </span>
                 <span class="header-tagline">武大校园 · 出行向导</span>
                 <button id="road-report-btn" class="road-report-btn" aria-label="上报路况" title="上报施工/活动/管制">🚧</button>
-                <button type="button" id="reset-btn" class="reset-btn" aria-label="新建会话" title="开始新对话">新建会话</button>
+                <button type="button" id="reset-btn" class="reset-btn" aria-label="刷新规划" title="刷新规划，清空当前对话和路线"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 11a8 8 0 1 0-2.3 5.7"/><path d="M20 4v7h-7"/></svg></button>
                 <button id="help-btn" class="help-btn" aria-label="帮助引导" title="查看快捷键">?</button>
             </div>
         </header>
@@ -187,7 +187,7 @@
 
             <!-- 欢迎语 -->
             <div class="welcome-bubble" id="welcome-bubble">
-                <div class="bubble-avatar">🌸</div>
+                <div class="bubble-avatar" aria-hidden="true"><span class="blossom-mark"></span></div>
                 <div class="bubble-body">
                     <p class="bubble-greeting">珞珈智行</p>
                     <p class="bubble-text">想去哪儿？告诉我起点和终点，也可以加上路线偏好。</p>
@@ -205,7 +205,7 @@
                 <button class="mini-card sc-pink"
                         data-action="path_planning"
                         data-display-text="从珞珈门到樱花大道，赏樱路线">
-                    <span class="mini-card-icon">🌸</span>
+                    <span class="mini-card-icon blossom-mark" aria-hidden="true"></span>
                     <span class="mini-card-text">赏樱路线 珞珈门→樱花大道</span>
                 </button>
             </div>
@@ -322,7 +322,7 @@
                 <kbd data-kbd="chip:distance_first">D</kbd><span class="kbd-label">最短</span>
             </div>
             <div class="kbd-row">
-                <kbd data-kbd="refresh">R</kbd><span class="kbd-label">新建会话</span>
+                <kbd data-kbd="refresh">R</kbd><span class="kbd-label">刷新规划</span>
                 <kbd data-kbd="focus">/</kbd><span class="kbd-label">聚焦</span>
                 <kbd data-kbd="help">?</kbd><span class="kbd-label">帮助</span>
             </div>
@@ -357,7 +357,7 @@
                 <div class="kbd-help-row"><span>🌸 风景优先</span><kbd>F</kbd></div>
                 <div class="kbd-help-row"><span>🪜 平坦优先</span><kbd>S</kbd></div>
                 <div class="kbd-help-row"><span>⚡ 最短路径</span><kbd>D</kbd></div>
-                <div class="kbd-help-row"><span>↻ 新建会话</span><kbd>R</kbd></div>
+                <div class="kbd-help-row"><span>↻ 刷新规划</span><kbd>R</kbd></div>
                 <div class="kbd-help-row"><span>聚焦输入框</span><kbd>/</kbd></div>
                 <div class="kbd-help-row"><span>⏎ 发送 / ⇧⏎ 换行</span><kbd>Enter</kbd></div>
                 <div class="kbd-help-row"><span>关闭弹窗</span><kbd>Esc</kbd></div>
@@ -469,7 +469,7 @@
                 </svg>
             </button>
             <header class="welcome-header">
-                <h1 class="welcome-title">🌸 珞珈智行</h1>
+                <h1 class="welcome-title"><span class="blossom-mark" aria-hidden="true"></span> 珞珈智行</h1>
                 <p class="welcome-subtitle">校园问路、地点查询和路线规划</p>
             </header>
             <section class="welcome-shortcuts" aria-label="快捷查询示例">
@@ -485,7 +485,7 @@
                 <button class="shortcut-card sc-pink"
                         data-action="path_planning"
                         data-display-text="从珞珈门到樱花大道，赏樱路线">
-                    <span class="sc-emoji" aria-hidden="true">🌸</span>
+                    <span class="sc-emoji blossom-mark" aria-hidden="true"></span>
                     <div class="sc-text">
                         <span class="sc-name">赏樱路线</span>
                         <small class="sc-desc">珞珈门 → 樱花大道</small>
@@ -585,7 +585,7 @@
     <script src="/js/navigation.js?v=20260928c"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261109-vision-safety-v1"></script>
+    <script src="/js/app.js?v=20261109-ui-v2"></script>
     <script>
         if ('serviceWorker' in navigator && window.isSecureContext) {
             window.addEventListener('load', function () {

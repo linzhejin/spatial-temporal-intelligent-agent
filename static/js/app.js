@@ -4037,7 +4037,7 @@
         }
         bubble.innerHTML =
             '<div class="chat-bubble chat-bubble-reply">' +
-                '<div class="chat-bubble-avatar">🌸</div>' +
+                '<div class="chat-bubble-avatar" aria-hidden="true"><span class="blossom-mark"></span></div>' +
                 '<div class="chat-bubble-body">' +
                     '<p class="chat-bubble-text">' + escapeHtml(plainAssistantText(reply)) + '</p>' +
                 '</div>' +

@@ -513,13 +513,13 @@ test('clicking a candidate keeps a typed origin while GPS and map origins stay a
     assert.equal(h.candidateRouteQuery({ name: '附近食堂' }), '去附近食堂');
 });
 
-test('R shortcut and header button both start a new conversation', () => {
+test('R shortcut and header button both refresh the planning session', () => {
     const html = fs.readFileSync(require.resolve('../../static/index.html'), 'utf8');
     const app = fs.readFileSync(require.resolve('../../static/js/app.js'), 'utf8');
 
-    assert.match(html, /data-kbd="refresh">R<\/kbd><span class="kbd-label">新建会话<\/span>/);
-    assert.match(html, /↻ 新建会话<\/span><kbd>R<\/kbd>/);
-    assert.match(html, /id="reset-btn"[^>]*aria-label="新建会话"[^>]*>新建会话<\/button>/);
+    assert.match(html, /data-kbd="refresh">R<\/kbd><span class="kbd-label">刷新规划<\/span>/);
+    assert.match(html, /↻ 刷新规划<\/span><kbd>R<\/kbd>/);
+    assert.match(html, /id="reset-btn"[^>]*aria-label="刷新规划"[^>]*>/);
     assert.match(app, /resetBtn\.addEventListener\('click', refreshPage\)/);
     assert.match(app, /function refreshPage\(\)\s*\{[\s\S]*?beginExplicitRefreshSession\(\);\s*handleReset\(\);\s*state\.restoredActiveRuns = \[\];\s*\}/);
     assert.doesNotMatch(app.match(/function refreshPage\(\)\s*\{[\s\S]*?\n    \}/)[0], /location\.reload/);
