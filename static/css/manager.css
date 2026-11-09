@@ -178,3 +178,11 @@ main{width:min(1500px,calc(100% - 48px));padding:28px 0 52px}
   .vision-upload-card{overflow-y:auto;overscroll-behavior:contain}
   .vision-new-analysis[open]{flex:0 0 auto}
 }
+
+/* 页面标题与生效数量并入绿色页头，取消独立标题行 */
+.masthead-section{margin:0;color:#f7f4eb;font-size:14px;font-weight:600;letter-spacing:.02em;white-space:nowrap}
+.masthead-count{display:inline-flex;align-items:baseline;gap:5px;padding:5px 11px;border:1px solid rgba(255,255,255,.28);border-radius:999px;background:rgba(255,255,255,.1);color:#f7f4eb;font-size:11px;line-height:1;white-space:nowrap}
+.masthead-count span{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.masthead .quiet-button{color:#f7f4eb;border-color:rgba(255,255,255,.4)}
+.masthead .quiet-button:hover{background:rgba(255,255,255,.12)}
+@media(max-width:560px){.masthead-section{display:none}.masthead-count{padding:4px 8px;font-size:10px}.masthead-count span{font-size:13px}}

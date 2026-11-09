@@ -305,10 +305,15 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261109-vision-height-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261109-compact-header-v1/);
   assert.match(managerHtml, /manager\.js\?v=20261109-vision-height-v1/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
   assert.match(managerCss, /\.vision-jobs\{max-height:100%;overflow-y:auto/);
+  assert.match(managerHtml, /class="masthead-count"><span id="active-count">0<\/span> 条生效/);
+  assert.match(managerCss, /\.masthead-count\{/);
+  assert.doesNotMatch(managerHtml, /class="page-heading"/);
+  assert.doesNotMatch(managerHtml, /先在地图上确认具体路段/);
+  assert.doesNotMatch(managerHtml, /选路、预览并发布/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);

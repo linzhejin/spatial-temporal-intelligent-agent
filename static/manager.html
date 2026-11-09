@@ -6,7 +6,7 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261109-vision-height-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261109-compact-header-v1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
   <script src="/js/manager.js?v=20261109-vision-height-v1" defer></script>
@@ -15,10 +15,11 @@
   <header class="masthead">
     <a class="brand" href="/" aria-label="返回珞珈智行">
       <span class="brand-mark">珞</span>
-      <span><strong>珞珈智行</strong><small>校园运行管理台</small></span>
+      <strong>珞珈智行</strong>
     </a>
     <div class="masthead-right">
-      <span class="live-indicator"><i></i>校园路况工作区</span>
+      <h1 class="masthead-section">校园通行信息</h1>
+      <span class="masthead-count"><span id="active-count">0</span> 条生效</span>
       <button id="logout" class="quiet-button" type="button" hidden>退出管理</button>
     </div>
   </header>
@@ -42,19 +43,10 @@
     </section>
 
     <section id="workspace" class="workspace" hidden>
-      <div class="page-heading">
-        <div>
-          <span class="eyebrow">ROAD CONDITIONS · LIVE OPERATIONS</span>
-          <h1>校园通行信息</h1>
-          <p>先在地图上确认具体路段，再发布管制；每条记录保留起止时间与道路绑定信息。</p>
-        </div>
-        <div class="summary-chip"><span id="active-count">0</span><small>条当前生效</small></div>
-      </div>
-
       <nav class="workflow-nav" aria-label="管理流程">
-        <a href="#road-workspace"><span>道路事件</span><small>选路、预览并发布</small></a>
-        <a href="#vision-workspace"><span>影像巡查</span><small>识别、复核并交接</small></a>
-        <a href="#event-history"><span>事件记录</span><small>生效、结束与历史</small></a>
+        <a href="#road-workspace"><span>道路事件</span></a>
+        <a href="#vision-workspace"><span>影像巡查</span></a>
+        <a href="#event-history"><span>事件记录</span></a>
       </nav>
 
       <div id="road-workspace" class="workspace-grid">
