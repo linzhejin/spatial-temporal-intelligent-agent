@@ -168,3 +168,13 @@ main{width:min(1500px,calc(100% - 48px));padding:28px 0 52px}
 .vision-terminal>summary::-webkit-details-marker{display:none}
 .vision-terminal>summary::after{content:"＋";float:right;font-size:11px;font-weight:400;color:#5d6a63}
 .vision-terminal[open]>summary::after{content:"−"}
+
+/* 影像两栏固定高度：左栏任务列表内部滚动，右栏表单过长时也在卡内滚动 */
+@media(min-width:901px){
+  .vision-grid{height:560px}
+  .vision-upload-card,.vision-jobs{min-height:0}
+  .vision-jobs{max-height:100%;overflow-y:auto;overscroll-behavior:contain}
+  .vision-jobs>*{flex:0 0 auto}
+  .vision-upload-card{overflow-y:auto;overscroll-behavior:contain}
+  .vision-new-analysis[open]{flex:0 0 auto}
+}

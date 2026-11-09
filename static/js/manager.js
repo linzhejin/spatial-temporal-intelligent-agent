@@ -3138,6 +3138,7 @@
       Object.keys(state.suggestedEdgesCache).forEach(function (key) {
         if (!activePreviewJobIds.has(String(key).split(':')[0])) delete state.suggestedEdgesCache[key];
       });
+      var jobScrollTop = root.scrollTop;
       root.replaceChildren();
       if (!jobs.length) {
         var empty = document.createElement('div'); empty.className = 'empty-state';
@@ -3146,6 +3147,7 @@
           : '尚无巡查任务。提交影像后，分析进度和候选都会显示在这里。';
         root.appendChild(empty);
       } else { jobs.forEach(function (job) { root.appendChild(renderVisionJob(job)); }); }
+      root.scrollTop = jobScrollTop;
     } catch (error) {
       root.replaceChildren(); var failed = document.createElement('div'); failed.className = 'empty-state';
       failed.textContent = error.message || '视觉任务记录暂时无法读取。'; root.appendChild(failed);
