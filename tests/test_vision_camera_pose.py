@@ -23,6 +23,7 @@ def _legal_pose():
                 "lng": 114.36, "lat": 30.53,
                 "rel_alt_m": 12.5, "abs_alt_m": 45.0,
                 "yaw_deg": 90.0, "gb_yaw_deg": 1.5, "gb_pitch_deg": -2.5,
+                "gb_roll_deg": None,
                 "focal_len_35mm": 24.0, "seconds": 0.0,
             },
         ],
@@ -57,6 +58,7 @@ def test_parse_vision_camera_pose_drops_out_of_range_points():
         "trajectory": [{"lng": 114.36, "lat": 30.53,
                         "rel_alt_m": None, "abs_alt_m": None,
                         "yaw_deg": None, "gb_yaw_deg": None, "gb_pitch_deg": None,
+                        "gb_roll_deg": None,
                         "focal_len_35mm": None, "seconds": None}],
     }
 
@@ -91,7 +93,7 @@ def test_parse_vision_camera_pose_keeps_only_whitelisted_point_keys():
     payload = {"trajectory": [{"lng": 114.36, "lat": 30.53, "extra": "dropped"}]}
     point = _parse_vision_camera_pose(payload)["trajectory"][0]
     assert set(point) == {"lng", "lat", "rel_alt_m", "abs_alt_m",
-                          "yaw_deg", "gb_yaw_deg", "gb_pitch_deg",
+                          "yaw_deg", "gb_yaw_deg", "gb_pitch_deg", "gb_roll_deg",
                           "focal_len_35mm", "seconds"}
 
 

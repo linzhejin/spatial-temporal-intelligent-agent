@@ -130,6 +130,7 @@ test('convertPoseForUpload emits the backend camera_pose contract', () => {
       yaw_deg: -91.5,
       gb_yaw_deg: -92.2,
       gb_pitch_deg: -79.3,
+      gb_roll_deg: null,
       focal_len_35mm: 240,
     }],
   });
