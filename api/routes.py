@@ -356,6 +356,7 @@ def _parse_vision_camera_pose(value) -> dict | None:
         rel_alt_m, abs_alt_m = point.get("rel_alt_m"), point.get("abs_alt_m")
         yaw_deg = point.get("yaw_deg")
         gb_yaw_deg, gb_pitch_deg = point.get("gb_yaw_deg"), point.get("gb_pitch_deg")
+        gb_roll_deg = point.get("gb_roll_deg")
         focal_len_35mm = point.get("focal_len_35mm")
         seconds = point.get("seconds")
         cleaned_points.append({
@@ -370,6 +371,8 @@ def _parse_vision_camera_pose(value) -> dict | None:
                                          and -360 <= gb_yaw_deg <= 360) else None,
             "gb_pitch_deg": gb_pitch_deg if (_camera_pose_finite_number(gb_pitch_deg)
                                              and -360 <= gb_pitch_deg <= 360) else None,
+            "gb_roll_deg": gb_roll_deg if (_camera_pose_finite_number(gb_roll_deg)
+                                           and -180 <= gb_roll_deg <= 180) else None,
             "focal_len_35mm": focal_len_35mm if (
                 _camera_pose_finite_number(focal_len_35mm) and 0 < focal_len_35mm <= 2000) else None,
             "seconds": seconds if _camera_pose_finite_number(seconds) else None,
@@ -381,12 +384,12 @@ def _parse_vision_camera_pose(value) -> dict | None:
     return result
 
 
-def _parse_vision_capture_time(value, *, required: bool) -> datetime:
+def _parse_vision_capture_time(value, *, required: bool) -> datetime | None:
     """Accept an epoch or timezone-aware ISO timestamp; persist every observation in UTC."""
     if value is None or value == "":
         if required:
             raise ValueError("请填写这段影像的实际拍摄时间。")
-        return datetime.now(timezone.utc)
+        return None
     timestamp = _parse_time_input(value)
     if timestamp is None or not math.isfinite(float(timestamp)):
         raise ValueError("影像拍摄时间无效。")
@@ -2714,6 +2717,8 @@ def create_road_condition():
         except Exception:
             logger.exception("影像来源验证暂时不可用")
             return _err("vision_storage_unavailable", "影像任务暂时无法核对，请稍后重试。", 503)
+        if source_job and source_job.get("purpose") == "trial":
+            return _err("vision_trial_not_publishable", "试用影像不能发布为真实路况。", 409)
         source_result = source_job.get("result") if source_job else None
         if isinstance(source_result, dict) and "research_replay" in source_result:
             return _err("simulation_not_allowed", "历史回放只能在隔离实验中使用，不能发布为当前路况。", 400)
@@ -3250,7 +3255,7 @@ def _vision_inference_readiness(database_url=None) -> tuple[bool, bool, bool, bo
         try:
             from storage import database, vision_repository
             database.initialize(database_url)
-            worker_ready = vision_repository.has_ready_worker(database_url)
+            worker_ready = vision_repository.has_ready_worker(database_url, role="operational")
         except Exception:
             logger.info("Vision worker is not ready or its heartbeat is unavailable", exc_info=True)
     return weights_ready and dependencies_ready and worker_ready, weights_ready, dependencies_ready, worker_ready
@@ -3261,12 +3266,53 @@ def _vision_worker_capabilities(database_url=None) -> dict:
 
     try:
         database.initialize(database_url)
-        worker = vision_repository.ready_worker_status(database_url)
-        detail = json.loads(worker["status_detail"]) if worker and worker.get("status_detail") else {}
-        return detail if isinstance(detail, dict) else {}
+        workers = vision_repository.ready_worker_statuses(database_url)
+        decoded = []
+        for worker in workers:
+            try:
+                detail = json.loads(worker.get("status_detail") or "{}")
+            except (TypeError, ValueError):
+                continue
+            if isinstance(detail, dict):
+                decoded.append((worker.get("worker_role", "shared"), detail))
+        operational = next((detail for role, detail in decoded if role in {"shared", "operational"}), {})
+        trial = next((detail for role, detail in decoded if role in {"shared", "trial"} and (
+            detail.get("trial_accident_supported") is True or detail.get("trial_flood_supported") is True)), {})
+        return {**{key: value for key, value in operational.items() if not key.startswith("trial_")},
+                **{key: value for key, value in trial.items() if key.startswith("trial_")}}
     except Exception:
         logger.info("Optional vision capability status is unavailable", exc_info=True)
         return {}
+
+
+def _vision_submission_purpose(value):
+    purpose = "operational" if value is None or value == "" else value
+    if not isinstance(purpose, str) or purpose not in {"operational", "trial"}:
+        return None, _err("invalid_vision_purpose", "影像任务类型无效。", 400)
+    if purpose == "trial":
+        capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
+        if not config.VISION_TRIAL_ENABLED or not (
+                capabilities.get("trial_accident_supported") is True
+                or capabilities.get("trial_flood_supported") is True):
+            return None, _err("vision_trial_not_ready", "影像试用模型尚未就绪。", 503)
+    return purpose, None
+
+
+def _validate_trial_regions(purpose, regions, media_kind):
+    if purpose != "trial":
+        return None
+    capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
+    kinds = {region.get("kind") for region in regions or []}
+    temporal = (capabilities.get("trial_accident_supported") is True and
+                capabilities.get("trial_accident_media") == "video")
+    if temporal and media_kind == "image" and capabilities.get("trial_flood_supported") is not True:
+        return _err("trial_video_required", "当前事故试用模型只支持视频。", 400)
+    usable = (temporal and media_kind == "video") or (not temporal and capabilities.get("trial_accident_supported") is True
+              and bool(kinds & {"vehicle_lane", "road_surface"})) or (
+        capabilities.get("trial_flood_supported") is True and "road_surface" in kinds)
+    if not usable:
+        return _err("trial_region_required", "请圈选机动车道或路面；积水检查须圈选路面。", 400)
+    return None
 
 
 def _vision_optional_model_ready(path_key: str, enabled_key: str, capability_key: str,
@@ -3437,6 +3483,16 @@ def manager_vision_status():
         "max_image_bytes": config.VISION_MAX_MEDIA_BYTES,
         "max_video_bytes": config.VISION_MAX_VIDEO_BYTES,
         "upload_chunk_bytes": config.VISION_CHUNK_BYTES,
+        "trial": {
+            "enabled": bool(config.VISION_TRIAL_ENABLED and inference_ready and (
+                worker_capabilities.get("trial_accident_supported") is True
+                or worker_capabilities.get("trial_flood_supported") is True)),
+            "accident": worker_capabilities.get("trial_accident_supported") is True,
+            "accident_media": worker_capabilities.get("trial_accident_media", "frame"),
+            "flood": worker_capabilities.get("trial_flood_supported") is True,
+            "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS,
+            "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS,
+        },
         "capabilities": {
             "aerial_vehicle_detection": inference_ready,
             "congestion_candidate_review": inference_ready,
@@ -3483,6 +3539,9 @@ def start_manager_vision_upload():
         return _err("vision_not_ready", "视觉模型、依赖或后台工作进程尚未就绪，暂不能提交任务。", 503)
 
     body = request.get_json(silent=True) or {}
+    purpose, purpose_error = _vision_submission_purpose(body.get("purpose"))
+    if purpose_error:
+        return purpose_error
     safe_name = secure_filename(str(body.get("filename", "")))
     extension = Path(safe_name).suffix.lower()
     size = body.get("size")
@@ -3495,11 +3554,13 @@ def start_manager_vision_upload():
     if config.VISION_CHUNK_BYTES < 1:
         return _err("upload_unavailable", "视频分块大小配置无效。", 503)
     try:
-        captured_at = _parse_vision_capture_time(body.get("captured_at"), required=True)
+        captured_at = _parse_vision_capture_time(body.get("captured_at"), required=purpose != "trial")
         capture_time_source, capture_timezone = _parse_vision_capture_provenance(
             body.get("capture_time_source"), body.get("capture_timezone"),
         )
         scene_id = str(body.get("scene_id") or "").strip() or None
+        if purpose == "trial" and (scene_id or body.get("lng") is not None or body.get("lat") is not None):
+            return _err("trial_location_not_allowed", "试用影像不关联校园位置或观察场景。", 400)
         if scene_id:
             uuid.UUID(scene_id)
             from storage import database
@@ -3512,6 +3573,9 @@ def start_manager_vision_upload():
             )
         else:
             observation_regions = _parse_vision_observation_regions(body.get("observation_regions"))
+        region_error = _validate_trial_regions(purpose, observation_regions, "video")
+        if region_error:
+            return region_error
     except (TypeError, ValueError) as error:
         return _err("invalid_observation_metadata", str(error), 400)
     anchor_gcj = None
@@ -3544,7 +3608,8 @@ def start_manager_vision_upload():
             "size": size, "offset": 0, "chunk_size": config.VISION_CHUNK_BYTES,
             "anchor_gcj": anchor_gcj,
             "camera_stabilized": body.get("camera_stabilized") is True,
-            "captured_at": captured_at.timestamp(),
+            "captured_at": captured_at.timestamp() if captured_at else None,
+            "purpose": purpose,
             "capture_time_source": capture_time_source,
             "capture_timezone": capture_timezone,
             "observation_regions": observation_regions,
@@ -3683,6 +3748,9 @@ def complete_manager_vision_upload(upload_id):
                 return _err("upload_expired", "视频续传任务已过期，请重新选择视频。", 410)
             if metadata.get("completed_job"):
                 return _ok({"job": metadata["completed_job"]}, status=202)
+            purpose, purpose_error = _vision_submission_purpose(metadata.get("purpose"))
+            if purpose_error:
+                return purpose_error
             if int(metadata.get("offset", 0)) != int(metadata.get("size", -1)):
                 return _err("upload_incomplete", "视频尚未上传完整，请继续上传后再提交分析。", 409)
             part_path = session_dir / "upload.part"
@@ -3716,7 +3784,8 @@ def complete_manager_vision_upload(upload_id):
                     media_kind="video", media_path=stored_name, sha256=digest.hexdigest(),
                     anchor_gcj=scene_values.get("anchor_gcj", metadata["anchor_gcj"]),
                     camera_stabilized=scene_values.get("camera_stabilized", metadata["camera_stabilized"]),
-                    captured_at=datetime.fromtimestamp(float(metadata["captured_at"]), tz=timezone.utc),
+                    captured_at=(datetime.fromtimestamp(float(metadata["captured_at"]), tz=timezone.utc)
+                                 if metadata.get("captured_at") is not None else None),
                     capture_time_source=metadata.get("capture_time_source", "unknown"),
                     capture_timezone=metadata.get("capture_timezone"),
                     observation_regions=scene_values.get(
@@ -3724,6 +3793,7 @@ def complete_manager_vision_upload(upload_id):
                     ),
                     observation_scene_id=scene_values.get("scene_id"),
                     camera_pose=metadata.get("camera_pose"),
+                    purpose=purpose,
                 )
             except Exception:
                 os.replace(target, part_path)
@@ -3793,6 +3863,9 @@ def manager_vision_jobs():
             "视觉模型、依赖或后台工作进程尚未就绪，暂不能提交任务。",
             503,
         )
+    purpose, purpose_error = _vision_submission_purpose(request.form.get("purpose"))
+    if purpose_error:
+        return purpose_error
     uploaded = request.files.get("media")
     if uploaded is None or not uploaded.filename:
         return _err("missing_media", "请选择一张图片或一个视频文件。", 400)
@@ -3804,11 +3877,13 @@ def manager_vision_jobs():
         return _err("unsupported_media", "只支持 JPG、PNG、WebP 图片和 MP4、MOV、AVI、WebM 视频。", 415)
     is_video = extension in video_extensions
     try:
-        captured_at = _parse_vision_capture_time(request.form.get("captured_at"), required=True)
+        captured_at = _parse_vision_capture_time(request.form.get("captured_at"), required=purpose != "trial")
         capture_time_source, capture_timezone = _parse_vision_capture_provenance(
             request.form.get("capture_time_source"), request.form.get("capture_timezone"),
         )
         scene_id = request.form.get("scene_id", "").strip() or None
+        if purpose == "trial" and (scene_id or request.form.get("lng") or request.form.get("lat")):
+            return _err("trial_location_not_allowed", "试用影像不关联校园位置或观察场景。", 400)
         if scene_id:
             uuid.UUID(scene_id)
             from storage import database
@@ -3823,6 +3898,9 @@ def manager_vision_jobs():
             observation_regions = _parse_vision_observation_regions(
                 request.form.get("observation_regions"),
             )
+        region_error = _validate_trial_regions(purpose, observation_regions, "video" if is_video else "image")
+        if region_error:
+            return region_error
     except (TypeError, ValueError) as error:
         return _err("invalid_observation_metadata", str(error), 400)
     raw_lng = request.form.get("lng", "").strip()
@@ -3907,6 +3985,7 @@ def manager_vision_jobs():
             capture_timezone=capture_timezone,
             observation_regions=scene_values.get("observation_regions", observation_regions),
             observation_scene_id=scene_values.get("scene_id"),
+            purpose=purpose,
         )
         return _ok({"job": _public_vision_job(job)}, status=202)
     except _VisionSceneError as error:
@@ -4156,6 +4235,41 @@ def manager_vision_media(job_id):
         return _err("media_not_found", "影像文件不存在。", 404)
     return send_file(path, mimetype=mimetypes.guess_type(job["original_name"])[0],
                      as_attachment=False, download_name=job["original_name"])
+
+
+@api_bp.route("/manager/vision-jobs/<job_id>/trial-feedback", methods=["POST"])
+def add_manager_vision_trial_feedback(job_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("invalid_feedback", "请填写漏检类型和说明。", 400)
+    kind = body.get("kind")
+    note = str(body.get("note") or "").strip()
+    time_seconds = body.get("time_seconds")
+    if kind not in ("possible_accident", "possible_flooding") or not 8 <= len(note) <= 1000:
+        return _err("invalid_feedback", "请选择事故或积水，并填写 8 至 1000 字说明。", 400)
+    if time_seconds is not None and (isinstance(time_seconds, bool)
+            or not isinstance(time_seconds, (int, float)) or not math.isfinite(time_seconds)
+            or time_seconds < 0):
+        return _err("invalid_feedback_time", "时间应为不小于零的秒数。", 400)
+    try:
+        uuid.UUID(job_id)
+        from storage import database, vision_repository
+        database.initialize(current_app.config.get("DATABASE_URL"))
+        result = vision_repository.add_trial_feedback(
+            current_app.config.get("DATABASE_URL"), job_id, kind=kind, note=note,
+            recorded_by=_admin_identity() or "unknown", time_seconds=time_seconds,
+        )
+    except ValueError:
+        return _err("invalid_job_id", "影像任务标识无效。", 400)
+    except Exception:
+        logger.exception("记录试用影像漏检失败")
+        return _err("vision_storage_unavailable", "记录暂时无法保存，请重试。", 503)
+    if not result:
+        return _err("trial_feedback_unavailable", "只有已完成的试用影像可以补充漏检。", 409)
+    return _ok({"job": result})
 
 
 @api_bp.route("/manager/vision-jobs/<job_id>/review", methods=["POST"])

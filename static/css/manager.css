@@ -133,3 +133,9 @@ main{width:min(1500px,calc(100% - 48px));padding:28px 0 52px}
 /* Keep Leaflet panes and controls below the sticky manager navigation. */
 .map-card { position: relative; z-index: 0; }
 #road-workspace, #vision-workspace, #event-history { scroll-margin-top: 150px; }
+
+.vision-trial-feedback{display:grid;gap:8px;margin-top:14px;padding:12px;border:1px solid var(--line);background:#f7faf7}
+.vision-trial-feedback select,.vision-trial-feedback textarea,.vision-trial-feedback input{width:100%;padding:9px;border:1px solid var(--line);background:#fff;color:var(--ink)}
+.vision-trial-feedback textarea{min-height:72px;resize:vertical}
+.vision-trial-feedback .outline-button{justify-self:start}
+@media(max-width:560px){.vision-trial-feedback select,.vision-trial-feedback textarea,.vision-trial-feedback input{font-size:16px}}

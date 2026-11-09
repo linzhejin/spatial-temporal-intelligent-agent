@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261109-ui-v2">
+  <link rel="stylesheet" href="/css/manager.css?v=20261109-vision-trial-v1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261109-vision-safety-v1" defer></script>
+  <script src="/js/manager.js?v=20261109-vision-trial-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -178,6 +178,13 @@
             <details class="vision-new-analysis">
               <summary>新建影像分析</summary>
             <form id="vision-form">
+              <label>影像用途
+                <select id="vision-purpose">
+                  <option value="operational">校园巡查</option>
+                  <option id="vision-trial-option" value="trial" disabled>公开影像试用（模型未就绪）</option>
+                </select>
+                <small id="vision-purpose-note">校园巡查可在人工核实后登记路况。</small>
+              </label>
               <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频（支持断点续传）</small></label>
               <input id="media-file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm" required>
               <div id="selected-media" class="selected-media" aria-live="polite" hidden>

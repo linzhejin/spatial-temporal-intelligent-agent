@@ -9,6 +9,7 @@ User=@APP_USER@
 WorkingDirectory=@APP_DIR@
 Environment=PYTHONUNBUFFERED=1
 Environment=VISION_CPU_THREADS=1
+Environment=VISION_WORKER_ROLE=operational
 Environment=OMP_NUM_THREADS=1
 Environment=OPENBLAS_NUM_THREADS=1
 ExecStart=@APP_DIR@/venv/bin/python -m vision.worker

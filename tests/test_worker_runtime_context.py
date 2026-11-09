@@ -636,7 +636,7 @@ def test_vision_worker_heartbeat_uses_freshness_and_worker_identity(monkeypatch)
     )
 
     assert "ON CONFLICT(worker_id)" in statements[0][0]
-    assert statements[0][1] == ("worker-a", True, "loaded")
+    assert statements[0][1] == ("worker-a", True, "loaded", "shared")
     assert "heartbeat_at > now()" in statements[1][0]
     assert statements[1][1] == (12, "worker-a")
 

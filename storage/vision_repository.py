@@ -16,27 +16,32 @@ def create_job(url: str | None, *, created_by: str, original_name: str,
                capture_timezone: str | None = None,
                observation_regions: list[dict] | None = None,
                observation_scene_id: str | None = None,
-               camera_pose: dict | None = None) -> dict:
+               camera_pose: dict | None = None, purpose: str = "operational") -> dict:
+    if purpose not in {"operational", "trial"}:
+        raise ValueError("invalid vision job purpose")
     job_id = str(uuid.uuid4())
     with database.connect(url) as conn:
         row = conn.execute(
             "INSERT INTO manager_vision_job(job_id, created_by, original_name, media_kind,"
             " media_path, sha256, anchor_gcj, camera_stabilized, captured_at, capture_time_source,"
             " capture_timezone, observation_regions,"
-            " observation_scene_id, camera_pose, status)"
-            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
-            " RETURNING job_id, status, created_at, capture_time_source, capture_timezone, camera_pose",
+            " observation_scene_id, camera_pose, purpose, status)"
+            " VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'queued')"
+            " RETURNING job_id, status, created_at, capture_time_source, capture_timezone, camera_pose, purpose",
             (job_id, created_by, original_name, media_kind, media_path, sha256,
              Jsonb(anchor_gcj) if anchor_gcj is not None else None,
              bool(camera_stabilized), captured_at,
              capture_time_source, capture_timezone,
              Jsonb(observation_regions or []), observation_scene_id,
-             Jsonb(camera_pose) if camera_pose is not None else None),
+             Jsonb(camera_pose) if camera_pose is not None else None, purpose),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])}
 
 
-def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90) -> dict | None:
+def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
+                   allow_trial: bool = False, trial_only: bool = False) -> dict | None:
+    purposes = (["trial"] if allow_trial else []) if trial_only else (
+        ["operational", "trial"] if allow_trial else ["operational"])
     with database.connect(url) as conn:
         conn.execute(
             "UPDATE manager_vision_job SET status='failed', lease_until=NULL,"
@@ -46,15 +51,15 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90) -> 
         )
         row = conn.execute(
             "WITH candidate AS (SELECT job_id FROM manager_vision_job"
-            " WHERE deleted_at IS NULL AND attempts<3"
+            " WHERE deleted_at IS NULL AND attempts<3 AND purpose=ANY(%s)"
             " AND (status='queued' OR (status='running' AND lease_until < now()))"
             " ORDER BY created_at, job_id FOR UPDATE SKIP LOCKED LIMIT 1)"
             " UPDATE manager_vision_job j SET status='running', worker_id=%s,"
             " lease_until=now()+(%s * interval '1 second'), attempts=attempts+1, updated_at=now()"
             " FROM candidate c WHERE j.job_id=c.job_id"
             " RETURNING j.job_id, j.media_kind, j.media_path, j.anchor_gcj, j.camera_stabilized,"
-            " j.camera_pose, j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts",
-            (worker_id, lease_seconds),
+            " j.camera_pose, j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts, j.purpose",
+            (purposes, worker_id, lease_seconds),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])} if row else None
 
@@ -154,7 +159,7 @@ def get_job(url: str | None, job_id: str) -> dict | None:
     with database.connect(url) as conn:
         row = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, media_path, sha256, anchor_gcj, camera_stabilized,"
-            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, checkpoint, candidate_reviews, cancel_requested, status, attempts, result, error, purpose, trial_feedback,"
             " review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at FROM manager_vision_job WHERE job_id=%s AND deleted_at IS NULL", (job_id,),
         ).fetchone()
@@ -167,7 +172,7 @@ def list_jobs(url: str | None, limit: int = 50) -> list[dict[str, Any]]:
     with database.connect(url) as conn:
         rows = conn.execute(
             "SELECT job_id, created_by, original_name, media_kind, anchor_gcj, camera_stabilized,"
-            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, candidate_reviews, cancel_requested, status, attempts,"
+            " captured_at, capture_time_source, capture_timezone, observation_regions, observation_scene_id, camera_pose, progress, candidate_reviews, cancel_requested, status, attempts, purpose, trial_feedback,"
             " result - 'preview_frames' - 'preview_frame_interval_seconds' AS result,"
             " error, review_status, review_candidate_index, review_note, reviewed_by, reviewed_at,"
             " created_at, updated_at"
@@ -175,6 +180,21 @@ def list_jobs(url: str | None, limit: int = 50) -> list[dict[str, Any]]:
             " ORDER BY created_at DESC LIMIT %s", (limit,),
         ).fetchall()
     return [{**row, "job_id": str(row["job_id"])} for row in rows]
+
+
+def add_trial_feedback(url: str | None, job_id: str, *, kind: str, note: str,
+                       recorded_by: str, time_seconds: float | None = None) -> dict | None:
+    feedback = Jsonb({"kind": kind, "note": note, "recorded_by": recorded_by,
+                      "time_seconds": time_seconds})
+    with database.connect(url) as conn:
+        row = conn.execute(
+            "UPDATE manager_vision_job SET trial_feedback=trial_feedback || "
+            "jsonb_build_array(%s::jsonb || jsonb_build_object('recorded_at', now())), updated_at=now() "
+            "WHERE job_id=%s AND purpose='trial' AND deleted_at IS NULL "
+            "AND status IN ('completed','needs_review') RETURNING job_id, trial_feedback",
+            (feedback, job_id),
+        ).fetchone()
+    return {**row, "job_id": str(row["job_id"])} if row else None
 
 
 def review_candidate(url: str | None, job_id: str, *, candidate_index: int,
@@ -241,27 +261,28 @@ def begin_delete_jobs(url: str | None, job_id: str) -> list[dict[str, Any]]:
     """
     with database.connect(url) as conn:
         target = conn.execute(
-            "SELECT sha256 FROM manager_vision_job WHERE job_id=%s", (job_id,),
+            "SELECT sha256, purpose FROM manager_vision_job WHERE job_id=%s", (job_id,),
         ).fetchone()
         if not target:
             return []
         digest = target.get("sha256")
-        identity_clause = "sha256=%s" if digest else "job_id=%s"
+        identity_clause = "sha256=%s AND purpose=%s" if digest else "job_id=%s AND purpose=%s"
         identity = digest if digest else job_id
+        identity_params = (identity, target["purpose"])
         locked_rows = conn.execute(
             "SELECT job_id FROM manager_vision_job WHERE " + identity_clause
-            + " ORDER BY job_id FOR UPDATE", (identity,),
+            + " ORDER BY job_id FOR UPDATE", identity_params,
         ).fetchall()
         if not locked_rows:
             return []
         conn.execute(
             "UPDATE manager_vision_job SET deleted_at=COALESCE(deleted_at, now()),"
             " worker_id=NULL, lease_until=NULL, updated_at=now() WHERE " + identity_clause
-            + " AND deleted_at IS NULL", (identity,),
+            + " AND deleted_at IS NULL", identity_params,
         )
         rows = conn.execute(
             "SELECT job_id, media_path, sha256 FROM manager_vision_job WHERE " + identity_clause
-            + " AND deleted_at IS NOT NULL ORDER BY updated_at, job_id", (identity,),
+            + " AND deleted_at IS NOT NULL ORDER BY updated_at, job_id", identity_params,
         ).fetchall()
     return [{**row, "job_id": str(row["job_id"])} for row in rows]
 
@@ -306,27 +327,37 @@ def finalize_delete_jobs(url: str | None, job_ids: list[str]) -> int:
 
 
 def heartbeat_worker(url: str | None, worker_id: str, *, ready: bool,
-                     status_detail: str | None = None) -> None:
+                     status_detail: str | None = None, role: str = "shared") -> None:
     """Publish vision-process health; the web app never infers readiness from files alone."""
+    if role not in {"shared", "operational", "trial"}:
+        raise ValueError("invalid vision worker role")
     with database.connect(url) as conn:
         conn.execute(
-            "INSERT INTO manager_vision_worker(worker_id, ready, status_detail, heartbeat_at)"
-            " VALUES (%s,%s,%s,now()) ON CONFLICT(worker_id) DO UPDATE SET"
-            " ready=EXCLUDED.ready, status_detail=EXCLUDED.status_detail, heartbeat_at=now()",
-            (worker_id, bool(ready), (status_detail or "")[:500]),
+            "INSERT INTO manager_vision_worker(worker_id, ready, status_detail, worker_role, heartbeat_at)"
+            " VALUES (%s,%s,%s,%s,now()) ON CONFLICT(worker_id) DO UPDATE SET"
+            " ready=EXCLUDED.ready, status_detail=EXCLUDED.status_detail,"
+            " worker_role=EXCLUDED.worker_role, heartbeat_at=now()",
+            (worker_id, bool(ready), (status_detail or "")[:500], role),
         )
 
 
 def has_ready_worker(url: str | None, max_age_seconds: int = 30,
-                     worker_id: str | None = None) -> bool:
+                     worker_id: str | None = None, role: str | None = None) -> bool:
     """Return true only when a healthy worker has renewed its heartbeat recently."""
     worker_filter = " AND worker_id=%s" if worker_id else ""
-    parameters = (max(1, int(max_age_seconds)), worker_id) if worker_id else (max(1, int(max_age_seconds)),)
+    parameters = [max(1, int(max_age_seconds))]
+    if worker_id:
+        parameters.append(worker_id)
+    if role is not None:
+        if role not in {"operational", "trial"}:
+            raise ValueError("invalid vision worker role filter")
+        worker_filter += " AND worker_role=ANY(%s)"
+        parameters.append(["shared", role])
     with database.connect(url) as conn:
         row = conn.execute(
             "SELECT EXISTS (SELECT 1 FROM manager_vision_worker WHERE ready=true"
             " AND heartbeat_at > now() - (%s * interval '1 second')" + worker_filter + ") AS ready",
-            parameters,
+            tuple(parameters),
         ).fetchone()
     return bool(row and row["ready"])
 
@@ -340,3 +371,13 @@ def ready_worker_status(url: str | None, max_age_seconds: int = 30) -> dict[str,
             " ORDER BY heartbeat_at DESC LIMIT 1",
             (max(1, int(max_age_seconds)),),
         ).fetchone()
+
+
+def ready_worker_statuses(url: str | None, max_age_seconds: int = 30) -> list[dict[str, Any]]:
+    """Return fresh worker capabilities without confusing trial and campus workers."""
+    with database.connect(url) as conn:
+        return conn.execute(
+            "SELECT worker_id, worker_role, status_detail, heartbeat_at FROM manager_vision_worker"
+            " WHERE ready=true AND heartbeat_at > now() - (%s * interval '1 second')"
+            " ORDER BY heartbeat_at DESC", (max(1, int(max_age_seconds)),),
+        ).fetchall()

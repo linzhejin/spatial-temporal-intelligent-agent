@@ -192,7 +192,7 @@
     var pointCount = 0;
     var points = [];
     var stride = 1;
-    var poseFieldPattern = /\b(latitude|longitude|rel_alt|abs_alt|yaw|gb_yaw|gb_pitch|focal_len)\s*:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
+    var poseFieldPattern = /\b(latitude|longitude|rel_alt|abs_alt|yaw|gb_yaw|gb_pitch|gb_roll|focal_len)\s*:\s*([-+]?(?:\d+(?:\.\d*)?|\.\d+))/gi;
     function poseFields(line) {
       var fields = {};
       var field;
@@ -210,6 +210,7 @@
         yaw_deg: Number.isFinite(fields.yaw) ? fields.yaw : null,
         gb_yaw_deg: Number.isFinite(fields.gb_yaw) ? fields.gb_yaw : null,
         gb_pitch_deg: Number.isFinite(fields.gb_pitch) ? fields.gb_pitch : null,
+        gb_roll_deg: Number.isFinite(fields.gb_roll) ? fields.gb_roll : null,
         focal_len_35mm: Number.isFinite(fields.focal_len) ? fields.focal_len : null,
       };
     }
@@ -265,6 +266,7 @@
           yaw_deg: point.yaw_deg,
           gb_yaw_deg: point.gb_yaw_deg,
           gb_pitch_deg: point.gb_pitch_deg,
+          gb_roll_deg: point.gb_roll_deg,
           focal_len_35mm: point.focal_len_35mm,
         };
       }),
@@ -574,12 +576,32 @@
     } else if (isVideoFile(file) && fileMatchesPending(file, readPendingVisionUpload())) {
       message('vision-message', '发现这段视频的未完成上传；提交后会从已上传位置继续。', true);
     } else {
-      message('vision-message', '影像已准备好，可以开始识别；如有有效候选，将在复核后选择具体道路。', true);
+      message('vision-message', isVisionTrial() ? '影像已准备好，试用结果不会进入真实路况。' :
+        '影像已准备好，可以开始识别；如有有效候选，将在复核后选择具体道路。', true);
     }
   }
 
   function canSubmitVision() {
-    return !!(state.inferenceReady && !state.visionUploadBusy && !state.mediaInvalidReason && byId('media-file').files.length);
+    return !!(state.inferenceReady && (!isVisionTrial() || state.trialReady) &&
+      !state.visionUploadBusy && !state.mediaInvalidReason && byId('media-file').files.length);
+  }
+
+  function isVisionTrial() { return byId('vision-purpose').value === 'trial'; }
+
+  function updateVisionPurpose() {
+    var trial = isVisionTrial();
+    byId('captured-at').required = !trial;
+    byId('pick-anchor').disabled = trial;
+    var trialLimits = state.trialCapabilities || {};
+    var limitNote = '视频不超过 ' + Number(trialLimits.max_video_seconds || 45) + ' 秒，影像不超过约 ' +
+      Math.round(Number(trialLimits.max_frame_pixels || 2073600) / 10000) + ' 万像素。';
+    byId('vision-purpose-note').textContent = trial
+      ? ((state.trialCapabilities || {}).accident_media === 'video'
+        ? '试用不关联校园位置。事故按视频抽帧筛查；积水须圈选路面。' + limitNote
+        : '试用不关联校园位置。请圈选机动车道或路面；积水须圈选路面。' + limitNote)
+      : '校园巡查可在人工核实后登记路况。';
+    updateVisionSubmitState();
+    updateVisionGuidance();
   }
 
   function updateVisionSubmitState() {
@@ -1901,10 +1923,12 @@
     var pending = readPendingVisionUpload();
     if (!fileMatchesPending(file, pending) || !isVideoFile(file)) return;
     byId('camera-stabilized').checked = pending.camera_stabilized === true;
-    byId('captured-at').value = localDateTimeValue(Number(pending.captured_at));
+    byId('vision-purpose').value = pending.purpose === 'trial' ? 'trial' : 'operational';
+    byId('captured-at').value = pending.captured_at == null ? '' : localDateTimeValue(Number(pending.captured_at));
     state.observationRegions = Array.isArray(pending.observation_regions) ? pending.observation_regions : [];
     state.observationSceneId = pending.scene_id || null;
     renderObservationRegionList();
+    updateVisionPurpose();
     message('vision-message', '已找到这段视频的未完成上传；提交时会核对字幕和设置。', true);
     if (pending.anchor && Number.isFinite(Number(pending.anchor.lng)) && Number.isFinite(Number(pending.anchor.lat))) {
       state.anchor = { lng: Number(pending.anchor.lng), lat: Number(pending.anchor.lat) };
@@ -1954,7 +1978,8 @@
     return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
   }
 
-  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance, observationRegions, sceneId, cameraPose) {
+  async function uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance, observationRegions, sceneId, cameraPose, purpose) {
+    purpose = purpose || 'operational';
     var pose = poseForUpload(cameraPose);
     var poseDigest = null;
     try {
@@ -1970,10 +1995,12 @@
     var matchingPending = fileMatchesPending(file, pending) &&
       !!poseDigest && pending.camera_pose_sha256 === poseDigest &&
       pending.camera_stabilized === cameraStabilized &&
-      Math.abs(Number(pending.captured_at) - Number(capturedAt)) < 1 &&
+      (pending.purpose || 'operational') === purpose &&
+      ((pending.captured_at == null && capturedAt == null) ||
+        (pending.captured_at != null && capturedAt != null && Math.abs(Number(pending.captured_at) - Number(capturedAt)) < 1)) &&
       JSON.stringify(pending.observation_regions || []) === JSON.stringify(observationRegions || []) &&
       (pending.scene_id || null) === (sceneId || null) &&
-      ((!pending.anchor && !state.anchor) || (pending.anchor && state.anchor &&
+      ((purpose === 'trial' && !pending.anchor) || (!pending.anchor && !state.anchor) || (pending.anchor && state.anchor &&
         Math.abs(Number(pending.anchor.lng) - state.anchor.lng) < 0.000001 &&
         Math.abs(Number(pending.anchor.lat) - state.anchor.lat) < 0.000001));
     var uploadId = matchingPending ? pending.upload_id : null;
@@ -1996,6 +2023,7 @@
     if (!uploadId) {
       var uploadMetadata = {
         filename: file.name, size: file.size, camera_stabilized: cameraStabilized,
+        purpose: purpose,
         captured_at: capturedAt,
         capture_time_source: captureProvenance.capture_time_source,
         capture_timezone: captureProvenance.capture_timezone,
@@ -2003,7 +2031,7 @@
       };
       if (sceneId) uploadMetadata.scene_id = sceneId;
       if (pose) uploadMetadata.camera_pose = JSON.stringify(pose);
-      if (state.anchor) {
+      if (state.anchor && purpose !== 'trial') {
         uploadMetadata.lng = state.anchor.lng;
         uploadMetadata.lat = state.anchor.lat;
       }
@@ -2013,7 +2041,8 @@
       pending = {
         upload_id: uploadId, filename: file.name, size: file.size,
         last_modified: Number(file.lastModified || 0),
-        anchor: state.anchor ? { lng: state.anchor.lng, lat: state.anchor.lat } : null,
+        anchor: state.anchor && purpose !== 'trial' ? { lng: state.anchor.lng, lat: state.anchor.lat } : null,
+        purpose: purpose,
         camera_stabilized: cameraStabilized,
         captured_at: capturedAt,
         camera_pose_sha256: poseDigest,
@@ -2064,6 +2093,11 @@
     try {
       var data = await request('/api/manager/vision-status', 'GET');
       state.visionCapabilities = data.capabilities || {};
+      state.trialCapabilities = data.trial || {};
+      state.trialReady = !!(data.trial && data.trial.enabled);
+      byId('vision-trial-option').disabled = !state.trialReady;
+      byId('vision-trial-option').textContent = state.trialReady
+        ? '公开影像试用' : '公开影像试用（模型未就绪）';
       var optionalModels = data.optional_model_status || {};
       function modelLabel(status) {
         return {
@@ -2079,8 +2113,7 @@
       state.maxVideoBytes = data.max_video_bytes || state.maxVideoBytes;
       state.uploadChunkBytes = data.upload_chunk_bytes || state.uploadChunkBytes;
       state.inferenceReady = !!data.inference_ready;
-      updateVisionSubmitState();
-      updateVisionGuidance();
+      updateVisionPurpose();
       byId('vision-status').classList.toggle('is-ready', !!data.inference_ready);
     } catch (error) {
       state.inferenceReady = false;
@@ -2109,6 +2142,10 @@
     if (job.media_kind === 'video') {
       var video = document.createElement('video');
       video.controls = true; video.preload = 'metadata'; video.className = 'vision-preview'; video.src = job.media_url;
+      if (result.trial_specialized_only === true) {
+        card.appendChild(video);
+        return video;
+      }
       var previewState = getVisionPreviewState(job.job_id, result);
       var stage = appendVideoDetectionOverlay(video, previewState, 0);
       card.appendChild(stage);
@@ -2395,7 +2432,9 @@
     var summary = evidence.summary || {};
     var regionId = summary.region_id || evidence.region_id;
     var line = typeof regionId === 'string' && regionId ? '观察区域：' + regionId + '。' : '';
-    if (candidate.kind === 'possible_accident') {
+    if (candidate.kind === 'possible_accident' && summary.model_scope === 'temporal_window') {
+      line += '每段抽取 16 帧筛查，不能定位事故时刻或位置；请查看原视频。';
+    } else if (candidate.kind === 'possible_accident') {
       var accidentScore = Number(summary.peak_traffic_accident_probability);
       line += '模型在 ' + Number(summary.supporting_frames || 0) + ' 帧中给出事故场景线索' +
         (Number.isFinite(accidentScore) ? '，最高分 ' + Math.round(accidentScore * 100) + '%' : '') +
@@ -2499,6 +2538,11 @@
     var metrics = result.metrics || {};
     var safety = result.safety || {};
     var summary = document.createElement('div'); summary.className = 'vision-metrics';
+    if (result.trial_specialized_only === true) {
+      var trialOnly = document.createElement('small');
+      trialOnly.textContent = '本次只运行事故或积水试用模型，没有统计人车数量。';
+      summary.appendChild(trialOnly); card.appendChild(summary); return;
+    }
     var count = document.createElement('strong');
     count.textContent = mediaKind === 'video'
       ? '每帧平均检出车辆 ' + Number(metrics.mean_vehicle_count || 0)
@@ -2545,12 +2589,14 @@
       if (!enabled) return '未启用';
       return String(record && record.version || '已加载');
     }
-    var version = document.createElement('small');
-    version.textContent = '人车模型 ' + String(model.id || '未记录') + ' · ' + String(model.version || '未记录') +
-      '；事故场景模型 ' + optionalModelLabel('accident', accident, safety.accident_recognition_supported) +
-      '；路面积水分割模型 ' + optionalModelLabel('flood', flood, safety.flood_segmentation_supported) +
-      '。识别框不是地面坐标，事故分类不能定位事故车辆。';
-    summary.appendChild(version);
+    if (!job || job.purpose !== 'trial') {
+      var version = document.createElement('small');
+      version.textContent = '人车模型 ' + String(model.id || '未记录') + ' · ' + String(model.version || '未记录') +
+        '；事故场景模型 ' + optionalModelLabel('accident', accident, safety.accident_recognition_supported) +
+        '；路面积水分割模型 ' + optionalModelLabel('flood', flood, safety.flood_segmentation_supported) +
+        '。识别框不是地面坐标，事故分类不能定位事故车辆。';
+      summary.appendChild(version);
+    }
     card.appendChild(summary);
   }
 
@@ -2622,13 +2668,17 @@
   function renderVisionJob(job) {
     var card = document.createElement('article'); card.className = 'vision-job';
     var result = job.result && typeof job.result === 'object' ? job.result : {};
-    var isReplay = Object.prototype.hasOwnProperty.call(result, 'research_replay');
+    var isTrial = job.purpose === 'trial';
+    var isReplay = Object.prototype.hasOwnProperty.call(result, 'research_replay') && !isTrial;
+    var isolated = isReplay || isTrial;
     var replay = isReplay && result.research_replay && typeof result.research_replay === 'object'
       ? result.research_replay : {};
     var head = document.createElement('div'); head.className = 'vision-job-head';
     var title = document.createElement('div'); title.className = 'vision-job-title'; title.textContent = job.original_name || '巡查影像';
     var meta = document.createElement('div'); meta.className = 'vision-job-meta';
-    if (isReplay) {
+    if (isTrial) {
+      meta.textContent = '试用影像 · 拍摄时间' + (job.captured_at ? formatBeijingDateTime(job.captured_at, false) : '未记录');
+    } else if (isReplay) {
       var originalLocation = typeof replay.original_location === 'string' && replay.original_location.trim()
         ? replay.original_location.trim().slice(0, 120) : '未知';
       var originalTime = typeof replay.original_capture_time === 'string' && replay.original_capture_time.trim()
@@ -2658,7 +2708,20 @@
     if (isReplay && replay.review_origin === 'scripted' &&
         (job.review_status || Object.keys(job.candidate_reviews || {}).length)) stateLabel.textContent = '脚本模拟复核';
     head.append(title, stateLabel); card.appendChild(head);
-    if (isReplay) {
+    if (isTrial) {
+      var trialNotice = document.createElement('p'); trialNotice.className = 'vision-replay-notice';
+      trialNotice.textContent = '试用结果可能误报或漏报，仅供复核，不会进入真实路况。';
+      card.appendChild(trialNotice);
+      if (result.trial_coverage) {
+        var coverageLabels = { checked: '已检查', not_configured: '模型未配置',
+          region_required: '缺少对应观察区域', no_observation: '没有可用的观察帧',
+          video_required: '此模型仅支持视频', failed: '分析失败' };
+        var coverage = document.createElement('p'); coverage.className = 'vision-job-meta';
+        coverage.textContent = '事故：' + (coverageLabels[result.trial_coverage.accident] || '未知') +
+          ' · 积水：' + (coverageLabels[result.trial_coverage.flood] || '未知');
+        card.appendChild(coverage);
+      }
+    } else if (isReplay) {
       var replayNotice = document.createElement('p'); replayNotice.className = 'vision-replay-notice';
       replayNotice.textContent = '公开素材历史回放；校园道路和实验时钟均为模拟，不能发布为当前路况。'
         + (replay.review_origin === 'scripted' ? '脚本模拟复核，非人工复核。' : '复核来源请以记录为准。');
@@ -2730,7 +2793,10 @@
         var candidate = document.createElement('div'); candidate.className = 'candidate-card';
         var titleNode = document.createElement('strong');
         var titleStatus;
-        if (item.kind === 'possible_flooding') {
+        if (item.kind === 'possible_accident' && item.evidence && item.evidence.summary &&
+            item.evidence.summary.model_scope === 'temporal_window') {
+          titleStatus = ' · 视频筛查 · 需复核';
+        } else if (item.kind === 'possible_flooding') {
           titleStatus = ' · 需人工核对';
         } else if (['vehicle_cluster_review', 'possible_congestion', 'possible_crowding'].indexOf(item.kind) >= 0) {
           titleStatus = ' · 规则筛查 · 需复核';
@@ -2768,7 +2834,7 @@
           });
           actions.append(confirmButton, dismissCandidate); candidate.appendChild(actions);
         }
-        if (!isReplay && ((candidateReview && candidateReview.status === 'confirmed') ||
+        if (!isolated && ((candidateReview && candidateReview.status === 'confirmed') ||
             (legacyReview && job.review_status === 'confirmed'))) {
           var transfer = document.createElement('button'); transfer.type = 'button';
           transfer.className = 'outline-button transfer-button'; transfer.textContent = '将此候选转入道路事件';
@@ -2797,7 +2863,7 @@
         });
         card.appendChild(dismissButton);
       }
-      if (!isReplay && job.review_status === 'confirmed') {
+      if (!isolated && job.review_status === 'confirmed') {
         var next = document.createElement('p'); next.className = 'vision-job-meta';
         next.textContent = '已确认影像迹象。若需影响导航，请在上方路况表单中手工选定具体道路并发布事件。';
         card.appendChild(next);
@@ -2818,7 +2884,9 @@
         var terminal = document.createElement('div'); terminal.className = 'vision-terminal';
         var terminalTitle = document.createElement('strong'); terminalTitle.textContent = '分析已结束';
         var terminalCopy = document.createElement('p');
-        if (isReplay) {
+        if (isTrial) {
+          terminalCopy.textContent = '没有生成候选。请查看原片；发现漏检可在下方记录。';
+        } else if (isReplay) {
           terminalCopy.textContent = '历史分析没有可复核候选；是否存在道路异常未知，不能据此发布当前路况。';
         } else {
           terminalCopy.textContent = result.safety && result.safety.observation_region_reassociation_required === true
@@ -2826,7 +2894,7 @@
             : noCandidateFeedback(result, job.media_kind);
         }
         terminal.append(terminalTitle, terminalCopy); card.appendChild(terminal);
-        if (!isReplay) {
+        if (!isolated) {
           var manual = document.createElement('button'); manual.type = 'button';
           manual.className = 'outline-button transfer-button';
           manual.textContent = '依据原片手工登记路况';
@@ -2838,9 +2906,49 @@
         }
       }
     }
+    if (isTrial && (job.status === 'completed' || job.status === 'needs_review')) {
+      appendTrialFeedback(card, job);
+    }
     if (job.status === 'failed') appendVisionRecoveryActions(card, job);
     appendVisionDeleteAction(card, job);
     return card;
+  }
+
+  function appendTrialFeedback(card, job) {
+    var box = document.createElement('div'); box.className = 'vision-trial-feedback';
+    var heading = document.createElement('strong'); heading.textContent = '补充漏检';
+    var kind = document.createElement('select'); kind.setAttribute('aria-label', '漏检类型');
+    [['possible_accident', '疑似事故'], ['possible_flooding', '疑似积水']].forEach(function (entry) {
+      var option = document.createElement('option'); option.value = entry[0]; option.textContent = entry[1];
+      kind.appendChild(option);
+    });
+    var note = document.createElement('textarea'); note.maxLength = 1000;
+    note.placeholder = '说明画面中遗漏了什么（至少 8 字）'; note.setAttribute('aria-label', '漏检说明');
+    var seconds = document.createElement('input'); seconds.type = 'number'; seconds.min = '0'; seconds.step = '0.1';
+    seconds.placeholder = '视频中的时间（秒，可选）'; seconds.setAttribute('aria-label', '漏检时间（秒，可选）');
+    var feedback = document.createElement('p'); feedback.className = 'form-message'; feedback.setAttribute('role', 'status');
+    var save = document.createElement('button'); save.type = 'button'; save.className = 'outline-button';
+    save.textContent = '保存漏检';
+    save.addEventListener('click', async function () {
+      var body = { kind: kind.value, note: note.value.trim() };
+      if (seconds.value !== '') body.time_seconds = Number(seconds.value);
+      save.disabled = true;
+      try {
+        await request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/trial-feedback', 'POST', body);
+        await refreshVisionJobs(true);
+      } catch (error) { feedback.textContent = error.message || '漏检记录保存失败。'; }
+      finally { save.disabled = false; }
+    });
+    box.append(heading, kind, note);
+    if (job.media_kind === 'video') box.appendChild(seconds);
+    box.append(save, feedback);
+    (job.trial_feedback || []).forEach(function (item) {
+      var line = document.createElement('p'); line.className = 'vision-job-meta';
+      line.textContent = (item.kind === 'possible_accident' ? '事故' : '积水') + '漏检：' + (item.note || '') +
+        (item.time_seconds == null ? '' : ' · ' + item.time_seconds + ' 秒');
+      box.appendChild(line);
+    });
+    card.appendChild(box);
   }
 
   function appendVisionRecoveryActions(card, job) {
@@ -3039,7 +3147,9 @@
     if (!file) { message('vision-message', '请先选择一张图片或一段视频。'); return; }
     var video = isVideoFile(file);
     var capturedAt = captureTimeEpoch();
-    if (capturedAt === null) {
+    var purpose = isVisionTrial() ? 'trial' : 'operational';
+    if (purpose === 'trial' && !state.trialReady) { message('vision-message', '试用模型尚未就绪。'); return; }
+    if (capturedAt === null && purpose !== 'trial') {
       message('vision-message', '请填写影像实际拍摄时间。'); return;
     }
     var maxBytes = video ? state.maxVideoBytes : state.maxImageBytes;
@@ -3050,8 +3160,20 @@
       message('vision-message', '只支持 JPG、PNG、WebP 图片和 MP4、MOV、AVI、WebM 视频。'); return;
     }
     var cameraStabilized = video && byId('camera-stabilized').checked;
-    var captureProvenance = captureTimeProvenance();
+    var captureProvenance = capturedAt === null ? { capture_time_source: 'unknown', capture_timezone: null } : captureTimeProvenance();
     var observationRegions = state.observationRegions.slice();
+    var trialModels = state.trialCapabilities || {};
+    var temporalVideo = trialModels.accident && trialModels.accident_media === 'video' && video;
+    var laneRegion = observationRegions.some(function (region) { return region.kind === 'vehicle_lane' || region.kind === 'road_surface'; });
+    var roadRegion = observationRegions.some(function (region) { return region.kind === 'road_surface'; });
+    var sceneAccident = trialModels.accident && trialModels.accident_media !== 'video' && laneRegion;
+    var floodRegion = trialModels.flood && roadRegion;
+    if (purpose === 'trial' && !video && trialModels.accident_media === 'video' && !trialModels.flood) {
+      message('vision-message', '当前事故试用模型只支持视频。'); return;
+    }
+    if (purpose === 'trial' && !temporalVideo && !sceneAccident && !floodRegion) {
+      message('vision-message', '请圈选机动车道或路面；积水检查须圈选路面。'); return;
+    }
     var button = byId('submit-vision');
     state.visionUploadBusy = true;
     updateVisionSubmitState();
@@ -3060,16 +3182,17 @@
       var data;
       if (video) {
         data = await uploadVideoInChunks(file, cameraStabilized, capturedAt, captureProvenance,
-          observationRegions, state.observationSceneId, state.djiCameraPose || null);
+          observationRegions, purpose === 'trial' ? null : state.observationSceneId, state.djiCameraPose || null, purpose);
       } else {
         var form = new FormData(); form.append('media', file);
         form.append('camera_stabilized', String(cameraStabilized));
-        form.append('captured_at', new Date(capturedAt * 1000).toISOString());
+        form.append('purpose', purpose);
+        if (capturedAt !== null) form.append('captured_at', new Date(capturedAt * 1000).toISOString());
         form.append('capture_time_source', captureProvenance.capture_time_source);
-        form.append('capture_timezone', captureProvenance.capture_timezone);
+        if (captureProvenance.capture_timezone) form.append('capture_timezone', captureProvenance.capture_timezone);
         form.append('observation_regions', JSON.stringify(observationRegions));
-        if (state.observationSceneId) form.append('scene_id', state.observationSceneId);
-        if (state.anchor) {
+        if (state.observationSceneId && purpose !== 'trial') form.append('scene_id', state.observationSceneId);
+        if (state.anchor && purpose !== 'trial') {
           form.append('lng', String(state.anchor.lng));
           form.append('lat', String(state.anchor.lat));
         }
@@ -3202,6 +3325,7 @@
   byId('event-cost').addEventListener('input', function () { updatePublishState(); return refreshImpactPreview(); });
   byId('field-confirmation').addEventListener('input', updatePublishState);
   byId('clear-vision-source').addEventListener('click', clearVisionSource);
+  byId('vision-purpose').addEventListener('change', updateVisionPurpose);
   byId('pick-anchor').addEventListener('click', function () { setPicking(true, 'vision'); });
   byId('start-region').addEventListener('click', function () {
     if (!byId('observation-canvas').width) { message('vision-message', '请先选择可读取的图片或视频画面。'); return; }

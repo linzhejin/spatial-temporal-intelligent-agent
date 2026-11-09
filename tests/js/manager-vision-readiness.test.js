@@ -305,8 +305,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261109-ui-v2/);
-  assert.match(managerHtml, /manager\.js\?v=20261109-vision-safety-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261109-vision-trial-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261109-vision-trial-v1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -838,7 +838,7 @@ test('successful media upload clears the preview and preserves the queued confir
   const upload = harness.elements.get('vision-form').listeners.submit({ preventDefault() {} });
   await flush();
   assert.deepEqual(harness.formEntries.map(([name]) => name), [
-    'media', 'camera_stabilized', 'captured_at', 'capture_time_source', 'capture_timezone', 'observation_regions',
+    'media', 'camera_stabilized', 'purpose', 'captured_at', 'capture_time_source', 'capture_timezone', 'observation_regions',
   ]);
   assert.equal(harness.formEntries.find(([name]) => name === 'capture_time_source')[1], 'manual');
   assert.equal(typeof harness.formEntries.find(([name]) => name === 'capture_timezone')[1], 'string');

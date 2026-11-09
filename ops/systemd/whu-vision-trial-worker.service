@@ -1,0 +1,30 @@
+[Unit]
+Description=WHU Walker isolated public vision trial worker
+After=network-online.target whu-walker.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=@APP_USER@
+WorkingDirectory=@APP_DIR@
+Environment=PYTHONUNBUFFERED=1
+Environment=VISION_CPU_THREADS=1
+Environment=OMP_NUM_THREADS=1
+Environment=OPENBLAS_NUM_THREADS=1
+Environment=VISION_WORKER_ROLE=trial
+ExecStart=@APP_DIR@/venv/bin/python -m vision.worker
+Restart=always
+RestartSec=5
+Nice=10
+CPUQuota=75%
+MemoryMax=640M
+MemorySwapMax=0
+TasksMax=32
+UMask=0077
+KillSignal=SIGTERM
+TimeoutStopSec=300
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

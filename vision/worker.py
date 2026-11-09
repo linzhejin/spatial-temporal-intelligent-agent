@@ -5,6 +5,7 @@ import logging
 import os
 import signal
 import importlib.util
+import hashlib
 import json
 import threading
 import time
@@ -19,6 +20,7 @@ from vision.evidence import attach_evidence_clips
 from vision.engine import OnnxDetector, VisionAnalysisCancelled, analyze_media
 from vision.model_release import check_optional_model_release
 from vision.specialized import OnnxAiderClassifier, OnnxFloodSegmenter
+from vision.temporal_trial import OnnxTemporalAccident
 
 logger = logging.getLogger(__name__)
 _STOP = threading.Event()
@@ -125,9 +127,61 @@ class VisionJobCancelled(RuntimeError):
     """A manager cancelled a running job after its last saved checkpoint."""
 
 
+class _TrialNoVehicleDetector:
+    """Keep specialized trial jobs independent of the expensive vehicle detector."""
+    model_id = "trial-no-vehicle-detection"
+    model_version = "1"
+
+    def detect(self, _frame, *, tracking=False):
+        return []
+
+    def detect_regions(self, _frame, _regions, *, tracking=False):
+        return []
+
+
+def load_trial_models():
+    """Load explicitly configured test weights without changing release capabilities."""
+    capabilities = {"trial_accident_supported": False, "trial_flood_supported": False}
+    models = {"accident": None, "flood": None}
+    if not config.VISION_TRIAL_ENABLED:
+        return models, capabilities
+    for kind, path in (("accident", config.VISION_TRIAL_ACCIDENT_MODEL_PATH),
+                       ("flood", config.VISION_TRIAL_FLOOD_MODEL_PATH)):
+        if not path:
+            continue
+        try:
+            with Path(path).open("rb") as file:
+                digest = hashlib.file_digest(file, "sha256").hexdigest()
+            if kind == "accident":
+                accident_kind = config.VISION_TRIAL_ACCIDENT_KIND
+                if accident_kind == "scene":
+                    model = OnnxAiderClassifier(path, threshold=config.VISION_TRIAL_ACCIDENT_THRESHOLD,
+                                                model_version="trial-sha256:" + digest)
+                elif accident_kind == "temporal":
+                    model = OnnxTemporalAccident(path, threshold=config.VISION_TRIAL_ACCIDENT_THRESHOLD,
+                                                 model_version="trial-sha256:" + digest)
+                    capabilities["trial_accident_media"] = "video"
+                else:
+                    raise ValueError("未知的事故试用模型类型。")
+            else:
+                model = OnnxFloodSegmenter(path, min_area_ratio=config.VISION_TRIAL_FLOOD_MIN_AREA_RATIO,
+                                           flood_probability_threshold=config.VISION_TRIAL_FLOOD_PROBABILITY,
+                                           model_version="trial-sha256:" + digest)
+                if config.VISION_TRIAL_FLOOD_MODEL_ID:
+                    model.model_id = config.VISION_TRIAL_FLOOD_MODEL_ID
+            models[kind] = model
+            capabilities["trial_" + kind + "_supported"] = True
+        except Exception:
+            logger.exception("Could not load %s trial model", kind)
+    return models, capabilities
+
+
 def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90, *,
-                     detector=None, accident_model=None, flood_segmenter=None):
-    job = vision_repository.claim_next_job(database_url, worker_id, lease_seconds)
+                     detector=None, accident_model=None, flood_segmenter=None,
+                     trial_accident_model=None, trial_flood_segmenter=None, trial_only=False):
+    allow_trial = trial_accident_model is not None or trial_flood_segmenter is not None
+    job = vision_repository.claim_next_job(database_url, worker_id, lease_seconds,
+                                          allow_trial=allow_trial, trial_only=trial_only)
     if not job:
         return None
     job_id = job["job_id"]
@@ -143,6 +197,10 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
     heartbeat = threading.Thread(target=keep_lease_alive, name=f"vision-lease-{job_id[:8]}", daemon=True)
     heartbeat.start()
     try:
+        if job.get("purpose") == "trial":
+            if not allow_trial:
+                raise RuntimeError("试用模型尚未就绪，无法分析这条测试影像。")
+            accident_model, flood_segmenter = trial_accident_model, trial_flood_segmenter
         path = Path(config.VISION_UPLOAD_DIR) / job["media_path"]
 
         def save_progress(snapshot):
@@ -174,16 +232,60 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
             cached_cancel_state = bool(state.get("cancel_requested"))
             return cached_cancel_state
 
-        result = analyze_media(
-            path, job["media_kind"], job["anchor_gcj"],
-            camera_stabilized=job["camera_stabilized"], detector=detector,
-            accident_model=accident_model,
-            flood_segmenter=flood_segmenter,
-            regions=job.get("observation_regions") or [],
-            progress_callback=save_progress,
-            resume_state=job.get("checkpoint"),
-            cancel_check=cancellation_requested,
-        )
+        deadline = time.monotonic() + config.VISION_MAX_ANALYSIS_SECONDS
+        temporal_accident = (accident_model if job.get("purpose") == "trial" and
+                             getattr(accident_model, "trial_video_only", False) else None)
+        kinds = {region.get("kind") for region in job.get("observation_regions") or []}
+        temporal_only = bool(temporal_accident is not None and job["media_kind"] == "video" and
+                             not (flood_segmenter is not None and "road_surface" in kinds))
+        if temporal_only:
+            # An accident-only trial has no need for vehicle tracking or ground-road matching.
+            result = {"candidates": [], "metrics": {}, "safety": {"automatically_changes_routing": False},
+                      "trial_temporal_only": True}
+        else:
+            is_trial = job.get("purpose") == "trial"
+            trial_options = ({"target_sample_fps": min(1.0, config.VISION_TRIAL_SAMPLE_FPS),
+                              "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS,
+                              "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS} if is_trial else {})
+            result = analyze_media(
+                path, job["media_kind"], job["anchor_gcj"],
+                camera_stabilized=job["camera_stabilized"], detector=_TrialNoVehicleDetector() if is_trial else detector,
+                accident_model=None if temporal_accident else accident_model,
+                flood_segmenter=flood_segmenter,
+                regions=job.get("observation_regions") or [],
+                progress_callback=save_progress,
+                resume_state=job.get("checkpoint"),
+                cancel_check=cancellation_requested,
+                **trial_options,
+            )
+        if job.get("purpose") == "trial":
+            result["trial_specialized_only"] = True
+        temporal_result = None
+        if temporal_accident is not None and job["media_kind"] == "video":
+            temporal_result = temporal_accident.analyze_video(
+                path, cancel_check=cancellation_requested, deadline=deadline,
+            )
+            result.setdefault("candidates", []).extend(temporal_result["candidates"])
+            result.setdefault("trial_model_details", {})["accident"] = {
+                "model_version": getattr(temporal_accident, "model_version", "unverified"),
+                "scope": "temporal_window", "windows_analyzed": temporal_result["windows_analyzed"],
+                "windows": temporal_result["windows"],
+            }
+        if job.get("purpose") == "trial":
+            safety = result.get("safety") or {}
+            counts = (result.get("metrics") or {}).get("specialized_model_frames") or {}
+            result["trial_coverage"] = {
+                "accident": ("not_configured" if accident_model is None else
+                             "video_required" if temporal_accident is not None and job["media_kind"] != "video" else
+                             "checked" if temporal_result is not None and temporal_result["windows_analyzed"] > 0 else
+                             "region_required" if not kinds.intersection({"vehicle_lane", "road_surface"}) else
+                             "failed" if safety.get("accident_recognition_supported") is False else
+                             "checked" if counts.get("accident", 0) > 0 else "no_observation"),
+                "flood": ("not_configured" if flood_segmenter is None else
+                          "region_required" if "road_surface" not in kinds else
+                          "failed" if safety.get("flood_segmentation_supported") is False else
+                          "checked" if counts.get("flood", 0) > 0 else "no_observation"),
+            }
         finalizing_progress = {"phase": "finalizing", "percent": 99}
         if job["media_kind"] == "video":
             video_coverage = result.get("video_coverage", {})
@@ -265,35 +367,46 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
     detector = None
     accident_model = None
     flood_segmenter = None
+    trial_models = {"accident": None, "flood": None}
     ready = False
     status_detail = ""
     try:
+        role = config.VISION_WORKER_ROLE
+        if role not in {"shared", "operational", "trial"}:
+            raise RuntimeError("invalid vision worker role")
         missing = [
             name for name in ("onnxruntime", "numpy", "cv2", "PIL", "scipy")
             if importlib.util.find_spec(name) is None
         ]
         if missing:
             raise RuntimeError("missing vision dependencies: " + ", ".join(missing))
-        detector = OnnxDetector(
-            config.VISION_MODEL_PATH,
-            model_id=getattr(config, "VISION_MODEL_ID", "visdrone-rtdetrv4-s"),
-            model_version=getattr(config, "VISION_MODEL_REVISION", "unspecified"),
-        )
-        accident_model, flood_segmenter, optional_capabilities = load_optional_models(
-            accident_path=config.VISION_ACCIDENT_MODEL_PATH,
-            accident_revision=config.VISION_ACCIDENT_REVISION,
-            accident_threshold=config.VISION_ACCIDENT_THRESHOLD,
-            accident_enabled=config.VISION_ACCIDENT_ENABLED,
-            flood_path=config.VISION_FLOOD_MODEL_PATH,
-            flood_enabled=config.VISION_FLOOD_ENABLED,
-            flood_revision=config.VISION_FLOOD_REVISION,
-            flood_min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
-            release_manifest_path=config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST,
-            readiness_report_path=config.VISION_FIELD_READINESS_REPORT,
-        )
+        optional_capabilities = {}
+        if role != "trial":
+            detector = OnnxDetector(
+                config.VISION_MODEL_PATH,
+                model_id=getattr(config, "VISION_MODEL_ID", "visdrone-rtdetrv4-s"),
+                model_version=getattr(config, "VISION_MODEL_REVISION", "unspecified"),
+            )
+            accident_model, flood_segmenter, optional_capabilities = load_optional_models(
+                accident_path=config.VISION_ACCIDENT_MODEL_PATH,
+                accident_revision=config.VISION_ACCIDENT_REVISION,
+                accident_threshold=config.VISION_ACCIDENT_THRESHOLD,
+                accident_enabled=config.VISION_ACCIDENT_ENABLED,
+                flood_path=config.VISION_FLOOD_MODEL_PATH,
+                flood_enabled=config.VISION_FLOOD_ENABLED,
+                flood_revision=config.VISION_FLOOD_REVISION,
+                flood_min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
+                release_manifest_path=config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST,
+                readiness_report_path=config.VISION_FIELD_READINESS_REPORT,
+            )
+        trial_capabilities = {}
+        if role != "operational":
+            trial_models, trial_capabilities = load_trial_models()
+        optional_capabilities.update(trial_capabilities)
         status_detail = json.dumps(optional_capabilities, separators=(",", ":"))
-        ready = True
+        ready = role != "trial" or any(trial_models.values())
     except Exception as error:
+        role = role if role in {"shared", "operational", "trial"} else "shared"
         status_detail = f"{type(error).__name__}: {error}"[:500]
         logger.exception("Vision worker model initialization failed; uploads remain disabled")
 
@@ -304,6 +417,7 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
             try:
                 vision_repository.heartbeat_worker(
                     database_url, worker_id, ready=ready, status_detail=status_detail,
+                    role=role,
                 )
             except Exception:
                 logger.exception("Could not publish vision worker readiness")
@@ -322,6 +436,9 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
                 if process_next_job(
                     database_url, worker_id, detector=detector,
                     accident_model=accident_model, flood_segmenter=flood_segmenter,
+                    trial_accident_model=trial_models["accident"],
+                    trial_flood_segmenter=trial_models["flood"],
+                    trial_only=role == "trial",
                 ) is None:
                     _STOP.wait(idle_seconds)
             except Exception:
@@ -333,6 +450,7 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
         try:
             vision_repository.heartbeat_worker(
                 database_url, worker_id, ready=False, status_detail="worker_stopped",
+                role=role,
             )
         except Exception:
             logger.exception("Could not mark vision worker stopped")

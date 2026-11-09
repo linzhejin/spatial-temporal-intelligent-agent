@@ -91,12 +91,14 @@ class VisionAnalysisCancelled(RuntimeError):
     """A video analysis was cancelled between sampled frames."""
 
 
-def _validate_frame_dimensions(width: int, height: int) -> None:
+def _validate_frame_dimensions(width: int, height: int, *, max_pixels: int | None = None) -> None:
     if width <= 0 or height <= 0:
         raise ValueError("影像分辨率无效")
-    if width * height > config.VISION_MAX_FRAME_PIXELS:
+    limit = config.VISION_MAX_FRAME_PIXELS if max_pixels is None else min(config.VISION_MAX_FRAME_PIXELS, max_pixels)
+    if width * height > limit:
+        prefix = "试用影像" if max_pixels is not None else "影像"
         raise ValueError(
-            f"影像分辨率超过 {config.VISION_MAX_FRAME_PIXELS:,} 像素上限，请先裁剪或降低分辨率。"
+            f"{prefix}分辨率超过 {limit:,} 像素上限，请先裁剪或降低分辨率。"
         )
 
 
@@ -601,6 +603,7 @@ def _merge_segment_analyses(segments: list[dict], *, accident_threshold: float =
             ),
             "analysis_segments": len(segments),
             "specialized_frames_analyzed": len(specialized_frame_times),
+            "specialized_model_frames": _specialized_frame_counts(specialized_observations),
             "minimum_congestion_duration_seconds": minimum_congestion_duration,
             "minimum_crowding_duration_seconds": minimum_crowding_duration,
         },
@@ -694,12 +697,26 @@ def _compact_specialized_observations(observations: list[dict]) -> list[dict]:
     return compacted
 
 
+def _specialized_frame_counts(observations: list[dict]) -> dict[str, int]:
+    frames = {"accident": set(), "flood": set()}
+    for item in observations:
+        when = item.get("time_seconds") if isinstance(item, dict) else None
+        if isinstance(when, bool) or not isinstance(when, (int, float)) or not math.isfinite(when):
+            continue
+        if "traffic_accident_probability" in item:
+            frames["accident"].add(round(float(when), 3))
+        if "flooded_road_area_ratio" in item:
+            frames["flood"].add(round(float(when), 3))
+    return {kind: len(values) for kind, values in frames.items()}
+
+
 def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | None,
                   camera_stabilized: bool = False,
                   *, detector=None, accident_model=None, flood_segmenter=None,
                   regions: list[dict] | None = None,
                   progress_callback=None, resume_state: dict | None = None,
-                  cancel_check=None) -> dict:
+                  cancel_check=None, target_sample_fps: float | None = None,
+                  max_frame_pixels: int | None = None, max_video_seconds: float | None = None) -> dict:
     """Analyze all sampled frames in bounded chunks and retain resumable review evidence."""
     path = Path(media_path)
     if not path.is_file():
@@ -742,14 +759,14 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             raise VisionConfigurationError("缺少图片尺寸校验依赖，请安装 requirements-vision.txt") from error
         try:
             with Image.open(path) as image:
-                _validate_frame_dimensions(*image.size)
+                _validate_frame_dimensions(*image.size, max_pixels=max_frame_pixels)
         except OSError as error:
             raise ValueError("图片无法读取或分辨率无效") from error
         frame = cv2.imread(str(path), cv2.IMREAD_COLOR)
         if frame is None:
             raise ValueError("图片无法解码，请上传有效的 JPG、PNG 或 WebP 文件")
         height, width = frame.shape[:2]
-        _validate_frame_dimensions(width, height)
+        _validate_frame_dimensions(width, height, max_pixels=max_frame_pixels)
         image_detections = (
             detector.detect_regions(frame, regions) if regions and hasattr(detector, "detect_regions")
             else detector.detect(frame, tracking=False)
@@ -761,6 +778,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
         specialized_observations, failures = _specialized_predictions(
             frame, 0.0, regions, accident_model, flood_segmenter,
         )
+        analysis["metrics"]["specialized_model_frames"] = _specialized_frame_counts(specialized_observations)
         optional_model_errors.update({item["model"]: item["error_type"] for item in failures})
         analysis["candidates"].extend(build_specialized_candidates(
             specialized_observations, sample_interval_s=1.0, single_image=True,
@@ -781,7 +799,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
         try:
             width = int(capture.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-            _validate_frame_dimensions(width, height)
+            _validate_frame_dimensions(width, height, max_pixels=max_frame_pixels)
             anchor_gray = None
             anchor_scale = 1.0
             if regions and not camera_stabilized:
@@ -797,11 +815,17 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             fps = float(fps) if fps and fps > 0 else 1.0
             total_frames = int(capture.get(cv2.CAP_PROP_FRAME_COUNT) or 0) or None
             duration_seconds = total_frames / fps if total_frames else None
+            if max_video_seconds is not None and (duration_seconds is None or duration_seconds > max_video_seconds):
+                raise ValueError(f"试用视频时长无法确认或超过 {max_video_seconds:g} 秒，请先裁剪。")
             preview_interval_seconds = max(
                 1.0, (duration_seconds or float(MAX_VIDEO_PREVIEW_FRAMES))
                 / MAX_VIDEO_PREVIEW_FRAMES,
             )
-            target_fps = max(0.1, float(getattr(config, "VISION_SAMPLE_FPS", 5)))
+            requested_fps = float(getattr(config, "VISION_SAMPLE_FPS", 5) if target_sample_fps is None
+                                  else target_sample_fps)
+            if not math.isfinite(requested_fps) or requested_fps <= 0:
+                raise ValueError("视频抽样帧率无效")
+            target_fps = max(0.1, requested_fps)
             stride = max(1, round(fps / target_fps))
             total_sampled_frames = math.ceil(total_frames / stride) if total_frames else None
             sample_interval = 1.0 / target_fps
@@ -1298,6 +1322,8 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                             )
                         break
                     decoded_time = decoded_time_seconds(frame_index)
+                    if max_video_seconds is not None and decoded_time > max_video_seconds:
+                        raise ValueError(f"试用视频时长超过 {max_video_seconds:g} 秒，请先裁剪。")
                     detector_sample = decoded_time + 1e-9 >= next_detector_sample_time
                     if detector_sample:
                         next_detector_sample_time = (
@@ -1313,7 +1339,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                         ) * specialized_interval
                     if detector_sample:
                         height, width = frame.shape[:2]
-                        _validate_frame_dimensions(width, height)
+                        _validate_frame_dimensions(width, height, max_pixels=max_frame_pixels)
                         gray = None
                         scale = 1.0
                         if regions and not camera_stabilized:

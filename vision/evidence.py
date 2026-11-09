@@ -124,6 +124,13 @@ def attach_evidence_clips(
                 continue
             segments = evidence.get("segments")
             segments = segments if isinstance(segments, list) else []
+            summary = evidence.get("summary") if isinstance(evidence.get("summary"), dict) else {}
+            if summary.get("model_scope") == "temporal_window":
+                # A whole-window score cannot identify which shorter excerpt contains an event.
+                evidence["clips"] = []
+                evidence["clip_status"] = "window_only"
+                skipped += len(segments)
+                continue
             valid = []
             for original_index, segment in enumerate(segments):
                 if not isinstance(segment, dict):

@@ -119,6 +119,21 @@ VISION_FLOOD_ENABLED = os.getenv("VISION_FLOOD_ENABLED", "false").strip().lower(
 }
 VISION_FLOOD_REVISION = os.getenv("VISION_FLOOD_REVISION", "unverified")
 VISION_FLOOD_MIN_AREA_RATIO = _env_float("VISION_FLOOD_MIN_AREA_RATIO", 0.08)
+# Test-only models are never eligible for publishing route events.
+VISION_TRIAL_ENABLED = os.getenv("VISION_TRIAL_ENABLED", "false").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+VISION_WORKER_ROLE = os.getenv("VISION_WORKER_ROLE", "shared").strip().lower()
+VISION_TRIAL_ACCIDENT_MODEL_PATH = os.getenv("VISION_TRIAL_ACCIDENT_MODEL_PATH", "")
+VISION_TRIAL_ACCIDENT_KIND = os.getenv("VISION_TRIAL_ACCIDENT_KIND", "scene").strip().lower()
+VISION_TRIAL_FLOOD_MODEL_PATH = os.getenv("VISION_TRIAL_FLOOD_MODEL_PATH", "")
+VISION_TRIAL_FLOOD_MODEL_ID = os.getenv("VISION_TRIAL_FLOOD_MODEL_ID", "").strip()
+VISION_TRIAL_ACCIDENT_THRESHOLD = _env_float("VISION_TRIAL_ACCIDENT_THRESHOLD", 0.85)
+VISION_TRIAL_FLOOD_MIN_AREA_RATIO = _env_float("VISION_TRIAL_FLOOD_MIN_AREA_RATIO", 0.08)
+VISION_TRIAL_FLOOD_PROBABILITY = _env_float("VISION_TRIAL_FLOOD_PROBABILITY", 0.5)
+VISION_TRIAL_SAMPLE_FPS = _env_float("VISION_TRIAL_SAMPLE_FPS", 1.0)
+VISION_TRIAL_MAX_FRAME_PIXELS = int(os.getenv("VISION_TRIAL_MAX_FRAME_PIXELS", "2073600"))
+VISION_TRIAL_MAX_VIDEO_SECONDS = _env_float("VISION_TRIAL_MAX_VIDEO_SECONDS", 45.0)
 # Optional safety models require both a rights-reviewed release manifest and a
 # matching campus field-readiness report before the worker loads their weights.
 VISION_OPTIONAL_MODELS_RELEASE_MANIFEST = os.getenv("VISION_OPTIONAL_MODELS_RELEASE_MANIFEST", "")
