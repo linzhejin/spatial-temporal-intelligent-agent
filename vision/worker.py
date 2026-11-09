@@ -380,6 +380,9 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
         ]
         if missing:
             raise RuntimeError("missing vision dependencies: " + ", ".join(missing))
+        if role == "trial":
+            import cv2
+            cv2.setNumThreads(1)
         optional_capabilities = {}
         if role != "trial":
             detector = OnnxDetector(
