@@ -305,8 +305,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261109-vision-trial-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261109-vision-trial-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261109-ui-align-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261109-ui-align-v1/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
   assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
@@ -1126,8 +1126,9 @@ test('completed image jobs show vehicle counts and safely render detector boxes'
   assert.equal(svg.children.find((node) => node.tagName === 'text').textContent, 'car 91%');
   assert.doesNotMatch(svg.children.map((node) => node.textContent).join(' '), /script|alert/);
   const summary = card.children.find((node) => node.className === 'vision-metrics');
-  const summaryText = summary.children.map((node) => node.textContent).join(' ');
+  const summaryText = descendants(summary).map((node) => node.textContent || '').join(' ');
   assert.match(summaryText, /检出车辆 2/);
+  assert.match(summaryText, /模型与检出说明/);
   assert.match(summaryText, /事故场景模型 未启用/);
   assert.match(summaryText, /路面积水分割模型 未启用/);
   assert.doesNotMatch(summaryText, /抽样画面的模型检出数/);

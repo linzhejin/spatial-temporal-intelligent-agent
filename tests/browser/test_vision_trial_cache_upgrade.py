@@ -81,7 +81,7 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
             wait_for_cache(page, new_cache, old_cache)
             page.goto(base + "/manager.html", wait_until="domcontentloaded")
             asset = page.locator("script[src*='manager.js']").get_attribute("src")
-            assert "vision-trial-v1" in asset
+            assert "ui-align-v1" in asset
             assert "appendTrialFeedback" in page.evaluate("async url => (await fetch(url)).text()", asset)
             assert page.locator("#vision-purpose").count() == 1
 

@@ -6,10 +6,10 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261109-vision-trial-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261109-ui-align-v1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261109-vision-trial-v1" defer></script>
+  <script src="/js/manager.js?v=20261109-ui-align-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -257,8 +257,11 @@
               </div>
               <p id="vision-message" class="form-message" role="status"></p>
             </form>
-            <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。事故模型只判断画面类别；积水模型仅检查圈选路面像素、不估算水深。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
-            <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
+              <details class="vision-note-collapse">
+                <summary>识别说明与模型来源</summary>
+                <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。事故模型只判断画面类别；积水模型仅检查圈选路面像素、不估算水深。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
+                <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
+              </details>
             </details>
           </div>
           <div id="vision-jobs" class="vision-jobs"><div class="empty-state">正在读取影像任务…</div></div>

@@ -2537,11 +2537,23 @@
   function appendVisionMetrics(card, result, mediaKind, job) {
     var metrics = result.metrics || {};
     var safety = result.safety || {};
+    var modelNote = null;
+    function ensureModelNote() {
+      if (!modelNote) {
+        modelNote = document.createElement('details');
+        modelNote.className = 'vision-job-note';
+        var noteSummary = document.createElement('summary');
+        noteSummary.textContent = '模型与检出说明';
+        modelNote.appendChild(noteSummary);
+      }
+      return modelNote;
+    }
     var summary = document.createElement('div'); summary.className = 'vision-metrics';
     if (result.trial_specialized_only === true) {
       var trialOnly = document.createElement('small');
       trialOnly.textContent = '本次只运行事故或积水试用模型，没有统计人车数量。';
-      summary.appendChild(trialOnly); card.appendChild(summary); return;
+      ensureModelNote().appendChild(trialOnly);
+      summary.appendChild(modelNote); card.appendChild(summary); return;
     }
     var count = document.createElement('strong');
     count.textContent = mediaKind === 'video'
@@ -2577,7 +2589,7 @@
       var countCaveat = document.createElement('div');
       countCaveat.className = 'vision-count-caveat';
       countCaveat.textContent = '人车数是抽样画面的模型检出数；远景、遮挡或人群密集时可能漏检，不等于实际人数或人流密度，车辆检出数也不等于车流量。';
-      summary.appendChild(countCaveat);
+      ensureModelNote().appendChild(countCaveat);
     }
     var model = result.model || {};
     var accident = model.accident_model;
@@ -2595,8 +2607,9 @@
         '；事故场景模型 ' + optionalModelLabel('accident', accident, safety.accident_recognition_supported) +
         '；路面积水分割模型 ' + optionalModelLabel('flood', flood, safety.flood_segmentation_supported) +
         '。识别框不是地面坐标，事故分类不能定位事故车辆。';
-      summary.appendChild(version);
+      ensureModelNote().appendChild(version);
     }
+    if (modelNote) summary.appendChild(modelNote);
     card.appendChild(summary);
   }
 
@@ -2881,8 +2894,8 @@
         }
       }
       if (job.status === 'completed' && !(result.candidates || []).length) {
-        var terminal = document.createElement('div'); terminal.className = 'vision-terminal';
-        var terminalTitle = document.createElement('strong'); terminalTitle.textContent = '分析已结束';
+        var terminal = document.createElement('details'); terminal.className = 'vision-terminal';
+        var terminalTitle = document.createElement('summary'); terminalTitle.textContent = '分析已结束 · 结果说明';
         var terminalCopy = document.createElement('p');
         if (isTrial) {
           terminalCopy.textContent = '没有生成候选。请查看原片；发现漏检可在下方记录。';
