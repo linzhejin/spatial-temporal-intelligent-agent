@@ -21,6 +21,7 @@ RUN_E2E = os.getenv("RUN_VISION_TRIAL_REAL_E2E") == "1"
 def test_distinct_worker_processes_keep_trial_and_campus_jobs_separate(monkeypatch, tmp_path):
     import config
     from app import create_app
+    from vision.worker import VISION_CAPACITY_LOCK_KEY
 
     root = Path(__file__).resolve().parents[2]
     detector = Path(r"D:\LuoJiaModels\visdrone-rtdetrv4-s.onnx")
@@ -87,18 +88,25 @@ def test_distinct_worker_processes_keep_trial_and_campus_jobs_separate(monkeypat
         region = [{"id": "road", "kind": "road_surface", "polygon":
                    [[.01, .543], [.99, .543], [.99, .945], [.01, .945]]}]
         content = image.read_bytes()
-        trial = client.post("/api/manager/vision-jobs", headers=headers, data={
-            "purpose": "trial", "observation_regions": json.dumps(region),
-            "media": (io.BytesIO(content), "public.png", "image/png"),
-        })
-        assert trial.status_code == 202, trial.get_json()
-        live = client.post("/api/manager/vision-jobs", headers=headers, data={
-            "captured_at": datetime.now(timezone.utc).isoformat(),
-            "media": (io.BytesIO(content), "campus.png", "image/png"),
-        })
-        assert live.status_code == 202, live.get_json()
-        trial_id = trial.get_json()["data"]["job"]["job_id"]
-        live_id = live.get_json()["data"]["job"]["job_id"]
+        with database.connect(DATABASE_URL) as lock_connection:
+            lock_connection.execute("SELECT pg_advisory_lock(%s)", (VISION_CAPACITY_LOCK_KEY,))
+            lock_connection.commit()
+            trial = client.post("/api/manager/vision-jobs", headers=headers, data={
+                "purpose": "trial", "observation_regions": json.dumps(region),
+                "media": (io.BytesIO(content), "public.png", "image/png"),
+            })
+            assert trial.status_code == 202, trial.get_json()
+            live = client.post("/api/manager/vision-jobs", headers=headers, data={
+                "captured_at": datetime.now(timezone.utc).isoformat(),
+                "media": (io.BytesIO(content), "campus.png", "image/png"),
+            })
+            assert live.status_code == 202, live.get_json()
+            trial_id = trial.get_json()["data"]["job"]["job_id"]
+            live_id = live.get_json()["data"]["job"]["job_id"]
+            time.sleep(1.5)
+            assert all(vision_repository.get_job(DATABASE_URL, item)["status"] == "queued"
+                       for item in (trial_id, live_id))
+            lock_connection.execute("SELECT pg_advisory_unlock(%s)", (VISION_CAPACITY_LOCK_KEY,))
 
         def both_finished():
             jobs = [vision_repository.get_job(DATABASE_URL, item) for item in (trial_id, live_id)]

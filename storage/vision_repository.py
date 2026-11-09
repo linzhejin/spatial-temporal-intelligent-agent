@@ -139,7 +139,7 @@ def finish_job(url: str | None, job_id: str, worker_id: str, *, status: str,
         row = conn.execute(
             "UPDATE manager_vision_job SET"
             " status=CASE WHEN cancel_requested THEN 'cancelled' ELSE %s END,"
-            " result=CASE WHEN cancel_requested THEN NULL ELSE %s END,"
+            " result=CASE WHEN cancel_requested THEN NULL ELSE %s::jsonb END,"
             " error=CASE WHEN cancel_requested THEN %s ELSE %s END,"
             " progress=CASE WHEN cancel_requested OR %s='cancelled' THEN %s"
             " WHEN %s IN ('needs_review','completed') THEN %s ELSE progress END,"

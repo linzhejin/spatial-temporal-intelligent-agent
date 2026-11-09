@@ -23,6 +23,7 @@ from vision.specialized import OnnxAiderClassifier, OnnxFloodSegmenter
 from vision.temporal_trial import OnnxTemporalAccident
 
 logger = logging.getLogger(__name__)
+VISION_CAPACITY_LOCK_KEY = 735182640120
 _STOP = threading.Event()
 
 
@@ -179,6 +180,52 @@ def load_trial_models():
 def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                      detector=None, accident_model=None, flood_segmenter=None,
                      trial_accident_model=None, trial_flood_segmenter=None, trial_only=False):
+    options = {"detector": detector, "accident_model": accident_model, "flood_segmenter": flood_segmenter,
+               "trial_accident_model": trial_accident_model, "trial_flood_segmenter": trial_flood_segmenter,
+               "trial_only": trial_only}
+    if not config.VISION_TRIAL_ENABLED:
+        return _process_next_job_unlocked(database_url, worker_id, lease_seconds, **options)
+    # A single host may not have enough memory to run the campus and trial models together.
+    # Keep a session-level lock alive independently of job leases, including across commits.
+    with database.connect(database_url) as conn:
+        acquired = conn.execute("SELECT pg_try_advisory_lock(%s) AS acquired",
+                                (VISION_CAPACITY_LOCK_KEY,)).fetchone()["acquired"]
+        conn.commit()
+        if not acquired:
+            return None
+        stop_guard = threading.Event()
+        lock_lost = threading.Event()
+
+        def keep_capacity_lock():
+            while not stop_guard.wait(1.0):
+                try:
+                    conn.execute("SELECT 1").fetchone()
+                    conn.commit()
+                except Exception:
+                    lock_lost.set()
+                    logger.exception("Vision capacity lock connection was lost")
+                    return
+
+        guard = threading.Thread(target=keep_capacity_lock, name="vision-capacity-lock", daemon=True)
+        guard.start()
+        try:
+            return _process_next_job_unlocked(database_url, worker_id, lease_seconds,
+                                              capacity_lock_lost=lock_lost, **options)
+        finally:
+            stop_guard.set()
+            guard.join(timeout=2)
+            if not guard.is_alive():
+                try:
+                    conn.execute("SELECT pg_advisory_unlock(%s)", (VISION_CAPACITY_LOCK_KEY,))
+                    conn.commit()
+                except Exception:
+                    logger.warning("Vision capacity lock was already lost", exc_info=True)
+
+
+def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds: int = 90, *,
+                               detector=None, accident_model=None, flood_segmenter=None,
+                               trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                               capacity_lock_lost=None):
     allow_trial = trial_accident_model is not None or trial_flood_segmenter is not None
     job = vision_repository.claim_next_job(database_url, worker_id, lease_seconds,
                                           allow_trial=allow_trial, trial_only=trial_only)
@@ -219,7 +266,8 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
 
         def cancellation_requested():
             nonlocal last_cancel_poll, cached_cancel_state
-            if lease_lost.is_set():
+            if lease_lost.is_set() or (capacity_lock_lost is not None and capacity_lock_lost.is_set()):
+                lease_lost.set()
                 return True
             now = time.monotonic()
             if last_cancel_poll is not None and now - last_cancel_poll < 1.0:
@@ -326,7 +374,7 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
                     if isinstance(evidence, dict):
                         evidence.setdefault("clips", [])
                         evidence["clip_status"] = "unavailable"
-        if lease_lost.is_set():
+        if lease_lost.is_set() or (capacity_lock_lost is not None and capacity_lock_lost.is_set()):
             return {"job_id": job_id, "status": "lease_lost"}
         status = "needs_review" if result.get("candidates") else "completed"
         final_status = vision_repository.finish_job(

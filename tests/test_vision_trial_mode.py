@@ -334,3 +334,69 @@ def test_systemd_templates_keep_trial_capacity_separate_from_campus_worker():
     assert "Environment=VISION_WORKER_ROLE=trial" in trial
     assert "MemoryMax=640M" in trial and "MemorySwapMax=0" in trial
     assert "python -m vision.worker" in trial
+
+
+def test_trial_and_operational_workers_serialize_memory_intensive_jobs(monkeypatch, tmp_path):
+    from vision import worker
+
+    monkeypatch.setattr(worker.config, "VISION_TRIAL_ENABLED", True)
+    monkeypatch.setattr(worker.config, "VISION_UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(worker, "analyze_media", lambda *args, **kwargs: {
+        "candidates": [], "metrics": {}, "safety": {},
+    })
+    job = vision_repository.create_job(DATABASE_URL, created_by="test", original_name="queue.png",
+        media_kind="image", media_path="queue.png", sha256="f" * 64, anchor_gcj=None)
+    with database.connect(DATABASE_URL) as lock_connection:
+        lock_connection.execute("SELECT pg_advisory_lock(%s)", (worker.VISION_CAPACITY_LOCK_KEY,))
+        lock_connection.commit()
+        assert worker.process_next_job(DATABASE_URL, "capacity-waiter") is None
+        assert vision_repository.get_job(DATABASE_URL, job["job_id"])["status"] == "queued"
+        lock_connection.execute("SELECT pg_advisory_unlock(%s)", (worker.VISION_CAPACITY_LOCK_KEY,))
+    assert worker.process_next_job(DATABASE_URL, "capacity-waiter")["status"] == "completed"
+
+
+def test_capacity_lock_is_released_after_trial_analysis_failure(monkeypatch, tmp_path):
+    from vision import worker
+
+    monkeypatch.setattr(worker.config, "VISION_TRIAL_ENABLED", True)
+    monkeypatch.setattr(worker.config, "VISION_UPLOAD_DIR", str(tmp_path))
+    def fail(*_args, **_kwargs):
+        raise ValueError("injected trial failure")
+    monkeypatch.setattr(worker, "analyze_media", fail)
+    vision_repository.create_job(DATABASE_URL, created_by="test", original_name="broken.png",
+        media_kind="image", media_path="broken.png", sha256="0" * 64, anchor_gcj=None, purpose="trial")
+    assert worker.process_next_job(DATABASE_URL, "capacity-failure", trial_flood_segmenter=object())["status"] == "failed"
+    with database.connect(DATABASE_URL) as conn:
+        assert conn.execute("SELECT pg_try_advisory_lock(%s) AS acquired", (worker.VISION_CAPACITY_LOCK_KEY,)).fetchone()["acquired"]
+        conn.execute("SELECT pg_advisory_unlock(%s)", (worker.VISION_CAPACITY_LOCK_KEY,))
+
+
+def test_running_trial_can_save_cancelled_status_without_a_result():
+    job = vision_repository.create_job(DATABASE_URL, created_by="test", original_name="cancel.png",
+        media_kind="image", media_path="cancel.png", sha256="1" * 64, anchor_gcj=None, purpose="trial")
+    claimed = vision_repository.claim_next_job(DATABASE_URL, "cancel-trial", allow_trial=True, trial_only=True)
+    assert claimed["job_id"] == job["job_id"]
+    assert vision_repository.request_cancel_job(DATABASE_URL, job["job_id"])["cancel_requested"]
+    assert vision_repository.finish_job(DATABASE_URL, job["job_id"], "cancel-trial", status="cancelled") == "cancelled"
+    stored = vision_repository.get_job(DATABASE_URL, job["job_id"])
+    assert stored["result"] is None and stored["error"]["code"] == "vision_job_cancelled"
+
+
+def test_lost_capacity_lock_prevents_job_from_committing_a_result(monkeypatch, tmp_path):
+    import threading
+    from vision import worker
+    from vision.engine import VisionAnalysisCancelled
+
+    monkeypatch.setattr(worker.config, "VISION_UPLOAD_DIR", str(tmp_path))
+    def cancelled(*_args, **kwargs):
+        assert kwargs["cancel_check"]()
+        raise VisionAnalysisCancelled("capacity lock lost")
+    monkeypatch.setattr(worker, "analyze_media", cancelled)
+    job = vision_repository.create_job(DATABASE_URL, created_by="test", original_name="lost.png",
+        media_kind="image", media_path="lost.png", sha256="2" * 64, anchor_gcj=None)
+    lost = threading.Event()
+    lost.set()
+    outcome = worker._process_next_job_unlocked(DATABASE_URL, "lost-capacity", capacity_lock_lost=lost)
+    assert outcome["status"] == "lease_lost"
+    stored = vision_repository.get_job(DATABASE_URL, job["job_id"])
+    assert stored["status"] == "running" and stored["result"] is None
