@@ -65,7 +65,7 @@ def test_distinct_worker_processes_keep_trial_and_campus_jobs_separate(monkeypat
         pytest.fail("worker or result timed out; inspect worker logs")
 
     try:
-        launch("trial")
+        trial_process = launch("trial")
         wait_until(lambda: vision_repository.has_ready_worker(DATABASE_URL, role="trial"))
         assert not vision_repository.has_ready_worker(DATABASE_URL, role="operational")
         launch("operational")
@@ -114,7 +114,16 @@ def test_distinct_worker_processes_keep_trial_and_campus_jobs_separate(monkeypat
                 return jobs
             return None
 
-        trial_job, live_job = wait_until(both_finished, timeout=120)
+        deadline = time.monotonic() + 120
+        finished = None
+        while time.monotonic() < deadline:
+            assert all(process.poll() in (None, 0) for process in processes), "worker failed; inspect worker logs"
+            finished = both_finished()
+            if finished:
+                break
+            time.sleep(.2)
+        assert finished, "worker results timed out; inspect worker logs"
+        trial_job, live_job = finished
         assert trial_job["status"] in {"completed", "needs_review"}, trial_job.get("error")
         assert live_job["status"] in {"completed", "needs_review"}, live_job.get("error")
         assert trial_job["result"]["trial_specialized_only"] is True
@@ -122,6 +131,10 @@ def test_distinct_worker_processes_keep_trial_and_campus_jobs_separate(monkeypat
         assert trial_job["result"]["model"]["id"] == "trial-no-vehicle-detection"
         assert live_job["result"]["model"]["id"] != "trial-no-vehicle-detection"
         assert "research_replay" in trial_job["result"] and "research_replay" not in live_job["result"]
+        deadline = time.monotonic() + 15
+        while trial_process.poll() is None and time.monotonic() < deadline:
+            time.sleep(.1)
+        assert trial_process.returncode == 0, "trial worker should recycle after completing a job"
     finally:
         for process in processes:
             if process.poll() is None:

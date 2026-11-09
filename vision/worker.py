@@ -7,6 +7,8 @@ import signal
 import importlib.util
 import hashlib
 import json
+import gc
+import sys
 import threading
 import time
 import uuid
@@ -179,7 +181,8 @@ def load_trial_models():
 
 def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                      detector=None, accident_model=None, flood_segmenter=None,
-                     trial_accident_model=None, trial_flood_segmenter=None, trial_only=False):
+                     trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                     on_locked_completion=None):
     options = {"detector": detector, "accident_model": accident_model, "flood_segmenter": flood_segmenter,
                "trial_accident_model": trial_accident_model, "trial_flood_segmenter": trial_flood_segmenter,
                "trial_only": trial_only}
@@ -209,8 +212,20 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
         guard = threading.Thread(target=keep_capacity_lock, name="vision-capacity-lock", daemon=True)
         guard.start()
         try:
-            return _process_next_job_unlocked(database_url, worker_id, lease_seconds,
-                                              capacity_lock_lost=lock_lost, **options)
+            try:
+                outcome = _process_next_job_unlocked(database_url, worker_id, lease_seconds,
+                                                      capacity_lock_lost=lock_lost, **options)
+            except Exception:
+                if on_locked_completion is not None:
+                    options["trial_accident_model"] = options["trial_flood_segmenter"] = None
+                    trial_accident_model = trial_flood_segmenter = None
+                    on_locked_completion()
+                raise
+            if outcome is not None and on_locked_completion is not None:
+                options["trial_accident_model"] = options["trial_flood_segmenter"] = None
+                trial_accident_model = trial_flood_segmenter = None
+                on_locked_completion()
+            return outcome
         finally:
             stop_guard.set()
             guard.join(timeout=2)
@@ -478,22 +493,41 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
         target=keep_worker_heartbeat, name="vision-worker-heartbeat", daemon=True,
     )
     heartbeat.start()
+
+    def release_trial_models():
+        nonlocal trial_models
+        trial_models = {"accident": None, "flood": None}
+        gc.collect()
+        if sys.platform.startswith("linux"):
+            try:
+                import ctypes
+                ctypes.CDLL(None).malloc_trim(0)
+            except (AttributeError, OSError):
+                logger.info("The allocator does not support explicit memory trimming")
+
     try:
         while not _STOP.is_set():
             if not ready:
                 _STOP.wait(idle_seconds)
                 continue
             try:
-                if process_next_job(
+                outcome = process_next_job(
                     database_url, worker_id, detector=detector,
                     accident_model=accident_model, flood_segmenter=flood_segmenter,
                     trial_accident_model=trial_models["accident"],
                     trial_flood_segmenter=trial_models["flood"],
                     trial_only=role == "trial",
-                ) is None:
+                    on_locked_completion=release_trial_models if role == "trial" else None,
+                )
+                if outcome is None:
                     _STOP.wait(idle_seconds)
+                elif role == "trial":
+                    # systemd starts a fresh isolated process for the next trial job.
+                    break
             except Exception:
                 logger.exception("Vision worker loop failed; retrying")
+                if role == "trial":
+                    break
                 _STOP.wait(min(5, idle_seconds * 4))
     finally:
         heartbeat_stop.set()

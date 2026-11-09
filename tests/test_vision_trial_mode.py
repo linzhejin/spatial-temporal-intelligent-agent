@@ -400,3 +400,34 @@ def test_lost_capacity_lock_prevents_job_from_committing_a_result(monkeypatch, t
     assert outcome["status"] == "lease_lost"
     stored = vision_repository.get_job(DATABASE_URL, job["job_id"])
     assert stored["status"] == "running" and stored["result"] is None
+
+
+def test_trial_cleanup_runs_before_capacity_lock_is_released(monkeypatch, tmp_path):
+    import gc
+    import weakref
+    from vision import worker
+
+    monkeypatch.setattr(worker.config, "VISION_TRIAL_ENABLED", True)
+    monkeypatch.setattr(worker.config, "VISION_UPLOAD_DIR", str(tmp_path))
+    monkeypatch.setattr(worker, "analyze_media", lambda *args, **kwargs: {
+        "candidates": [], "metrics": {}, "safety": {},
+    })
+    vision_repository.create_job(DATABASE_URL, created_by="test", original_name="cleanup.png",
+        media_kind="image", media_path="cleanup.png", sha256="3" * 64, anchor_gcj=None, purpose="trial")
+    class TrialModel:
+        pass
+    models = {"flood": TrialModel()}
+    model_ref = weakref.ref(models["flood"])
+    observed = []
+    def cleanup():
+        models.clear()
+        gc.collect()
+        with database.connect(DATABASE_URL) as conn:
+            available = conn.execute("SELECT pg_try_advisory_lock(%s) AS acquired",
+                                     (worker.VISION_CAPACITY_LOCK_KEY,)).fetchone()["acquired"]
+            observed.append((available, model_ref() is None))
+            if available:
+                conn.execute("SELECT pg_advisory_unlock(%s)", (worker.VISION_CAPACITY_LOCK_KEY,))
+    result = worker.process_next_job(DATABASE_URL, "cleanup-trial", trial_flood_segmenter=models["flood"],
+                                     trial_only=True, on_locked_completion=cleanup)
+    assert result["status"] == "completed" and observed == [(False, True)]
