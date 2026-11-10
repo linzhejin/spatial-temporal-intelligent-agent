@@ -311,11 +311,15 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261109-compact-header-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
   assert.match(managerHtml, /manager\.js\?v=20261110-flood-review-v2/);
-  assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.3628, 30\.5388\]/);
+  assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
+  assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
   assert.match(managerCss, /\.vision-jobs\{max-height:100%;overflow-y:auto/);
+  assert.match(managerCss, /\.workspace-grid\{align-items:start\}/);
+  assert.match(managerCss, /\.map-card\{position:sticky;top:152px;height:calc\(100vh - 176px\)/);
+  assert.match(managerCss, /\.map-card #manager-map\{min-height:0\}/);
   assert.match(managerHtml, /class="masthead-count"><span id="active-count">0<\/span> 条生效/);
   assert.match(managerCss, /\.masthead-count\{/);
   assert.doesNotMatch(managerHtml, /class="page-heading"/);

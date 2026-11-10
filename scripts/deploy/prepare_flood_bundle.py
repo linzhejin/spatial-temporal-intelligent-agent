@@ -101,6 +101,7 @@ def main():
         'flood_cache_actual_209d19f_20261110.xml': 2,
         'flood_public_smoke_e2e_20261110.xml': 1,
         'flood_cache_actual_0d2ca6d_20261110.xml': 2,
+        'flood_cache_actual_133fef4_20261110.xml': 2,
     }
     reports = workflow.get('junit_reports') or []
     for name, expected_count in required_reports.items():

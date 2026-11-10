@@ -39,7 +39,7 @@ REQUIRED_TESTED_SOURCES = {
     'vision/model_release.py', 'vision/specialized.py', 'vision/worker.py',
     'vision/doodleverse_preprocessing.py', 'vision/assisted_image.py',
     'vision/assisted_image_child.py', 'vision/assisted_image_supervisor.py',
-    'static/js/manager.js', 'static/manager.html', 'static/sw.js', 'api/routes.py',
+    'static/js/manager.js', 'static/css/manager.css', 'static/manager.html', 'static/sw.js', 'api/routes.py',
     'requirements-flood-runtime.txt', 'scripts/deploy/flood_backup.py',
     'scripts/deploy/flood_release.py', 'scripts/deploy/prepare_flood_bundle.py',
     'scripts/deploy/public_flood_smoke.py',
