@@ -57,7 +57,7 @@
             + '<path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>'
             + '<line x1="12" y1="19" x2="12" y2="23"></line>'
             + '<line x1="8" y1="23" x2="16" y2="23"></line></svg></div>'
-            + '<div class="vhc-text">正在聆听…</div>'
+            + '<div class="vhc-text">正在聆听</div>'
             + '<div class="vhc-interim"></div>'
             + '<div class="vhc-hint">松开发送 · 上滑取消</div>';
         document.body.appendChild(cardEl);
@@ -73,7 +73,7 @@
         cardEl.classList.remove('show', 'cancel');
         // 强制 reflow 再进 show，保证过渡动画生效
         void cardEl.offsetWidth;
-        cardTextEl.textContent = '正在聆听…';
+        cardTextEl.textContent = '正在聆听';
         cardInterimEl.textContent = '';
         cardHintEl.textContent = '松开发送 · 上滑取消';
         cardEl.classList.add('show');
@@ -82,8 +82,8 @@
     function setCancelUI(on) {
         if (!cardEl) return;
         cardEl.classList.toggle('cancel', !!on);
-        cardTextEl.textContent = on ? '松开取消' : '正在聆听…';
-        cardHintEl.textContent = on ? '松开手指取消发送' : '松开发送 · 上滑取消';
+        cardTextEl.textContent = on ? '松开取消' : '正在聆听';
+        cardHintEl.textContent = on ? '松开取消发送' : '松开发送 · 上滑取消';
     }
 
     function setInterim(text) {
@@ -221,7 +221,7 @@
         try {
             recognition.start();
         } catch (e) {
-            if (cb.onError) cb.onError('语音启动中，请稍候再试');
+            if (cb.onError) cb.onError('语音启动中，请稍后再试');
         }
     }
 

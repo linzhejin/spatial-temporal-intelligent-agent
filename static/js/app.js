@@ -101,7 +101,7 @@
         }
         var welcomeText = document.querySelector('#welcome-bubble .bubble-text');
         if (welcomeText && state.productMode === 'planning') {
-            welcomeText.textContent = '输入起点和终点，或在地图上选点；规划结果会列出路线和注意事项。';
+            welcomeText.textContent = '输入起点和终点，或在地图上选点。';
         }
     }
 
@@ -1076,7 +1076,7 @@
             }).addTo(state.map);
             bindMapPointRemoval(m, 'via', labels.via);
             state.pointMarkers.via.push(m);
-            showTopBanner('✅ 已设置途经点' + viaIdx + '（点标记可删除）', 'success');
+            showTopBanner('已设置途经点' + viaIdx + '（点标记可删除）', 'success');
         } else {
             // 起点或终点：替换已有标记
             state.mapPoints[key] = pt;
@@ -1092,7 +1092,7 @@
             }).addTo(state.map);
             bindMapPointRemoval(mk, key, labels[key]);
             state.pointMarkers[key] = mk;
-            showTopBanner('✅ 已设置' + labels[key] + '（点标记可删除）', 'success');
+            showTopBanner('已设置' + labels[key] + '（点标记可删除）', 'success');
         }
     }
 
@@ -1970,7 +1970,7 @@
                 return;
             }
             notice.hidden = false;
-            notice.textContent = '校园路况有更新。重新规划会保留起点、途经点和路线偏好。';
+            notice.textContent = '校园路况有更新，重新规划会保留起点、途经点和路线偏好。';
             var button = notice.querySelector('button[data-action="replan-road-conditions"]');
             if (!button) {
                 button = document.createElement('button');
@@ -2404,7 +2404,7 @@
                     var hint = document.getElementById('road-report-hint');
                     if (hint) {
                         hint.style.color = '#27AE60';
-                        hint.textContent = '✅ 已吸附到「' + (snap.road_name || '未命名道路')
+                        hint.textContent = '已吸附到「' + (snap.road_name || '未命名道路')
                             + '」，偏移 ' + (snap.dist_m != null ? snap.dist_m : '?') + ' 米'
                             + (snap.chain_length_m
                                 ? '，关联路段约 ' + Math.round(snap.chain_length_m) + ' 米'
@@ -2490,7 +2490,7 @@
                 : action === 'slowdown' ? '允许通行并增加规划成本' : '发布提示，不改变路线';
             if (hint) {
                 hint.style.color = '#27AE60';
-                hint.textContent = '✅ 已发布：' + actionSummary + '；仅作用于所选出行方式。';
+                hint.textContent = '已发布：' + actionSummary + '；仅作用于所选出行方式。';
             }
             clearPickState();
             loadAndRenderRoadConditions(true);  // 保持管理员视图刷新
@@ -2588,7 +2588,7 @@
         var Nav = window.WhuWalkerNavigation;
         if (!Nav || !state.map) return;
         if (!route || !(route.recommended || []).length) {
-            showError('还没有路线', '先规划一条路线，再开始导航吧～');
+            showError('还没有路线', '先规划一条路线，再开始导航。');
             return;
         }
         // 导航态不显示最短路径灰线（等下引擎接管后重绘）
@@ -2644,7 +2644,7 @@
             renderRoute: function (data) { renderRoute(data); },
         });
         if (!ok) {
-            showError('导航启动失败', '路线数据不完整，重新规划一次试试～');
+            showError('导航启动失败', '路线数据不完整，重新规划一次试试。');
             return;
         }
         trackRouteSignal('navigation_started', routeState);
@@ -2686,7 +2686,7 @@
 
     function showVoiceUnsupported(reason) {
         if (reason === 'wechat') {
-            showTopBanner('微信里语音用不了：点右上角「⋯」→「在浏览器打开」就能语音输入啦', 'info');
+            showTopBanner('微信里语音用不了：点右上角「⋯」→「在浏览器打开」就能语音输入', 'info');
         } else if (reason === 'permission') {
             showTopBanner('麦克风权限被拒绝，可在浏览器设置里开启后重试', 'warning');
         } else {
@@ -2927,7 +2927,7 @@
         if (!steps.length) {
             var empty = document.createElement('li');
             empty.className = 'desktop-route-step desktop-route-step--empty';
-            empty.textContent = '这条路线暂时没有分段指引，可查看地图上的路线。';
+            empty.textContent = '这条路线暂无分段指引，可查看地图。';
             stepsList.appendChild(empty);
             return;
         }
@@ -3223,7 +3223,7 @@
             });
         }
 
-        var explanation = appendRouteStepNotice(data.explanation || '已为您规划好路线', data);
+        var explanation = appendRouteStepNotice(data.explanation || '已规划好路线', data);
         document.getElementById('explanation-text').textContent = explanation;
 
         // 路况提示：若有生效的路况事件，在解释下方显示提醒
@@ -3921,7 +3921,7 @@
             if (taskType === 'poi_query') {
                 hideWelcomeElements();
                 var poi = result.poi;
-                updateChatBubble(thinkingBubble, result.assistant_text || result.message || (poi ? poi.description : '找到相关信息了～'));
+                updateChatBubble(thinkingBubble, result.assistant_text || result.message || (poi ? poi.description : '找到相关信息了'));
                 if (poi && state.map) {
                     focusPoiOnMap(poi);
                 }
@@ -4148,7 +4148,7 @@
 
         var note = document.createElement('p');
         note.className = 'route-comparison-note';
-        note.textContent = '时间为速度模型估算；坡度数值越低越平缓，风景数值越高代表沿线景观属性更高。';
+        note.textContent = '用时按速度模型估算；坡度数值越低越平缓，风景数值越高沿线景观越好。';
         card.appendChild(note);
         row.appendChild(card);
         var followLatest = chatIsNearLatest(chatContent);

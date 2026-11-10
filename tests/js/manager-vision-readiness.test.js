@@ -312,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-flood-review-v2/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-deai-copy-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -326,7 +326,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.doesNotMatch(managerHtml, /先在地图上确认具体路段/);
   assert.doesNotMatch(managerHtml, /选路、预览并发布/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
-  assert.match(managerHtml, /机身 GPS 不作为地面位置或道路绑定依据/);
+  assert.match(managerHtml, /机身 GPS 不表示地面位置，也不用于道路绑定/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
   assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
@@ -473,7 +473,7 @@ test('selecting an image immediately enables recognition without a map point', a
   assert.equal(harness.elements.get('selected-media-name').textContent, '珞珈道路.png');
   assert.match(harness.elements.get('selected-media-meta').textContent, /768 B.*图片/);
   assert.equal(harness.elements.get('selected-media-preview').src, 'blob:preview-0');
-  assert.match(harness.elements.get('vision-message').textContent, /可以开始识别.*复核后选择具体道路/);
+  assert.match(harness.elements.get('vision-message').textContent, /可开始识别.*复核后选择具体道路/);
   assert.equal(harness.elements.get('submit-vision').disabled, false);
 });
 
@@ -1184,7 +1184,7 @@ test('completed image jobs show vehicle counts and safely render detector boxes'
   const summary = card.children.find((node) => node.className === 'vision-metrics');
   const summaryText = descendants(summary).map((node) => node.textContent || '').join(' ');
   assert.match(summaryText, /检出车辆 2/);
-  assert.match(summaryText, /模型与检出说明/);
+  assert.match(summaryText, /模型与检出信息/);
   assert.match(summaryText, /事故场景模型 未启用/);
   assert.match(summaryText, /路面积水分割模型 未启用/);
   assert.doesNotMatch(summaryText, /抽样画面的模型检出数/);
@@ -1367,9 +1367,9 @@ test('a needs_review job with no candidates explains why none were produced', as
   const card = harness.elements.get('vision-jobs').children[0];
   const text = descendants(card).map((node) => node.textContent || '').join(' ');
   assert.match(text, /待复核/);
-  assert.match(text, /该任务尚无候选说明/);
-  assert.match(text, /原片未检出可复核迹象时不会生成候选/);
-  assert.match(text, /请依据原片与现场情况判断/);
+  assert.match(text, /该任务没有生成候选/);
+  assert.match(text, /未检出可复核迹象时不会产生候选/);
+  assert.match(text, /请结合原片与现场判断/);
   assert.doesNotMatch(text, /确认此候选/);
   assert.doesNotMatch(text, /影像复核依据/);
 });
@@ -1397,7 +1397,7 @@ test('completed jobs without candidates allow manual visual road registration an
   const clear = nodes.find((node) => node.tagName === 'button' && node.textContent === '删除影像记录');
   assert.match(terminalText, /分析已结束/);
   assert.match(terminalText, /静态图片/);
-  assert.match(terminalText, /不能判断车辆是否持续缓行或人群是否持续聚集/);
+  assert.match(terminalText, /无法判断车辆是否持续缓行或人群是否持续聚集/);
   assert.ok(manual);
   assert.ok(retry);
   assert.ok(clear);

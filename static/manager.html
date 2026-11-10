@@ -10,7 +10,7 @@
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261110-flood-review-v2" defer></script>
+  <script src="/js/manager.js?v=20261110-deai-copy-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -29,8 +29,8 @@
     <section id="login-panel" class="login-panel">
       <div class="login-copy">
         <span class="eyebrow">WHU · CAMPUS OPERATIONS</span>
-        <h1>让每一条<br>校园道路都可管理。</h1>
-        <p>在地图上选取路段，发布有时效、有依据的通行信息。生效事件会同步影响路线规划。</p>
+        <h1>管理每一条<br>校园道路的通行状态。</h1>
+        <p>在地图上选取路段，发布带时效和依据的通行信息，生效后会影响路线规划。</p>
         <div class="login-rule"><span></span><span></span><span></span></div>
       </div>
       <form id="login-form" class="login-card">
@@ -158,7 +158,7 @@
           </section>
           <section class="protocol-card">
             <span class="protocol-mark">i</span>
-            <p><strong>影响范围</strong><br>事件绑定在实际路段上，仅影响勾选的出行方式：提示不改变路线，缓行增加时间成本，禁止通行才会绕开。未勾选的方式保持原有通行规则。</p>
+            <p><strong>影响范围</strong><br>事件绑定在实际路段，只影响勾选的出行方式：提示不改变路线，缓行增加时间成本，禁止通行才绕开；未勾选的方式按原规则通行。</p>
           </section>
         </aside>
       </div>
@@ -195,7 +195,7 @@
               </label>
               <button id="pick-dji-subtitle" class="outline-button" type="button">读取 DJI 字幕时间（可选）</button>
               <input id="dji-subtitle-file" type="file" accept=".srt,text/plain" aria-label="选择与视频同名的 DJI SRT 字幕文件">
-              <small class="dji-subtitle-note">选择与视频同名的 .SRT 文件可带入拍摄时间。字幕无时区，按当前设备本地时区解释，请核对时钟和时区。字幕只在本机读取、不上传；机身 GPS 不作为地面位置或道路绑定依据。影像原片仍按原流程上传。</small>
+              <small class="dji-subtitle-note">选择与视频同名的 .SRT 文件可带入拍摄时间。字幕无时区，按当前设备本地时区解释，请核对时钟和时区。字幕只在本机读取、不上传；机身 GPS 不表示地面位置，也不用于道路绑定。影像原片仍按原流程上传。</small>
               <p id="dji-subtitle-status" class="dji-subtitle-status" role="status" aria-live="polite"></p>
               <button id="show-dji-track" class="outline-button dji-track-preview-button" type="button" hidden>在地图上查看无人机航迹</button>
               <button id="pick-anchor" class="outline-button" type="button">⌖ 标注影像所在校园区域</button>

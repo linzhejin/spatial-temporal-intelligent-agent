@@ -581,7 +581,7 @@
       message('vision-message', isVisionFloodAssisted()
         ? (isVideoFile(file) ? '积水辅助识别只支持图片。' : '已选择积水辅助识别；请圈选路面并标注校园位置。')
         : isVisionTrial() ? '影像已准备好，试用结果不会进入真实路况。' :
-        '影像已准备好，可以开始识别；如有有效候选，将在复核后选择具体道路。', true);
+        '影像已准备好，可开始识别；如有有效候选，复核后选择具体道路。', true);
     }
   }
 
@@ -1152,7 +1152,7 @@
     state.sourceMode = 'manual';
     byId('vision-source-banner').hidden = false;
     byId('vision-source-label').textContent = '人工登记来源：' + (job.original_name || job.job_id) +
-      '。模型没有生成路况候选；请先查看原片，再选择受影响道路并填写现场核实依据。';
+      '。模型未生成路况候选；请先查看原片，再选择受影响道路并填写现场核实依据。';
     byId('field-confirmation-wrap').hidden = false;
     byId('field-confirmation').required = true;
     byId('event-type').value = '';
@@ -2523,7 +2523,7 @@
     var box = document.createElement('div'); box.className = 'candidate-card flood-small-review';
     var title = document.createElement('strong'); title.textContent = '小范围积水线索';
     var note = document.createElement('p');
-    note.textContent = '这些像素未达到候选提示线，轮廓保留供查看；请结合原图和现场判断。';
+    note.textContent = '这些像素低于候选提示线，仅保留轮廓供查看，请结合原图和现场判断。';
     box.append(title, note);
     items.slice(0, 24).forEach(function (item) {
       var line = document.createElement('small'); line.className = 'candidate-evidence-caption';
@@ -2594,7 +2594,7 @@
         modelNote = document.createElement('details');
         modelNote.className = 'vision-job-note';
         var noteSummary = document.createElement('summary');
-        noteSummary.textContent = '模型与检出说明';
+        noteSummary.textContent = '模型与检出信息';
         modelNote.appendChild(noteSummary);
       }
       return modelNote;
@@ -2700,7 +2700,7 @@
   function noCandidateFeedback(result, mediaKind) {
     var metrics = result.metrics || {};
     if (mediaKind === 'image') {
-      return '这是一张静态图片，不能判断车辆是否持续缓行或人群是否持续聚集；检测数量只是画面线索。若查看原片并现场核实后确认道路受影响，可按下方按钮手工登记路况。';
+      return '静态图片无法判断车辆是否持续缓行或人群是否持续聚集，检测数量只是画面线索。若查看原片并现场核实后确认道路受影响，可按下方按钮手工登记路况。';
     }
     var coverage = result.video_coverage || {};
     var duration = Number(coverage.duration_seconds || metrics.observed_duration_seconds);
@@ -2725,7 +2725,7 @@
           + '可按下方“依据原片手工登记路况”，并填写现场核实依据。';
       }
     }
-    return '模型没有生成可复核的路况候选。请查看原片和观察区域；抽样帧中的车辆数不能单独说明道路流量或拥堵。'
+    return '模型未生成可复核的路况候选。请查看原片和观察区域；抽样帧里的车辆数不能单独说明道路流量或拥堵。'
       + '若现场核实后确认道路受影响，可按下方按钮手工登记路况，并填写核实依据。';
   }
 
@@ -2852,7 +2852,7 @@
         reviewNote.addEventListener('input', function () {
           state.reviewDrafts[job.job_id] = reviewNote.value;
         });
-        reviewNote.placeholder = '说明查看了哪些影像证据，以及确认或排除的理由（至少 8 字）';
+        reviewNote.placeholder = '写明查看了哪些影像证据、确认或排除的理由（至少 8 字）';
         noteLabel.appendChild(reviewNote); card.appendChild(noteLabel);
         reviewFeedback = document.createElement('p'); reviewFeedback.className = 'form-message';
         card.appendChild(reviewFeedback);
@@ -2921,7 +2921,7 @@
       if (!candidates.children.length && job.status === 'needs_review' && !job.review_status &&
           !(result.candidates || []).length && !(result.flood_review || []).length) {
         var noCandidates = document.createElement('p'); noCandidates.className = 'vision-job-meta';
-        noCandidates.textContent = '该任务尚无候选说明；原片未检出可复核迹象时不会生成候选，请依据原片与现场情况判断。';
+        noCandidates.textContent = '该任务没有生成候选；未检出可复核迹象时不会产生候选，请结合原片与现场判断。';
         card.appendChild(noCandidates);
       }
       if (job.status === 'needs_review' && job.anchor_gcj) {
@@ -2957,7 +2957,7 @@
       if (job.status === 'completed' && !(result.candidates || []).length &&
           !(Array.isArray(result.flood_review) && result.flood_review.length)) {
         var terminal = document.createElement('details'); terminal.className = 'vision-terminal';
-        var terminalTitle = document.createElement('summary'); terminalTitle.textContent = '分析已结束 · 结果说明';
+        var terminalTitle = document.createElement('summary'); terminalTitle.textContent = '分析已结束 · 结果';
         var terminalCopy = document.createElement('p');
         if (isTrial) {
           terminalCopy.textContent = '没有生成候选。请查看原片；发现漏检可在下方记录。';

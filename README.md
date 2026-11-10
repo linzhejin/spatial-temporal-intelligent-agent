@@ -17,9 +17,9 @@
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：main @ de986cc ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-09 14:20
+- 版本：main @ 9573e1f ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-10 17:02
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
-- 前端 SW whu-walker-v126 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 19（最新 019）
+- 前端 SW whu-walker-v129 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 19（最新 019）
 <!-- FACTS:END -->
 
 日常通勤与“最短路径”策略的距离/坡度/景观权重为 `1/0/0`；推荐、风景优先和平坦优先使用其他预设。路线可计算或画出不等于每条边均已实地核实；发布记录见文档目录，当前进度见交接说明。

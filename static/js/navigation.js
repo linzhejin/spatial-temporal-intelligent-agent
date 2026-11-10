@@ -252,7 +252,7 @@
         if (Date.now() - navState.lastRerouteAt < REROUTE_COOLDOWN) return;
         navState.rerouting = true;
         navState.lastRerouteAt = Date.now();
-        if (navState._cb.onToast) navState._cb.onToast('已偏航，正在重新规划…');
+        if (navState._cb.onToast) navState._cb.onToast('已偏航，正在重新规划');
 
         var body = {
             task_type: 'path_planning',
