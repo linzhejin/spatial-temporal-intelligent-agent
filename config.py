@@ -119,6 +119,11 @@ VISION_FLOOD_ENABLED = os.getenv("VISION_FLOOD_ENABLED", "false").strip().lower(
 }
 VISION_FLOOD_REVISION = os.getenv("VISION_FLOOD_REVISION", "unverified")
 VISION_FLOOD_MIN_AREA_RATIO = _env_float("VISION_FLOOD_MIN_AREA_RATIO", 0.08)
+VISION_FLOOD_RELEASE_MODE = os.getenv("VISION_FLOOD_RELEASE_MODE", "field_validated").strip().lower()
+VISION_FLOOD_PROBABILITY_THRESHOLD = _env_float("VISION_FLOOD_PROBABILITY_THRESHOLD", 0.001)
+VISION_FLOOD_RUNTIME_PYTHON = os.getenv("VISION_FLOOD_RUNTIME_PYTHON", "")
+VISION_FLOOD_CPU_THREADS = max(1, int(os.getenv("VISION_FLOOD_CPU_THREADS", "2")))
+VISION_FLOOD_TIMEOUT_SECONDS = _env_float("VISION_FLOOD_TIMEOUT_SECONDS", 120.0)
 # Test-only models are never eligible for publishing route events.
 VISION_TRIAL_ENABLED = os.getenv("VISION_TRIAL_ENABLED", "false").strip().lower() in {
     "1", "true", "yes", "on",

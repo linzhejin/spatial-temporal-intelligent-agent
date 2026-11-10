@@ -414,5 +414,5 @@ def test_finishing_job_atomically_honors_a_late_cancel_request(monkeypatch):
 
     statement = " ".join(statements[0].split())
     assert "CASE WHEN cancel_requested THEN 'cancelled' ELSE %s END" in statement
-    assert "CASE WHEN cancel_requested THEN NULL ELSE %s END" in statement
+    assert "CASE WHEN cancel_requested THEN NULL ELSE %s::jsonb END" in statement
     assert status == "cancelled"

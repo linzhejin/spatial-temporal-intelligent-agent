@@ -262,6 +262,7 @@ def build_specialized_candidates(
     single_image: bool = False,
     accident_threshold: float = 0.85,
     flood_area_threshold: float = 0.08,
+    flood_single_image_threshold: float = 0.25,
 ) -> list[dict]:
     """Convert optional scene/segmentation outputs into review-only candidates.
 
@@ -288,8 +289,10 @@ def build_specialized_candidates(
                 "region_id": str(observation.get("region_id") or "road"),
             })
         ratio = observation.get("flooded_road_area_ratio")
+        single_image_threshold = (flood_single_image_threshold if single_image
+                                  else flood_area_threshold)
         if (isinstance(ratio, (int, float)) and not isinstance(ratio, bool)
-                and math.isfinite(float(ratio)) and flood_area_threshold <= ratio <= 1):
+                and math.isfinite(float(ratio)) and single_image_threshold <= ratio <= 1):
             flood_records.append({
                 "time_seconds": float(when), "area_ratio": float(ratio),
                 "region_id": str(observation.get("region_id") or "road-surface"),
@@ -348,7 +351,8 @@ def build_specialized_candidates(
         for event in _cluster_temporal_records(selected, sample_interval_s):
             flood_supported = (
                 len(event) >= 2
-                or single_image and max((item["area_ratio"] for item in event), default=0) >= 0.25
+                or single_image and max((item["area_ratio"] for item in event), default=0)
+                >= single_image_threshold
             )
             if not flood_supported:
                 continue

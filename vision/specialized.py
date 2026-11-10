@@ -3,10 +3,17 @@ from __future__ import annotations
 
 import math
 import os
+import json
+import logging
+import subprocess
+import sys
+import tempfile
+import time
 from pathlib import Path
-
-import config
 from vision.tiling import tile_windows
+
+
+logger = logging.getLogger(__name__)
 
 
 AIDER_CLASSES = (
@@ -26,6 +33,7 @@ def _onnx_contract(model_path, session, *, expected_classes: int | tuple[int, ..
     if session is None:
         if not model_path or not Path(model_path).is_file():
             raise ValueError("模型权重文件不存在")
+        import config
         try:
             import onnxruntime as ort
         except ImportError as error:
@@ -297,3 +305,284 @@ class OnnxFloodSegmenter:
             if self.is_binary_visible_water:
                 prediction["visible_water_probability"] = full_probability
         return prediction
+
+
+class DoodleverseFloodSegmenter:
+    """Official FloodNet v7 probabilities clipped to marked road regions.
+
+    The default path runs one image in a short-lived child interpreter. Passing a
+    session is intended for parity tests and controlled offline evaluation.
+    Frames passed to this adapter are RGB, matching the official model input.
+    """
+
+    INPUT_HEIGHT = 768
+    INPUT_WIDTH = 1024
+    CLASS_COUNT = 10
+    FLOODED_ROAD_CLASS = 3
+    PREPROCESSING = "doodleverse_rgb_resize_uint8_global_standardize_v1"
+    model_id = "doodleverse-floodnet-resunet-v7"
+    classes = list(FLOODNET_CLASSES)
+    output_scope = "flooded_road_class"
+
+    def __init__(self, model_path: str, *, session=None,
+                 model_version: str | None = None,
+                 probability_threshold: float = 0.001,
+                 min_area_ratio: float = 0.08,
+                 single_image_trigger_threshold: float = 0.08,
+                 runtime_python: str | None = None,
+                 timeout_seconds: float = 120.0):
+        self.model_path = str(model_path or "")
+        self.model_version = model_version or os.getenv(
+            "VISION_FLOOD_REVISION", "unverified",
+        )
+        self.probability_threshold = self._validate_threshold(
+            probability_threshold, "积水类别概率阈值", allow_zero=True,
+        )
+        self.min_area_ratio = self._validate_threshold(
+            min_area_ratio, "积水面积阈值", allow_zero=False,
+        )
+        self.single_image_trigger_threshold = self._validate_threshold(
+            single_image_trigger_threshold, "单张图片候选阈值", allow_zero=False,
+        )
+        self.timeout_seconds = float(timeout_seconds)
+        if not math.isfinite(self.timeout_seconds) or not 0 < self.timeout_seconds <= 120:
+            raise ValueError("单张图片推理时限必须大于 0 且不超过 120 秒")
+        self.runtime_python = runtime_python or os.getenv("VISION_FLOOD_RUNTIME_PYTHON", "")
+        self.session = session
+        self.input_name = None
+        self.output_name = None
+        if session is not None:
+            self._validate_session(session)
+        elif not self.model_path or not Path(self.model_path).is_file():
+            raise ValueError("Doodleverse v7 权重文件不存在")
+
+    @staticmethod
+    def _validate_threshold(value, label, *, allow_zero):
+        try:
+            number = float(value)
+        except (TypeError, ValueError) as error:
+            raise ValueError(f"{label}必须是 0 到 1 之间的数") from error
+        lower_ok = number >= 0 if allow_zero else number > 0
+        if not math.isfinite(number) or not lower_ok or number > 1:
+            raise ValueError(f"{label}必须是 0 到 1 之间的数")
+        return number
+
+    def _validate_session(self, session):
+        inputs = session.get_inputs()
+        outputs = session.get_outputs()
+        if len(inputs) != 1 or len(outputs) != 1:
+            raise ValueError("Doodleverse v7 必须有单个图像输入和概率输出")
+        input_shape = list(inputs[0].shape)
+        output_shape = list(outputs[0].shape)
+        if (len(input_shape) != 4 or input_shape[1:] != [
+                self.INPUT_HEIGHT, self.INPUT_WIDTH, 3,
+        ]):
+            raise ValueError("Doodleverse v7 输入必须为 NHWC [N,768,1024,3]")
+        if (len(output_shape) != 4 or output_shape[1:] != [
+                self.INPUT_HEIGHT, self.INPUT_WIDTH, self.CLASS_COUNT,
+        ]):
+            raise ValueError("Doodleverse v7 输出必须为 NHWC [N,768,1024,10]")
+        self.input_name = inputs[0].name
+        self.output_name = outputs[0].name
+
+    def _load_session(self):
+        import onnxruntime as ort
+
+        options = ort.SessionOptions()
+        options.intra_op_num_threads = max(1, int(os.getenv("VISION_FLOOD_CPU_THREADS", "2")))
+        options.inter_op_num_threads = 1
+        options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+        session = ort.InferenceSession(
+            self.model_path, sess_options=options, providers=["CPUExecutionProvider"],
+        )
+        self._validate_session(session)
+        return session
+
+    @staticmethod
+    def _prepare_rgb(frame_rgb):
+        from vision.doodleverse_preprocessing import prepare_doodleverse_rgb
+
+        return prepare_doodleverse_rgb(frame_rgb)
+
+    def _predict_probabilities(self, frame_rgb):
+        from vision.doodleverse_preprocessing import extract_flooded_road_probability
+
+        model_input = self._prepare_rgb(frame_rgb)
+        if self.session is None:
+            # Large source-image resize buffers must be released before the
+            # ONNX session reserves its own inference workspace.
+            import gc
+            gc.collect()
+            if sys.platform.startswith("linux"):
+                try:
+                    import ctypes
+                    ctypes.CDLL(None).malloc_trim(0)
+                except (AttributeError, OSError):
+                    pass
+            self.session = self._load_session()
+        try:
+            raw = self.session.run([self.output_name], {self.input_name: model_input})
+        except Exception as error:
+            raise RuntimeError(f"Doodleverse v7 推理失败：{error}") from error
+        return extract_flooded_road_probability(raw[0])
+
+    def _predictions_from_probability(self, frame_rgb, regions, class_probability):
+        import cv2
+        import numpy as np
+        from skimage.transform import resize
+
+        height, width = frame_rgb.shape[:2]
+        probability = resize(
+            class_probability, (height, width), preserve_range=False, clip=True,
+        ).astype(np.float32)
+        if (not np.isfinite(probability).all() or float(probability.min()) < -1e-6
+                or float(probability.max()) > 1.000001):
+            raise ValueError("Doodleverse v7 原图尺寸概率图无效")
+        predictions = {}
+        for region in regions or []:
+            if not isinstance(region, dict) or region.get("kind") != "road_surface":
+                continue
+            polygon = region.get("polygon")
+            if not isinstance(polygon, list) or len(polygon) < 3:
+                continue
+            try:
+                points = np.asarray([
+                    [round(float(point[0]) * (width - 1)),
+                     round(float(point[1]) * (height - 1))]
+                    for point in polygon
+                ], dtype=np.int32)
+            except (IndexError, TypeError, ValueError):
+                continue
+            roi = np.zeros((height, width), dtype=np.uint8)
+            cv2.fillPoly(roi, [points], 1)
+            roi_pixels = int(roi.sum())
+            if not roi_pixels:
+                continue
+            flood_mask = ((probability >= self.probability_threshold) & (roi != 0)).astype(np.uint8)
+            ratio = float(flood_mask.sum()) / roi_pixels
+            contours, _ = cv2.findContours(
+                flood_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+            )
+            outlines = []
+            for contour in sorted(contours, key=cv2.contourArea, reverse=True)[:8]:
+                if cv2.contourArea(contour) < 2:
+                    continue
+                epsilon = max(1.0, 0.005 * cv2.arcLength(contour, True))
+                simplified = cv2.approxPolyDP(contour, epsilon, True).reshape(-1, 2)
+                if len(simplified) < 3:
+                    continue
+                outlines.append([
+                    [round(float(x) / max(1, width - 1), 5),
+                     round(float(y) / max(1, height - 1), 5)]
+                    for x, y in simplified[:128]
+                ])
+            region_id = str(region.get("id") or "road-surface")
+            predictions[region_id] = {
+                "region_id": region_id,
+                "flooded_road_area_ratio": round(ratio, 6),
+                "outline_polygons": outlines,
+                "model_id": self.model_id,
+                "model_version": self.model_version,
+                "class_label": "flooded_road",
+                "water_evidence_type": "flooded_road",
+                "model_output_scope": self.output_scope,
+                "area_measurement": "fraction_of_marked_image_region",
+                "water_depth_estimated": False,
+                "flood_probability_threshold": self.probability_threshold,
+                "candidate_triggered": ratio >= self.single_image_trigger_threshold,
+            }
+        return predictions
+
+    def predict_regions(self, frame_rgb, regions, *, cancel_check=None):
+        import numpy as np
+
+        if cancel_check and cancel_check():
+            raise RuntimeError("积水检查已取消")
+        road_regions = [region for region in regions or []
+                        if isinstance(region, dict) and region.get("kind") == "road_surface"]
+        if not road_regions:
+            return {}
+        if self.session is not None:
+            probabilities = self._predict_probabilities(frame_rgb)
+            return self._predictions_from_probability(frame_rgb, road_regions, probabilities)
+        request_root = Path(tempfile.mkdtemp(prefix="whu-flood-"))
+        process = None
+        try:
+            image_path = request_root / "image.npy"
+            np.save(image_path, np.asarray(frame_rgb), allow_pickle=False)
+            request_path = request_root / "request.json"
+            response_path = request_root / "response.json"
+            stderr_path = request_root / "stderr.log"
+            request_path.write_text(json.dumps({
+                "image_path": str(image_path),
+                "response_path": str(response_path),
+                "model_path": self.model_path,
+                "model_version": self.model_version,
+                "probability_threshold": self.probability_threshold,
+                "min_area_ratio": self.min_area_ratio,
+                "single_image_trigger_threshold": self.single_image_trigger_threshold,
+                "regions": road_regions,
+            }, separators=(",", ":")), encoding="utf-8")
+            project_root = Path(__file__).resolve().parents[1]
+            python = self.runtime_python or sys.executable
+            environment = {key: value for key, value in os.environ.items()
+                           if key in {"PATH", "SYSTEMROOT", "WINDIR", "HOME", "TMPDIR",
+                                      "LD_LIBRARY_PATH", "OMP_NUM_THREADS"}}
+            environment["PYTHONPATH"] = str(project_root)
+            with stderr_path.open("wb") as stderr_file:
+                process = subprocess.Popen(
+                    [python, "-m", "vision.flood_inference_child", str(request_path)],
+                    cwd=str(project_root), env=environment,
+                    stdout=subprocess.DEVNULL, stderr=stderr_file,
+                )
+            deadline = time.monotonic() + self.timeout_seconds
+            while process.poll() is None:
+                if cancel_check and cancel_check():
+                    process.terminate()
+                    try:
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=3.5)
+                    raise RuntimeError("积水检查已取消")
+                remaining = deadline - time.monotonic()
+                if remaining <= 0:
+                    process.terminate()
+                    try:
+                        process.wait(timeout=1)
+                    except subprocess.TimeoutExpired:
+                        process.kill()
+                        process.wait(timeout=3.5)
+                    raise TimeoutError("积水图片分析超过 120 秒")
+                try:
+                    process.wait(timeout=min(0.25, remaining))
+                except subprocess.TimeoutExpired:
+                    pass
+            stderr = stderr_path.read_text(encoding="utf-8", errors="replace")
+            if process.returncode != 0:
+                raise RuntimeError(f"积水分割子进程失败：{stderr[-1000:]}")
+            response = json.loads(response_path.read_text(encoding="utf-8"))
+            if response.get("status") != "ok" or not isinstance(response.get("predictions"), dict):
+                raise RuntimeError("积水分割子进程未返回有效结果")
+            return response["predictions"]
+        finally:
+            if process is not None and process.poll() is None:
+                process.terminate()
+                try:
+                    process.wait(timeout=1)
+                except subprocess.TimeoutExpired:
+                    process.kill()
+                    process.wait(timeout=3.5)
+            import shutil
+            for attempt in range(4):
+                try:
+                    shutil.rmtree(request_root)
+                    break
+                except FileNotFoundError:
+                    break
+                except OSError:
+                    if attempt == 3:
+                        logger.exception("Could not remove temporary flood inference files")
+                    else:
+                        time.sleep(0.05 * (attempt + 1))

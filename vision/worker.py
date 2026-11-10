@@ -7,7 +7,6 @@ import signal
 import importlib.util
 import hashlib
 import json
-import gc
 import sys
 import threading
 import time
@@ -20,8 +19,13 @@ from storage import database
 from storage import vision_repository
 from vision.evidence import attach_evidence_clips
 from vision.engine import OnnxDetector, VisionAnalysisCancelled, analyze_media
-from vision.model_release import check_optional_model_release
-from vision.specialized import OnnxAiderClassifier, OnnxFloodSegmenter
+from vision.assisted_image import (
+    _TrialNoVehicleDetector, _release_inference_memory,
+    _analyze_assisted_flood_image, _merge_assisted_flood_results,
+)
+from vision.assisted_image_supervisor import run_supervised_assisted_image
+from vision.model_release import assisted_flood_runtime_config, check_optional_model_release
+from vision.specialized import DoodleverseFloodSegmenter, OnnxAiderClassifier, OnnxFloodSegmenter
 from vision.temporal_trial import OnnxTemporalAccident
 
 logger = logging.getLogger(__name__)
@@ -130,26 +134,26 @@ class VisionJobCancelled(RuntimeError):
     """A manager cancelled a running job after its last saved checkpoint."""
 
 
-class _TrialNoVehicleDetector:
-    """Keep specialized trial jobs independent of the expensive vehicle detector."""
-    model_id = "trial-no-vehicle-detection"
-    model_version = "1"
-
-    def detect(self, _frame, *, tracking=False):
-        return []
-
-    def detect_regions(self, _frame, _regions, *, tracking=False):
-        return []
-
-
-def load_trial_models():
+def load_trial_models(*, include_assisted_flood=False):
     """Load explicitly configured test weights without changing release capabilities."""
-    capabilities = {"trial_accident_supported": False, "trial_flood_supported": False}
+    capabilities = {
+        "trial_accident_supported": False, "trial_flood_supported": False,
+        "flood_assistance_supported": False,
+        "flood_assistance_release_status": "disabled",
+    }
     models = {"accident": None, "flood": None}
-    if not config.VISION_TRIAL_ENABLED:
-        return models, capabilities
-    for kind, path in (("accident", config.VISION_TRIAL_ACCIDENT_MODEL_PATH),
-                       ("flood", config.VISION_TRIAL_FLOOD_MODEL_PATH)):
+    # The assisted role serves public trials and campus image checks through
+    # the same Doodleverse path; don't keep legacy comparison sessions resident.
+    doodleverse_assisted_mode = bool(
+        include_assisted_flood and config.VISION_FLOOD_ENABLED
+        and config.VISION_FLOOD_RELEASE_MODE == "assisted_review"
+    )
+    trial_weights = (
+        (("accident", config.VISION_TRIAL_ACCIDENT_MODEL_PATH),
+         ("flood", config.VISION_TRIAL_FLOOD_MODEL_PATH))
+        if config.VISION_TRIAL_ENABLED and not doodleverse_assisted_mode else ()
+    )
+    for kind, path in trial_weights:
         if not path:
             continue
         try:
@@ -176,17 +180,79 @@ def load_trial_models():
             capabilities["trial_" + kind + "_supported"] = True
         except Exception:
             logger.exception("Could not load %s trial model", kind)
+    if include_assisted_flood:
+        if not config.VISION_FLOOD_ENABLED:
+            capabilities["flood_assistance_release_status"] = "disabled"
+        elif config.VISION_FLOOD_RELEASE_MODE != "assisted_review":
+            capabilities["flood_assistance_release_status"] = "unsupported_release_mode"
+        elif not config.VISION_FLOOD_MODEL_PATH:
+            capabilities["flood_assistance_release_status"] = "model_missing"
+        elif not config.VISION_MODEL_PATH or not Path(config.VISION_MODEL_PATH).is_file():
+            capabilities["flood_assistance_release_status"] = "traffic_detector_missing"
+        else:
+            try:
+                model_path = config.VISION_FLOOD_MODEL_PATH
+                with Path(model_path).open("rb") as file:
+                    digest = hashlib.file_digest(file, "sha256").hexdigest()
+                runtime_config = assisted_flood_runtime_config(
+                    probability_threshold=config.VISION_FLOOD_PROBABILITY_THRESHOLD,
+                    min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
+                )
+                release = check_optional_model_release(
+                    "flood", model_path, config.VISION_FLOOD_REVISION,
+                    config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST, None,
+                    runtime_config, release_mode="assisted_review",
+                )
+                capabilities["flood_assistance_release_status"] = str(
+                    release.get("reason", "release_invalid"),
+                )
+                if release.get("approved") is True:
+                    model = DoodleverseFloodSegmenter(
+                        model_path,
+                        model_version=config.VISION_FLOOD_REVISION,
+                        probability_threshold=config.VISION_FLOOD_PROBABILITY_THRESHOLD,
+                        min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
+                        single_image_trigger_threshold=config.VISION_FLOOD_MIN_AREA_RATIO,
+                        runtime_python=config.VISION_FLOOD_RUNTIME_PYTHON,
+                        timeout_seconds=config.VISION_FLOOD_TIMEOUT_SECONDS,
+                    )
+                    model.model_sha256 = digest
+                    models["flood"] = model
+                    capabilities.update({
+                        "flood_assistance_supported": True,
+                        "flood_assistance_release_status": "approved",
+                        "flood_assistance_model_id": model.model_id,
+                        "flood_assistance_model_version": model.model_version,
+                        "flood_assistance_model_sha256": digest,
+                        "trial_flood_supported": True,
+                        "trial_flood_media": "image",
+                        "trial_flood_model_id": model.model_id,
+                    })
+            except Exception:
+                capabilities["flood_assistance_release_status"] = "model_load_failed"
+                logger.exception("Doodleverse assisted flood model could not be initialized")
     return models, capabilities
+
+
+def _requires_vision_capacity_lock():
+    return bool(
+        config.VISION_TRIAL_ENABLED
+        or (config.VISION_FLOOD_ENABLED and config.VISION_FLOOD_RELEASE_MODE == "assisted_review")
+    )
 
 
 def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                      detector=None, accident_model=None, flood_segmenter=None,
                      trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                     assisted_flood_supported=False,
+                     reserve_assisted=False,
                      on_locked_completion=None):
     options = {"detector": detector, "accident_model": accident_model, "flood_segmenter": flood_segmenter,
                "trial_accident_model": trial_accident_model, "trial_flood_segmenter": trial_flood_segmenter,
-               "trial_only": trial_only}
-    if not config.VISION_TRIAL_ENABLED:
+               "trial_only": trial_only,
+               "assisted_flood_supported": assisted_flood_supported,
+               "reserve_assisted": reserve_assisted}
+    if not _requires_vision_capacity_lock():
         return _process_next_job_unlocked(database_url, worker_id, lease_seconds, **options)
     # A single host may not have enough memory to run the campus and trial models together.
     # Keep a session-level lock alive independently of job leases, including across commits.
@@ -240,13 +306,18 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
 def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                                detector=None, accident_model=None, flood_segmenter=None,
                                trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                               assisted_flood_supported=False,
+                               reserve_assisted=False,
                                capacity_lock_lost=None):
     allow_trial = trial_accident_model is not None or trial_flood_segmenter is not None
     job = vision_repository.claim_next_job(database_url, worker_id, lease_seconds,
-                                          allow_trial=allow_trial, trial_only=trial_only)
+                                          allow_trial=allow_trial, trial_only=trial_only,
+                                          allow_assisted=assisted_flood_supported,
+                                          reserve_assisted=reserve_assisted)
     if not job:
         return None
     job_id = job["job_id"]
+    job_started = time.monotonic()
     stop_heartbeat = threading.Event()
     lease_lost = threading.Event()
 
@@ -259,10 +330,27 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
     heartbeat = threading.Thread(target=keep_lease_alive, name=f"vision-lease-{job_id[:8]}", daemon=True)
     heartbeat.start()
     try:
+        is_assisted_flood_job = bool(
+            assisted_flood_supported and job.get("purpose") == "operational"
+            and job.get("media_kind") == "image"
+            and any(isinstance(region, dict) and region.get("kind") == "road_surface"
+                    and region.get("flood_assistance_mode") == "assisted_review"
+                    for region in job.get("observation_regions") or [])
+        )
+        specialized_job = job.get("purpose") == "trial" or is_assisted_flood_job
+        trial_flood_video_unchecked = bool(
+            job.get("purpose") == "trial" and job.get("media_kind") == "video"
+            and getattr(trial_flood_segmenter, "single_image_trigger_threshold", None) is not None
+        )
         if job.get("purpose") == "trial":
             if not allow_trial:
                 raise RuntimeError("试用模型尚未就绪，无法分析这条测试影像。")
-            accident_model, flood_segmenter = trial_accident_model, trial_flood_segmenter
+            accident_model = trial_accident_model
+            flood_segmenter = None if trial_flood_video_unchecked else trial_flood_segmenter
+        elif is_assisted_flood_job:
+            if trial_flood_segmenter is None:
+                raise RuntimeError("积水辅助识别未就绪，不能把任务当作未发现积水。")
+            accident_model, flood_segmenter = None, trial_flood_segmenter
         path = Path(config.VISION_UPLOAD_DIR) / job["media_path"]
 
         def save_progress(snapshot):
@@ -301,7 +389,65 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
         kinds = {region.get("kind") for region in job.get("observation_regions") or []}
         temporal_only = bool(temporal_accident is not None and job["media_kind"] == "video" and
                              not (flood_segmenter is not None and "road_surface" in kinds))
-        if temporal_only:
+        supervised_trial_image = bool(
+            job.get("purpose") == "trial" and job.get("media_kind") == "image"
+            and isinstance(flood_segmenter, DoodleverseFloodSegmenter)
+            and "road_surface" in kinds
+        )
+        image_deadline = None
+        if is_assisted_flood_job or supervised_trial_image:
+            image_deadline = job_started + min(float(config.VISION_FLOOD_TIMEOUT_SECONDS), 120.0)
+            save_progress({"progress": {"phase": "analyzing", "percent": 0}, "checkpoint": None})
+            monitor_stop = threading.Event()
+            cancel_pending = threading.Event()
+
+            def monitor_cancellation():
+                while not monitor_stop.is_set():
+                    try:
+                        state = vision_repository.get_job_cancel_state(database_url, job_id, worker_id)
+                    except Exception:
+                        logger.exception("Could not check image cancellation; ending the leased run")
+                        lease_lost.set()
+                        return
+                    if state is None:
+                        lease_lost.set()
+                        return
+                    if state.get("cancel_requested"):
+                        cancel_pending.set()
+                        return
+                    monitor_stop.wait(0.5)
+
+            monitor = threading.Thread(target=monitor_cancellation, name=f"vision-cancel-{job_id[:8]}", daemon=True)
+            monitor.start()
+
+            def supervised_cancelled():
+                if capacity_lock_lost is not None and capacity_lock_lost.is_set():
+                    lease_lost.set()
+                return cancel_pending.is_set() or lease_lost.is_set()
+
+            try:
+                result = run_supervised_assisted_image({
+                    "media_path": str(path), "anchor_gcj": job["anchor_gcj"],
+                    "camera_stabilized": job["camera_stabilized"],
+                    "regions": job.get("observation_regions") or [],
+                    "resume_state": job.get("checkpoint"),
+                    "traffic_required": is_assisted_flood_job,
+                    "traffic_model_path": config.VISION_MODEL_PATH,
+                    "traffic_model_id": config.VISION_MODEL_ID,
+                    "traffic_model_version": config.VISION_MODEL_REVISION,
+                    "flood_model_path": flood_segmenter.model_path,
+                    "flood_model_version": flood_segmenter.model_version,
+                    "flood_model_sha256": getattr(flood_segmenter, "model_sha256", None),
+                    "probability_threshold": flood_segmenter.probability_threshold,
+                    "min_area_ratio": flood_segmenter.min_area_ratio,
+                    "single_image_trigger_threshold": flood_segmenter.single_image_trigger_threshold,
+                    "runtime_python": flood_segmenter.runtime_python,
+                    "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS if supervised_trial_image else None,
+                }, deadline=image_deadline, cancel_check=supervised_cancelled)
+            finally:
+                monitor_stop.set()
+                monitor.join(timeout=0.25)
+        elif temporal_only:
             # An accident-only trial has no need for vehicle tracking or ground-road matching.
             result = {"candidates": [], "metrics": {}, "safety": {"automatically_changes_routing": False},
                       "trial_temporal_only": True}
@@ -312,17 +458,31 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
                               "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS} if is_trial else {})
             result = analyze_media(
                 path, job["media_kind"], job["anchor_gcj"],
-                camera_stabilized=job["camera_stabilized"], detector=_TrialNoVehicleDetector() if is_trial else detector,
+                camera_stabilized=job["camera_stabilized"],
+                detector=_TrialNoVehicleDetector() if specialized_job else detector,
                 accident_model=None if temporal_accident else accident_model,
                 flood_segmenter=flood_segmenter,
                 regions=job.get("observation_regions") or [],
                 progress_callback=save_progress,
                 resume_state=job.get("checkpoint"),
                 cancel_check=cancellation_requested,
+                require_flood_success=is_assisted_flood_job,
                 **trial_options,
             )
         if job.get("purpose") == "trial":
             result["trial_specialized_only"] = True
+        elif is_assisted_flood_job:
+            result["flood_assistance"] = {
+                "mode": "assisted_review",
+                "field_validated": False,
+                "human_confirmation_required": True,
+                "supported_media": ["image"],
+                "model_id": getattr(flood_segmenter, "model_id", "doodleverse-floodnet-resunet-v7"),
+                "model_version": getattr(flood_segmenter, "model_version", "unverified"),
+                "model_sha256": getattr(flood_segmenter, "model_sha256", None),
+                "probability_threshold": getattr(flood_segmenter, "probability_threshold", None),
+                "min_area_ratio": getattr(flood_segmenter, "min_area_ratio", None),
+            }
         temporal_result = None
         if temporal_accident is not None and job["media_kind"] == "video":
             temporal_result = temporal_accident.analyze_video(
@@ -344,11 +504,14 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
                              "region_required" if not kinds.intersection({"vehicle_lane", "road_surface"}) else
                              "failed" if safety.get("accident_recognition_supported") is False else
                              "checked" if counts.get("accident", 0) > 0 else "no_observation"),
-                "flood": ("not_configured" if flood_segmenter is None else
+                "flood": ("video_not_supported" if trial_flood_video_unchecked else
+                          "not_configured" if flood_segmenter is None else
                           "region_required" if "road_surface" not in kinds else
                           "failed" if safety.get("flood_segmentation_supported") is False else
                           "checked" if counts.get("flood", 0) > 0 else "no_observation"),
             }
+        if image_deadline is not None and time.monotonic() >= image_deadline:
+            raise TimeoutError("积水图片分析超过 120 秒时限")
         finalizing_progress = {"phase": "finalizing", "percent": 99}
         if job["media_kind"] == "video":
             video_coverage = result.get("video_coverage", {})
@@ -459,7 +622,10 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
                 accident_threshold=config.VISION_ACCIDENT_THRESHOLD,
                 accident_enabled=config.VISION_ACCIDENT_ENABLED,
                 flood_path=config.VISION_FLOOD_MODEL_PATH,
-                flood_enabled=config.VISION_FLOOD_ENABLED,
+                flood_enabled=(
+                    config.VISION_FLOOD_ENABLED
+                    and config.VISION_FLOOD_RELEASE_MODE != "assisted_review"
+                ),
                 flood_revision=config.VISION_FLOOD_REVISION,
                 flood_min_area_ratio=config.VISION_FLOOD_MIN_AREA_RATIO,
                 release_manifest_path=config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST,
@@ -467,10 +633,12 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
             )
         trial_capabilities = {}
         if role != "operational":
-            trial_models, trial_capabilities = load_trial_models()
+            trial_models, trial_capabilities = load_trial_models(include_assisted_flood=role == "trial")
         optional_capabilities.update(trial_capabilities)
         status_detail = json.dumps(optional_capabilities, separators=(",", ":"))
-        ready = role != "trial" or any(trial_models.values())
+        ready = role != "trial" or any(trial_models.values()) or (
+            trial_capabilities.get("flood_assistance_supported") is True
+        )
     except Exception as error:
         role = role if role in {"shared", "operational", "trial"} else "shared"
         status_detail = f"{type(error).__name__}: {error}"[:500]
@@ -497,13 +665,7 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
     def release_trial_models():
         nonlocal trial_models
         trial_models = {"accident": None, "flood": None}
-        gc.collect()
-        if sys.platform.startswith("linux"):
-            try:
-                import ctypes
-                ctypes.CDLL(None).malloc_trim(0)
-            except (AttributeError, OSError):
-                logger.info("The allocator does not support explicit memory trimming")
+        _release_inference_memory()
 
     try:
         while not _STOP.is_set():
@@ -517,6 +679,13 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
                     trial_accident_model=trial_models["accident"],
                     trial_flood_segmenter=trial_models["flood"],
                     trial_only=role == "trial",
+                    assisted_flood_supported=(
+                        role == "trial" and optional_capabilities.get("flood_assistance_supported") is True
+                    ),
+                    reserve_assisted=(
+                        role != "trial" and config.VISION_FLOOD_ENABLED
+                        and config.VISION_FLOOD_RELEASE_MODE == "assisted_review"
+                    ),
                     on_locked_completion=release_trial_models if role == "trial" else None,
                 )
                 if outcome is None:

@@ -30,6 +30,9 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
     cache_name = lambda root: re.search(r"var CACHE_NAME = '([^']+)'",
                                         (root / "sw.js").read_text(encoding="utf8")).group(1)
     old_cache, new_cache = cache_name(old), cache_name(new)
+    manager_asset = lambda root: re.search(r'src="(/js/manager\.js\?[^\"]+)"',
+                                           (root / "manager.html").read_text(encoding="utf8")).group(1)
+    old_asset, new_asset = manager_asset(old), manager_asset(new)
     assert old_cache != new_cache
     # A deployed checkout gives the incoming files newer mtimes. Git archives
     # instead carry commit timestamps, which may be newer than our local edits.
@@ -72,7 +75,7 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
             page.wait_for_function("navigator.serviceWorker.controller !== null", timeout=30000)
             wait_for_cache(page, old_cache, new_cache)
             page.goto(base + "/manager.html", wait_until="domcontentloaded")
-            assert "vision-safety-v1" in page.locator("script[src*='manager.js']").get_attribute("src")
+            assert page.locator("script[src*='manager.js']").get_attribute("src") == old_asset
 
             Handler.root = new
             page.evaluate("() => { window.__previousController = navigator.serviceWorker.controller; return true; }")
@@ -81,8 +84,9 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
             wait_for_cache(page, new_cache, old_cache)
             page.goto(base + "/manager.html", wait_until="domcontentloaded")
             asset = page.locator("script[src*='manager.js']").get_attribute("src")
-            assert "vision-height-v1" in asset
-            assert "appendTrialFeedback" in page.evaluate("async url => (await fetch(url)).text()", asset)
+            assert asset == new_asset
+            source = page.evaluate("async url => (await fetch(url)).text()", asset)
+            assert source.replace("\r\n", "\n") == (new / "js/manager.js").read_text(encoding="utf8")
             assert page.locator("#vision-purpose").count() == 1
 
             page.evaluate("() => { window.__previousController = navigator.serviceWorker.controller; return true; }")
@@ -94,7 +98,7 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
             page.wait_for_function("navigator.serviceWorker.controller !== window.__previousController", timeout=30000)
             wait_for_cache(page, old_cache, new_cache)
             page.goto(base + "/manager.html", wait_until="domcontentloaded")
-            assert "vision-safety-v1" in page.locator("script[src*='manager.js']").get_attribute("src")
+            assert page.locator("script[src*='manager.js']").get_attribute("src") == old_asset
             context.close()
             browser.close()
     finally:

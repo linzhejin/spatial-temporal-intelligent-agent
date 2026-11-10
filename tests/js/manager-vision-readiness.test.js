@@ -35,6 +35,7 @@ function managerHarness(sessionSeed = []) {
   let roadEvents = [];
   const calls = [];
   let inferenceReady = false;
+  let floodAssistance = { ready: false, enabled: false };
   let visionPublicationAlreadyExists = false;
   let optionalModelStatus = { accident: 'not_configured', flood: 'not_configured' };
   let visionStatusFailure = false;
@@ -51,6 +52,7 @@ function managerHarness(sessionSeed = []) {
       id, hidden: false, value: '', innerHTML: '', disabled: false, currentTime: 0, duration: NaN,
       checked: false, files: [], style: {}, listeners, children: [], attributes: {},
       clickCount: 0, scrollCount: 0,
+      get childNodes() { return this.children; },
       setAttribute(name, value) { this.attributes[name] = String(value); },
       removeAttribute(name) { delete this.attributes[name]; },
       classList: {
@@ -246,7 +248,10 @@ function managerHarness(sessionSeed = []) {
       };
       else if (url.startsWith('/api/manager/vision-status')) data = {
         inference_ready: inferenceReady, max_media_bytes: 1024, max_image_bytes: 1024,
-        max_video_bytes: 4096, upload_chunk_bytes: 512, notice: inferenceReady ? '已就绪' : '尚未就绪',
+        max_video_bytes: 4096, upload_chunk_bytes: 512,
+        notice: inferenceReady || floodAssistance.ready ? '积水辅助识别已就绪' : '尚未就绪',
+        flood_assistance: floodAssistance,
+        trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false },
         optional_model_status: optionalModelStatus,
       };
       else if (url.startsWith('/api/manager/vision-jobs')) data = { jobs: visionJobs };
@@ -259,6 +264,7 @@ function managerHarness(sessionSeed = []) {
     elements, intervalCallbacks, mapListeners, map, mapLayers, removedMapLayers, requested, calls, document, window,
     createdObjectUrls, revokedObjectUrls, formEntries, sessionValues, getElement: element,
     setInferenceReady: (value) => { inferenceReady = value; },
+    setFloodAssistance: (value) => { floodAssistance = value; },
     setOptionalModelStatus: (value) => { optionalModelStatus = value; },
     setVisionJobs: (items) => { visionJobs = items; },
     setVisionPreviewFrames: (jobId, value) => { visionPreviewFrames.set(jobId, value); },
@@ -306,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261109-compact-header-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261109-vision-height-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-flood-assistance-v1/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
   assert.match(managerCss, /\.vision-jobs\{max-height:100%;overflow-y:auto/);
   assert.match(managerHtml, /class="masthead-count"><span id="active-count">0<\/span> 条生效/);
@@ -804,6 +810,20 @@ test('manager refreshes vision readiness and updates submission availability whi
   assert.equal(elements.get('submit-vision').disabled, true);
 });
 
+test('manager exposes the image flood-assistance mode when only that worker is ready', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setFloodAssistance({ ready: true, enabled: true, mode: 'assisted_review' });
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const option = harness.elements.get('vision-flood-assistance-option');
+  assert.equal(option.disabled, false);
+  assert.equal(option.textContent, '积水辅助识别（图片）');
+  assert.equal(harness.elements.get('vision-status').classList.contains('is-ready'), true);
+  assert.match(harness.elements.get('vision-status').textContent, /积水辅助识别已就绪/);
+});
+
 test('readiness polling cannot re-enable or duplicate an in-flight media upload', async () => {
   const harness = managerHarness();
   await flush();
@@ -958,7 +978,7 @@ test('manager reports optional model load failures accurately instead of claimin
 
   const status = harness.elements.get('vision-status').textContent;
   assert.match(status, /事故模型权重未能加载/);
-  assert.match(status, /积水模型权重文件缺失/);
+  assert.match(status, /积水辅助识别权重文件缺失/);
 });
 
 test('manager explains optional models are intentionally disabled before release approval', async () => {
@@ -971,7 +991,23 @@ test('manager explains optional models are intentionally disabled before release
 
   const status = harness.elements.get('vision-status').textContent;
   assert.match(status, /事故模型尚未验收，暂不启用/);
-  assert.match(status, /积水模型尚未验收，暂不启用/);
+  assert.match(status, /积水辅助识别尚未验收，暂不启用/);
+});
+
+test('a road can be selected before its affected travel modes are chosen', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements, mapListeners, calls } = harness;
+  elements.get('event-type').value = 'flooding';
+  elements.get('event-action').value = 'notice';
+  elements.get('pick-road').listeners.click();
+  await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
+  const snap = calls.filter((call) => call.url.startsWith('/api/road-conditions/snap')).at(-1);
+  const query = new URL(snap.url, 'http://localhost').searchParams;
+  assert.equal(query.get('type'), '');
+  assert.equal(query.has('action'), false);
+  assert.equal(query.has('modes'), false);
+  assert.equal(elements.get('publish-event').disabled, true);
 });
 
 test('canceling route picking prevents a late snap response from selecting a road', async () => {
@@ -985,6 +1021,8 @@ test('canceling route picking prevents a late snap response from selecting a roa
   selectedRoad.textContent = '尚未选择道路';
   publishButton.disabled = true;
   elements.get('event-type').value = 'closure';
+  elements.get('event-action').value = 'closure';
+  elements.get('event-mode-walk').checked = true;
   harness.deferImpactPreviews();
   elements.get('pick-road').listeners.click();
   const pending = mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
@@ -1005,6 +1043,8 @@ test('a snap response refreshes its impact preview when the event type changed w
   const { elements, mapListeners } = harness;
   harness.deferImpactPreviews();
   elements.get('event-type').value = 'closure';
+  elements.get('event-action').value = 'closure';
+  elements.get('event-mode-walk').checked = true;
   elements.get('pick-road').listeners.click();
   const pendingSnap = mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
   await flush();
@@ -1026,6 +1066,8 @@ test('a late event-type preview cannot overwrite the newer selection', async () 
   const harness = managerHarness();
   await flush();
   const { elements, mapListeners } = harness;
+  elements.get('event-action').value = 'closure';
+  elements.get('event-mode-walk').checked = true;
   elements.get('pick-road').listeners.click();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
   elements.get('confirm-picked-road').listeners.click();
@@ -1049,6 +1091,8 @@ test('a pending preview safely settles after the selected road is cleared', asyn
   const harness = managerHarness();
   await flush();
   const { elements, mapListeners } = harness;
+  elements.get('event-action').value = 'closure';
+  elements.get('event-mode-walk').checked = true;
   elements.get('pick-road').listeners.click();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
   elements.get('confirm-picked-road').listeners.click();
@@ -1139,6 +1183,38 @@ test('completed image jobs show vehicle counts and safely render detector boxes'
   assert.match(summaryText, /事故场景模型 未启用/);
   assert.match(summaryText, /路面积水分割模型 未启用/);
   assert.doesNotMatch(summaryText, /抽样画面的模型检出数/);
+});
+
+test('assisted flood image results overlay sub-threshold outlines without a confidence score', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'flood-review-image', status: 'completed', media_kind: 'image',
+    media_url: '/private/flood-image', original_name: '雨后路面.png',
+    observation_regions: [{ id: 'road-east', kind: 'road_surface' }],
+    result: {
+      media: { width: 100, height: 50 }, candidates: [],
+      flood_assistance: { mode: 'assisted_review', field_validated: false },
+      flood_review: [{
+        region_id: 'road-east', flooded_road_area_ratio: 0.03,
+        outline_polygons: [[[0.1, 0.2], [0.4, 0.2], [0.3, 0.5]]],
+      }],
+    },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const stage = card.children.find((node) => node.className === 'vision-image-stage');
+  const overlay = stage.children.find((node) => node.tagName === 'svg' &&
+    node.attributes['aria-label'] === '疑似积水像素轮廓，仅供管理员复核');
+  assert.ok(overlay);
+  assert.equal(overlay.children[0].tagName, 'polygon');
+  assert.equal(overlay.children[0].attributes.points, '10,10 40,10 30,25');
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(text, /小范围积水线索/);
+  assert.match(text, /画面区域占比约 3%/);
+  assert.doesNotMatch(text, /置信度|置信百分比/);
 });
 
 test('video class peaks are labeled as sampled detections rather than real crowd counts', async () => {

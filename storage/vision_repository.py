@@ -39,9 +39,8 @@ def create_job(url: str | None, *, created_by: str, original_name: str,
 
 
 def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
-                   allow_trial: bool = False, trial_only: bool = False) -> dict | None:
-    purposes = (["trial"] if allow_trial else []) if trial_only else (
-        ["operational", "trial"] if allow_trial else ["operational"])
+                   allow_trial: bool = False, trial_only: bool = False,
+                   allow_assisted: bool = False, reserve_assisted: bool = False) -> dict | None:
     with database.connect(url) as conn:
         conn.execute(
             "UPDATE manager_vision_job SET status='failed', lease_until=NULL,"
@@ -51,7 +50,12 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
         )
         row = conn.execute(
             "WITH candidate AS (SELECT job_id FROM manager_vision_job"
-            " WHERE deleted_at IS NULL AND attempts<3 AND purpose=ANY(%s)"
+            " WHERE deleted_at IS NULL AND attempts<3 AND ("
+            " (purpose='operational' AND %s AND NOT (%s AND media_kind='image'"
+            " AND observation_regions @> '[{\"kind\":\"road_surface\",\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
+            " OR (purpose='trial' AND %s)"
+            " OR (%s AND purpose='operational' AND media_kind='image'"
+            " AND observation_regions @> '[{\"kind\":\"road_surface\",\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
             " AND (status='queued' OR (status='running' AND lease_until < now()))"
             " ORDER BY created_at, job_id FOR UPDATE SKIP LOCKED LIMIT 1)"
             " UPDATE manager_vision_job j SET status='running', worker_id=%s,"
@@ -59,7 +63,7 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
             " FROM candidate c WHERE j.job_id=c.job_id"
             " RETURNING j.job_id, j.media_kind, j.media_path, j.anchor_gcj, j.camera_stabilized,"
             " j.camera_pose, j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts, j.purpose",
-            (purposes, worker_id, lease_seconds),
+            (not trial_only, reserve_assisted, allow_trial, allow_assisted, worker_id, lease_seconds),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])} if row else None
 

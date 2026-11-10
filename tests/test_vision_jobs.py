@@ -73,6 +73,27 @@ def test_manager_upload_is_private_and_queues_reviewable_media(monkeypatch, tmp_
     ).status_code == 409
 
 
+def test_late_cancel_wins_over_completed_result_in_postgresql():
+    database.initialize(DATABASE_URL)
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("TRUNCATE manager_vision_job")
+    job = vision_repository.create_job(
+        DATABASE_URL, created_by="manager", original_name="cancel.png", media_kind="image",
+        media_path="cancel.png", sha256="0" * 64, anchor_gcj=None,
+    )
+    claimed = vision_repository.claim_next_job(DATABASE_URL, "late-cancel-worker")
+    assert claimed["job_id"] == job["job_id"]
+    assert vision_repository.request_cancel_job(DATABASE_URL, job["job_id"])["cancel_requested"] is True
+    assert vision_repository.finish_job(
+        DATABASE_URL, job["job_id"], "late-cancel-worker", status="needs_review",
+        result={"candidates": [{"kind": "possible_flooding"}]},
+    ) == "cancelled"
+    stored = vision_repository.get_job(DATABASE_URL, job["job_id"])
+    assert stored["status"] == "cancelled"
+    assert stored["result"] is None
+    assert stored["error"]["code"] == "vision_job_cancelled"
+
+
 def test_upload_rejects_extension_content_mismatch_and_outside_campus(monkeypatch, tmp_path):
     client, csrf = manager_client(monkeypatch, tmp_path)
     bad_file = client.post(

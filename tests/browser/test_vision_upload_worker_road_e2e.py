@@ -79,7 +79,8 @@ def test_video_upload_worker_candidate_suggested_edge_and_route(monkeypatch, tmp
     try:
         with sync_playwright() as playwright:
             browser = playwright.chromium.launch()
-            page = browser.new_page(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True)
+            page = browser.new_page(viewport={"width": 390, "height": 844}, is_mobile=True,
+                                    has_touch=True, service_workers="block")
             errors = []
             page.on("pageerror", lambda error: errors.append(str(error)))
             page.route("**/*", lambda route: route.continue_()

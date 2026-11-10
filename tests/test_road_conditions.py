@@ -10,6 +10,7 @@
 """
 
 import math
+import hashlib
 import json
 import os
 import subprocess
@@ -1317,6 +1318,108 @@ class TestRoadConditionAPI:
         assert response.status_code == 400
         assert response.get_json()["error"] == "vision_effect_required"
         assert rc.list_conditions() == []
+
+    @pytest.mark.parametrize("action,expected", [
+        ("notice", "notice"), ("slowdown", "penalty"), ("closure", "closed"),
+    ])
+    def test_assisted_flood_publication_uses_reviewed_model_and_selected_edge(
+        self, client, G, monkeypatch, tmp_path, action, expected,
+    ):
+        import api.routes as routes
+        from storage import database, vision_repository
+
+        job_id = "a6f6c6b1-d237-43fa-8ea2-b01ae48a3e8e"
+        model_path = tmp_path / "doodleverse-v7.onnx"
+        model_path.write_bytes(b"pinned assisted model")
+        model_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
+        monkeypatch.setattr(routes.config, "VISION_FLOOD_ENABLED", True)
+        monkeypatch.setattr(routes.config, "VISION_FLOOD_RELEASE_MODE", "assisted_review")
+        monkeypatch.setattr(routes.config, "VISION_FLOOD_MODEL_PATH", str(model_path))
+        monkeypatch.setattr(routes.config, "VISION_FLOOD_REVISION", "doodleverse-floodnet-resunet-v7")
+        monkeypatch.setattr(routes, "_vision_flood_assistance_ready", lambda _caps: True)
+        monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+            "flood_assistance_model_sha256": model_hash,
+        })
+        monkeypatch.setattr(database, "initialize", lambda *_args: None)
+        region = {"id": "road-east", "kind": "road_surface", "polygon": [
+            [0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9],
+        ]}
+        job = {
+            "job_id": job_id, "purpose": "operational", "media_kind": "image",
+            "status": "needs_review", "captured_at": time.time(),
+            "observation_regions": [region],
+            "candidate_reviews": {"0": {
+                "status": "confirmed", "reviewed_by": "manager",
+                "reviewed_at": "2026-11-10T04:00:00+00:00", "note": "已逐项核对轮廓与现场。",
+            }},
+            "result": {
+                "flood_assistance": {
+                    "mode": "assisted_review", "field_validated": False,
+                    "model_id": "doodleverse-floodnet-resunet-v7",
+                    "model_version": "doodleverse-floodnet-resunet-v7",
+                    "model_sha256": model_hash,
+                },
+                "candidates": [{
+                    "kind": "possible_flooding", "review_required": True, "auto_publish": False,
+                    "evidence": {"summary": {"region_id": "road-east"}},
+                }],
+            },
+        }
+        monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
+        lng, lat = _mid_12_gcj(G)
+        headers = {"X-Admin-Token": "test-token-xyz"}
+        body = {
+            "type": "flooding", "name": "雨后路面积水", "lng": lng, "lat": lat,
+            "action": action, "affected_modes": ["walk"],
+            "cost_multiplier": 1.5 if action == "slowdown" else None,
+            "source_vision_job_id": job_id, "source_vision_candidate_index": 0,
+            "field_confirmation": "现场复核确认该道路有积水线索，影响步行通行。",
+            "end_time": time.time() + 1800,
+        }
+
+        missing_edge = client.post("/api/road-conditions", json=body, headers=headers)
+        assert missing_edge.status_code == 409
+        assert missing_edge.get_json()["error"] == "flood_assistance_edge_required"
+        assert rc.list_conditions() == []
+
+        snap_response = client.get(
+            f"/api/road-conditions/snap?lng={lng}&lat={lat}&type=flooding"
+            f"&action={action}&modes=walk"
+            + ("&cost_multiplier=1.5" if action == "slowdown" else ""),
+            headers=headers,
+        )
+        assert snap_response.status_code == 200
+        snap = snap_response.get_json()["data"]["snap"]
+        body["edge_ref"] = {key: snap[key] for key in ("u", "v", "key")}
+        body["binding_token"] = snap["binding_token"]
+
+        published = client.post("/api/road-conditions", json=body, headers=headers)
+
+        assert published.status_code == 201, published.get_json()
+        condition = published.get_json()["data"]["condition"]
+        assert condition["edge"]["u"] == body["edge_ref"]["u"]
+        assert condition["edge"]["v"] == body["edge_ref"]["v"]
+        assert condition["source"]["flood_model"] == {
+            "model_id": "doodleverse-floodnet-resunet-v7",
+            "model_version": "doodleverse-floodnet-resunet-v7",
+            "model_sha256": model_hash,
+            "field_validated": False,
+            "mode": "assisted_review",
+        }
+        assert condition.get("blocked_modes") is None
+        walk_penalties, walk_closed, _ = rc.resolve_condition_effects(
+            G, [condition], "walk", strict=True,
+        )
+        bike_penalties, bike_closed, _ = rc.resolve_condition_effects(
+            G, [condition], "bike", strict=True,
+        )
+        assert not bike_penalties and not bike_closed
+        if expected == "notice":
+            assert not walk_penalties and not walk_closed
+        elif expected == "penalty":
+            assert walk_penalties and not walk_closed
+        else:
+            assert not walk_penalties and walk_closed
 
     def test_agent_condition_lookup_reports_unavailable_store_instead_of_no_conditions(self):
         from agents import tools as agent_tools

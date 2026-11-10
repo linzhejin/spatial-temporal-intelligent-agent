@@ -129,6 +129,25 @@ def test_accident_inference_covers_each_marked_vehicle_lane_roi():
     assert len(model.shapes) == 2
 
 
+def test_flood_child_cancellation_is_not_downgraded_to_a_model_failure():
+    from vision.engine import VisionAnalysisCancelled
+
+    class CancelledFloodModel:
+        def predict_regions(self, _frame_rgb, _regions, *, cancel_check=None):
+            if cancel_check and cancel_check():
+                raise RuntimeError("积水检查已取消")
+            raise AssertionError("the cancellation fixture must stop before inference")
+
+    with pytest.raises(VisionAnalysisCancelled, match="取消"):
+        _specialized_predictions(
+            np.zeros((8, 8, 3), dtype=np.uint8), 0.0,
+            [{"id": "road", "kind": "road_surface", "polygon": [
+                [0, 0], [1, 0], [1, 1], [0, 1],
+            ]}],
+            None, CancelledFloodModel(), cancel_check=lambda: True,
+        )
+
+
 def test_specialized_models_are_sampled_about_once_per_second_at_24_fps(tmp_path, monkeypatch):
     import config
 

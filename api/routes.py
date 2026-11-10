@@ -2702,6 +2702,7 @@ def create_road_condition():
 
     source = None
     source_job_id = body.get("source_vision_job_id")
+    assisted_flood_source = False
     if source_job_id:
         try:
             source_job_id = str(uuid.UUID(str(source_job_id)))
@@ -2825,6 +2826,42 @@ def create_road_condition():
                 "region_polygon": observation_region["polygon"],
             })
 
+        flood_assistance = (
+            source_result.get("flood_assistance")
+            if isinstance(source_result, dict) else None
+        )
+        if isinstance(flood_assistance, dict) and flood_assistance.get("mode") == "assisted_review":
+            if (manual_registration or source_job.get("media_kind") != "image"
+                    or not isinstance(candidate, dict)
+                    or candidate.get("kind") != "possible_flooding"
+                    or cond_type != "flooding"):
+                return _err(
+                    "flood_assistance_candidate_required",
+                    "积水辅助识别结果只能用于发布已确认的图片积水候选。", 409,
+                )
+            capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
+            try:
+                current_hash = _file_sha256(config.VISION_FLOOD_MODEL_PATH)
+            except OSError:
+                return _err("flood_assistance_model_unavailable", "当前积水模型无法核对，请刷新影像后再试。", 503)
+            if (not _vision_flood_assistance_ready(capabilities)
+                    or flood_assistance.get("model_id") != "doodleverse-floodnet-resunet-v7"
+                    or flood_assistance.get("model_version") != config.VISION_FLOOD_REVISION
+                    or flood_assistance.get("model_sha256") != current_hash
+                    or capabilities.get("flood_assistance_model_sha256") != current_hash):
+                return _err(
+                    "flood_assistance_model_changed",
+                    "积水模型版本已变化，请重新分析并复核候选。", 409,
+                )
+            assisted_flood_source = True
+            source["flood_model"] = {
+                "model_id": flood_assistance["model_id"],
+                "model_version": flood_assistance["model_version"],
+                "model_sha256": flood_assistance["model_sha256"],
+                "field_validated": False,
+                "mode": "assisted_review",
+            }
+
     if source_job_id and (
             action not in CONDITION_ACTIONS
             or not isinstance(affected_modes, list)
@@ -2869,6 +2906,8 @@ def create_road_condition():
                 edge_ref = _parse_edge_ref(body["edge_ref"])
             except ValueError:
                 return _err("invalid_edge_ref", "道路标识无效，请重新选择。", 400)
+        if assisted_flood_source and edge_ref is None:
+            return _err("flood_assistance_edge_required", "请先在地图上确认实际受影响的道路边。", 409)
         start_ts = _parse_time_input(body.get("start_time"))
         end_ts = _parse_time_input(body.get("end_time"))
         if start_ts and end_ts and end_ts <= start_ts:
@@ -3277,9 +3316,11 @@ def _vision_worker_capabilities(database_url=None) -> dict:
                 decoded.append((worker.get("worker_role", "shared"), detail))
         operational = next((detail for role, detail in decoded if role in {"shared", "operational"}), {})
         trial = next((detail for role, detail in decoded if role in {"shared", "trial"} and (
-            detail.get("trial_accident_supported") is True or detail.get("trial_flood_supported") is True)), {})
+            detail.get("trial_accident_supported") is True or detail.get("trial_flood_supported") is True
+            or detail.get("flood_assistance_supported") is True)), {})
         return {**{key: value for key, value in operational.items() if not key.startswith("trial_")},
-                **{key: value for key, value in trial.items() if key.startswith("trial_")}}
+                **{key: value for key, value in trial.items()
+                   if key.startswith(("trial_", "flood_assistance_"))}}
     except Exception:
         logger.info("Optional vision capability status is unavailable", exc_info=True)
         return {}
@@ -3291,9 +3332,13 @@ def _vision_submission_purpose(value):
         return None, _err("invalid_vision_purpose", "影像任务类型无效。", 400)
     if purpose == "trial":
         capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
-        if not config.VISION_TRIAL_ENABLED or not (
+        trial_model_ready = (
+            config.VISION_TRIAL_ENABLED and (
                 capabilities.get("trial_accident_supported") is True
-                or capabilities.get("trial_flood_supported") is True):
+                or capabilities.get("trial_flood_supported") is True
+            )
+        ) or _vision_flood_assistance_ready(capabilities)
+        if not trial_model_ready:
             return None, _err("vision_trial_not_ready", "影像试用模型尚未就绪。", 503)
     return purpose, None
 
@@ -3305,6 +3350,9 @@ def _validate_trial_regions(purpose, regions, media_kind):
     kinds = {region.get("kind") for region in regions or []}
     temporal = (capabilities.get("trial_accident_supported") is True and
                 capabilities.get("trial_accident_media") == "video")
+    flood_image_only = capabilities.get("trial_flood_media") == "image"
+    if flood_image_only and media_kind == "video" and not temporal:
+        return _err("trial_image_required", "当前积水模型只支持图片。", 400)
     if temporal and media_kind == "image" and capabilities.get("trial_flood_supported") is not True:
         return _err("trial_video_required", "当前事故试用模型只支持视频。", 400)
     usable = (temporal and media_kind == "video") or (not temporal and capabilities.get("trial_accident_supported") is True
@@ -3325,6 +3373,61 @@ def _vision_optional_model_ready(path_key: str, enabled_key: str, capability_key
         and worker_capabilities.get(capability_key) is True
         and worker_capabilities.get(release_key) == "approved"
     )
+
+
+def _vision_flood_assistance_ready(worker_capabilities: dict) -> bool:
+    return bool(
+        config.VISION_FLOOD_ENABLED
+        and config.VISION_FLOOD_RELEASE_MODE == "assisted_review"
+        and config.VISION_FLOOD_MODEL_PATH
+        and Path(config.VISION_FLOOD_MODEL_PATH).is_file()
+        and worker_capabilities.get("flood_assistance_supported") is True
+        and worker_capabilities.get("flood_assistance_release_status") == "approved"
+        and worker_capabilities.get("flood_assistance_model_id") == "doodleverse-floodnet-resunet-v7"
+    )
+
+
+def _file_sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as source:
+        for block in iter(lambda: source.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def _parse_flood_assistance_flag(value):
+    if value is None or value is False or value == "" or value == "false" or value == "0":
+        return False, None
+    if value is True or value == "true" or value == "1":
+        return True, None
+    return False, _err("invalid_flood_assistance", "积水辅助识别选项无效。", 400)
+
+
+def _validate_flood_assistance_request(requested, purpose, regions, media_kind,
+                                       worker_capabilities):
+    if not requested:
+        return None
+    if purpose != "operational":
+        return _err("flood_assistance_operational_only", "积水辅助识别仅适用于校园巡查影像。", 400)
+    if media_kind != "image":
+        return _err("flood_assistance_image_only", "积水辅助识别仅支持单张图片。", 415)
+    if not _vision_flood_assistance_ready(worker_capabilities):
+        return _err("flood_assistance_not_ready", "积水辅助识别尚未就绪，请稍后重试。", 503)
+    if not any(isinstance(region, dict) and region.get("kind") == "road_surface"
+               for region in regions or []):
+        return _err("flood_assistance_region_required", "请先圈选需要检查的路面区域。", 400)
+    return None
+
+
+def _tag_assisted_flood_regions(regions, requested):
+    tagged = []
+    for region in regions or []:
+        copied = dict(region)
+        copied.pop("flood_assistance_mode", None)
+        if requested and copied.get("kind") == "road_surface":
+            copied["flood_assistance_mode"] = "assisted_review"
+        tagged.append(copied)
+    return tagged
 
 
 @api_bp.route("/manager/vision-scenes", methods=["GET", "POST"])
@@ -3472,7 +3575,8 @@ def manager_vision_status():
     inference_ready, weights_ready, dependencies_ready, worker_ready = _vision_inference_readiness(
         current_app.config.get("DATABASE_URL"),
     )
-    worker_capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL")) if worker_ready else {}
+    worker_capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
+    flood_assistance_ready = _vision_flood_assistance_ready(worker_capabilities)
     return _ok({
         "upload_enabled": inference_ready,
         "inference_ready": inference_ready,
@@ -3484,14 +3588,30 @@ def manager_vision_status():
         "max_video_bytes": config.VISION_MAX_VIDEO_BYTES,
         "upload_chunk_bytes": config.VISION_CHUNK_BYTES,
         "trial": {
-            "enabled": bool(config.VISION_TRIAL_ENABLED and inference_ready and (
+            "enabled": bool((config.VISION_TRIAL_ENABLED and inference_ready and (
                 worker_capabilities.get("trial_accident_supported") is True
-                or worker_capabilities.get("trial_flood_supported") is True)),
+                or worker_capabilities.get("trial_flood_supported") is True))
+                or flood_assistance_ready),
             "accident": worker_capabilities.get("trial_accident_supported") is True,
             "accident_media": worker_capabilities.get("trial_accident_media", "frame"),
             "flood": worker_capabilities.get("trial_flood_supported") is True,
             "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS,
             "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS,
+        },
+        "flood_assistance": {
+            "enabled": bool(
+                config.VISION_FLOOD_ENABLED
+                and config.VISION_FLOOD_RELEASE_MODE == "assisted_review"
+            ),
+            "ready": flood_assistance_ready,
+            "mode": ("assisted_review" if flood_assistance_ready else "disabled"),
+            "supported_media": ["image"],
+            "field_validated": False,
+            "model_id": worker_capabilities.get("flood_assistance_model_id"),
+            "model_version": worker_capabilities.get("flood_assistance_model_version"),
+            "model_sha256": worker_capabilities.get("flood_assistance_model_sha256"),
+            "probability_threshold": config.VISION_FLOOD_PROBABILITY_THRESHOLD,
+            "area_threshold": config.VISION_FLOOD_MIN_AREA_RATIO,
         },
         "capabilities": {
             "aerial_vehicle_detection": inference_ready,
@@ -3522,9 +3642,11 @@ def manager_vision_status():
             ),
         },
         "notice": (
-            "车辆与行人模型已就绪；圈选机动车道、人行区域或路面可限定分析范围，结果只作为待复核线索。"
+            "积水辅助识别已就绪，仅支持图片；请圈选路面，结果需管理员核实。"
+            if flood_assistance_ready else
+            "车辆与行人模型已就绪；圈选观察区域可限定分析范围，结果只作为待复核线索。"
             if inference_ready else
-            "管理界面已就绪；基础视觉模型、依赖或后台工作进程尚未就绪，当前不会接收影像任务。"
+            "管理界面已就绪；基础视觉模型、依赖或后台工作进程尚未就绪。"
         ),
     })
 
@@ -3534,11 +3656,16 @@ def start_manager_vision_upload():
     auth_error = _require_admin()
     if auth_error:
         return auth_error
+    body = request.get_json(silent=True) or {}
+    flood_assistance, flag_error = _parse_flood_assistance_flag(body.get("flood_assistance"))
+    if flag_error:
+        return flag_error
+    if flood_assistance:
+        return _err("flood_assistance_image_only", "积水辅助识别仅支持单张图片，不能续传视频。", 415)
     inference_ready, _, _, _ = _vision_inference_readiness(current_app.config.get("DATABASE_URL"))
     if not inference_ready:
         return _err("vision_not_ready", "视觉模型、依赖或后台工作进程尚未就绪，暂不能提交任务。", 503)
 
-    body = request.get_json(silent=True) or {}
     purpose, purpose_error = _vision_submission_purpose(body.get("purpose"))
     if purpose_error:
         return purpose_error
@@ -3856,16 +3983,29 @@ def manager_vision_jobs():
     auth_error = _require_admin()
     if auth_error:
         return auth_error
-    inference_ready, _, _, _ = _vision_inference_readiness(current_app.config.get("DATABASE_URL"))
-    if not inference_ready:
-        return _err(
-            "vision_not_ready",
-            "视觉模型、依赖或后台工作进程尚未就绪，暂不能提交任务。",
-            503,
-        )
     purpose, purpose_error = _vision_submission_purpose(request.form.get("purpose"))
     if purpose_error:
         return purpose_error
+    flood_assistance, flag_error = _parse_flood_assistance_flag(request.form.get("flood_assistance"))
+    if flag_error:
+        return flag_error
+    worker_capabilities = (
+        _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
+        if flood_assistance else {}
+    )
+    if flood_assistance:
+        if not _vision_flood_assistance_ready(worker_capabilities):
+            return _err("flood_assistance_not_ready", "积水辅助识别尚未就绪，请稍后重试。", 503)
+    elif purpose != "trial":
+        inference_ready, _, _, _ = _vision_inference_readiness(
+            current_app.config.get("DATABASE_URL"),
+        )
+        if not inference_ready:
+            return _err(
+                "vision_not_ready",
+                "视觉模型、依赖或后台工作进程尚未就绪，暂不能提交任务。",
+                503,
+            )
     uploaded = request.files.get("media")
     if uploaded is None or not uploaded.filename:
         return _err("missing_media", "请选择一张图片或一个视频文件。", 400)
@@ -3876,6 +4016,8 @@ def manager_vision_jobs():
     if extension not in image_extensions | video_extensions:
         return _err("unsupported_media", "只支持 JPG、PNG、WebP 图片和 MP4、MOV、AVI、WebM 视频。", 415)
     is_video = extension in video_extensions
+    if flood_assistance and is_video:
+        return _err("flood_assistance_image_only", "积水辅助识别仅支持单张图片。", 415)
     try:
         captured_at = _parse_vision_capture_time(request.form.get("captured_at"), required=purpose != "trial")
         capture_time_source, capture_timezone = _parse_vision_capture_provenance(
@@ -3899,6 +4041,12 @@ def manager_vision_jobs():
                 request.form.get("observation_regions"),
             )
         region_error = _validate_trial_regions(purpose, observation_regions, "video" if is_video else "image")
+        if region_error:
+            return region_error
+        region_error = _validate_flood_assistance_request(
+            flood_assistance, purpose, observation_regions,
+            "video" if is_video else "image", worker_capabilities,
+        )
         if region_error:
             return region_error
     except (TypeError, ValueError) as error:
@@ -3968,6 +4116,12 @@ def manager_vision_jobs():
                 ),
                 observation_regions_override=observation_regions,
             )
+        final_regions = scene_values.get("observation_regions", observation_regions)
+        final_regions = _tag_assisted_flood_regions(final_regions, flood_assistance)
+        final_anchor = scene_values.get("anchor_gcj", anchor_gcj)
+        if flood_assistance and final_anchor is None:
+            target.unlink(missing_ok=True)
+            return _err("flood_assistance_anchor_required", "请先在地图上标注这张图片所在的校园区域。", 400)
         job = vision_repository.create_job(
             current_app.config.get("DATABASE_URL"),
             created_by=_admin_identity() or "unknown",
@@ -3975,7 +4129,7 @@ def manager_vision_jobs():
             media_kind="image" if extension in image_extensions else "video",
             media_path=stored_name,
             sha256=digest.hexdigest(),
-            anchor_gcj=scene_values.get("anchor_gcj", anchor_gcj),
+            anchor_gcj=final_anchor,
             camera_stabilized=scene_values.get("camera_stabilized", (
                 extension in video_extensions
                 and request.form.get("camera_stabilized", "false").strip().lower() == "true"
@@ -3983,7 +4137,7 @@ def manager_vision_jobs():
             captured_at=captured_at,
             capture_time_source=capture_time_source,
             capture_timezone=capture_timezone,
-            observation_regions=scene_values.get("observation_regions", observation_regions),
+            observation_regions=final_regions,
             observation_scene_id=scene_values.get("scene_id"),
             purpose=purpose,
         )

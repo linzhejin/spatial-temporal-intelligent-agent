@@ -1,4 +1,5 @@
 import io
+import json
 from pathlib import Path
 
 
@@ -28,6 +29,109 @@ def _manager_client(monkeypatch, tmp_path, captured):
     client = app.test_client()
     login = client.post("/api/admin/login", json={"password": "manager-secret"})
     return client, login.get_json()["data"]["csrf_token"]
+
+
+def _enable_doodleverse_assistance(monkeypatch, tmp_path):
+    import api.routes as routes
+
+    model_path = tmp_path / "doodleverse-v7.onnx"
+    model_path.write_bytes(b"pinned-onnx-test-fixture")
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_ENABLED", True)
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_RELEASE_MODE", "assisted_review")
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_MODEL_PATH", str(model_path))
+    monkeypatch.setattr(routes.config, "VISION_FLOOD_REVISION", "doodleverse-floodnet-resunet-v7")
+    monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+        "flood_assistance_supported": True,
+        "flood_assistance_release_status": "approved",
+        "flood_assistance_model_id": "doodleverse-floodnet-resunet-v7",
+        "flood_assistance_model_version": "doodleverse-floodnet-resunet-v7",
+        "flood_assistance_model_sha256": "a" * 64,
+        "trial_flood_supported": True,
+        "trial_flood_media": "image",
+    })
+
+
+def _flood_upload_data(*, purpose="operational", include_anchor=True):
+    data = {
+        "media": (io.BytesIO(b"\x89PNG\r\n\x1a\nvalid"), "campus.png", "image/png"),
+        "purpose": purpose,
+        "captured_at": "2026-11-10T02:00:00Z",
+        "capture_time_source": "manual",
+        "capture_timezone": "UTC",
+        "observation_regions": json.dumps([
+            {"id": "road-main", "kind": "road_surface", "polygon": [
+                [0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9],
+            ]},
+            {"id": "people", "kind": "pedestrian", "polygon": [
+                [0.2, 0.2], [0.3, 0.2], [0.3, 0.3],
+            ]},
+        ]),
+    }
+    if include_anchor:
+        data.update({"lng": "114.36", "lat": "30.53"})
+    return data
+
+
+def test_doodleverse_upload_tags_only_road_roi_and_keeps_operational_job(monkeypatch, tmp_path):
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+
+    response = client.post(
+        "/api/manager/vision-jobs",
+        data={**_flood_upload_data(), "flood_assistance": "true"},
+        headers={"X-CSRF-Token": csrf},
+    )
+
+    assert response.status_code == 202, response.get_json()
+    assert captured["purpose"] == "operational"
+    regions = {item["id"]: item for item in captured["observation_regions"]}
+    assert regions["road-main"]["flood_assistance_mode"] == "assisted_review"
+    assert "flood_assistance_mode" not in regions["people"]
+    assert captured["anchor_gcj"] is not None
+
+
+def test_doodleverse_public_trial_uses_same_image_path_without_becoming_publishable(monkeypatch, tmp_path):
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+    data = _flood_upload_data(purpose="trial", include_anchor=False)
+    data.pop("captured_at")
+    data.pop("capture_time_source")
+    data.pop("capture_timezone")
+
+    response = client.post(
+        "/api/manager/vision-jobs", data=data,
+        headers={"X-CSRF-Token": csrf},
+    )
+
+    assert response.status_code == 202, response.get_json()
+    assert captured["purpose"] == "trial"
+    assert captured["anchor_gcj"] is None
+    assert all("flood_assistance_mode" not in item for item in captured["observation_regions"])
+
+
+def test_doodleverse_assisted_upload_rejects_video_and_missing_location(monkeypatch, tmp_path):
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+    video = client.post(
+        "/api/manager/vision-jobs",
+        data={
+            "media": (io.BytesIO(b"video"), "campus.mp4", "video/mp4"),
+            "flood_assistance": "true", "purpose": "operational",
+        }, headers={"X-CSRF-Token": csrf},
+    )
+    assert video.status_code == 415
+    assert video.get_json()["error"] == "flood_assistance_image_only"
+
+    missing_location = client.post(
+        "/api/manager/vision-jobs",
+        data={**_flood_upload_data(include_anchor=False), "flood_assistance": "true"},
+        headers={"X-CSRF-Token": csrf},
+    )
+    assert missing_location.status_code == 400
+    assert missing_location.get_json()["error"] == "flood_assistance_anchor_required"
 
 
 def test_manager_vision_upload_accepts_media_without_location(monkeypatch, tmp_path):

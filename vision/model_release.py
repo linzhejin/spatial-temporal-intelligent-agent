@@ -58,6 +58,24 @@ def _aware_time(value: object) -> datetime | None:
     return parsed.astimezone(timezone.utc)
 
 
+def assisted_flood_runtime_config(*, probability_threshold: float = 0.001,
+                                  min_area_ratio: float = 0.08) -> dict[str, object]:
+    return {
+        "input_width": 1024,
+        "input_height": 768,
+        "input_color": "RGB",
+        "class_count": 10,
+        "preprocessing": "doodleverse_rgb_resize_uint8_global_standardize_v1",
+        "flooded_road_class": 3,
+        "probability_threshold": float(probability_threshold),
+        "min_area_ratio": float(min_area_ratio),
+        "single_image_trigger_threshold": float(min_area_ratio),
+        "media": ["image"],
+        "human_confirmation_required": True,
+        "subprocess_timeout_seconds": 120,
+    }
+
+
 def check_optional_model_release(
     model_kind: str,
     model_path: str | Path | None,
@@ -65,6 +83,7 @@ def check_optional_model_release(
     release_manifest_path: str | Path | None,
     readiness_report_path: str | Path | None,
     runtime_config: dict | None = None,
+    release_mode: str | None = None,
 ) -> dict[str, object]:
     """Validate rights, exact weight identity, and campus field evidence before loading.
 
@@ -87,23 +106,79 @@ def check_optional_model_release(
     release_path = Path(release_manifest_path)
     if not release_path.is_file():
         return rejected("release_manifest_missing")
-    if not readiness_report_path:
-        return rejected("readiness_report_missing")
-    readiness_path = Path(readiness_report_path)
-    if not readiness_path.is_file():
-        return rejected("readiness_report_missing")
-
     release = _read_json(release_path)
-    readiness = _read_json(readiness_path)
     if release is None or release.get("schema_version") != 1:
         return rejected("release_manifest_invalid")
-    if readiness is None:
-        return rejected("readiness_report_invalid")
 
     entries = release.get("models")
     entry = entries.get(model_kind) if isinstance(entries, dict) else None
     if not isinstance(entry, dict):
         return rejected("model_release_missing")
+
+    if release_mode == "assisted_review":
+        if model_kind != "flood":
+            return rejected("assisted_review_is_flood_only")
+        now = datetime.now(timezone.utc)
+        approved_at = _aware_time(entry.get("approved_at"))
+        expires_at = _aware_time(entry.get("approval_expires_at"))
+        if approved_at is None or approved_at > now:
+            return rejected("approval_time_invalid")
+        if (expires_at is None or expires_at <= approved_at
+                or expires_at - approved_at > MAX_APPROVAL_VALIDITY):
+            return rejected("approval_period_invalid")
+        if expires_at <= now:
+            return rejected("approval_expired")
+        if (entry.get("mode") != "assisted_review"
+                or entry.get("approved") is not True
+                or entry.get("rights_status") != "approved"
+                or entry.get("license") != "CC BY 4.0"
+                or not isinstance(entry.get("rights_evidence"), str)
+                or not entry["rights_evidence"].lower().startswith(("https://", "http://"))
+                or not isinstance(entry.get("approved_by"), str)
+                or not entry["approved_by"].strip()):
+            return rejected("rights_not_approved")
+        if entry.get("field_validated") is not False:
+            return rejected("field_validation_must_remain_false")
+        actual_model_hash = _sha256(model_file)
+        if entry.get("model_sha256") != actual_model_hash:
+            return rejected("model_hash_mismatch")
+        if not model_revision or entry.get("model_revision") != model_revision:
+            return rejected("model_revision_mismatch")
+        if not isinstance(runtime_config, dict) or not runtime_config:
+            return rejected("runtime_config_missing")
+        if entry.get("runtime_config") != runtime_config:
+            return rejected("runtime_config_mismatch")
+        required_runtime = assisted_flood_runtime_config()
+        if runtime_config != required_runtime:
+            return rejected("assisted_runtime_contract_mismatch")
+        acceptance = entry.get("acceptance")
+        if not isinstance(acceptance, dict):
+            return rejected("acceptance_evidence_missing")
+        for name in ("parity", "resource", "workflow"):
+            evidence = acceptance.get(name)
+            if (not isinstance(evidence, dict) or evidence.get("status") != "passed"
+                    or not isinstance(evidence.get("path"), str)
+                    or not evidence["path"].strip()
+                    or not isinstance(evidence.get("sha256"), str)
+                    or not _SHA256_RE.fullmatch(evidence["sha256"])):
+                return rejected(f"{name}_evidence_invalid")
+            evidence_path = Path(evidence["path"])
+            if not evidence_path.is_file():
+                return rejected(f"{name}_evidence_missing")
+            if _sha256(evidence_path) != evidence["sha256"]:
+                return rejected(f"{name}_evidence_hash_mismatch")
+        return {"approved": True, "reason": "approved"}
+
+    if release_mode not in (None, "field_validated"):
+        return rejected("unsupported_release_mode")
+    if not readiness_report_path:
+        return rejected("readiness_report_missing")
+    readiness_path = Path(readiness_report_path)
+    if not readiness_path.is_file():
+        return rejected("readiness_report_missing")
+    readiness = _read_json(readiness_path)
+    if readiness is None:
+        return rejected("readiness_report_invalid")
     now = datetime.now(timezone.utc)
     approved_at = _aware_time(entry.get("approved_at"))
     expires_at = _aware_time(entry.get("approval_expires_at"))

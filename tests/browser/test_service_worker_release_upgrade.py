@@ -24,7 +24,7 @@ pytestmark = pytest.mark.skipif(sync_playwright is None, reason="Playwright brow
 
 def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
     repo = Path(__file__).resolve().parents[2]
-    baseline = "873f576d3b138847dc794a33354807e448f444ed"
+    baseline = os.getenv("VISION_RELEASE_CACHE_BASELINE", "873f576d3b138847dc794a33354807e448f444ed")
     archive = subprocess.check_output(["git", "archive", baseline, "static"], cwd=repo)
     baseline_root = tmp_path / "baseline"
     baseline_root.mkdir()
@@ -36,6 +36,9 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
     new_sw = (new_static / "sw.js").read_text(encoding="utf-8")
     old_cache = re.search(r"var CACHE_NAME = '([^']+)'", old_sw).group(1)
     new_cache = re.search(r"var CACHE_NAME = '([^']+)'", new_sw).group(1)
+    app_asset = lambda root: re.search(r'src="(/js/app\.js\?[^\"]+)"',
+                                       (root / "index.html").read_text(encoding="utf-8")).group(1)
+    old_asset, new_asset = app_asset(old_static), app_asset(new_static)
     assert old_cache != new_cache
 
     class DynamicHandler(SimpleHTTPRequestHandler):
@@ -92,14 +95,13 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
             page.reload(wait_until="domcontentloaded")
             page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
 
-            result = page.evaluate("""async newName => {
-                const cache = await caches.open(newName);
-                const script = await cache.match('/js/app.js?v=20261109-vision-safety-v1');
+            result = page.evaluate("""async ({name, asset}) => {
+                const cache = await caches.open(name);
+                const script = await cache.match(asset);
                 return {keys: await caches.keys(), app: script ? await script.text() : ''};
-            }""", new_cache)
+            }""", {"name": new_cache, "asset": new_asset})
             assert result["keys"] == [new_cache]
-            assert "appendRouteStepNotice" in result["app"]
-            assert "appendRouteFieldTruthNotice" not in result["app"]
+            assert result["app"].replace("\r\n", "\n") == (new_static / "js/app.js").read_text(encoding="utf-8")
 
             # A rollback must also replace the newly installed shell, not leave
             # a newer cached manager/client bundle paired with the old backend.
@@ -126,12 +128,13 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
             wait_for_cache(page, old_cache, new_cache)
             page.reload(wait_until="domcontentloaded")
             page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
-            rollback = page.evaluate("""async oldName => {
-                const cache = await caches.open(oldName);
-                const script = await cache.match('/js/app.js?v=20261108-interaction-v1');
-                return {keys: await caches.keys(), present: !!script};
-            }""", old_cache)
-            assert rollback == {"keys": [old_cache], "present": True}
+            rollback = page.evaluate("""async ({name, asset}) => {
+                const cache = await caches.open(name);
+                const script = await cache.match(asset);
+                return {keys: await caches.keys(), app: script ? await script.text() : ''};
+            }""", {"name": old_cache, "asset": old_asset})
+            assert rollback["keys"] == [old_cache]
+            assert rollback["app"].replace("\r\n", "\n") == (old_static / "js/app.js").read_text(encoding="utf-8")
             context.close()
             browser.close()
     finally:

@@ -9,7 +9,7 @@
   <link rel="stylesheet" href="/css/manager.css?v=20261109-compact-header-v1">
   <script src="/js/config.js"></script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261109-vision-height-v1" defer></script>
+  <script src="/js/manager.js?v=20261110-flood-assistance-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -173,6 +173,7 @@
               <label>影像用途
                 <select id="vision-purpose">
                   <option value="operational">校园巡查</option>
+                  <option id="vision-flood-assistance-option" value="flood_assisted" disabled>积水辅助识别（图片）</option>
                   <option id="vision-trial-option" value="trial" disabled>公开影像试用（模型未就绪）</option>
                 </select>
                 <small id="vision-purpose-note">校园巡查可在人工核实后登记路况。</small>

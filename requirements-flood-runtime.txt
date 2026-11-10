@@ -1,0 +1,9 @@
+# Isolated one-shot Doodleverse v7 inference child. Keep TensorFlow and tf2onnx
+# out of the server runtime; the export environment is local-only.
+numpy==1.26.4
+onnxruntime==1.20.1
+opencv-python-headless==4.10.0.84
+scikit-image==0.24.0
+scipy==1.14.1
+Pillow==11.0.0
+python-dotenv==1.1.0
