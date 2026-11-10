@@ -152,6 +152,7 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
             card.locator("textarea.vision-review-note").fill("隔离验收：已核对图片中的积水候选。")
             candidate.get_by_role("button", name="确认此候选").click()
             expect(candidate).to_contain_text("已确认", timeout=30000)
+            expect(card.locator(".vision-job-state")).to_have_text("候选已复核", timeout=30000)
             candidate.get_by_role("button", name="将此候选转入道路事件").click()
             assert page.locator("#event-type").input_value() == "flooding"
             assert page.locator("#event-action").input_value() == "notice"

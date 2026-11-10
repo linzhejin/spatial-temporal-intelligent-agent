@@ -312,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261109-compact-header-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-flood-assistance-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-flood-review-v2/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.3628, 30\.5388\]/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
   assert.match(managerCss, /\.vision-jobs\{max-height:100%;overflow-y:auto/);
@@ -1698,6 +1698,27 @@ test('candidate review records show who reviewed the evidence and when', async (
   assert.match(text, /单项复核：已确认 · manager-1/);
   assert.match(text, /2026/);
   assert.match(text, /逐帧核对后确认该路段存在持续排队/);
+});
+
+test('job status reflects whether every candidate has been reviewed', async () => {
+  const harness = managerHarness();
+  await flush();
+  for (const [reviews, expected] of [
+    [{}, '待复核'],
+    [{ '0': { status: 'confirmed' } }, '待复核'],
+    [{ '0': { status: 'confirmed' }, '1': { status: 'dismissed' } }, '候选已复核'],
+  ]) {
+    harness.setVisionJobs([{
+      job_id: 'review-status', status: 'needs_review', media_kind: 'image', original_name: '道路.png',
+      candidate_reviews: reviews,
+      result: { candidates: [{ kind: 'possible_flooding' }, { kind: 'possible_flooding' }] },
+    }]);
+    harness.intervalCallbacks[0]();
+    await flush();
+    const card = harness.elements.get('vision-jobs').children[0];
+    const label = descendants(card).find((node) => (node.className || '').startsWith('vision-job-state '));
+    assert.equal(label.textContent, expected);
+  }
 });
 
 test('flood candidates show their limits and expose per-candidate review', async () => {

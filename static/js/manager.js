@@ -2765,8 +2765,15 @@
     }
     title.appendChild(meta);
     var stateLabel = document.createElement('span'); stateLabel.className = 'vision-job-state ' + job.status;
+    var reviewCandidates = Array.isArray(result.candidates) ? result.candidates : [];
+    var candidateReviews = job.candidate_reviews || {};
+    var allCandidatesReviewed = reviewCandidates.length > 0 && reviewCandidates.every(function (_item, index) {
+      var review = candidateReviews[String(index)];
+      return review && (review.status === 'confirmed' || review.status === 'dismissed');
+    });
     stateLabel.textContent = {
-      queued: '排队中', running: job.cancel_requested ? '等待取消' : '分析中', needs_review: job.review_status ? '已复核' : '待复核',
+      queued: '排队中', running: job.cancel_requested ? '等待取消' : '分析中',
+      needs_review: job.review_status ? '已复核' : (allCandidatesReviewed ? '候选已复核' : '待复核'),
       completed: '完成', failed: '分析失败', cancelled: '已取消',
     }[job.status] || job.status;
     if (isReplay && replay.review_origin === 'scripted' &&

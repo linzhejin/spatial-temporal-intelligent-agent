@@ -100,6 +100,7 @@ def main():
         'flood_state_views_20261110.xml': 1,
         'flood_cache_actual_209d19f_20261110.xml': 2,
         'flood_public_smoke_e2e_20261110.xml': 1,
+        'flood_cache_actual_0d2ca6d_20261110.xml': 2,
     }
     reports = workflow.get('junit_reports') or []
     for name, expected_count in required_reports.items():
@@ -111,7 +112,7 @@ def main():
     js = workflow.get('javascript') or {}
     js_path = evidence_dir / PureWindowsPath(js.get('file', '')).name
     if (not js_path.is_file() or sha256(js_path) != js.get('sha256')
-            or (js.get('passed'), js.get('failed'), js.get('skipped')) != (233, 0, 0)):
+            or (js.get('passed'), js.get('failed'), js.get('skipped')) != (234, 0, 0)):
         raise ValueError('JavaScript workflow evidence is incomplete')
     if not RESOURCE_SOURCES.issubset(sources):
         raise ValueError('Resource-tested source manifest is incomplete')
