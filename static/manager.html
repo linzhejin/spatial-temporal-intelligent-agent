@@ -10,7 +10,7 @@
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261110-deai-copy-v1" defer></script>
+  <script src="/js/manager.js?v=20261110-manager-status-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -167,7 +167,7 @@
         <div class="events-heading"><div><span class="eyebrow">AERIAL OBSERVATION</span><h2>机载影像巡查</h2></div><div class="vision-heading-actions"><span class="review-badge">人工复核后才进入路况流程</span></div></div>
         <div class="vision-grid">
           <div id="vision-upload-card" class="vision-upload-card">
-            <div id="vision-status" class="vision-status">正在读取视觉分析配置…</div>
+            <div id="vision-status" class="vision-status">正在读取分析状态…</div>
             <details class="vision-new-analysis">
               <summary>新建影像分析</summary>
             <form id="vision-form">
@@ -179,7 +179,7 @@
                 </select>
                 <small id="vision-purpose-note">校园巡查可在人工核实后登记路况。</small>
               </label>
-              <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频（支持断点续传）</small></label>
+              <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频（支持断点续传）<span id="media-size-hint"></span></small></label>
               <input id="media-file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm" required>
               <div id="selected-media" class="selected-media" aria-live="polite" hidden>
                 <img id="selected-media-preview" class="selected-media-preview" alt="所选巡查图片预览" hidden>

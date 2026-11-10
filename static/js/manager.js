@@ -2122,20 +2122,29 @@
       floodOption.textContent = state.floodAssistance.ready
         ? '积水辅助识别（图片）' : '积水辅助识别（图片，未就绪）';
       var optionalModels = data.optional_model_status || {};
-      function modelLabel(status) {
-        return {
-          ready: '已启用', not_configured: '未配置', file_missing: '权重文件缺失',
-          disabled: '尚未验收，暂不启用',
-          worker_not_ready: '视觉进程未就绪', load_failed: '权重未能加载',
-        }[status] || '状态未知';
+      function faultText(label, status) {
+        if (status === 'worker_not_ready') return '视觉进程未就绪';
+        if (status === 'file_missing') return label + '权重缺失';
+        if (status === 'load_failed') return label + '加载失败';
+        return '';
       }
-      var floodLabel = state.floodAssistance.ready ? '已就绪（图片，需人工核实）'
-        : state.floodAssistance.enabled ? '暂不可用' : modelLabel(optionalModels.flood);
-      var modelState = '事故模型' + modelLabel(optionalModels.accident) +
-        ' · 积水辅助识别' + floodLabel;
-      byId('vision-status').textContent = data.notice + ' ' + modelState + '。图片不超过 ' + Math.round((data.max_image_bytes || data.max_media_bytes || state.maxImageBytes) / (1024 * 1024)) + ' MB；视频不超过 ' + Math.round((data.max_video_bytes || state.maxVideoBytes) / (1024 * 1024)) + ' MB，支持分块续传。';
+      var faults = [faultText('事故识别', optionalModels.accident), faultText('积水识别', optionalModels.flood)]
+        .filter(function (text, index, list) { return text && list.indexOf(text) === index; });
+      var statusText = String(data.notice || '').trim();
+      if (faults.length) statusText += (statusText ? ' ' : '') + faults.join('；') + '。';
+      byId('vision-status').textContent = statusText || '视觉分析暂不可用。';
       state.maxImageBytes = data.max_image_bytes || data.max_media_bytes || state.maxImageBytes;
       state.maxVideoBytes = data.max_video_bytes || state.maxVideoBytes;
+      var sizeHint = byId('media-size-hint');
+      if (sizeHint && state.maxImageBytes) {
+        function formatLimit(bytes) {
+          return bytes >= 1024 * 1024
+            ? Math.round(bytes / (1024 * 1024)) + ' MB'
+            : Math.max(1, Math.round(bytes / 1024)) + ' KB';
+        }
+        sizeHint.textContent = '；图片 ≤' + formatLimit(state.maxImageBytes)
+          + '，视频 ≤' + formatLimit(state.maxVideoBytes || 0);
+      }
       state.uploadChunkBytes = data.upload_chunk_bytes || state.uploadChunkBytes;
       state.inferenceReady = !!data.inference_ready;
       updateVisionPurpose();
@@ -2741,7 +2750,7 @@
     var title = document.createElement('div'); title.className = 'vision-job-title'; title.textContent = job.original_name || '巡查影像';
     var meta = document.createElement('div'); meta.className = 'vision-job-meta';
     if (isTrial) {
-      meta.textContent = '试用影像 · 拍摄时间' + (job.captured_at ? formatBeijingDateTime(job.captured_at, false) : '未记录');
+      meta.textContent = '试用影像' + (job.captured_at ? ' · 拍摄时间 ' + formatBeijingDateTime(job.captured_at, false) : '');
     } else if (isReplay) {
       var originalLocation = typeof replay.original_location === 'string' && replay.original_location.trim()
         ? replay.original_location.trim().slice(0, 120) : '未知';
@@ -2781,7 +2790,7 @@
     head.append(title, stateLabel); card.appendChild(head);
     if (isTrial) {
       var trialNotice = document.createElement('p'); trialNotice.className = 'vision-replay-notice';
-      trialNotice.textContent = '试用结果可能误报或漏报，仅供复核，不会进入真实路况。';
+      trialNotice.textContent = '试用结果仅供复核，不会进入真实路况。';
       card.appendChild(trialNotice);
       if (result.trial_coverage) {
         var coverageLabels = { checked: '已检查', not_configured: '模型未配置',

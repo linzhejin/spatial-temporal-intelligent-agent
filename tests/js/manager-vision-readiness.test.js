@@ -249,7 +249,7 @@ function managerHarness(sessionSeed = []) {
       else if (url.startsWith('/api/manager/vision-status')) data = {
         inference_ready: inferenceReady, max_media_bytes: 1024, max_image_bytes: 1024,
         max_video_bytes: 4096, upload_chunk_bytes: 512,
-        notice: inferenceReady || floodAssistance.ready ? '积水辅助识别已就绪' : '尚未就绪',
+        notice: inferenceReady || floodAssistance.ready ? '积水辅助识别可用' : '视觉分析暂不可用。',
         flood_assistance: floodAssistance,
         trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false },
         optional_model_status: optionalModelStatus,
@@ -312,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-deai-copy-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -826,7 +826,7 @@ test('manager exposes the image flood-assistance mode when only that worker is r
   assert.equal(option.disabled, false);
   assert.equal(option.textContent, '积水辅助识别（图片）');
   assert.equal(harness.elements.get('vision-status').classList.contains('is-ready'), true);
-  assert.match(harness.elements.get('vision-status').textContent, /积水辅助识别已就绪/);
+  assert.match(harness.elements.get('vision-status').textContent, /积水辅助识别可用/);
 });
 
 test('readiness polling cannot re-enable or duplicate an in-flight media upload', async () => {
@@ -982,11 +982,11 @@ test('manager reports optional model load failures accurately instead of claimin
   await flush();
 
   const status = harness.elements.get('vision-status').textContent;
-  assert.match(status, /事故模型权重未能加载/);
-  assert.match(status, /积水辅助识别权重文件缺失/);
+  assert.match(status, /事故识别加载失败/);
+  assert.match(status, /积水识别权重缺失/);
 });
 
-test('manager explains optional models are intentionally disabled before release approval', async () => {
+test('manager keeps intentionally disabled models out of the operator status line', async () => {
   const harness = managerHarness();
   await flush();
   harness.setInferenceReady(true);
@@ -995,8 +995,9 @@ test('manager explains optional models are intentionally disabled before release
   await flush();
 
   const status = harness.elements.get('vision-status').textContent;
-  assert.match(status, /事故模型尚未验收，暂不启用/);
-  assert.match(status, /积水辅助识别尚未验收，暂不启用/);
+  assert.equal(status, '积水辅助识别可用');
+  assert.doesNotMatch(status, /事故模型|未配置|尚未验收|MB|分块续传/);
+  assert.match(harness.elements.get('media-size-hint').textContent, /图片 ≤1 KB，视频 ≤4 KB/);
 });
 
 test('a road can be selected before its affected travel modes are chosen', async () => {
