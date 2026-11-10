@@ -6,9 +6,9 @@
 
 ## 1. 从哪里接手
 
-- 当前主线：`C:\Users\HUAWEI\Desktop\campus-spatial-intelligence-agent`，分支 `main`。交接时本机 HEAD、GitHub `main`、Gitee `main` 和生产 HEAD 均为 `c787416`。
+- 当前主线：`C:\Users\HUAWEI\Desktop\campus-spatial-intelligence-agent`，分支 `main`。交接时本机 HEAD、GitHub `main`、Gitee `main` 和生产 HEAD 均为 `6b0ee95`。
 - 生产：`ubuntu@whuspati.online`，目录 `/home/ubuntu/campus-spatial-intelligence-agent`。`whu-walker`、`whu-agent-worker`、`whu-vision-worker`、`whu-vision-trial-worker` 当时均为 active，`/health` 为 ok。
-- `c787416` 把管理台影像区系统说明清理为操作指引：状态提示合并为“车辆与行人检测、积水辅助识别可用”，去掉事故模型配置状态、断点续传、机身 GPS、画面指纹等内部表述；管理台脚本版本为 `20261110-manager-status-v2`，Service Worker 仍为 `whu-walker-v129`。不要把 [64 号积水记录](docs/development/64_积水图片辅助识别实施与上线状态_20261110.md) 中的 `71b5f32` 和 `v128` 当成最新生产版本：它们是那次发布的历史证据。
+- `6b0ee95` 管理台状态横幅只显示后端合并的能力提示，不再附加旧对照模型的加载状态（曾出现“可用”与“加载失败”并存）；试用提示改为“这是试用影像，结果不能发布为校园路况。”；管理台脚本版本为 `20261110-manager-status-v3`，Service Worker 仍为 `whu-walker-v129`。不要把 [64 号积水记录](docs/development/64_积水图片辅助识别实施与上线状态_20261110.md) 中的 `71b5f32` 和 `v128` 当成最新生产版本：它们是那次发布的历史证据。
 - Android App 为 `1.4.2`、versionCode `7`；本轮网页和积水功能不需要重新安装 APK。用户此前对对话体验给过正面反馈，但本次影像功能和最新网页在 App 真机上的逐项验收仍待用户反馈；手机尺寸浏览器不等于真机。
 - 本地资料入口：`C:\Users\HUAWEI\Desktop\homework\珞珈智行`；其中 `04_代码\本地仓库` 是指向桌面仓库的 Junction，`当前交接` 入口指向本文件。[项目目录说明](docs/项目目录说明.md)与 `04_代码\工作区索引.txt` 已于 2026-11-10 按收拢后的 8 个工作区重写，可直接作为当前入口；更早的索引版本是历史快照。
 
@@ -58,7 +58,7 @@
 
 | 名称／用途 | HEAD | 交接时变更条目 |
 | --- | --- | ---: |
-| 桌面 `main`：当前产品主线 | `c787416` | 状态条目含既有用户内容与本次交接、目录说明编辑 |
+| 桌面 `main`：当前产品主线 | `6b0ee95` | 状态条目含既有用户内容与本次交接、目录说明编辑 |
 | `9948`：研究协议、源码与证据，detached | `e7e7f02` | 447 |
 | `agent-experiment-implementation`：研究实现与证据 | `ccfc0fe` | 0 |
 | `luojia-next-phase`：后续研究与证据 | `48dbe6d` | 285 |
@@ -98,7 +98,7 @@ OGE 比赛是独立工作区和交付边界。其 2026-11-05 记录描述了腾�
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：main @ c787416 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-10 21:23
+- 版本：main @ 6b0ee95 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-10 22:21
 - Agent 工具 14 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v129 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 19（最新 019）
 <!-- FACTS:END -->
