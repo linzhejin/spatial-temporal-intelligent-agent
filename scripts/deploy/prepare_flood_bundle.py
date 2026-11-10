@@ -96,9 +96,10 @@ def main():
         'flood_regression_recovery_20261110.xml': 264,
         'flood_browser_cache_release_helpers_20261110.xml': 10,
         'flood_normal_worker_startup_20261110.xml': 1,
-        'flood_deploy_helpers_final_20261110.xml': 8,
+        'flood_deploy_helpers_final_20261110.xml': 11,
         'flood_state_views_20261110.xml': 1,
         'flood_cache_actual_209d19f_20261110.xml': 2,
+        'flood_public_smoke_e2e_20261110.xml': 1,
     }
     reports = workflow.get('junit_reports') or []
     for name, expected_count in required_reports.items():

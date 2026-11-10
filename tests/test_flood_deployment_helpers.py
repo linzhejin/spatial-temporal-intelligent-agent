@@ -125,6 +125,52 @@ def test_public_smoke_treats_failed_inference_as_error(monkeypatch):
         public_flood_smoke.wait_for(object(), "test-job", {"needs_review"})
 
 
+def test_public_smoke_recognizes_only_a_successful_scheduled_trial_worker_restart():
+    expected = {'Restart': 'always', 'Result': 'success', 'SubState': 'auto-restart'}
+    assert public_flood_smoke.expected_trial_restart('activating', expected)
+    assert not public_flood_smoke.expected_trial_restart('failed', expected)
+    assert not public_flood_smoke.expected_trial_restart('activating', {**expected, 'Result': 'oom-kill'})
+
+
+def test_public_smoke_waits_for_a_new_ready_worker_after_recycling(monkeypatch):
+    monkeypatch.setattr(public_flood_smoke, 'check_host', lambda: None)
+    monkeypatch.setattr(public_flood_smoke.time, 'sleep', lambda _seconds: None)
+    pids = iter([100, 0, 101])
+    monkeypatch.setattr(public_flood_smoke, 'trial_worker_pid', lambda: next(pids))
+
+    class Response:
+        status_code = 200
+
+        def json(self):
+            return {'data': {'flood_assistance': {
+                'ready': True, 'model_sha256': public_flood_smoke.MODEL_SHA256,
+            }}}
+
+    class Session:
+        def get(self, *_args, **_kwargs):
+            return Response()
+
+    public_flood_smoke.wait_for_worker_ready(Session(), previous_pid=100)
+
+
+def test_release_keeps_sanitized_public_smoke_failure_record(monkeypatch, tmp_path):
+    monkeypatch.setattr(flood_release, 'APP', tmp_path)
+    monkeypatch.setattr(flood_release, 'OPS', tmp_path / 'ops')
+
+    class Result:
+        returncode = 1
+        stdout = json.dumps({'status': 'failed', 'step': 'wait_for_public_candidate',
+                             'error_type': 'RuntimeError', 'error': 'private debug text'})
+
+    monkeypatch.setattr(flood_release.subprocess, 'run', lambda *_args, **_kwargs: Result())
+    with pytest.raises(RuntimeError, match='wait_for_public_candidate'):
+        flood_release.run_public_smoke({'public_smoke_image': '/private/sample.png'})
+    paths = list((tmp_path / 'ops').glob('public_flood_smoke_*.json'))
+    assert len(paths) == 1
+    record = json.loads(paths[0].read_text(encoding='utf-8'))
+    assert record == {'status': 'failed', 'step': 'wait_for_public_candidate', 'error_type': 'RuntimeError'}
+
+
 def test_rollback_restores_verified_environment_and_starts_all_services(monkeypatch, tmp_path):
     root = tmp_path / 'backups'
     backup = root / 'accepted'

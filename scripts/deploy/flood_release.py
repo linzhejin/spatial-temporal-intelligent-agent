@@ -98,6 +98,28 @@ def web_assets_ready():
             and MANAGER_ASSET_VERSION in manager and CACHE_NAME in worker)
 
 
+def run_public_smoke(bundle):
+    """Keep a private, sanitized failure record even when a smoke check fails."""
+    result = subprocess.run([str(APP / 'venv/bin/python'), str(APP / 'scripts/deploy/public_flood_smoke.py'),
+                             bundle['public_smoke_image']], cwd=APP, capture_output=True, text=True, timeout=240)
+    try:
+        report = json.loads(result.stdout)
+        if not isinstance(report, dict):
+            raise ValueError('not an object')
+    except (ValueError, json.JSONDecodeError):
+        report = {'status': 'failed', 'step': 'smoke_output', 'error_type': 'InvalidOutput'}
+    safe = {key: value for key, value in report.items()
+            if key in {'status', 'step', 'error_type', 'purpose', 'model_sha256', 'job_id', 'candidate_index',
+                       'review', 'elapsed_seconds', 'cancelled_job_id', 'cancel_seconds', 'road_event_published'}}
+    OPS.mkdir(parents=True, exist_ok=True)
+    path = OPS / ('public_flood_smoke_' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ') + '.json')
+    with path.open('x', encoding='utf-8') as stream:
+        json.dump(safe, stream, indent=2)
+    if result.returncode or safe.get('status') != 'passed' or safe.get('road_event_published') is not False:
+        raise RuntimeError('Public model smoke check failed at ' + str(safe.get('step', 'unknown')))
+    return {**safe, 'report_path': str(path)}
+
+
 def validate_bundle(bundle_path, new_commit):
     path = Path(bundle_path).resolve(strict=True)
     root = path.parent
@@ -341,11 +363,7 @@ def main(old, new, rollback, bundle_path):
         package_after = app_package_fingerprint()
         if package_after != package_before:
             raise RuntimeError('The App package changed during a web-only release')
-        public_smoke = json.loads(run([str(APP / 'venv/bin/python'),
-                                       str(APP / 'scripts/deploy/public_flood_smoke.py'),
-                                       bundle['public_smoke_image']]))
-        if public_smoke.get('status') != 'passed' or public_smoke.get('road_event_published') is not False:
-            raise RuntimeError('Public model smoke check did not pass')
+        public_smoke = run_public_smoke(bundle)
         report = {'status': 'deployed', 'previous_commit': old, 'deployed_commit': run(['git', 'rev-parse', 'HEAD']),
                   'compatible_rollback_commit': rollback, 'backup_directory': backup['backup_directory'],
                   'services': dict(zip(SERVICES, states)), 'local_health': 'ok',
