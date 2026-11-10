@@ -62,9 +62,13 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--stage', type=Path, required=True)
     parser.add_argument('--commit', required=True)
+    parser.add_argument('--bundle-tag', default=None)
     args = parser.parse_args()
     stage = args.stage.resolve(strict=True)
+    run_tag = stage.name.removeprefix('flood-resource-')
+    bundle_tag = args.bundle_tag or run_tag
     if (stage.parent != STAGE_ROOT.resolve() or not re.fullmatch(r'flood-resource-[0-9a-f]{10}', stage.name)
+            or not re.fullmatch(re.escape(run_tag) + r'(?:-r[1-9][0-9]*)?', bundle_tag)
             or not re.fullmatch(r'[0-9a-f]{40}', args.commit)):
         raise ValueError('Invalid isolated stage or commit')
     evidence_dir = stage / 'release-evidence'
@@ -94,6 +98,7 @@ def main():
         'flood_normal_worker_startup_20261110.xml': 1,
         'flood_deploy_helpers_final_20261110.xml': 8,
         'flood_state_views_20261110.xml': 1,
+        'flood_cache_actual_209d19f_20261110.xml': 2,
     }
     reports = workflow.get('junit_reports') or []
     for name, expected_count in required_reports.items():
@@ -125,7 +130,7 @@ def main():
         raise ValueError('Resource sample set does not match the acceptance contract')
 
     MODEL_ROOT.mkdir(parents=True, mode=0o700, exist_ok=True)
-    destination = MODEL_ROOT / ('floodnet-v7-' + stage.name.removeprefix('flood-resource-'))
+    destination = MODEL_ROOT / ('floodnet-v7-' + bundle_tag)
     destination.mkdir(mode=0o700, exist_ok=False)
     shutil.copy2(model, destination / 'model.onnx')
     public_sample = stage / 'samples' / samples[0]['filename']

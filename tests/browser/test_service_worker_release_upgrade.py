@@ -40,6 +40,11 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
                                        (root / "index.html").read_text(encoding="utf-8")).group(1)
     old_asset, new_asset = app_asset(old_static), app_asset(new_static)
     assert old_cache != new_cache
+    # A deployed checkout updates changed files' mtimes.  Git archives carry
+    # commit timestamps, which can be newer than the candidate working files.
+    initial_mtime = min(time.time() - 30, (new_static / 'sw.js').stat().st_mtime - 30)
+    for name in ('sw.js', 'index.html', 'js/app.js', 'css/style.css'):
+        os.utime(old_static / name, (initial_mtime, initial_mtime))
 
     class DynamicHandler(SimpleHTTPRequestHandler):
         root = old_static
