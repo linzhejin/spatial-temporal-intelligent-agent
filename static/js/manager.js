@@ -604,11 +604,9 @@
     var limitNote = '视频不超过 ' + Number(trialLimits.max_video_seconds || 45) + ' 秒，影像不超过约 ' +
       Math.round(Number(trialLimits.max_frame_pixels || 2073600) / 10000) + ' 万像素。';
     byId('vision-purpose-note').textContent = floodAssisted
-      ? '仅支持图片。圈选实际路面并标注校园位置；轮廓是辅助线索，需管理员核实。模型尚未完成校园现场标定。'
+      ? '仅支持图片。圈选实际路面并标注校园位置。'
       : trial
-      ? ((state.trialCapabilities || {}).accident_media === 'video'
-        ? '试用不关联校园位置。事故按视频抽帧筛查；积水须圈选路面。' + limitNote
-        : '试用不关联校园位置。请圈选机动车道或路面；积水须圈选路面。' + limitNote)
+      ? '试用不关联校园位置。请圈选路面。' + limitNote
       : '校园巡查可在人工核实后登记路况。';
     updateVisionSubmitState();
     updateVisionGuidance();

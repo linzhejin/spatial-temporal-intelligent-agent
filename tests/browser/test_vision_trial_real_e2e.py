@@ -297,7 +297,7 @@ def test_temporal_video_trial_uses_whole_window_and_cannot_publish(monkeypatch, 
             page.get_by_text("新建影像分析", exact=True).click()
             expect(page.locator("#vision-trial-option")).to_be_enabled(timeout=30000)
             page.locator("#vision-purpose").select_option("trial")
-            expect(page.locator("#vision-purpose-note")).to_contain_text("事故按视频抽帧筛查")
+            expect(page.locator("#vision-purpose-note")).to_contain_text("试用不关联校园位置")
             page.locator("#media-file").set_input_files(str(video))
             page.wait_for_function("document.querySelector('#observation-video').videoWidth > 0", timeout=30000)
             with page.expect_response(lambda response: response.url.endswith("/complete")

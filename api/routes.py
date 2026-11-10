@@ -3642,7 +3642,9 @@ def manager_vision_status():
             ),
         },
         "notice": (
-            "积水辅助识别可用，请圈选路面。"
+            "车辆与行人检测、积水辅助识别可用。"
+            if inference_ready and flood_assistance_ready else
+            "积水辅助识别可用。"
             if flood_assistance_ready else
             "车辆与行人检测可用。"
             if inference_ready else

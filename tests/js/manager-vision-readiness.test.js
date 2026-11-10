@@ -249,7 +249,7 @@ function managerHarness(sessionSeed = []) {
       else if (url.startsWith('/api/manager/vision-status')) data = {
         inference_ready: inferenceReady, max_media_bytes: 1024, max_image_bytes: 1024,
         max_video_bytes: 4096, upload_chunk_bytes: 512,
-        notice: inferenceReady || floodAssistance.ready ? '积水辅助识别可用' : '视觉分析暂不可用。',
+        notice: inferenceReady || floodAssistance.ready ? '车辆与行人检测、积水辅助识别可用。' : '视觉分析暂不可用。',
         flood_assistance: floodAssistance,
         trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false },
         optional_model_status: optionalModelStatus,
@@ -312,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v2/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -326,7 +326,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.doesNotMatch(managerHtml, /先在地图上确认具体路段/);
   assert.doesNotMatch(managerHtml, /选路、预览并发布/);
   assert.match(managerHtml, /id="dji-subtitle-file"[^>]*accept="\.srt,text\/plain"/);
-  assert.match(managerHtml, /机身 GPS 不表示地面位置，也不用于道路绑定/);
+  assert.match(managerHtml, /字幕只在本机读取、不上传/);
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
   assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
@@ -995,7 +995,7 @@ test('manager keeps intentionally disabled models out of the operator status lin
   await flush();
 
   const status = harness.elements.get('vision-status').textContent;
-  assert.equal(status, '积水辅助识别可用');
+  assert.equal(status, '车辆与行人检测、积水辅助识别可用。');
   assert.doesNotMatch(status, /事故模型|未配置|尚未验收|MB|分块续传/);
   assert.match(harness.elements.get('media-size-hint').textContent, /图片 ≤1 KB，视频 ≤4 KB/);
 });

@@ -10,7 +10,7 @@
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261110-manager-status-v1" defer></script>
+  <script src="/js/manager.js?v=20261110-manager-status-v2" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -179,7 +179,7 @@
                 </select>
                 <small id="vision-purpose-note">校园巡查可在人工核实后登记路况。</small>
               </label>
-              <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频（支持断点续传）<span id="media-size-hint"></span></small></label>
+              <label class="upload-label" for="media-file"><span class="upload-symbol">＋</span><strong>选择图片或短视频</strong><small>JPG、PNG、WebP 图片；MP4、MOV、AVI、WebM 视频<span id="media-size-hint"></span></small></label>
               <input id="media-file" type="file" accept="image/jpeg,image/png,image/webp,video/mp4,video/quicktime,video/x-msvideo,video/webm" required>
               <div id="selected-media" class="selected-media" aria-live="polite" hidden>
                 <img id="selected-media-preview" class="selected-media-preview" alt="所选巡查图片预览" hidden>
@@ -195,7 +195,7 @@
               </label>
               <button id="pick-dji-subtitle" class="outline-button" type="button">读取 DJI 字幕时间（可选）</button>
               <input id="dji-subtitle-file" type="file" accept=".srt,text/plain" aria-label="选择与视频同名的 DJI SRT 字幕文件">
-              <small class="dji-subtitle-note">选择与视频同名的 .SRT 文件可带入拍摄时间。字幕无时区，按当前设备本地时区解释，请核对时钟和时区。字幕只在本机读取、不上传；机身 GPS 不表示地面位置，也不用于道路绑定。影像原片仍按原流程上传。</small>
+              <small class="dji-subtitle-note">选择与视频同名的 .SRT 文件可带入拍摄时间；字幕无时区，按当前设备本地时区解释，请核对时钟。字幕只在本机读取、不上传。</small>
               <p id="dji-subtitle-status" class="dji-subtitle-status" role="status" aria-live="polite"></p>
               <button id="show-dji-track" class="outline-button dji-track-preview-button" type="button" hidden>在地图上查看无人机航迹</button>
               <button id="pick-anchor" class="outline-button" type="button">⌖ 标注影像所在校园区域</button>
@@ -238,12 +238,12 @@
                     <button id="load-vision-scene" type="button" class="outline-button">检查画面并载入</button>
                     <button id="delete-vision-scene" type="button" class="quiet-button">删除场景</button>
                   </div>
-                  <small>场景保存画面指纹、观察区域和道路绑定。视频按首帧比对；指纹只排除明显视角变化，载入后仍请核对圈选区域和道路。</small>
+                  <small>保存后可复用圈选区域和道路；载入后仍请核对。</small>
                 </div>
-              <small id="observation-region-note" class="stabilization-note">视频中的圈选区域会随无人机移动；镜头改变后请重新圈选。积水分析只在“路面”区域内计算画面占比，不估水深。</small>
+              <small id="observation-region-note" class="stabilization-note">视频中的圈选区域会随无人机移动，镜头改变后请重新圈选。积水分析不估算水深。</small>
               </div>
               <label class="stabilization-option"><input id="camera-stabilized" type="checkbox"> 视频来自固定机位或已完成稳像（可选）</label>
-              <small class="stabilization-note">拥堵与人群候选只在圈定对应画面区域、且固定机位或完成稳像时生成；原片仍需人工复核。</small>
+              <small class="stabilization-note">拥堵与人群候选需要圈定画面区域，且固定机位或完成稳像。</small>
               <button id="submit-vision" class="primary-button" type="submit" disabled>提交分析任务 <span>→</span></button>
               <div id="vision-upload-progress" class="vision-upload-progress" hidden>
                 <progress id="vision-upload-bar" max="100" value="0" aria-label="视频上传进度"></progress>
@@ -253,7 +253,7 @@
             </form>
               <details class="vision-note-collapse">
                 <summary>识别说明与模型来源</summary>
-                <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。事故模型只判断画面类别；积水模型仅检查圈选路面像素、不估算水深。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
+                <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
                 <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
               </details>
             </details>
