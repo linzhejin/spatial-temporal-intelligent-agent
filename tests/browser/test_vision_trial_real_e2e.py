@@ -111,7 +111,7 @@ def test_public_image_real_inference_review_and_missed_case(monkeypatch, tmp_pat
             page.reload(wait_until="networkidle")
             card = page.locator(".vision-job").filter(has_text=image.name)
             expect(card).to_be_visible(timeout=30000)
-            expect(card).to_contain_text("试用结果仅供复核，不会进入真实路况")
+            expect(card).to_contain_text("这是试用影像，结果不能发布为校园路况")
             expect(card).to_contain_text("积水：已检查")
             candidate = card.locator(".candidate-card").filter(has_text="积水").first
             expect(candidate).to_be_visible()

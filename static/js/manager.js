@@ -2119,17 +2119,7 @@
       floodOption.disabled = !state.floodAssistance.ready;
       floodOption.textContent = state.floodAssistance.ready
         ? '积水辅助识别（图片）' : '积水辅助识别（图片，未就绪）';
-      var optionalModels = data.optional_model_status || {};
-      function faultText(label, status) {
-        if (status === 'worker_not_ready') return '视觉进程未就绪';
-        if (status === 'file_missing') return label + '权重缺失';
-        if (status === 'load_failed') return label + '加载失败';
-        return '';
-      }
-      var faults = [faultText('事故识别', optionalModels.accident), faultText('积水识别', optionalModels.flood)]
-        .filter(function (text, index, list) { return text && list.indexOf(text) === index; });
       var statusText = String(data.notice || '').trim();
-      if (faults.length) statusText += (statusText ? ' ' : '') + faults.join('；') + '。';
       byId('vision-status').textContent = statusText || '视觉分析暂不可用。';
       state.maxImageBytes = data.max_image_bytes || data.max_media_bytes || state.maxImageBytes;
       state.maxVideoBytes = data.max_video_bytes || state.maxVideoBytes;
@@ -2788,7 +2778,7 @@
     head.append(title, stateLabel); card.appendChild(head);
     if (isTrial) {
       var trialNotice = document.createElement('p'); trialNotice.className = 'vision-replay-notice';
-      trialNotice.textContent = '试用结果仅供复核，不会进入真实路况。';
+      trialNotice.textContent = '这是试用影像，结果不能发布为校园路况。';
       card.appendChild(trialNotice);
       if (result.trial_coverage) {
         var coverageLabels = { checked: '已检查', not_configured: '模型未配置',

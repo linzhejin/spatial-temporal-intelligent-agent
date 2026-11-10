@@ -312,7 +312,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v2/);
+  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v3/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -973,7 +973,7 @@ test('road event preview and publication use an action and affected travel modes
   assert.equal(Object.hasOwn(body, 'blocked_modes'), false);
 });
 
-test('manager reports optional model load failures accurately instead of claiming models are configured', async () => {
+test('manager keeps internal optional-model load state out of the operator status line', async () => {
   const harness = managerHarness();
   await flush();
   harness.setInferenceReady(true);
@@ -982,8 +982,8 @@ test('manager reports optional model load failures accurately instead of claimin
   await flush();
 
   const status = harness.elements.get('vision-status').textContent;
-  assert.match(status, /事故识别加载失败/);
-  assert.match(status, /积水识别权重缺失/);
+  assert.equal(status, '车辆与行人检测、积水辅助识别可用。');
+  assert.doesNotMatch(status, /加载失败|权重缺失|未就绪|未配置/);
 });
 
 test('manager keeps intentionally disabled models out of the operator status line', async () => {
