@@ -10,6 +10,7 @@ from math import hypot
 from statistics import mean
 from typing import Any
 
+from vision.specialized import MAX_AUTOMATIC_FLOOD_HOLES, MAX_AUTOMATIC_FLOOD_HOLE_POINTS
 from vision.tracking import assign_track_ids
 
 
@@ -293,6 +294,26 @@ def build_specialized_candidates(
                           or not math.isfinite(float(value)) or not 0 <= value <= 1
                           for value in point) for point in polygon):
                 continue
+            holes = observation.get("outline_holes")
+            holes_complete = (observation.get("outline_holes_complete") is True
+                              and isinstance(holes, list)
+                              and len(holes) <= MAX_AUTOMATIC_FLOOD_HOLES)
+            if holes_complete:
+                point_count = 0
+                for hole in holes:
+                    if not isinstance(hole, list) or len(hole) < 3:
+                        holes_complete = False
+                        break
+                    point_count += len(hole)
+                    if (point_count > MAX_AUTOMATIC_FLOOD_HOLE_POINTS
+                            or any(not isinstance(point, (tuple, list)) or len(point) != 2
+                                   or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                                          or not math.isfinite(float(value)) or not 0 <= value <= 1
+                                          for value in point) for point in hole)):
+                        holes_complete = False
+                        break
+            if not holes_complete:
+                holes = []
             candidates.append(_candidate(
                 "possible_flooding", float(score),
                 "模型标出疑似积水区域，请结合原图确认是否为道路积水。",
@@ -301,6 +322,8 @@ def build_specialized_candidates(
                     "region_origin": "automatic_model",
                     "region_polygon": polygon,
                     "outline_polygons": [polygon],
+                    "outline_holes": holes,
+                    "outline_holes_complete": holes_complete,
                     "automatic_candidates_truncated": observation.get("automatic_candidates_truncated") is True,
                     "water_evidence_type": "flooded_road",
                     "water_depth_estimated": False,

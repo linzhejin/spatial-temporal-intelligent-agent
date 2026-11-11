@@ -84,6 +84,48 @@ def test_automatic_proposals_respect_class_ties_and_reject_invalid_model_outputs
         model.predict_automatic(np.zeros((64, 64, 3), dtype=np.uint8))
 
 
+def test_automatic_outline_preserves_holes_and_separate_islands():
+    import cv2
+
+    model = DoodleverseFloodSegmenter("injected.onnx", session=_Session(_output()))
+    winner = np.zeros((140, 140), dtype=bool)
+    winner[10:130, 10:130] = True
+    winner[35:105, 35:105] = False
+    winner[65:75, 65:75] = True
+    probability = np.where(winner, 0.9, 0.0).astype(np.float32)
+
+    proposals = model._automatic_predictions_from_maps(probability, winner)
+
+    assert len(proposals) == 2
+    ring = proposals["auto-flood-1"]
+    assert ring["outline_holes_complete"] is True
+    assert len(ring["outline_holes"]) == 1
+    assert ring["model_score"] == 0.9
+    shown = np.zeros(winner.shape, dtype=np.uint8)
+    def pixels(polygon):
+        return np.array([[round(x * 139), round(y * 139)] for x, y in polygon], dtype=np.int32)
+    cv2.fillPoly(shown, [pixels(ring["region_polygon"])], 1)
+    cv2.fillPoly(shown, [pixels(hole) for hole in ring["outline_holes"]], 0)
+    assert shown[20, 20] == 1
+    assert shown[45, 45] == 0
+    assert shown[70, 70] == 0  # The separate island is its own candidate.
+
+
+def test_automatic_outline_too_complex_for_bounded_holes_is_border_only():
+    model = DoodleverseFloodSegmenter("injected.onnx", session=_Session(_output()))
+    winner = np.zeros((200, 200), dtype=bool)
+    winner[3:197, 3:197] = True
+    for y in range(12, 190, 12):
+        for x in range(12, 190, 12):
+            winner[y:y + 2, x:x + 2] = False
+    probability = np.where(winner, 0.9, 0.0).astype(np.float32)
+
+    proposal = model._automatic_predictions_from_maps(probability, winner)["auto-flood-1"]
+
+    assert proposal["outline_holes_complete"] is False
+    assert proposal["outline_holes"] == []
+
+
 def test_automatic_proposals_disclose_when_the_bounded_candidate_list_is_incomplete():
     output = _output()
     for row in range(5):
@@ -101,12 +143,15 @@ def test_automatic_proposals_disclose_when_the_bounded_candidate_list_is_incompl
 
 def test_automatic_proposal_becomes_an_individually_reviewable_candidate():
     polygon = [[0.1, 0.2], [0.3, 0.2], [0.3, 0.4], [0.1, 0.4]]
+    hole = [[0.15, 0.25], [0.25, 0.25], [0.25, 0.35], [0.15, 0.35]]
     observations = [{
         "time_seconds": 0.0,
         "region_id": "auto-flood-1",
         "region_origin": "automatic_model",
         "region_polygon": polygon,
         "outline_polygons": [polygon],
+        "outline_holes": [hole],
+        "outline_holes_complete": True,
         "automatic_flood": True,
         "model_score": 0.9,
         "water_evidence_type": "flooded_road",
@@ -122,6 +167,25 @@ def test_automatic_proposal_becomes_an_individually_reviewable_candidate():
     assert candidate["evidence"]["summary"]["region_origin"] == "automatic_model"
     assert candidate["evidence"]["summary"]["region_polygon"] == polygon
     assert candidate["evidence"]["summary"]["outline_polygons"] == [polygon]
+    assert candidate["evidence"]["summary"]["outline_holes"] == [hole]
+    assert candidate["evidence"]["summary"]["outline_holes_complete"] is True
+
+
+def test_invalid_automatic_outline_holes_fall_back_to_border_only():
+    polygon = [[0.1, 0.2], [0.3, 0.2], [0.3, 0.4], [0.1, 0.4]]
+    observation = {
+        "time_seconds": 0.0, "region_id": "auto-flood-1", "region_polygon": polygon,
+        "automatic_flood": True, "model_score": 0.9,
+        "outline_holes": [[[0.2, 0.3], [float("nan"), 0.3], [0.2, 0.4]]],
+        "outline_holes_complete": True,
+    }
+
+    candidates = build_specialized_candidates([observation], sample_interval_s=1.0, single_image=True)
+
+    assert len(candidates) == 1
+    summary = candidates[0]["evidence"]["summary"]
+    assert summary["outline_holes"] == []
+    assert summary["outline_holes_complete"] is False
 
 
 def test_image_analysis_runs_automatic_flood_without_user_regions(tmp_path):

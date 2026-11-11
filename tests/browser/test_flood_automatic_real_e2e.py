@@ -115,7 +115,10 @@ def test_public_image_generates_reviewable_candidates_without_drawing(monkeypatc
             assert stored["result"]["trial_coverage"]["flood"] == "checked"
             candidate = stored["result"]["candidates"][0]
             assert candidate["kind"] == "possible_flooding"
-            assert candidate["evidence"]["summary"]["region_origin"] == "automatic_model"
+            summary = candidate["evidence"]["summary"]
+            assert summary["region_origin"] == "automatic_model"
+            assert summary["outline_holes_complete"] is True
+            assert summary["outline_holes"]
             page.reload(wait_until="networkidle")
             card = page.locator(".vision-job").filter(has_text=image.name)
             expect(card).to_be_visible(timeout=30000)
@@ -123,6 +126,52 @@ def test_public_image_generates_reviewable_candidates_without_drawing(monkeypatc
             expect(outlines.first).to_be_visible()
             assert outlines.count() > 5
             expect(outlines.nth(1)).to_be_hidden()
+            # The real browser's SVG hit-test must agree that the interior of a
+            # model hole is not painted, while a surrounding part is painted.
+            import cv2
+            import numpy as np
+            width, height = stored["result"]["media"]["width"], stored["result"]["media"]["height"]
+            def points(polygon):
+                return np.asarray([[round(x * width), round(y * height)] for x, y in polygon], dtype=np.int32)
+            holes = np.zeros((height, width), dtype=np.uint8)
+            cv2.fillPoly(holes, [points(hole) for hole in summary["outline_holes"]], 1)
+            hole_y, hole_x = np.unravel_index(cv2.distanceTransform(holes, cv2.DIST_L2, 3).argmax(), holes.shape)
+            filled = np.zeros_like(holes)
+            cv2.fillPoly(filled, [points(summary["region_polygon"])], 1)
+            outer = filled.copy()
+            filled[holes != 0] = 0
+            filled_y, filled_x = np.unravel_index(cv2.distanceTransform(filled, cv2.DIST_L2, 3).argmax(), filled.shape)
+            path = outlines.first.locator("path.flood-mask-outline")
+            expect(path).to_have_attribute("fill-rule", "evenodd")
+            assert path.evaluate("(node, p) => node.isPointInFill(new DOMPoint(p[0], p[1]))", [int(hole_x), int(hole_y)]) is False
+            assert path.evaluate("(node, p) => node.isPointInFill(new DOMPoint(p[0], p[1]))", [int(filled_x), int(filled_y)]) is True
+            # Force a hole-shaped ring outside the simplified exterior. The
+            # browser must clip it rather than paint it as a separate island.
+            import io
+            from PIL import Image
+            outside = (outer == 0).astype(np.uint8)
+            outside[:20, :] = outside[-20:, :] = outside[:, :20] = outside[:, -20:] = 0
+            distance = cv2.distanceTransform(outside, cv2.DIST_L2, 3)
+            outside_y, outside_x = np.unravel_index(distance.argmax(), distance.shape)
+            assert distance[outside_y, outside_x] > 10
+            assert not path.evaluate("(node, p) => node.isPointInFill(new DOMPoint(p[0], p[1]))", [int(outside_x), int(outside_y)])
+            stage = card.locator(".vision-image-stage")
+            stage.locator("img").evaluate("image => image.decode()")
+            before = Image.open(io.BytesIO(stage.screenshot())).convert("RGB")
+            path.evaluate("node => { node.style.visibility = 'hidden'; }")
+            without_overlay = Image.open(io.BytesIO(stage.screenshot())).convert("RGB")
+            path.evaluate("node => { node.style.visibility = ''; }")
+            painted_pixel = (int(filled_x * before.width / width), int(filled_y * before.height / height))
+            assert before.getpixel(painted_pixel) != without_overlay.getpixel(painted_pixel)
+            path.evaluate("""(node, p) => {
+                const [x, y] = p;
+                node.setAttribute('d', node.getAttribute('d') +
+                    ` M${x-8},${y-8} L${x+8},${y-8} L${x+8},${y+8} L${x-8},${y+8} Z`);
+            }""", [int(outside_x), int(outside_y)])
+            assert path.evaluate("(node, p) => node.isPointInFill(new DOMPoint(p[0], p[1]))", [int(outside_x), int(outside_y)])
+            after = Image.open(io.BytesIO(stage.screenshot())).convert("RGB")
+            pixel = (int(outside_x * before.width / width), int(outside_y * before.height / height))
+            assert after.getpixel(pixel) == before.getpixel(pixel)
             first = card.locator(".candidate-list:not(.suggested-edges) .candidate-card").first
             expect(first).to_contain_text("候选 1")
             more = card.locator("details.candidate-more")

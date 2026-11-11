@@ -24,6 +24,11 @@ FLOODNET_CLASSES = (
     "background", "flooded_building", "non_flooded_building", "flooded_road",
     "non_flooded_road", "water", "tree", "vehicle", "pool", "grass",
 )
+# Bound the evidence stored for one automatic candidate.  If a component has
+# more holes than this representation can carry, clients must draw its border
+# only rather than falsely filling in the missing holes.
+MAX_AUTOMATIC_FLOOD_HOLES = 128
+MAX_AUTOMATIC_FLOOD_HOLE_POINTS = 4096
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
 _IMAGENET_STD = (0.229, 0.224, 0.225)
 
@@ -455,14 +460,20 @@ class DoodleverseFloodSegmenter:
         if probability.shape != winner.shape or probability.ndim != 2:
             raise ValueError("积水候选概率图尺寸无效")
         height, width = winner.shape
-        contours, _ = cv2.findContours(
-            winner.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+        winner_mask = winner.astype(np.uint8)
+        contours, hierarchy = cv2.findContours(
+            winner_mask, cv2.RETR_CCOMP, cv2.CHAIN_APPROX_SIMPLE,
         )
-        contours = sorted(contours, key=lambda item: (-cv2.contourArea(item),
-                                                       cv2.boundingRect(item)[1], cv2.boundingRect(item)[0]))
-        truncated = sum(cv2.contourArea(item) >= 2 for item in contours) > 24
+        if hierarchy is None:
+            return {}
+        components = [(index, contour) for index, contour in enumerate(contours)
+                      if hierarchy[0][index][3] == -1]
+        components.sort(key=lambda item: (-cv2.contourArea(item[1]),
+                                           cv2.boundingRect(item[1])[1], cv2.boundingRect(item[1])[0]))
+        truncated = sum(cv2.contourArea(item) >= 2 for _, item in components) > 24
+        _, component_labels = cv2.connectedComponents(winner_mask, connectivity=8)
         predictions = {}
-        for contour in contours:
+        for contour_index, contour in components:
             if cv2.contourArea(contour) < 2:
                 continue
             epsilon = max(1.0, 0.005 * cv2.arcLength(contour, True))
@@ -475,16 +486,35 @@ class DoodleverseFloodSegmenter:
             polygon = [[round(float(x) / max(1, width - 1), 5),
                         round(float(y) / max(1, height - 1), 5)]
                        for x, y in simplified]
+            holes = []
+            hole_points = 0
+            holes_complete = True
+            child_index = int(hierarchy[0][contour_index][2])
+            while child_index != -1:
+                points = contours[child_index].reshape(-1, 2)
+                hole_points += len(points)
+                if (len(holes) >= MAX_AUTOMATIC_FLOOD_HOLES or len(points) < 3
+                        or hole_points > MAX_AUTOMATIC_FLOOD_HOLE_POINTS):
+                    holes = []
+                    holes_complete = False
+                    break
+                holes.append([[round(float(px) / max(1, width - 1), 5),
+                               round(float(py) / max(1, height - 1), 5)]
+                              for px, py in points])
+                child_index = int(hierarchy[0][child_index][0])
             x, y, w, h = cv2.boundingRect(contour)
-            local_mask = np.zeros((h, w), dtype=np.uint8)
-            cv2.drawContours(local_mask, [contour - np.array([[[x, y]]])], -1, 1, -1)
-            score = float(probability[y:y + h, x:x + w][local_mask != 0].mean())
+            anchor_x, anchor_y = contour[0, 0]
+            component_id = component_labels[anchor_y, anchor_x]
+            local_mask = component_labels[y:y + h, x:x + w] == component_id
+            score = float(probability[y:y + h, x:x + w][local_mask].mean())
             region_id = f"auto-flood-{len(predictions) + 1}"
             predictions[region_id] = {
                 "region_id": region_id,
                 "region_origin": "automatic_model",
                 "region_polygon": polygon,
                 "outline_polygons": [polygon],
+                "outline_holes": holes,
+                "outline_holes_complete": holes_complete,
                 "automatic_flood": True,
                 "automatic_candidates_truncated": truncated,
                 "model_score": round(score, 6),

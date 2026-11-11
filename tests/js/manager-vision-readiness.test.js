@@ -313,7 +313,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261111-auto-flood-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261111-auto-flood-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261112-auto-flood-v2/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -889,6 +889,47 @@ test('automatic flood outlines match numbered review cards without invented area
   showSecond.listeners.click();
   assert.equal(groups[0].style.display, 'none');
   assert.notEqual(groups[1].style.display, 'none');
+});
+
+test('automatic flood overlay keeps holes and never fills incomplete geometry', async () => {
+  const harness = managerHarness();
+  await flush();
+  const polygon = [[0.1, 0.1], [0.9, 0.1], [0.9, 0.9], [0.1, 0.9]];
+  const hole = [[0.3, 0.3], [0.7, 0.3], [0.7, 0.7], [0.3, 0.7]];
+  const summaries = [
+    { outline_holes: [hole], outline_holes_complete: true },
+    { outline_holes: [], outline_holes_complete: false },
+    {}, // A legacy candidate without hole data must not be shown as a filled mask.
+    { outline_holes: [[[2, 0], [0.2, 0.2], [0.3, 0.3]]], outline_holes_complete: true },
+  ];
+  harness.setVisionJobs([{
+    job_id: 'automatic-holes', status: 'needs_review', purpose: 'trial',
+    media_kind: 'image', media_url: '/private/image', original_name: 'public.png',
+    result: { media: { width: 100, height: 100 }, candidates: summaries.map((fields, index) => ({
+      kind: 'possible_flooding', reason: '请核对。', evidence: { summary: {
+        region_id: 'auto-flood-' + (index + 1), region_origin: 'automatic_model',
+        region_polygon: polygon, outline_polygons: [polygon], ...fields,
+      } },
+    })) },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const stage = card.children.find((node) => node.className === 'vision-image-stage');
+  const overlay = stage.children.find((node) => node.tagName === 'svg');
+  const groups = overlay.children.filter((node) => node.tagName === 'g');
+  const shapes = groups.map((group) => group.children.find((node) => node.className === 'flood-mask-outline' || node.attributes.class === 'flood-mask-outline'));
+  assert.equal(shapes.length, 4);
+  assert.equal(shapes[0].tagName, 'path');
+  assert.equal(shapes[0].attributes['fill-rule'], 'evenodd');
+  assert.equal((shapes[0].attributes.d.match(/M/g) || []).length, 2);
+  assert.notEqual(shapes[0].style.fill, 'none');
+  // A hole may cross the simplified exterior. It must not paint outside it.
+  const clip = groups[0].children.find((node) => node.tagName === 'clipPath');
+  assert.ok(clip);
+  assert.equal(shapes[0].attributes['clip-path'], 'url(#' + clip.attributes.id + ')');
+  for (const shape of shapes.slice(1)) assert.equal(shape.style.fill, 'none');
 });
 
 test('an empty automatic flood result explicitly says it can miss flooding', async () => {

@@ -7,6 +7,7 @@
   var visionPreviewStates = new Map();
   var playingVisionVideos = new Set();
   var visionJobsRefreshDeferred = false;
+  var floodOutlineClipSequence = 0;
   state.sourceMode = null;
   state.djiSubtitleFile = null;
   state.djiSubtitleReadId = 0;
@@ -2236,7 +2237,8 @@
       var summary = item.evidence && item.evidence.summary || {};
       if (Array.isArray(summary.outline_polygons) && summary.outline_polygons.length) {
         floodOutlines.push({ outlines: summary.outline_polygons,
-          number: summary.region_origin === 'automatic_model' ? index + 1 : null });
+          number: summary.region_origin === 'automatic_model' ? index + 1 : null,
+          holes: summary.outline_holes, holesComplete: summary.outline_holes_complete === true });
       }
     });
     (Array.isArray(result.flood_review) ? result.flood_review : []).forEach(function (item) {
@@ -2262,8 +2264,45 @@
             return (x * width) + ',' + (y * height);
           });
           if (points.some(function (point) { return point === null; })) return;
-          var shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
-          shape.setAttribute('points', points.join(' '));
+          var shape;
+          if (entry.number !== null) {
+            shape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            var paths = ['M' + points.join(' L') + ' Z'];
+            var holePoints = 0;
+            var safeHoles = entry.holesComplete && Array.isArray(entry.holes) && entry.holes.length <= 128;
+            if (safeHoles) {
+              entry.holes.forEach(function (hole) {
+                if (!Array.isArray(hole) || hole.length < 3) { safeHoles = false; return; }
+                holePoints += hole.length;
+                if (holePoints > 4096) { safeHoles = false; return; }
+                var holePath = hole.map(function (point) {
+                  if (!Array.isArray(point) || point.length !== 2 ||
+                      typeof point[0] !== 'number' || typeof point[1] !== 'number' ||
+                      !Number.isFinite(point[0]) || !Number.isFinite(point[1]) ||
+                      point[0] < 0 || point[0] > 1 || point[1] < 0 || point[1] > 1) return null;
+                  return (point[0] * width) + ',' + (point[1] * height);
+                });
+                if (holePath.some(function (point) { return point === null; })) { safeHoles = false; return; }
+                paths.push('M' + holePath.join(' L') + ' Z');
+              });
+            }
+            shape.setAttribute('d', (safeHoles ? paths : paths.slice(0, 1)).join(' '));
+            shape.setAttribute('fill-rule', 'evenodd');
+            // Hole rings can cross the simplified exterior: SVG's even-odd
+            // rule alone would paint those outside pieces as new islands.
+            var clip = document.createElementNS('http://www.w3.org/2000/svg', 'clipPath');
+            var clipId = 'flood-outline-clip-' + (++floodOutlineClipSequence);
+            clip.setAttribute('id', clipId);
+            var clipShape = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+            clipShape.setAttribute('d', paths[0]);
+            clip.appendChild(clipShape);
+            outlineTarget.appendChild(clip);
+            shape.setAttribute('clip-path', 'url(#' + clipId + ')');
+            if (!safeHoles) shape.style.fill = 'none';
+          } else {
+            shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
+            shape.setAttribute('points', points.join(' '));
+          }
           shape.setAttribute('class', 'flood-mask-outline');
           outlineTarget.appendChild(shape);
           if (!labelPosition) {
@@ -2512,6 +2551,7 @@
     } else if (candidate.kind === 'possible_flooding') {
       if (automatic) {
         line = '轮廓只表示画面位置，请确认是否为道路积水。';
+        if (summary.outline_holes_complete !== true) line += ' 内部形状未完整显示，仅显示外边界。';
       } else {
       var visibleWaterOnly = summary.water_evidence_type === 'visible_water';
       var ratio = Number(visibleWaterOnly ? summary.max_visible_water_area_ratio : summary.max_flooded_road_area_ratio);
