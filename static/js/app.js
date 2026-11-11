@@ -2861,8 +2861,6 @@
         // 7. 清空输入框
         var nlInput = document.getElementById('nl-input');
         if (nlInput) { nlInput.value = ''; nlInput.style.height = 'auto'; }
-        var charCount = document.getElementById('char-count');
-        if (charCount) charCount.textContent = '0';
         // 8. 隐藏错误与加载遮罩
         hideError();
         hideLoading();
@@ -3549,7 +3547,7 @@
     async function submitQueuedMessage(query, requestBody, _replyBubble, epoch) {
         var conversationId = await ensureServerConversation(epoch);
         if (epoch !== state.conversationEpoch) return null;
-        var statusRow = createChatRunStatus();
+        var statusRow = createChatRunStatus(query);
         var requestId = makeRequestId();
         var payload = Object.assign({ query: query, request_id: requestId }, requestBody || {});
         var accepted;
@@ -3601,36 +3599,81 @@
                 return null;
             }
             addRunCancelButton(statusRow, runId, conversationId);
+            startRunStatusRotation(statusRow);
             return await pollRun(runId, conversationId, epoch, statusRow);
         } finally {
             removeChatRunStatus(statusRow);
         }
     }
 
-    function createChatRunStatus() {
+    // 等待状态文案：按用户问题关键词挑首条，再跟两条通用推进语轮播。
+    function pickRunStatusMessages(query) {
+        var q = String(query || '');
+        var first = '正在为您规划路线…';
+        if (/吃|饭|食堂|饿|餐厅/.test(q)) first = '正在帮您找餐厅…';
+        else if (/咖啡|奶茶|喝|饮品/.test(q)) first = '正在找饮品店…';
+        else if (/逛|参观|游览|旅游/.test(q)) first = '正在安排游览路线…';
+        else if (/买|超市|快递|顺路/.test(q)) first = '正在找顺路的店…';
+        else if (/天气|下雨|带伞/.test(q)) first = '正在查看天气…';
+        else if (/修路|封|施工|管制|积水/.test(q)) first = '正在查看路况…';
+        else if (/樱花|赏花/.test(q)) first = '正在安排赏花路线…';
+        var messages = [first, '正在计算路线…', '马上就好…'];
+        return messages.filter(function (text, index) {
+            return messages.indexOf(text) === index;
+        });
+    }
+
+    function createChatRunStatus(query) {
         var region = document.getElementById('chat-run-statuses');
         if (!region) return null;
         var row = document.createElement('div');
+        var spinner = document.createElement('span');
         var label = document.createElement('span');
         row.className = 'chat-run-status-row';
         row.setAttribute('data-run-status', 'active');
+        spinner.className = 'chat-run-status-spinner';
+        spinner.setAttribute('aria-hidden', 'true');
         label.className = 'chat-run-status-label';
         label.setAttribute('role', 'status');
         label.setAttribute('aria-live', 'polite');
-        label.textContent = '正在处理…';
+        row._statusMessages = pickRunStatusMessages(query);
+        row._statusIndex = 0;
+        label.textContent = row._statusMessages[0];
         row._statusLabel = label;
+        row.appendChild(spinner);
         row.appendChild(label);
         region.hidden = false;
         region.appendChild(row);
         return row;
     }
 
+    function startRunStatusRotation(row) {
+        if (!row || !row._statusMessages || row._statusMessages.length < 2) return;
+        stopRunStatusRotation(row);
+        row._rotTimer = setInterval(function () {
+            if (!row._statusLabel) return;
+            row._statusIndex = (row._statusIndex + 1) % row._statusMessages.length;
+            row._statusLabel.textContent = row._statusMessages[row._statusIndex];
+        }, 2200);
+    }
+
+    function stopRunStatusRotation(row) {
+        if (row && row._rotTimer) {
+            clearInterval(row._rotTimer);
+            row._rotTimer = null;
+        }
+    }
+
     function updateChatRunStatus(row, text) {
-        if (row && row._statusLabel) row._statusLabel.textContent = text;
+        if (!row || !row._statusLabel) return;
+        // 取消、重试等明确状态优先，停掉轮播避免被覆盖。
+        stopRunStatusRotation(row);
+        row._statusLabel.textContent = text;
     }
 
     function removeChatRunStatus(row) {
         if (!row) return;
+        stopRunStatusRotation(row);
         var region = document.getElementById('chat-run-statuses');
         if (row.remove) row.remove();
         else if (region && Array.isArray(region.children)) {
@@ -3654,7 +3697,7 @@
                 conversation_id: conversationId,
             }).catch(function () {
                 button.disabled = false;
-                updateChatRunStatus(statusRow, '正在处理…');
+                updateChatRunStatus(statusRow, '正在为您规划路线…');
             });
         });
         statusRow.appendChild(button);
@@ -4915,20 +4958,14 @@
     function bindEvents() {
         bindMobilePanelResizer();
         var nlInput = document.getElementById('nl-input');
-        var charCount = document.getElementById('char-count');
         var submitBtn = document.getElementById('submit-btn');
         var quickChips = document.querySelectorAll('.quick-chip');
         var errorCloseBtn = document.getElementById('error-close-btn');
         var resetBtn = document.getElementById('reset-btn');
 
         if (nlInput) {
-            // 字数统计 + auto-resize
+            // auto-resize
             nlInput.addEventListener('input', function () {
-                var len = nlInput.value.length;
-                if (charCount) charCount.textContent = len;
-                if (len >= 200 && charCount) charCount.style.color = '#C76B7A';
-                else if (charCount) charCount.style.color = '';
-                // auto-resize
                 nlInput.style.height = 'auto';
                 nlInput.style.height = Math.min(nlInput.scrollHeight, 100) + 'px';
                 syncRouteStrategyUI();
@@ -4951,10 +4988,9 @@
                     return;
                 }
                 handleNlSubmit(query);
-                // 提交后清空输入框 + 重置字数统计与高度
+                // 提交后清空输入框与高度
                 nlInput.value = '';
                 nlInput.style.height = 'auto';
-                if (charCount) charCount.textContent = '0';
                 syncRouteStrategyUI();
             });
         }
@@ -5217,10 +5253,11 @@
             });
             if (!queryAlreadyVisible) showUserBubble(active.query);
             var bubble = showChatBubble(active.query, '', { pending: true });
-            var statusRow = createChatRunStatus();
+            var statusRow = createChatRunStatus(active.query);
             var conversationId = state.serverConversationId;
             var epoch = state.conversationEpoch;
             addRunCancelButton(statusRow, active.run_id, conversationId);
+            startRunStatusRotation(statusRow);
             var userMessage = state.conversationHistory.find(function (message) {
                 return message.role === 'user' && (active.message_seq != null
                     ? Number(message._seq) === Number(active.message_seq)

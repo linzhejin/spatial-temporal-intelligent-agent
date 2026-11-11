@@ -1095,7 +1095,7 @@ body.is-planning-mode .desktop-route-workbench {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    gap: 12px;
+    gap: 10px;
     min-height: 34px;
     padding: 5px 12px;
     border-radius: 12px;
@@ -1104,7 +1104,31 @@ body.is-planning-mode .desktop-route-workbench {
     font-size: 0.82rem;
 }
 
-.chat-run-status-label { flex: 1; min-width: 0; }
+.chat-run-status-spinner {
+    flex-shrink: 0;
+    width: 14px;
+    height: 14px;
+    border: 2px solid rgba(23, 107, 91, 0.25);
+    border-top-color: #176B5B;
+    border-radius: 50%;
+    animation: chat-run-status-spin 0.8s linear infinite;
+}
+
+@keyframes chat-run-status-spin {
+    to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .chat-run-status-spinner { animation: none; }
+}
+
+.chat-run-status-label {
+    flex: 1;
+    min-width: 0;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
 
 .chat-run-status-cancel {
     flex-shrink: 0;
@@ -1181,15 +1205,6 @@ body.is-planning-mode .desktop-route-workbench {
 .submit-btn:active { transform: scale(0.95); }
 
 .submit-btn:disabled { opacity: 0.5; transform: none; cursor: not-allowed; }
-
-.input-counter {
-    position: absolute;
-    top: -20px;
-    right: 60px;
-    font-size: 0.68rem;
-    color: var(--ink-light);
-    pointer-events: none;
-}
 
 /* ===== Keyboard hint bar (desktop only) ===== */
 .kbd-hint-bar {
