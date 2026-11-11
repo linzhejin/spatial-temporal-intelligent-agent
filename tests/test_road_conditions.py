@@ -1322,8 +1322,9 @@ class TestRoadConditionAPI:
     @pytest.mark.parametrize("action,expected", [
         ("notice", "notice"), ("slowdown", "penalty"), ("closure", "closed"),
     ])
+    @pytest.mark.parametrize("automatic", [False, True])
     def test_assisted_flood_publication_uses_reviewed_model_and_selected_edge(
-        self, client, G, monkeypatch, tmp_path, action, expected,
+        self, client, G, monkeypatch, tmp_path, action, expected, automatic,
     ):
         import api.routes as routes
         from storage import database, vision_repository
@@ -1365,6 +1366,17 @@ class TestRoadConditionAPI:
                 }],
             },
         }
+        if automatic:
+            job["observation_regions"] = [{
+                "kind": "automatic_flood_analysis",
+                "flood_assistance_mode": "assisted_review",
+            }]
+            job["result"]["flood_assistance"]["automatic_flood"] = True
+            job["result"]["candidates"][0]["evidence"]["summary"] = {
+                "region_id": "auto-flood-1", "region_origin": "automatic_model",
+                "region_polygon": region["polygon"],
+                "outline_polygons": [region["polygon"]],
+            }
         monkeypatch.setattr(vision_repository, "get_job", lambda *_args: job)
         lng, lat = _mid_12_gcj(G)
         headers = {"X-Admin-Token": "test-token-xyz"}
@@ -1376,6 +1388,19 @@ class TestRoadConditionAPI:
             "field_confirmation": "现场复核确认该道路有积水线索，影响步行通行。",
             "end_time": time.time() + 1800,
         }
+
+        if automatic:
+            review = job["candidate_reviews"].pop("0")
+            unconfirmed = client.post("/api/road-conditions", json=body, headers=headers)
+            assert unconfirmed.status_code == 409
+            assert unconfirmed.get_json()["error"] == "vision_source_not_confirmed"
+            job["candidate_reviews"]["0"] = review
+            summary = job["result"]["candidates"][0]["evidence"]["summary"]
+            summary["outline_polygons"] = [[[0.0, 0.0], [0.1, 0.0], [0.1, 0.1]]]
+            mismatch = client.post("/api/road-conditions", json=body, headers=headers)
+            assert mismatch.status_code == 409
+            assert mismatch.get_json()["error"] == "vision_region_mismatch"
+            summary["outline_polygons"] = [region["polygon"]]
 
         missing_edge = client.post("/api/road-conditions", json=body, headers=headers)
         assert missing_edge.status_code == 409
@@ -1399,6 +1424,9 @@ class TestRoadConditionAPI:
         condition = published.get_json()["data"]["condition"]
         assert condition["edge"]["u"] == body["edge_ref"]["u"]
         assert condition["edge"]["v"] == body["edge_ref"]["v"]
+        if automatic:
+            assert condition["source"]["region_origin"] == "automatic_model"
+            assert condition["source"]["region_polygon"] == region["polygon"]
         assert condition["source"]["flood_model"] == {
             "model_id": "doodleverse-floodnet-resunet-v7",
             "model_version": "doodleverse-floodnet-resunet-v7",

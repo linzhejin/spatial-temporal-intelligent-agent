@@ -42,12 +42,14 @@ def _enable_doodleverse_assistance(monkeypatch, tmp_path):
     monkeypatch.setattr(routes.config, "VISION_FLOOD_REVISION", "doodleverse-floodnet-resunet-v7")
     monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
         "flood_assistance_supported": True,
+        "flood_assistance_automatic_supported": True,
         "flood_assistance_release_status": "approved",
         "flood_assistance_model_id": "doodleverse-floodnet-resunet-v7",
         "flood_assistance_model_version": "doodleverse-floodnet-resunet-v7",
         "flood_assistance_model_sha256": "a" * 64,
         "trial_flood_supported": True,
         "trial_flood_media": "image",
+        "trial_flood_automatic_supported": True,
     })
 
 
@@ -109,6 +111,61 @@ def test_doodleverse_public_trial_uses_same_image_path_without_becoming_publisha
     assert captured["purpose"] == "trial"
     assert captured["anchor_gcj"] is None
     assert all("flood_assistance_mode" not in item for item in captured["observation_regions"])
+
+
+def test_public_flood_image_accepts_upload_without_manual_road_polygon(monkeypatch, tmp_path):
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+    data = _flood_upload_data(purpose="trial", include_anchor=False)
+    data["observation_regions"] = "[]"
+
+    response = client.post("/api/manager/vision-jobs", data=data,
+                           headers={"X-CSRF-Token": csrf})
+
+    assert response.status_code == 202, response.get_json()
+    assert captured["purpose"] == "trial"
+    assert captured["observation_regions"] == []
+
+
+def test_operational_flood_image_queues_automatic_analysis_without_manual_polygon(monkeypatch, tmp_path):
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+    data = _flood_upload_data()
+    data.update({"observation_regions": "[]", "flood_assistance": "true"})
+
+    response = client.post("/api/manager/vision-jobs", data=data,
+                           headers={"X-CSRF-Token": csrf})
+
+    assert response.status_code == 202, response.get_json()
+    assert captured["purpose"] == "operational"
+    marker = captured["observation_regions"]
+    assert len(marker) == 1
+    assert marker[0]["flood_assistance_mode"] == "assisted_review"
+    assert marker[0]["kind"] == "automatic_flood_analysis"
+    assert "polygon" not in marker[0]
+
+
+def test_automatic_flood_rejects_upload_until_specialized_worker_supports_it(monkeypatch, tmp_path):
+    import api.routes as routes
+
+    _enable_doodleverse_assistance(monkeypatch, tmp_path)
+    monkeypatch.setattr(routes, "_vision_worker_capabilities", lambda *_args: {
+        "flood_assistance_supported": True, "flood_assistance_release_status": "approved",
+        "flood_assistance_model_id": "doodleverse-floodnet-resunet-v7",
+    })
+    captured = {}
+    client, csrf = _manager_client(monkeypatch, tmp_path, captured)
+    data = _flood_upload_data()
+    data.update({"observation_regions": "[]", "flood_assistance": "true"})
+
+    response = client.post("/api/manager/vision-jobs", data=data,
+                           headers={"X-CSRF-Token": csrf})
+
+    assert response.status_code == 503
+    assert response.get_json()["error"] == "flood_automatic_not_ready"
+    assert not captured
 
 
 def test_doodleverse_assisted_upload_rejects_video_and_missing_location(monkeypatch, tmp_path):

@@ -38,7 +38,8 @@ def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tm
                           "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
     model_path = root / "doodleverse_floodnet_v7_fp32.onnx"
     traffic = Path(r"D:\LuoJiaModels\visdrone-rtdetrv4-s.onnx")
-    runtime = root / "flood_runtime_release_20261110/Scripts/python.exe"
+    runtime = Path(os.getenv("VISION_FLOOD_TEST_RUNTIME",
+                             str(root / "flood_runtime_release_20261110/Scripts/python.exe")))
     image = root / "model_comparison_20261109/flood/road_inundation_delta_ian_2024/samples_v1_2/test/HURRICANE-IAN_000352_image.png"
     assert all(path.is_file() for path in (model_path, traffic, runtime, image))
     model_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
@@ -96,7 +97,9 @@ def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tm
                                 and detail.get("flood_assistance_model_sha256") == model_hash):
                             return detail
                     return None
-                wait_until(approved_worker, process, timeout=45)
+                detail = wait_until(approved_worker, process, timeout=45)
+                assert detail.get("flood_assistance_automatic_supported") is False
+                assert detail.get("trial_flood_automatic_supported") is False
                 region = {"id": "road", "kind": "road_surface", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}
                 if purpose == "operational":
                     region["flood_assistance_mode"] = "assisted_review"

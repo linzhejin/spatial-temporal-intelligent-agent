@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261110-map-frame-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261111-auto-flood-v1">
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261110-manager-status-v3" defer></script>
+  <script src="/js/manager.js?v=20261111-auto-flood-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -200,7 +200,8 @@
               <button id="show-dji-track" class="outline-button dji-track-preview-button" type="button" hidden>在地图上查看无人机航迹</button>
               <button id="pick-anchor" class="outline-button" type="button">⌖ 标注影像所在校园区域</button>
               <div id="selected-anchor" class="selected-road">尚未标注影像区域</div>
-              <div id="observation-editor" class="observation-editor" hidden>
+              <details id="observation-editor" class="observation-editor" hidden open>
+                <summary>手动圈选观察区域</summary>
                 <div class="observation-editor-heading"><strong>标注画面中的观察区域</strong><span>点选顶点，完成后形成多边形</span></div>
                 <div class="observation-preview">
                   <img id="observation-image" alt="待标注巡查画面" hidden>
@@ -241,7 +242,7 @@
                   <small>保存后可复用圈选区域和道路；载入后仍请核对。</small>
                 </div>
               <small id="observation-region-note" class="stabilization-note">视频中的圈选区域会随无人机移动，镜头改变后请重新圈选。积水分析不估算水深。</small>
-              </div>
+              </details>
               <label class="stabilization-option"><input id="camera-stabilized" type="checkbox"> 视频来自固定机位或已完成稳像（可选）</label>
               <small class="stabilization-note">拥堵与人群候选需要圈定画面区域，且固定机位或完成稳像。</small>
               <button id="submit-vision" class="primary-button" type="submit" disabled>提交分析任务 <span>→</span></button>

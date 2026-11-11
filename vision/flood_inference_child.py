@@ -19,10 +19,14 @@ def main(request_path: str) -> int:
         min_area_ratio=request["min_area_ratio"],
         single_image_trigger_threshold=request["single_image_trigger_threshold"],
     )
-    probabilities = model._predict_probabilities(frame)
-    predictions = model._predictions_from_probability(
-        frame, request.get("regions") or [], probabilities,
-    )
+    if request.get("automatic") is True:
+        probability, winner = model._predict_automatic_maps(frame)
+        predictions = model._automatic_predictions_from_maps(probability, winner)
+    else:
+        probabilities = model._predict_probabilities(frame)
+        predictions = model._predictions_from_probability(
+            frame, request.get("regions") or [], probabilities,
+        )
     Path(request["response_path"]).write_text(json.dumps({
         "status": "ok", "predictions": predictions,
     }, ensure_ascii=False, allow_nan=False), encoding="utf-8")

@@ -52,6 +52,9 @@ def test_assisted_worker_uses_doodleverse_without_loading_legacy_trial_models(mo
     assert models["flood"].model_id == "doodleverse-fixture"
     assert capabilities["flood_assistance_supported"] is True
     assert capabilities["flood_assistance_release_status"] == "approved"
+    # The existing release evidence covers marked road regions only.
+    assert capabilities["flood_assistance_automatic_supported"] is False
+    assert capabilities["trial_flood_automatic_supported"] is False
 
 
 def test_assisted_worker_is_not_ready_without_the_traffic_detector(monkeypatch, tmp_path):

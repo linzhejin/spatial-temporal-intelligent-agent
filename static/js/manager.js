@@ -579,7 +579,8 @@
       message('vision-message', '发现这段视频的未完成上传；提交后会从已上传位置继续。', true);
     } else {
       message('vision-message', isVisionFloodAssisted()
-        ? (isVideoFile(file) ? '积水辅助识别只支持图片。' : '已选择积水辅助识别；请圈选路面并标注校园位置。')
+        ? (isVideoFile(file) ? '积水辅助识别只支持图片。' :
+          automaticFloodAvailable(file) ? '标注校园位置后，可自动识别疑似积水。' : '请圈选路面并标注校园位置。')
         : isVisionTrial() ? '影像已准备好，试用结果不会进入真实路况。' :
         '影像已准备好，可开始识别；如有有效候选，复核后选择具体道路。', true);
     }
@@ -594,6 +595,11 @@
 
   function isVisionTrial() { return byId('vision-purpose').value === 'trial'; }
   function isVisionFloodAssisted() { return byId('vision-purpose').value === 'flood_assisted'; }
+  function automaticFloodAvailable(file) {
+    if (!file || !isImageFile(file)) return false;
+    return isVisionFloodAssisted() ? state.floodAssistance.automatic_flood === true
+      : isVisionTrial() && state.trialCapabilities && state.trialCapabilities.automatic_flood === true;
+  }
 
   function updateVisionPurpose() {
     var trial = isVisionTrial();
@@ -604,9 +610,11 @@
     var limitNote = '视频不超过 ' + Number(trialLimits.max_video_seconds || 45) + ' 秒，影像不超过约 ' +
       Math.round(Number(trialLimits.max_frame_pixels || 2073600) / 10000) + ' 万像素。';
     byId('vision-purpose-note').textContent = floodAssisted
-      ? '仅支持图片。圈选实际路面并标注校园位置。'
+      ? (state.floodAssistance.automatic_flood ? '上传图片并标注校园位置，系统会自动标出疑似积水。' :
+        '仅支持图片。圈选实际路面并标注校园位置。')
       : trial
-      ? '试用不关联校园位置。请圈选路面。' + limitNote
+      ? (trialLimits.automatic_flood ? '上传图片后自动标出疑似积水，结果需人工核对。' :
+        '试用不关联校园位置。请圈选路面。') + limitNote
       : '校园巡查可在人工核实后登记路况。';
     updateVisionSubmitState();
     updateVisionGuidance();
@@ -668,6 +676,7 @@
   function showObservationMedia(file) {
     var editor = byId('observation-editor');
     if (!editor) return;
+    editor.open = !automaticFloodAvailable(file);
     if (state.mediaObjectUrl && window.URL && window.URL.revokeObjectURL) window.URL.revokeObjectURL(state.mediaObjectUrl);
     state.mediaObjectUrl = null;
     editor.hidden = true;
@@ -2221,21 +2230,30 @@
       });
       stage.appendChild(svg);
     }
-    var floodCandidates = Array.isArray(result.candidates) ? result.candidates.filter(function (item) {
-      return item && item.kind === 'possible_flooding';
-    }) : [];
-    var floodOutlines = floodCandidates.map(function (item) {
-      return item.evidence && item.evidence.summary && item.evidence.summary.outline_polygons;
-    }).concat((Array.isArray(result.flood_review) ? result.flood_review : []).map(function (item) {
-      return item && item.outline_polygons;
-    })).filter(function (outlines) { return Array.isArray(outlines) && outlines.length; });
+    var floodOutlines = [];
+    (Array.isArray(result.candidates) ? result.candidates : []).forEach(function (item, index) {
+      if (!item || item.kind !== 'possible_flooding') return;
+      var summary = item.evidence && item.evidence.summary || {};
+      if (Array.isArray(summary.outline_polygons) && summary.outline_polygons.length) {
+        floodOutlines.push({ outlines: summary.outline_polygons,
+          number: summary.region_origin === 'automatic_model' ? index + 1 : null });
+      }
+    });
+    (Array.isArray(result.flood_review) ? result.flood_review : []).forEach(function (item) {
+      if (item && Array.isArray(item.outline_polygons) && item.outline_polygons.length) {
+        floodOutlines.push({ outlines: item.outline_polygons, number: null });
+      }
+    });
     if (floodOutlines.length && width > 0 && height > 0) {
       var overlay = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      var automaticGroups = [];
       overlay.setAttribute('viewBox', '0 0 ' + width + ' ' + height);
       overlay.setAttribute('preserveAspectRatio', 'none');
       overlay.setAttribute('aria-label', '疑似积水像素轮廓，仅供管理员复核');
-      floodOutlines.slice(0, 24).forEach(function (outlines) {
-        outlines.slice(0, 8).forEach(function (polygon) {
+      floodOutlines.slice(0, 24).forEach(function (entry) {
+        var labelPosition = null;
+        var outlineTarget = entry.number === null ? overlay : document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        entry.outlines.slice(0, 8).forEach(function (polygon) {
           if (!Array.isArray(polygon) || polygon.length < 3) return;
           var points = polygon.map(function (point) {
             if (!Array.isArray(point) || point.length !== 2) return null;
@@ -2247,13 +2265,35 @@
           var shape = document.createElementNS('http://www.w3.org/2000/svg', 'polygon');
           shape.setAttribute('points', points.join(' '));
           shape.setAttribute('class', 'flood-mask-outline');
-          overlay.appendChild(shape);
+          outlineTarget.appendChild(shape);
+          if (!labelPosition) {
+            labelPosition = polygon.reduce(function (sum, point) {
+              return [sum[0] + Number(point[0]) * width / polygon.length,
+                sum[1] + Number(point[1]) * height / polygon.length];
+            }, [0, 0]);
+          }
         });
+        if (entry.number !== null && labelPosition) {
+          var label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+          label.setAttribute('x', labelPosition[0]); label.setAttribute('y', labelPosition[1]);
+          label.textContent = String(entry.number);
+          outlineTarget.appendChild(label);
+          automaticGroups.push({ number: entry.number, node: outlineTarget });
+          overlay.appendChild(outlineTarget);
+        }
       });
+      if (automaticGroups.length) {
+        stage._focusFloodCandidate = function (number) {
+          automaticGroups.forEach(function (group) {
+            group.node.style.display = group.number === number ? '' : 'none';
+          });
+        };
+        stage._focusFloodCandidate(automaticGroups[0].number);
+      }
       if (overlay.childNodes && overlay.childNodes.length) stage.appendChild(overlay);
     }
     card.appendChild(stage);
-    return null;
+    return stage;
   }
 
   function getVisionPreviewState(jobId, result) {
@@ -2460,7 +2500,8 @@
     var evidence = candidate && candidate.evidence || {};
     var summary = evidence.summary || {};
     var regionId = summary.region_id || evidence.region_id;
-    var line = typeof regionId === 'string' && regionId ? '观察区域：' + regionId + '。' : '';
+    var automatic = summary.region_origin === 'automatic_model';
+    var line = !automatic && typeof regionId === 'string' && regionId ? '观察区域：' + regionId + '。' : '';
     if (candidate.kind === 'possible_accident' && summary.model_scope === 'temporal_window') {
       line += '每段抽取 16 帧筛查，不能定位事故时刻或位置；请查看原视频。';
     } else if (candidate.kind === 'possible_accident') {
@@ -2469,6 +2510,9 @@
         (Number.isFinite(accidentScore) ? '，最高分 ' + Math.round(accidentScore * 100) + '%' : '') +
         '；此模型不能定位事故车辆。';
     } else if (candidate.kind === 'possible_flooding') {
+      if (automatic) {
+        line = '轮廓只表示画面位置，请确认是否为道路积水。';
+      } else {
       var visibleWaterOnly = summary.water_evidence_type === 'visible_water';
       var ratio = Number(visibleWaterOnly ? summary.max_visible_water_area_ratio : summary.max_flooded_road_area_ratio);
       line += (visibleWaterOnly ? '圈选路面画面内可见水体像素约占 ' : '圈选路面中疑似淹水像素约占 ') +
@@ -2477,6 +2521,7 @@
           ? '；模型无法区分路面积水与其他可见水体，须人工核对。'
           : '；这是画面比例，不是水深或实际淹水面积。') +
         (mediaKind === 'image' && summary.outline_polygons && summary.outline_polygons.length ? ' 原图已叠加疑似轮廓。' : '');
+      }
     } else if (candidate.kind === 'possible_congestion') {
       var observedSeconds = Number(summary.observed_duration_seconds);
       var meanVehicles = Number(summary.mean_vehicle_count);
@@ -2855,6 +2900,24 @@
         card.appendChild(reviewFeedback);
       }
       var candidates = document.createElement('div'); candidates.className = 'candidate-list';
+      var automaticCount = (result.candidates || []).filter(function (item) {
+        return item && item.evidence && item.evidence.summary &&
+          item.evidence.summary.region_origin === 'automatic_model';
+      }).length;
+      if (automaticCount) {
+        var automaticNotice = document.createElement('p'); automaticNotice.className = 'vision-job-meta';
+        automaticNotice.textContent = '水面可能被误识别为道路；未标出的位置也可能积水。';
+        card.appendChild(automaticNotice);
+      }
+      if ((result.candidates || []).some(function (item) {
+        return item && item.evidence && item.evidence.summary &&
+          item.evidence.summary.automatic_candidates_truncated === true;
+      })) {
+        var omitted = document.createElement('p'); omitted.className = 'vision-job-meta';
+        omitted.textContent = '还有零散疑似区域未列出，请结合原图核查。';
+        card.appendChild(omitted);
+      }
+      var automaticSeen = 0, moreAutomatic = null;
       (result.candidates || []).forEach(function (item, index) {
         var candidateReview = (job.candidate_reviews || {})[String(index)] || null;
         var legacyReview = job.review_status && (job.review_candidate_index === index || ((result.candidates || []).length === 1 && job.review_candidate_index == null));
@@ -2871,13 +2934,26 @@
         } else {
           titleStatus = ' · 模型分数 ' + Math.round((item.confidence || 0) * 100) + '% · 需复核';
         }
-        titleNode.textContent = candidateName(item.kind, item) + titleStatus;
+        var automaticSummary = item.evidence && item.evidence.summary || {};
+        titleNode.textContent = (automaticSummary.region_origin === 'automatic_model' ? '候选 ' + (index + 1) + ' · ' : '') +
+          candidateName(item.kind, item) + titleStatus;
         if (candidateReview) titleNode.textContent += candidateReview.status === 'confirmed' ? ' · 已确认' : ' · 已排除';
         else if (legacyReview) titleNode.textContent += job.review_status === 'confirmed' ? ' · 已确认' : ' · 已排除';
         var why = document.createElement('p'); why.textContent = item.reason || '请结合原始影像复核。';
         candidate.append(titleNode, why);
         appendCandidateSummary(item, job.media_kind, candidate);
         appendCandidateEvidence(item, previewMedia, job.media_kind, candidate, result);
+        if (automaticSummary.region_origin === 'automatic_model' && previewMedia &&
+            typeof previewMedia._focusFloodCandidate === 'function') {
+          var showLocation = document.createElement('button');
+          showLocation.type = 'button'; showLocation.className = 'outline-button';
+          showLocation.textContent = '查看位置';
+          showLocation.addEventListener('click', function () {
+            previewMedia._focusFloodCandidate(index + 1);
+            if (previewMedia.scrollIntoView) previewMedia.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          });
+          candidate.appendChild(showLocation);
+        }
         if (candidateReview) {
           var reviewText = document.createElement('p'); reviewText.className = 'vision-job-meta';
           var reviewParts = [candidateReview.status === 'confirmed' ? '已确认' : '已排除'];
@@ -2909,7 +2985,17 @@
           transfer.addEventListener('click', function () { prepareVisionEvent(job, index); });
           candidate.appendChild(transfer);
         }
-        candidates.appendChild(candidate);
+        if (automaticSummary.region_origin === 'automatic_model' && ++automaticSeen > 5) {
+          if (!moreAutomatic) {
+            moreAutomatic = document.createElement('details'); moreAutomatic.className = 'candidate-more';
+            var moreSummary = document.createElement('summary');
+            moreSummary.textContent = '查看其余 ' + (automaticCount - 5) + ' 个候选';
+            moreAutomatic.appendChild(moreSummary); candidates.appendChild(moreAutomatic);
+          }
+          moreAutomatic.appendChild(candidate);
+        } else {
+          candidates.appendChild(candidate);
+        }
       });
       if (candidates.children.length) {
         card.appendChild(candidates);
@@ -2956,7 +3042,10 @@
         var terminal = document.createElement('details'); terminal.className = 'vision-terminal';
         var terminalTitle = document.createElement('summary'); terminalTitle.textContent = '分析已结束 · 结果';
         var terminalCopy = document.createElement('p');
-        if (isTrial) {
+        if (result.automatic_flood === true) {
+          terminal.open = true;
+          terminalCopy.textContent = '未发现疑似积水；请结合原图核对，未检出不代表没有积水。';
+        } else if (isTrial) {
           terminalCopy.textContent = '没有生成候选。请查看原片；发现漏检可在下方记录。';
         } else if (isReplay) {
           terminalCopy.textContent = '历史分析没有可复核候选；是否存在道路异常未知，不能据此发布当前路况。';
@@ -3246,14 +3335,15 @@
     var temporalVideo = trialModels.accident && trialModels.accident_media === 'video' && video;
     var laneRegion = observationRegions.some(function (region) { return region.kind === 'vehicle_lane' || region.kind === 'road_surface'; });
     var roadRegion = observationRegions.some(function (region) { return region.kind === 'road_surface'; });
-    if (floodAssisted && !roadRegion) {
+    var automaticFlood = automaticFloodAvailable(file);
+    if (floodAssisted && !roadRegion && !automaticFlood) {
       message('vision-message', '请先在图片上圈选需要检查的路面区域。'); return;
     }
     if (floodAssisted && !state.anchor) {
       message('vision-message', '请先在地图上标注这张图片所在的校园区域。'); return;
     }
     var sceneAccident = trialModels.accident && trialModels.accident_media !== 'video' && laneRegion;
-    var floodRegion = trialModels.flood && roadRegion;
+    var floodRegion = trialModels.flood && (roadRegion || automaticFlood);
     if (purpose === 'trial' && !video && trialModels.accident_media === 'video' && !trialModels.flood) {
       message('vision-message', '当前事故试用模型只支持视频。'); return;
     }
@@ -3412,7 +3502,10 @@
   byId('event-cost').addEventListener('input', function () { updatePublishState(); return refreshImpactPreview(); });
   byId('field-confirmation').addEventListener('input', updatePublishState);
   byId('clear-vision-source').addEventListener('click', clearVisionSource);
-  byId('vision-purpose').addEventListener('change', updateVisionPurpose);
+  byId('vision-purpose').addEventListener('change', function () {
+    updateVisionPurpose();
+    byId('observation-editor').open = !automaticFloodAvailable(byId('media-file').files[0]);
+  });
   byId('pick-anchor').addEventListener('click', function () { setPicking(true, 'vision'); });
   byId('start-region').addEventListener('click', function () {
     if (!byId('observation-canvas').width) { message('vision-message', '请先选择可读取的图片或视频画面。'); return; }

@@ -52,10 +52,10 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
             "WITH candidate AS (SELECT job_id FROM manager_vision_job"
             " WHERE deleted_at IS NULL AND attempts<3 AND ("
             " (purpose='operational' AND %s AND NOT (%s AND media_kind='image'"
-            " AND observation_regions @> '[{\"kind\":\"road_surface\",\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
+            " AND observation_regions @> '[{\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
             " OR (purpose='trial' AND %s)"
             " OR (%s AND purpose='operational' AND media_kind='image'"
-            " AND observation_regions @> '[{\"kind\":\"road_surface\",\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
+            " AND observation_regions @> '[{\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
             " AND (status='queued' OR (status='running' AND lease_until < now()))"
             " ORDER BY created_at, job_id FOR UPDATE SKIP LOCKED LIMIT 1)"
             " UPDATE manager_vision_job j SET status='running', worker_id=%s,"
@@ -341,7 +341,9 @@ def heartbeat_worker(url: str | None, worker_id: str, *, ready: bool,
             " VALUES (%s,%s,%s,%s,now()) ON CONFLICT(worker_id) DO UPDATE SET"
             " ready=EXCLUDED.ready, status_detail=EXCLUDED.status_detail,"
             " worker_role=EXCLUDED.worker_role, heartbeat_at=now()",
-            (worker_id, bool(ready), (status_detail or "")[:500], role),
+            # Capability JSON must remain complete so the API can decode it.
+            # The database column is TEXT; worker error messages are already bounded.
+            (worker_id, bool(ready), status_detail or "", role),
         )
 
 

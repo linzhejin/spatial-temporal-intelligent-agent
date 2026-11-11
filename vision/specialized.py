@@ -405,9 +405,7 @@ class DoodleverseFloodSegmenter:
 
         return prepare_doodleverse_rgb(frame_rgb)
 
-    def _predict_probabilities(self, frame_rgb):
-        from vision.doodleverse_preprocessing import extract_flooded_road_probability
-
+    def _predict_output(self, frame_rgb):
         model_input = self._prepare_rgb(frame_rgb)
         if self.session is None:
             # Large source-image resize buffers must be released before the
@@ -425,7 +423,87 @@ class DoodleverseFloodSegmenter:
             raw = self.session.run([self.output_name], {self.input_name: model_input})
         except Exception as error:
             raise RuntimeError(f"Doodleverse v7 推理失败：{error}") from error
-        return extract_flooded_road_probability(raw[0])
+        return raw[0]
+
+    def _predict_probabilities(self, frame_rgb):
+        from vision.doodleverse_preprocessing import extract_flooded_road_probability
+
+        return extract_flooded_road_probability(self._predict_output(frame_rgb))
+
+    def _predict_automatic_maps(self, frame_rgb):
+        """Return the flooded-road class winner and its raw probability plane."""
+        import numpy as np
+
+        from vision.doodleverse_preprocessing import extract_flooded_road_probability
+
+        output = self._predict_output(frame_rgb)
+        probability = extract_flooded_road_probability(output)
+        scores = output[0]
+        winner = (probability >= np.max(scores, axis=-1))
+        # Match argmax's first-class tie behaviour without allocating an int64
+        # class map the size of the image.
+        for class_id in range(self.FLOODED_ROAD_CLASS):
+            winner &= probability > scores[:, :, class_id]
+        winner &= probability >= self.probability_threshold
+        return probability.copy(), winner
+
+    def _automatic_predictions_from_maps(self, probability, winner):
+        """Create bounded image-space proposals, not geographic road matches."""
+        import cv2
+        import numpy as np
+
+        if probability.shape != winner.shape or probability.ndim != 2:
+            raise ValueError("积水候选概率图尺寸无效")
+        height, width = winner.shape
+        contours, _ = cv2.findContours(
+            winner.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE,
+        )
+        contours = sorted(contours, key=lambda item: (-cv2.contourArea(item),
+                                                       cv2.boundingRect(item)[1], cv2.boundingRect(item)[0]))
+        truncated = sum(cv2.contourArea(item) >= 2 for item in contours) > 24
+        predictions = {}
+        for contour in contours:
+            if cv2.contourArea(contour) < 2:
+                continue
+            epsilon = max(1.0, 0.005 * cv2.arcLength(contour, True))
+            simplified = cv2.approxPolyDP(contour, epsilon, True).reshape(-1, 2)
+            while len(simplified) > 128:
+                epsilon *= 1.5
+                simplified = cv2.approxPolyDP(contour, epsilon, True).reshape(-1, 2)
+            if len(simplified) < 3:
+                continue
+            polygon = [[round(float(x) / max(1, width - 1), 5),
+                        round(float(y) / max(1, height - 1), 5)]
+                       for x, y in simplified]
+            x, y, w, h = cv2.boundingRect(contour)
+            local_mask = np.zeros((h, w), dtype=np.uint8)
+            cv2.drawContours(local_mask, [contour - np.array([[[x, y]]])], -1, 1, -1)
+            score = float(probability[y:y + h, x:x + w][local_mask != 0].mean())
+            region_id = f"auto-flood-{len(predictions) + 1}"
+            predictions[region_id] = {
+                "region_id": region_id,
+                "region_origin": "automatic_model",
+                "region_polygon": polygon,
+                "outline_polygons": [polygon],
+                "automatic_flood": True,
+                "automatic_candidates_truncated": truncated,
+                "model_score": round(score, 6),
+                "model_id": self.model_id,
+                "model_version": self.model_version,
+                "water_evidence_type": "flooded_road",
+                "water_depth_estimated": False,
+            }
+            if len(predictions) >= 24:
+                break
+        return predictions
+
+    def predict_automatic(self, frame_rgb, *, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise RuntimeError("积水检查已取消")
+        if self.session is not None:
+            probability, winner = self._predict_automatic_maps(frame_rgb)
+            return self._automatic_predictions_from_maps(probability, winner)
+        return self._run_isolated(frame_rgb, [], automatic=True, cancel_check=cancel_check)
 
     def _predictions_from_probability(self, frame_rgb, regions, class_probability):
         import cv2
@@ -506,6 +584,11 @@ class DoodleverseFloodSegmenter:
         if self.session is not None:
             probabilities = self._predict_probabilities(frame_rgb)
             return self._predictions_from_probability(frame_rgb, road_regions, probabilities)
+        return self._run_isolated(frame_rgb, road_regions, automatic=False, cancel_check=cancel_check)
+
+    def _run_isolated(self, frame_rgb, road_regions, *, automatic, cancel_check):
+        import numpy as np
+
         request_root = Path(tempfile.mkdtemp(prefix="whu-flood-"))
         process = None
         try:
@@ -523,6 +606,7 @@ class DoodleverseFloodSegmenter:
                 "min_area_ratio": self.min_area_ratio,
                 "single_image_trigger_threshold": self.single_image_trigger_threshold,
                 "regions": road_regions,
+                "automatic": automatic,
             }, separators=(",", ":")), encoding="utf-8")
             project_root = Path(__file__).resolve().parents[1]
             python = self.runtime_python or sys.executable

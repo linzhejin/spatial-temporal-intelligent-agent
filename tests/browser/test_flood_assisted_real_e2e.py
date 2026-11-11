@@ -25,8 +25,8 @@ pytestmark = pytest.mark.usefixtures("isolated_test_database")
 
 @pytest.mark.skipif(os.getenv("RUN_FLOOD_ASSISTED_REAL_E2E") != "1" or sync_playwright is None,
                     reason="requires explicit isolated PostgreSQL, real model weights and Playwright")
-@pytest.mark.parametrize("impact", ["notice", "slowdown", "closure"])
-def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, impact):
+@pytest.mark.parametrize("impact,automatic", [("notice", True), ("slowdown", False), ("closure", False)])
+def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, impact, automatic):
     import api.routes as routes
     import config
     from app import create_app
@@ -37,7 +37,8 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
     evidence = Path(r"D:\LuoJiaValidation")
     image = evidence / "model_comparison_20261109/flood/road_inundation_delta_ian_2024/samples_v1_2/test/HURRICANE-IAN_000352_image.png"
     flood_path = evidence / "doodleverse_floodnet_v7_fp32.onnx"
-    runtime = evidence / "flood_runtime_release_20261110/Scripts/python.exe"
+    runtime = Path(os.getenv("VISION_FLOOD_TEST_RUNTIME",
+                             str(evidence / "flood_runtime_release_20261110/Scripts/python.exe")))
     traffic_path = Path(r"D:\LuoJiaModels\visdrone-rtdetrv4-s.onnx")
     assert all(path.is_file() for path in (image, flood_path, runtime, traffic_path))
     uploads = tmp_path / "uploads"
@@ -71,11 +72,13 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
         conn.execute("TRUNCATE manager_vision_job, manager_vision_worker")
     capability = {
         "flood_assistance_supported": True,
+        "flood_assistance_automatic_supported": True,
         "flood_assistance_release_status": "test_injected",
         "flood_assistance_model_id": "doodleverse-floodnet-resunet-v7",
         "flood_assistance_model_version": config.VISION_FLOOD_REVISION,
         "flood_assistance_model_sha256": model_hash,
         "trial_flood_supported": True, "trial_flood_media": "image",
+        "trial_flood_automatic_supported": True,
     }
     heartbeat_stop = threading.Event()
 
@@ -121,15 +124,17 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
             map_element = page.locator("#manager-map")
             map_element.click(position={"x": 100, "y": 100})
             expect(page.locator("#selected-anchor")).not_to_contain_text("尚未标注", timeout=30000)
-            page.wait_for_function("document.querySelector('#observation-image').naturalWidth > 0")
-            page.locator("#observation-kind").select_option("road_surface")
-            page.locator("#start-region").click()
-            canvas = page.locator("#observation-canvas")
-            bounds = canvas.bounding_box()
-            assert bounds
-            for x, y in ((.02, .02), (.98, .02), (.98, .98), (.02, .98)):
-                canvas.click(position={"x": bounds["width"] * x, "y": bounds["height"] * y})
-            page.locator("#finish-region").click()
+            if not automatic:
+                page.locator("#observation-editor > summary").click()
+                page.wait_for_function("document.querySelector('#observation-image').naturalWidth > 0")
+                page.locator("#observation-kind").select_option("road_surface")
+                page.locator("#start-region").click()
+                canvas = page.locator("#observation-canvas")
+                bounds = canvas.bounding_box()
+                assert bounds
+                for x, y in ((.02, .02), (.98, .02), (.98, .98), (.02, .98)):
+                    canvas.click(position={"x": bounds["width"] * x, "y": bounds["height"] * y})
+                page.locator("#finish-region").click()
             with page.expect_response(lambda response: response.url.endswith("/api/manager/vision-jobs")
                                       and response.request.method == "POST", timeout=30000) as submitted:
                 page.locator("#submit-vision").click()
@@ -137,13 +142,18 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
             job_id = submitted.value.json()["data"]["job"]["job_id"]
             outcome = worker.process_next_job(DATABASE_URL, "flood-browser-actual-worker",
                                               trial_flood_segmenter=model, trial_only=True,
-                                              assisted_flood_supported=True)
+                                              assisted_flood_supported=True, automatic_flood_supported=automatic)
             assert outcome == {"job_id": job_id, "status": "needs_review"}
             stored = vision_repository.get_job(DATABASE_URL, job_id)
             assert stored["result"]["flood_assistance"]["model_sha256"] == model_hash
             flood_indices = [index for index, item in enumerate(stored["result"]["candidates"])
                              if item.get("kind") == "possible_flooding"]
-            assert len(flood_indices) == 1
+            assert flood_indices
+            if automatic:
+                assert stored["result"]["flood_assistance"]["automatic_flood"] is True
+                assert stored["result"]["candidates"][flood_indices[0]]["evidence"]["summary"]["region_origin"] == "automatic_model"
+            else:
+                assert len(flood_indices) == 1
             page.reload(wait_until="networkidle")
             card = page.locator(".vision-job").filter(has_text=image.name)
             expect(card).to_be_visible(timeout=30000)
@@ -152,7 +162,10 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
             card.locator("textarea.vision-review-note").fill("隔离验收：已核对图片中的积水候选。")
             candidate.get_by_role("button", name="确认此候选").click()
             expect(candidate).to_contain_text("已确认", timeout=30000)
-            expect(card.locator(".vision-job-state")).to_have_text("候选已复核", timeout=30000)
+            if len(stored["result"]["candidates"]) == 1:
+                expect(card.locator(".vision-job-state")).to_have_text("候选已复核", timeout=30000)
+            else:
+                expect(card.locator(".vision-job-state")).to_have_text("待复核", timeout=30000)
             candidate.get_by_role("button", name="将此候选转入道路事件").click()
             assert page.locator("#event-type").input_value() == "flooding"
             assert page.locator("#event-action").input_value() == "notice"

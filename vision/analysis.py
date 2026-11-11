@@ -281,6 +281,32 @@ def build_specialized_candidates(
         when = observation.get("time_seconds")
         if isinstance(when, bool) or not isinstance(when, (int, float)) or not math.isfinite(float(when)):
             continue
+        if single_image and observation.get("automatic_flood") is True:
+            polygon = observation.get("region_polygon")
+            score = observation.get("model_score")
+            if (not isinstance(polygon, list) or not 3 <= len(polygon) <= 128
+                    or not isinstance(score, (int, float)) or isinstance(score, bool)
+                    or not math.isfinite(float(score)) or not 0 <= score <= 1):
+                continue
+            if any(not isinstance(point, (tuple, list)) or len(point) != 2
+                   or any(isinstance(value, bool) or not isinstance(value, (int, float))
+                          or not math.isfinite(float(value)) or not 0 <= value <= 1
+                          for value in point) for point in polygon):
+                continue
+            candidates.append(_candidate(
+                "possible_flooding", float(score),
+                "模型标出疑似积水区域，请结合原图确认是否为道路积水。",
+                {"segments": [], "summary": {
+                    "region_id": str(observation.get("region_id") or "")[:64],
+                    "region_origin": "automatic_model",
+                    "region_polygon": polygon,
+                    "outline_polygons": [polygon],
+                    "automatic_candidates_truncated": observation.get("automatic_candidates_truncated") is True,
+                    "water_evidence_type": "flooded_road",
+                    "water_depth_estimated": False,
+                }},
+            ))
+            continue
         probability = observation.get("traffic_accident_probability")
         if (isinstance(probability, (int, float)) and not isinstance(probability, bool)
                 and math.isfinite(float(probability)) and accident_threshold <= probability <= 1):

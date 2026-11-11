@@ -1,4 +1,5 @@
 import io
+import json
 import time
 
 import pytest
@@ -94,6 +95,41 @@ def test_late_cancel_wins_over_completed_result_in_postgresql():
     assert stored["error"]["code"] == "vision_job_cancelled"
 
 
+def test_automatic_flood_job_is_reserved_for_the_specialized_worker():
+    database.initialize(DATABASE_URL)
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("TRUNCATE manager_vision_job")
+    job = vision_repository.create_job(
+        DATABASE_URL, created_by="manager", original_name="automatic.png", media_kind="image",
+        media_path="automatic.png", sha256="a" * 64, anchor_gcj={"lng": 114.363, "lat": 30.5365},
+        observation_regions=[{"kind": "automatic_flood_analysis",
+                              "flood_assistance_mode": "assisted_review"}],
+    )
+    assert vision_repository.claim_next_job(DATABASE_URL, "normal-worker", reserve_assisted=True) is None
+    claimed = vision_repository.claim_next_job(DATABASE_URL, "assisted-worker",
+                                                trial_only=True, allow_assisted=True)
+    assert claimed["job_id"] == job["job_id"]
+
+
+def test_worker_rejects_unapproved_automatic_job_even_if_it_is_in_the_database():
+    from vision import worker
+
+    database.initialize(DATABASE_URL)
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("TRUNCATE manager_vision_job")
+    job = vision_repository.create_job(
+        DATABASE_URL, created_by="manager", original_name="automatic.png", media_kind="image",
+        media_path="automatic.png", sha256="a" * 64, anchor_gcj={"lng": 114.363, "lat": 30.5365},
+        observation_regions=[{"kind": "automatic_flood_analysis", "flood_assistance_mode": "assisted_review"}],
+    )
+    outcome = worker.process_next_job(DATABASE_URL, "assisted-worker", trial_only=True,
+                                      trial_flood_segmenter=object(), assisted_flood_supported=True)
+    assert outcome == {"job_id": job["job_id"], "status": "failed"}
+    stored = vision_repository.get_job(DATABASE_URL, job["job_id"])
+    assert "自动积水识别尚未通过验收" in stored["error"]["message"]
+    assert stored["result"] is None
+
+
 def test_upload_rejects_extension_content_mismatch_and_outside_campus(monkeypatch, tmp_path):
     client, csrf = manager_client(monkeypatch, tmp_path)
     bad_file = client.post(
@@ -181,3 +217,20 @@ def test_vision_worker_readiness_heartbeat_is_live_and_can_be_revoked():
         DATABASE_URL, worker_id, ready=False, status_detail="权重读取失败",
     )
     assert not vision_repository.has_ready_worker(DATABASE_URL, worker_id=worker_id)
+
+
+def test_worker_capability_json_is_not_truncated_at_500_characters():
+    from api.routes import _vision_worker_capabilities
+
+    database.initialize(DATABASE_URL)
+    with database.connect(DATABASE_URL) as conn:
+        conn.execute("TRUNCATE manager_vision_worker")
+    capabilities = {"trial_flood_supported": True, "flood_assistance_automatic_supported": False,
+                    "trial_flood_model_id": "model-" + "x" * 510}
+    detail = json.dumps(capabilities, ensure_ascii=False)
+    assert len(detail) > 500
+    vision_repository.heartbeat_worker(DATABASE_URL, "long-capabilities", ready=True,
+                                       role="trial", status_detail=detail)
+    saved = vision_repository.ready_worker_statuses(DATABASE_URL)[0]["status_detail"]
+    assert json.loads(saved) == capabilities
+    assert _vision_worker_capabilities(DATABASE_URL)["trial_flood_model_id"] == capabilities["trial_flood_model_id"]

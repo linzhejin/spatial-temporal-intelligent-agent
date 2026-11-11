@@ -2730,6 +2730,7 @@ def create_road_condition():
         manual_registration = not candidates and source_job.get("status") == "completed"
         candidate = None
         observation_region = None
+        automatic_region = False
         if manual_registration:
             if candidate_index is not None:
                 return _err("vision_candidate_invalid", "没有模型候选的影像不能指定候选编号。", 409)
@@ -2762,9 +2763,31 @@ def create_road_condition():
                 regions = source_job.get("observation_regions")
                 matches = [region for region in regions if isinstance(region, dict)
                            and region.get("id") == region_id] if isinstance(regions, list) else []
-                if len(matches) != 1:
+                assisted = source_result.get("flood_assistance") if isinstance(source_result, dict) else None
+                auto_marker = any(
+                    isinstance(region, dict) and region.get("kind") == "automatic_flood_analysis"
+                    and region.get("flood_assistance_mode") == "assisted_review"
+                    for region in regions or []
+                )
+                automatic_region = bool(
+                    not matches and auto_marker and isinstance(assisted, dict)
+                    and assisted.get("mode") == "assisted_review"
+                    and assisted.get("automatic_flood") is True
+                    and candidate.get("kind") == "possible_flooding"
+                    and candidate_summary.get("region_origin") == "automatic_model"
+                    and region_id.startswith("auto-flood-")
+                    and region_id[len("auto-flood-"):].isdigit()
+                    and candidate_summary.get("outline_polygons") == [candidate_summary.get("region_polygon")]
+                )
+                if automatic_region:
+                    observation_region = {
+                        "id": region_id, "kind": "road_surface",
+                        "polygon": candidate_summary.get("region_polygon"),
+                    }
+                elif len(matches) == 1:
+                    observation_region = matches[0]
+                else:
                     return _err("vision_region_mismatch", "影像候选对应的观察区域已不存在或存在歧义，请重新分析。", 409)
-                observation_region = matches[0]
                 region_kind = observation_region.get("kind")
                 allowed_region_kinds = {
                     "possible_flooding": {"road_surface"},
@@ -2825,6 +2848,8 @@ def create_road_condition():
                 "region_kind": observation_region["kind"],
                 "region_polygon": observation_region["polygon"],
             })
+            if automatic_region:
+                source["region_origin"] = "automatic_model"
 
         flood_assistance = (
             source_result.get("flood_assistance")
@@ -3358,6 +3383,8 @@ def _validate_trial_regions(purpose, regions, media_kind):
     usable = (temporal and media_kind == "video") or (not temporal and capabilities.get("trial_accident_supported") is True
               and bool(kinds & {"vehicle_lane", "road_surface"})) or (
         capabilities.get("trial_flood_supported") is True and "road_surface" in kinds)
+    usable = usable or (media_kind == "image" and capabilities.get("trial_flood_supported") is True
+                        and capabilities.get("trial_flood_automatic_supported") is True)
     if not usable:
         return _err("trial_region_required", "请圈选机动车道或路面；积水检查须圈选路面。", 400)
     return None
@@ -3413,9 +3440,9 @@ def _validate_flood_assistance_request(requested, purpose, regions, media_kind,
         return _err("flood_assistance_image_only", "积水辅助识别仅支持单张图片。", 415)
     if not _vision_flood_assistance_ready(worker_capabilities):
         return _err("flood_assistance_not_ready", "积水辅助识别尚未就绪，请稍后重试。", 503)
-    if not any(isinstance(region, dict) and region.get("kind") == "road_surface"
-               for region in regions or []):
-        return _err("flood_assistance_region_required", "请先圈选需要检查的路面区域。", 400)
+    if (not any(region.get("kind") == "road_surface" for region in regions or [])
+            and worker_capabilities.get("flood_assistance_automatic_supported") is not True):
+        return _err("flood_automatic_not_ready", "自动积水识别暂未就绪，请稍后重试。", 503)
     return None
 
 
@@ -3427,6 +3454,8 @@ def _tag_assisted_flood_regions(regions, requested):
         if requested and copied.get("kind") == "road_surface":
             copied["flood_assistance_mode"] = "assisted_review"
         tagged.append(copied)
+    if requested and not any(item.get("kind") == "road_surface" for item in tagged):
+        tagged.append({"kind": "automatic_flood_analysis", "flood_assistance_mode": "assisted_review"})
     return tagged
 
 
@@ -3595,6 +3624,7 @@ def manager_vision_status():
             "accident": worker_capabilities.get("trial_accident_supported") is True,
             "accident_media": worker_capabilities.get("trial_accident_media", "frame"),
             "flood": worker_capabilities.get("trial_flood_supported") is True,
+            "automatic_flood": worker_capabilities.get("trial_flood_automatic_supported") is True,
             "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS,
             "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS,
         },
@@ -3606,6 +3636,7 @@ def manager_vision_status():
             "ready": flood_assistance_ready,
             "mode": ("assisted_review" if flood_assistance_ready else "disabled"),
             "supported_media": ["image"],
+            "automatic_flood": worker_capabilities.get("flood_assistance_automatic_supported") is True,
             "field_validated": False,
             "model_id": worker_capabilities.get("flood_assistance_model_id"),
             "model_version": worker_capabilities.get("flood_assistance_model_version"),

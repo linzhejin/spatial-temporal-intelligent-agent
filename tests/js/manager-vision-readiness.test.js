@@ -251,7 +251,8 @@ function managerHarness(sessionSeed = []) {
         max_video_bytes: 4096, upload_chunk_bytes: 512,
         notice: inferenceReady || floodAssistance.ready ? '车辆与行人检测、积水辅助识别可用。' : '视觉分析暂不可用。',
         flood_assistance: floodAssistance,
-        trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false },
+        trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false,
+          automatic_flood: !!floodAssistance.automatic_flood },
         optional_model_status: optionalModelStatus,
       };
       else if (url.startsWith('/api/manager/vision-jobs')) data = { jobs: visionJobs };
@@ -311,8 +312,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v3/);
+  assert.match(managerHtml, /manager\.css\?v=20261111-auto-flood-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261111-auto-flood-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -827,6 +828,83 @@ test('manager exposes the image flood-assistance mode when only that worker is r
   assert.equal(option.textContent, '积水辅助识别（图片）');
   assert.equal(harness.elements.get('vision-status').classList.contains('is-ready'), true);
   assert.match(harness.elements.get('vision-status').textContent, /积水辅助识别可用/);
+});
+
+test('public flood image submits without drawing a road when automatic proposals are available', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setFloodAssistance({ ready: true, enabled: true, automatic_flood: true });
+  harness.intervalCallbacks[0]();
+  await flush();
+  const { elements } = harness;
+  elements.get('vision-purpose').value = 'trial';
+  elements.get('vision-purpose').listeners.change();
+  elements.get('media-file').files = [{ type: 'image/png', name: 'public.png', size: 10 }];
+  elements.get('media-file').listeners.change();
+
+  const upload = elements.get('vision-form').listeners.submit({ preventDefault() {} });
+  await flush();
+  assert.ok(harness.calls.some((call) => call.url === '/api/manager/vision-jobs' && call.options.method === 'POST'));
+  assert.equal(harness.formEntries.find(([name]) => name === 'observation_regions')[1], '[]');
+  assert.doesNotMatch(elements.get('vision-purpose-note').textContent, /请圈选/);
+  harness.releaseVisionUploads();
+  await upload;
+});
+
+test('automatic flood outlines match numbered review cards without invented area percentages', async () => {
+  const harness = managerHarness();
+  await flush();
+  const polygons = [
+    [[0.1, 0.1], [0.3, 0.1], [0.3, 0.3], [0.1, 0.3]],
+    [[0.6, 0.6], [0.8, 0.6], [0.8, 0.8], [0.6, 0.8]],
+  ];
+  harness.setVisionJobs([{
+    job_id: 'automatic-flood', status: 'needs_review', purpose: 'trial',
+    media_kind: 'image', media_url: '/private/image', original_name: 'public.png',
+    result: { media: { width: 100, height: 100 }, candidates: polygons.map((polygon, index) => ({
+      kind: 'possible_flooding', reason: '请核对。',
+      evidence: { summary: { region_id: 'auto-flood-' + (index + 1),
+        region_origin: 'automatic_model', region_polygon: polygon, outline_polygons: [polygon] } },
+    })) },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+
+  const card = harness.elements.get('vision-jobs').children[0];
+  const stage = card.children.find((node) => node.className === 'vision-image-stage');
+  const overlay = stage.children.find((node) => node.tagName === 'svg');
+  const groups = overlay.children.filter((node) => node.tagName === 'g');
+  assert.equal(groups.length, 2);
+  assert.deepEqual(groups.map((group) => group.children.find((node) => node.tagName === 'text').textContent), ['1', '2']);
+  assert.notEqual(groups[0].style.display, 'none');
+  assert.equal(groups[1].style.display, 'none');
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(text, /候选 1/);
+  assert.match(text, /候选 2/);
+  assert.match(text, /水面可能被误识别为道路/);
+  assert.doesNotMatch(text, /auto-flood-|未计算|置信百分比/);
+  const cards = descendants(card).filter((node) => node.className === 'candidate-card');
+  const showSecond = descendants(cards[1]).find((node) => node.textContent === '查看位置');
+  assert.ok(showSecond);
+  showSecond.listeners.click();
+  assert.equal(groups[0].style.display, 'none');
+  assert.notEqual(groups[1].style.display, 'none');
+});
+
+test('an empty automatic flood result explicitly says it can miss flooding', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'automatic-empty', status: 'completed', purpose: 'trial',
+    media_kind: 'image', media_url: '/private/image', original_name: 'dry.png',
+    result: { media: { width: 100, height: 100 }, candidates: [], automatic_flood: true },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const terminal = descendants(card).find((node) => node.className === 'vision-terminal');
+  assert.equal(terminal.open, true);
+  assert.match(descendants(terminal).map((node) => node.textContent || '').join(' '), /未检出不代表没有积水/);
 });
 
 test('readiness polling cannot re-enable or duplicate an in-flight media upload', async () => {

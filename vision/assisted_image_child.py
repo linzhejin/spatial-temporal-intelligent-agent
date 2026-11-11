@@ -11,6 +11,14 @@ from vision.specialized import DoodleverseFloodSegmenter
 
 
 class _InProcessDoodleverse(DoodleverseFloodSegmenter):
+    def predict_automatic(self, frame_rgb, *, cancel_check=None):
+        if cancel_check and cancel_check():
+            raise RuntimeError("积水检查已取消")
+        probability, winner = self._predict_automatic_maps(frame_rgb)
+        self.session = None
+        _release_inference_memory()
+        return self._automatic_predictions_from_maps(probability, winner)
+
     def predict_regions(self, frame_rgb, regions, *, cancel_check=None):
         if cancel_check and cancel_check():
             raise RuntimeError("积水检查已取消")
@@ -53,6 +61,7 @@ def main(request_path):
             regions=request.get("regions") or [], progress_callback=None,
             resume_state=None, cancel_check=None, flood_segmenter=flood,
             traffic_required=False, max_frame_pixels=request.get("max_frame_pixels"),
+            automatic_flood=request.get("automatic_flood") is True,
         )
     else:
         raise ValueError("未知的积水图片分析阶段")

@@ -640,7 +640,7 @@ def _region_crop(frame, region: dict):
 
 
 def _specialized_predictions(frame, time_seconds, regions, accident_model, flood_segmenter,
-                            cancel_check=None, *, flood_frame_is_rgb=False):
+                            cancel_check=None, *, flood_frame_is_rgb=False, automatic_flood=False):
     if accident_model is None and flood_segmenter is None:
         return [], []
     observations = []
@@ -666,7 +666,15 @@ def _specialized_predictions(frame, time_seconds, regions, accident_model, flood
         flood_regions = [region for region in regions or []
                          if isinstance(region, dict) and region.get("kind") == "road_surface"]
         try:
-            if hasattr(flood_segmenter, "predict_regions"):
+            if automatic_flood:
+                import cv2
+                frame_rgb = frame if flood_frame_is_rgb else cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                predictions = flood_segmenter.predict_automatic(frame_rgb, cancel_check=cancel_check)
+                observations.extend(
+                    {"time_seconds": float(time_seconds), **prediction}
+                    for prediction in predictions.values()
+                )
+            elif hasattr(flood_segmenter, "predict_regions"):
                 import cv2
                 frame_rgb = frame if flood_frame_is_rgb else cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 predictions = flood_segmenter.predict_regions(
@@ -731,13 +739,16 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                   progress_callback=None, resume_state: dict | None = None,
                   cancel_check=None, target_sample_fps: float | None = None,
                   max_frame_pixels: int | None = None, max_video_seconds: float | None = None,
-                  require_flood_success: bool = False, inplace_flood_rgb: bool = False) -> dict:
+                  require_flood_success: bool = False, inplace_flood_rgb: bool = False,
+                  automatic_flood: bool = False) -> dict:
     """Analyze all sampled frames in bounded chunks and retain resumable review evidence."""
     path = Path(media_path)
     if not path.is_file():
         raise FileNotFoundError("巡检影像文件已丢失")
     if inplace_flood_rgb and (media_kind != "image" or accident_model is not None or flood_segmenter is None):
         raise ValueError("原位颜色转换仅适用于单张积水图片分析")
+    if automatic_flood and (media_kind != "image" or flood_segmenter is None):
+        raise ValueError("自动积水候选仅支持使用积水模型检查图片")
     detector = detector or OnnxDetector(
         config.VISION_MODEL_PATH,
         model_id=getattr(config, "VISION_MODEL_ID", "visdrone-rtdetrv4-s"),
@@ -798,12 +809,14 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             cv2.cvtColor(frame, cv2.COLOR_BGR2RGB, dst=frame)
         specialized_observations, failures = _specialized_predictions(
             frame, 0.0, regions, accident_model, flood_segmenter, cancel_check,
-            flood_frame_is_rgb=inplace_flood_rgb,
+            flood_frame_is_rgb=inplace_flood_rgb, automatic_flood=automatic_flood,
         )
         analysis["metrics"]["specialized_model_frames"] = _specialized_frame_counts(specialized_observations)
         optional_model_errors.update({item["model"]: item["error_type"] for item in failures})
         if require_flood_success and "flood" in optional_model_errors:
             raise RuntimeError("积水图片检查未完成；请重试，不能将失败显示为未发现积水。")
+        if automatic_flood and "flood" not in optional_model_errors:
+            analysis["metrics"]["specialized_model_frames"]["flood"] = 1
         analysis["candidates"].extend(build_specialized_candidates(
             specialized_observations, sample_interval_s=1.0, single_image=True,
             accident_threshold=getattr(accident_model, "threshold", 0.85),

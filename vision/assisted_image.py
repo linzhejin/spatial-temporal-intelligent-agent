@@ -68,12 +68,12 @@ def _analyze_assisted_flood_image(media_path, media_kind, anchor_gcj, *,
                                   camera_stabilized, regions, progress_callback,
                                   resume_state, cancel_check, flood_segmenter,
                                   detector_factory=None, traffic_required=True,
-                                  max_frame_pixels=None):
+                                  max_frame_pixels=None, automatic_flood=False):
     if media_kind != "image":
         raise ValueError("积水辅助识别仅支持图片")
     flood_regions = [region for region in regions or []
                      if isinstance(region, dict) and region.get("kind") == "road_surface"]
-    if not flood_regions:
+    if not flood_regions and not automatic_flood:
         raise ValueError("积水辅助识别需要先圈选路面范围")
 
     traffic_result = None
@@ -105,5 +105,6 @@ def _analyze_assisted_flood_image(media_path, media_kind, anchor_gcj, *,
         regions=flood_regions, progress_callback=progress_callback, resume_state=None,
         cancel_check=cancel_check, require_flood_success=True,
         max_frame_pixels=max_frame_pixels, inplace_flood_rgb=True,
+        automatic_flood=automatic_flood,
     )
     return _merge_assisted_flood_results(traffic_result, flood_result) if traffic_required else flood_result
