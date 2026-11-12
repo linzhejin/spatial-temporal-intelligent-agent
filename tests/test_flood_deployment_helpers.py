@@ -110,7 +110,7 @@ def test_public_smoke_submits_only_an_unlocated_trial_image(tmp_path):
             assert url.endswith("/api/manager/vision-jobs")
             assert kwargs["data"]["purpose"] == "trial"
             assert set(kwargs["data"]) == {"purpose", "observation_regions"}
-            assert json.loads(kwargs["data"]["observation_regions"])[0]["kind"] == "road_surface"
+            assert json.loads(kwargs["data"]["observation_regions"]) == []
             return Response()
 
     image = tmp_path / "public.png"
@@ -143,7 +143,8 @@ def test_public_smoke_waits_for_a_new_ready_worker_after_recycling(monkeypatch):
 
         def json(self):
             return {'data': {'flood_assistance': {
-                'ready': True, 'model_sha256': public_flood_smoke.MODEL_SHA256,
+                'ready': True, 'automatic_flood': True,
+                'model_sha256': public_flood_smoke.MODEL_SHA256,
             }}}
 
     class Session:

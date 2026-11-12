@@ -29,20 +29,20 @@ BACKUP_ROOT = Path('/home/ubuntu/luojia-release-backups')
 BACKUP_SCRIPT = OPS / 'flood_backup.py'
 SERVICES = ('whu-walker', 'whu-agent-worker', 'whu-vision-worker', 'whu-vision-trial-worker')
 ASSET_VERSION = '20261109-mountain-v1'
-MANAGER_ASSET_VERSION = '20261110-flood-review-v2'
-CACHE_NAME = 'whu-walker-v128'
+MANAGER_ASSET_VERSION = '20261112-auto-flood-v2'
+CACHE_NAME = 'whu-walker-v132'
 GITEE_MAIN_URL = 'https://gitee.com/kim-in-cheol/campus-spatio-temporal-agent.git'
 PRESERVED_UNTRACKED = {'?? cloudflared', '?? scripts/_probe_shortest.py', '?? wget-log'}
 MODEL_SHA256 = '1ef47ccd3aef9cafee359485cfb38c65edcd6625e1552d02e23afacd98f7eb52'
 REQUIRED_TESTED_SOURCES = {
     'config.py', 'storage/vision_repository.py', 'vision/analysis.py', 'vision/engine.py',
     'vision/model_release.py', 'vision/specialized.py', 'vision/worker.py',
-    'vision/doodleverse_preprocessing.py', 'vision/assisted_image.py',
+    'vision/doodleverse_preprocessing.py', 'vision/flood_inference_child.py', 'vision/assisted_image.py',
     'vision/assisted_image_child.py', 'vision/assisted_image_supervisor.py',
     'static/js/manager.js', 'static/css/manager.css', 'static/manager.html', 'static/sw.js', 'api/routes.py',
     'requirements-flood-runtime.txt', 'scripts/deploy/flood_backup.py',
     'scripts/deploy/flood_release.py', 'scripts/deploy/prepare_flood_bundle.py',
-    'scripts/deploy/public_flood_smoke.py',
+    'scripts/deploy/prepare_automatic_flood_bundle.py', 'scripts/deploy/public_flood_smoke.py',
 }
 
 
@@ -161,6 +161,22 @@ def validate_bundle(bundle_path, new_commit):
         if (item.get('status') != 'passed' or item.get('path') != bundle['evidence'][name]['path']
                 or item.get('sha256') != bundle['evidence'][name]['sha256']):
             raise ValueError('Flood release manifest is not bound to the tested evidence')
+    automatic = entry.get('automatic_flood') or {}
+    for name in ('resource', 'workflow'):
+        evidence = (bundle.get('automatic_evidence') or {}).get(name) or {}
+        evidence_path = Path(evidence.get('path', ''))
+        item = (automatic.get('acceptance') or {}).get(name) or {}
+        if (not evidence_path.is_file() or not evidence_path.resolve().is_relative_to(root)
+                or sha256_file(evidence_path) != evidence.get('sha256')
+                or item.get('path') != str(evidence_path) or item.get('sha256') != evidence.get('sha256')
+                or item.get('status') != 'passed'):
+            raise ValueError(f'Automatic flood {name} evidence is missing or changed')
+    candidate_root = Path(__file__).resolve().parents[2]
+    sys.path.insert(0, str(candidate_root))
+    from vision.model_release import check_automatic_flood_release
+    if check_automatic_flood_release(model, 'doodleverse-floodnet-resunet-v7', manifest) != {
+            'approved': True, 'reason': 'approved'}:
+        raise ValueError('Automatic flood release manifest was rejected')
     if not REQUIRED_TESTED_SOURCES.issubset(bundle.get('tested_source_sha256', {})):
         raise ValueError('Reviewed bundle does not identify all relevant tested source files')
     for name, expected in bundle['tested_source_sha256'].items():
@@ -209,6 +225,7 @@ def flood_worker_ready(database_url, expected_hash):
                 status = json.loads(detail or '{}')
                 if (operational and role in ('trial', 'shared')
                         and status.get('flood_assistance_supported') is True
+                        and status.get('flood_assistance_automatic_supported') is True
                         and status.get('flood_assistance_release_status') == 'approved'
                         and status.get('flood_assistance_model_sha256') == expected_hash):
                     return True

@@ -30,7 +30,8 @@ def test_public_smoke_runs_real_trial_review_and_cancellation(monkeypatch, tmp_p
     root = Path(r'D:\LuoJiaValidation')
     source = root / 'model_comparison_20261109/flood/road_inundation_delta_ian_2024/samples_v1_2/test/HURRICANE-IAN_000352_image.png'
     flood_path = root / 'doodleverse_floodnet_v7_fp32.onnx'
-    runtime = root / 'flood_runtime_release_20261110/Scripts/python.exe'
+    runtime = Path(os.getenv('VISION_FLOOD_TEST_RUNTIME',
+                             str(root / 'flood_runtime_release_20261110/Scripts/python.exe')))
     traffic = Path(r'D:\LuoJiaModels\visdrone-rtdetrv4-s.onnx')
     assert all(path.is_file() for path in (source, flood_path, runtime, traffic))
     image = tmp_path / 'public-smoke.png'
@@ -55,6 +56,7 @@ def test_public_smoke_runs_real_trial_review_and_cancellation(monkeypatch, tmp_p
     with database.connect(DATABASE_URL) as conn:
         conn.execute('TRUNCATE manager_vision_job, manager_vision_worker')
     capability = {'flood_assistance_supported': True, 'flood_assistance_release_status': 'test_injected',
+                  'flood_assistance_automatic_supported': True, 'trial_flood_automatic_supported': True,
                   'flood_assistance_model_id': 'doodleverse-floodnet-resunet-v7',
                   'flood_assistance_model_version': config.VISION_FLOOD_REVISION,
                   'flood_assistance_model_sha256': model_hash, 'trial_flood_supported': True,
@@ -71,7 +73,7 @@ def test_public_smoke_runs_real_trial_review_and_cancellation(monkeypatch, tmp_p
                                                status_detail=json.dumps(capability))
             outcome = worker.process_next_job(DATABASE_URL, 'smoke-actual-worker',
                                               trial_flood_segmenter=model, trial_only=True,
-                                              assisted_flood_supported=True)
+                                              assisted_flood_supported=True, automatic_flood_supported=True)
             if outcome is None:
                 stop.wait(0.2)
 

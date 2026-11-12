@@ -19,7 +19,7 @@ STAGE_ROOT = Path('/home/ubuntu/luojia-validation')
 RESOURCE_SOURCES = {
     'config.py', 'storage/vision_repository.py', 'vision/analysis.py', 'vision/engine.py',
     'vision/model_release.py', 'vision/specialized.py', 'vision/worker.py',
-    'vision/doodleverse_preprocessing.py', 'vision/assisted_image.py',
+    'vision/doodleverse_preprocessing.py', 'vision/flood_inference_child.py', 'vision/assisted_image.py',
     'vision/assisted_image_child.py', 'vision/assisted_image_supervisor.py',
     'requirements-flood-runtime.txt',
 }

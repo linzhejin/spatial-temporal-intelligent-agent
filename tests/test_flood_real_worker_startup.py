@@ -14,7 +14,7 @@ from pathlib import Path
 import pytest
 
 from storage import database, vision_repository
-from vision.model_release import assisted_flood_runtime_config
+from vision.model_release import assisted_flood_runtime_config, automatic_flood_runtime_config
 
 DATABASE_URL = None
 pytestmark = pytest.mark.usefixtures("isolated_test_database")
@@ -23,6 +23,7 @@ pytestmark = pytest.mark.usefixtures("isolated_test_database")
 @pytest.mark.skipif(os.getenv("RUN_FLOOD_REAL_WORKER_STARTUP") != "1",
                     reason="requires isolated PostgreSQL, actual model and completed evidence")
 def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tmp_path):
+    automatic = os.getenv("RUN_FLOOD_AUTOMATIC_REAL_WORKER_STARTUP") == "1"
     root = Path(r"D:\LuoJiaValidation")
     active = json.loads((root / "flood_resource_active_20261110.json").read_text(encoding="utf-8-sig"))
     evidence_paths = {
@@ -45,14 +46,29 @@ def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tm
     model_hash = hashlib.sha256(model_path.read_bytes()).hexdigest()
     now = datetime.now(timezone.utc)
     manifest = tmp_path / "release.json"
-    manifest.write_text(json.dumps({"schema_version": 1, "models": {"flood": {
+    flood_entry = {
         "mode": "assisted_review", "approved": True, "approved_by": "project-owner-authorized-session",
         "approved_at": now.isoformat(), "approval_expires_at": (now + timedelta(days=90)).isoformat(),
         "rights_status": "approved", "license": "CC BY 4.0",
         "rights_evidence": "https://zenodo.org/records/7566797", "field_validated": False,
         "model_revision": "doodleverse-floodnet-resunet-v7", "model_sha256": model_hash,
         "runtime_config": assisted_flood_runtime_config(), "acceptance": evidence,
-    }}}), encoding="utf-8")
+    }
+    if automatic:
+        automatic_evidence = {}
+        for kind, env_key in (("resource", "AUTOMATIC_FLOOD_RESOURCE_EVIDENCE"),
+                              ("workflow", "AUTOMATIC_FLOOD_WORKFLOW_EVIDENCE")):
+            path = Path(os.environ[env_key])
+            record = json.loads(path.read_text(encoding="utf-8"))
+            assert record["status"] == "passed" and record["scope"] == "automatic_flood"
+            assert record["model_sha256"] == model_hash
+            assert record["runtime_config"] == automatic_flood_runtime_config()
+            automatic_evidence[kind] = {"status": "passed", "path": str(path),
+                                        "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+        flood_entry["automatic_flood"] = {"enabled": True,
+                                          "runtime_config": automatic_flood_runtime_config(),
+                                          "acceptance": automatic_evidence}
+    manifest.write_text(json.dumps({"schema_version": 1, "models": {"flood": flood_entry}}), encoding="utf-8")
     uploads = tmp_path / "uploads"
     uploads.mkdir()
     shutil.copy2(image, uploads / image.name)
@@ -98,9 +114,10 @@ def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tm
                             return detail
                     return None
                 detail = wait_until(approved_worker, process, timeout=45)
-                assert detail.get("flood_assistance_automatic_supported") is False
-                assert detail.get("trial_flood_automatic_supported") is False
-                region = {"id": "road", "kind": "road_surface", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]}
+                assert detail.get("flood_assistance_automatic_supported") is automatic
+                assert detail.get("trial_flood_automatic_supported") is automatic
+                region = ({"id": "auto-flood", "kind": "automatic_flood_analysis"} if automatic else
+                          {"id": "road", "kind": "road_surface", "polygon": [[0, 0], [1, 0], [1, 1], [0, 1]]})
                 if purpose == "operational":
                     region["flood_assistance_mode"] = "assisted_review"
                 job = vision_repository.create_job(
@@ -117,6 +134,10 @@ def test_release_manifest_starts_real_worker_for_trial_and_operational_images(tm
                 assert stored["status"] == "needs_review", stored["error"]
                 assert any(item.get("kind") == "possible_flooding" for item in stored["result"]["candidates"])
                 assert stored["result"]["model"]["flood_model"]["sha256"] == model_hash
+                if automatic:
+                    assert stored["result"]["automatic_flood"] is True
+                    assert any(item.get("evidence", {}).get("summary", {}).get("region_origin") == "automatic_model"
+                               for item in stored["result"]["candidates"])
                 if purpose == "trial":
                     assert stored["result"]["trial_coverage"]["flood"] == "checked"
                 else:

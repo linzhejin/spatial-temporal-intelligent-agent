@@ -16,8 +16,6 @@ APP = Path('/home/ubuntu/campus-spatial-intelligence-agent')
 MODEL_ROOT = Path('/home/ubuntu/luojia-models')
 MODEL_SHA256 = '1ef47ccd3aef9cafee359485cfb38c65edcd6625e1552d02e23afacd98f7eb52'
 SERVICES = ('whu-walker', 'whu-agent-worker', 'whu-vision-worker', 'whu-vision-trial-worker')
-REGION = [{'id': 'public-smoke-road', 'kind': 'road_surface',
-           'polygon': [[0, 0], [1, 0], [1, 1], [0, 1]]}]
 _trial_inactive_since = None
 SMOKE_STEP = 'initialization'
 
@@ -77,7 +75,7 @@ def submit(session, image, name):
     with image.open('rb') as stream:
         data = get_data(session.post(
             BASE + '/api/manager/vision-jobs',
-            data={'purpose': 'trial', 'observation_regions': json.dumps(REGION)},
+            data={'purpose': 'trial', 'observation_regions': json.dumps([])},
             files={'media': (name, stream, 'image/png')}, timeout=30,
         ), expected=202)
     return data['job']['job_id']
@@ -114,6 +112,7 @@ def wait_for_worker_ready(session, previous_pid, timeout=30):
         capability = get_data(response)['flood_assistance']
         pid = trial_worker_pid()
         if (pid and pid != previous_pid and capability.get('ready') is True
+                and capability.get('automatic_flood') is True
                 and capability.get('model_sha256') == MODEL_SHA256):
             return
         time.sleep(0.5)
@@ -133,6 +132,7 @@ def main(image):
     capability = get_data(session.get(BASE + '/api/manager/vision-status', timeout=15))['flood_assistance']
     if (capability.get('ready') is not True or capability.get('mode') != 'assisted_review'
             or capability.get('supported_media') != ['image'] or capability.get('field_validated') is not False
+            or capability.get('automatic_flood') is not True
             or capability.get('model_sha256') != MODEL_SHA256):
         raise RuntimeError('Public flood capability differs from the accepted model')
     initial_pid = trial_worker_pid()
@@ -148,11 +148,14 @@ def main(image):
         job = wait_for(session, job_id, {'needs_review'})
         result = job.get('result') or {}
         if ((result.get('trial_coverage') or {}).get('flood') != 'checked'
+                or result.get('automatic_flood') is not True
                 or (result.get('model', {}).get('flood_model') or {}).get('sha256') != MODEL_SHA256):
             raise RuntimeError('Public trial did not use the accepted flood model')
         candidates = result.get('candidates') or []
         flood = next((index for index, candidate in enumerate(candidates)
-                      if candidate.get('kind') == 'possible_flooding'), None)
+                      if candidate.get('kind') == 'possible_flooding'
+                      and ((candidate.get('evidence') or {}).get('summary') or {}).get('region_origin')
+                      == 'automatic_model'), None)
         if flood is None:
             raise RuntimeError('Public trial did not produce a flood candidate')
         SMOKE_STEP = 'review_public_candidate'
