@@ -24,7 +24,8 @@ from vision.assisted_image import (
     _analyze_assisted_flood_image, _merge_assisted_flood_results,
 )
 from vision.assisted_image_supervisor import run_supervised_assisted_image
-from vision.model_release import assisted_flood_runtime_config, check_optional_model_release
+from vision.model_release import (assisted_flood_runtime_config, check_automatic_flood_release,
+                                  check_optional_model_release)
 from vision.specialized import DoodleverseFloodSegmenter, OnnxAiderClassifier, OnnxFloodSegmenter
 from vision.temporal_trial import OnnxTemporalAccident
 
@@ -218,18 +219,26 @@ def load_trial_models(*, include_assisted_flood=False):
                     )
                     model.model_sha256 = digest
                     models["flood"] = model
+                    try:
+                        automatic_release = check_automatic_flood_release(
+                            model_path, config.VISION_FLOOD_REVISION,
+                            config.VISION_OPTIONAL_MODELS_RELEASE_MANIFEST,
+                        )
+                    except Exception:
+                        logger.exception("Automatic flood evidence could not be checked")
+                        automatic_release = {"approved": False, "reason": "automatic_check_failed"}
+                    automatic_ready = automatic_release.get("approved") is True
                     capabilities.update({
                         "flood_assistance_supported": True,
                         "flood_assistance_release_status": "approved",
-                        # The existing release evidence covers user-marked roads,
-                        # not automatic whole-image proposals.
-                        "flood_assistance_automatic_supported": False,
+                        "flood_assistance_automatic_supported": automatic_ready,
+                        "flood_assistance_automatic_release_status": str(automatic_release.get("reason")),
                         "flood_assistance_model_id": model.model_id,
                         "flood_assistance_model_version": model.model_version,
                         "flood_assistance_model_sha256": digest,
                         "trial_flood_supported": True,
                         "trial_flood_media": "image",
-                        "trial_flood_automatic_supported": False,
+                        "trial_flood_automatic_supported": automatic_ready,
                         "trial_flood_model_id": model.model_id,
                     })
             except Exception:

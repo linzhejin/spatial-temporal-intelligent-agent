@@ -27,6 +27,7 @@ FLOODNET_CLASSES = (
 # Bound the evidence stored for one automatic candidate.  If a component has
 # more holes than this representation can carry, clients must draw its border
 # only rather than falsely filling in the missing holes.
+MAX_AUTOMATIC_FLOOD_CANDIDATES = 24
 MAX_AUTOMATIC_FLOOD_HOLES = 128
 MAX_AUTOMATIC_FLOOD_HOLE_POINTS = 4096
 _IMAGENET_MEAN = (0.485, 0.456, 0.406)
@@ -470,7 +471,7 @@ class DoodleverseFloodSegmenter:
                       if hierarchy[0][index][3] == -1]
         components.sort(key=lambda item: (-cv2.contourArea(item[1]),
                                            cv2.boundingRect(item[1])[1], cv2.boundingRect(item[1])[0]))
-        truncated = sum(cv2.contourArea(item) >= 2 for _, item in components) > 24
+        truncated = sum(cv2.contourArea(item) >= 2 for _, item in components) > MAX_AUTOMATIC_FLOOD_CANDIDATES
         _, component_labels = cv2.connectedComponents(winner_mask, connectivity=8)
         predictions = {}
         for contour_index, contour in components:
@@ -523,7 +524,7 @@ class DoodleverseFloodSegmenter:
                 "water_evidence_type": "flooded_road",
                 "water_depth_estimated": False,
             }
-            if len(predictions) >= 24:
+            if len(predictions) >= MAX_AUTOMATIC_FLOOD_CANDIDATES:
                 break
         return predictions
 

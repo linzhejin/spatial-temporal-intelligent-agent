@@ -8,6 +8,9 @@ import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+from vision.specialized import (MAX_AUTOMATIC_FLOOD_CANDIDATES, MAX_AUTOMATIC_FLOOD_HOLES,
+                                MAX_AUTOMATIC_FLOOD_HOLE_POINTS)
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -74,6 +77,64 @@ def assisted_flood_runtime_config(*, probability_threshold: float = 0.001,
         "human_confirmation_required": True,
         "subprocess_timeout_seconds": 120,
     }
+
+
+def automatic_flood_runtime_config() -> dict[str, object]:
+    """Identify the automatic candidate path independently of marked-road analysis."""
+    return {
+        "candidate_method": "flooded_road_argmax_v1",
+        "flooded_road_class": 3,
+        "probability_threshold": 0.001,
+        "max_candidates": MAX_AUTOMATIC_FLOOD_CANDIDATES,
+        "max_holes": MAX_AUTOMATIC_FLOOD_HOLES,
+        "max_hole_points": MAX_AUTOMATIC_FLOOD_HOLE_POINTS,
+        "human_confirmation_required": True,
+    }
+
+
+def check_automatic_flood_release(model_path: str | Path | None,
+                                  model_revision: str | None,
+                                  release_manifest_path: str | Path | None) -> dict[str, object]:
+    """Require automatic-path engineering evidence in addition to the manual release."""
+    base = check_optional_model_release(
+        "flood", model_path, model_revision, release_manifest_path, None,
+        assisted_flood_runtime_config(), release_mode="assisted_review",
+    )
+    if base.get("approved") is not True:
+        return base
+    release = _read_json(Path(release_manifest_path))
+    if release is None:
+        return {"approved": False, "reason": "release_manifest_invalid"}
+    entry = release["models"]["flood"]
+    automatic = entry.get("automatic_flood")
+    if not isinstance(automatic, dict) or automatic.get("enabled") is not True:
+        return {"approved": False, "reason": "automatic_release_missing"}
+    runtime = automatic_flood_runtime_config()
+    if automatic.get("runtime_config") != runtime:
+        return {"approved": False, "reason": "automatic_runtime_contract_mismatch"}
+    acceptance = automatic.get("acceptance")
+    if not isinstance(acceptance, dict):
+        return {"approved": False, "reason": "automatic_acceptance_evidence_missing"}
+    for name in ("resource", "workflow"):
+        evidence = acceptance.get(name)
+        prefix = f"automatic_{name}_evidence"
+        if (not isinstance(evidence, dict) or evidence.get("status") != "passed"
+                or not isinstance(evidence.get("path"), str) or not evidence["path"].strip()
+                or not isinstance(evidence.get("sha256"), str)
+                or not _SHA256_RE.fullmatch(evidence["sha256"])):
+            return {"approved": False, "reason": prefix + "_invalid"}
+        evidence_path = Path(evidence["path"])
+        if not evidence_path.is_file():
+            return {"approved": False, "reason": prefix + "_missing"}
+        if _sha256(evidence_path) != evidence["sha256"]:
+            return {"approved": False, "reason": prefix + "_hash_mismatch"}
+        record = _read_json(evidence_path)
+        if (record is None or record.get("status") != "passed"
+                or record.get("scope") != "automatic_flood"
+                or record.get("model_sha256") != entry.get("model_sha256")
+                or record.get("runtime_config") != runtime):
+            return {"approved": False, "reason": prefix + "_invalid"}
+    return {"approved": True, "reason": "approved"}
 
 
 def check_optional_model_release(
