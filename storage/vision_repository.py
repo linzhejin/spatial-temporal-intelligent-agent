@@ -40,6 +40,7 @@ def create_job(url: str | None, *, created_by: str, original_name: str,
 
 def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
                    allow_trial: bool = False, trial_only: bool = False,
+                   allow_trial_traffic: bool = False,
                    allow_assisted: bool = False, reserve_assisted: bool = False) -> dict | None:
     with database.connect(url) as conn:
         conn.execute(
@@ -53,7 +54,9 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
             " WHERE deleted_at IS NULL AND attempts<3 AND ("
             " (purpose='operational' AND %s AND NOT (%s AND media_kind='image'"
             " AND observation_regions @> '[{\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
-            " OR (purpose='trial' AND %s)"
+            " OR (purpose='trial' AND ((%s AND NOT observation_regions @>"
+            " '[{\"kind\":\"public_traffic_analysis\"}]'::jsonb) OR (%s AND observation_regions @>"
+            " '[{\"kind\":\"public_traffic_analysis\"}]'::jsonb)))"
             " OR (%s AND purpose='operational' AND media_kind='image'"
             " AND observation_regions @> '[{\"flood_assistance_mode\":\"assisted_review\"}]'::jsonb))"
             " AND (status='queued' OR (status='running' AND lease_until < now()))"
@@ -63,7 +66,7 @@ def claim_next_job(url: str | None, worker_id: str, lease_seconds: int = 90, *,
             " FROM candidate c WHERE j.job_id=c.job_id"
             " RETURNING j.job_id, j.media_kind, j.media_path, j.anchor_gcj, j.camera_stabilized,"
             " j.camera_pose, j.observation_regions, j.captured_at, j.progress, j.checkpoint, j.attempts, j.purpose",
-            (not trial_only, reserve_assisted, allow_trial, allow_assisted, worker_id, lease_seconds),
+            (not trial_only, reserve_assisted, allow_trial, allow_trial_traffic, allow_assisted, worker_id, lease_seconds),
         ).fetchone()
     return {**row, "job_id": str(row["job_id"])} if row else None
 

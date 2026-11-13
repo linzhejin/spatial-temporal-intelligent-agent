@@ -251,7 +251,8 @@ function managerHarness(sessionSeed = []) {
         max_video_bytes: 4096, upload_chunk_bytes: 512,
         notice: inferenceReady || floodAssistance.ready ? '车辆与行人检测、积水辅助识别可用。' : '视觉分析暂不可用。',
         flood_assistance: floodAssistance,
-        trial: { enabled: floodAssistance.ready, flood: floodAssistance.ready, accident: false,
+        trial: { enabled: inferenceReady || floodAssistance.ready, traffic: inferenceReady,
+          flood: floodAssistance.ready, accident: false,
           automatic_flood: !!floodAssistance.automatic_flood },
         optional_model_status: optionalModelStatus,
       };
@@ -313,7 +314,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261111-auto-flood-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261112-auto-flood-v2/);
+  assert.match(managerHtml, /manager\.js\?v=20261113-public-vision-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -816,18 +817,81 @@ test('manager refreshes vision readiness and updates submission availability whi
   assert.equal(elements.get('submit-vision').disabled, true);
 });
 
-test('manager exposes the image flood-assistance mode when only that worker is ready', async () => {
+test('manager exposes the public flood mode when only that worker is ready', async () => {
   const harness = managerHarness();
   await flush();
   harness.setFloodAssistance({ ready: true, enabled: true, mode: 'assisted_review' });
   harness.intervalCallbacks[0]();
   await flush();
 
-  const option = harness.elements.get('vision-flood-assistance-option');
+  const option = harness.elements.get('vision-trial-option');
   assert.equal(option.disabled, false);
-  assert.equal(option.textContent, '积水辅助识别（图片）');
+  assert.equal(option.textContent, '公开影像（积水）');
   assert.equal(harness.elements.get('vision-status').classList.contains('is-ready'), true);
   assert.match(harness.elements.get('vision-status').textContent, /积水辅助识别可用/);
+});
+
+test('public traffic mode submits an unmarked image for full-frame detection', async () => {
+  assert.match(managerHtml, /value="trial_traffic"[^>]*>公开影像（行人车流）/);
+  assert.match(managerHtml, /value="trial"[^>]*>公开影像（积水）/);
+  assert.doesNotMatch(managerHtml, /value="flood_assisted"/);
+  const harness = managerHarness();
+  await flush();
+  harness.setInferenceReady(true);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const { elements } = harness;
+  elements.get('vision-purpose').value = 'trial_traffic';
+  elements.get('vision-purpose').listeners.change();
+  elements.get('media-file').files = [{ type: 'image/png', name: 'public.png', size: 10 }];
+  elements.get('media-file').listeners.change();
+  const upload = elements.get('vision-form').listeners.submit({ preventDefault() {} });
+  await flush();
+  assert.ok(harness.calls.some((call) => call.url === '/api/manager/vision-jobs' && call.options.method === 'POST'));
+  assert.equal(harness.formEntries.find(([name]) => name === 'purpose')[1], 'trial');
+  assert.equal(harness.formEntries.find(([name]) => name === 'trial_mode')[1], 'traffic');
+  assert.equal(harness.formEntries.find(([name]) => name === 'observation_regions')[1], '[]');
+  harness.releaseVisionUploads();
+  await upload;
+});
+
+test('public traffic video preserves its mode in the chunked upload', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setInferenceReady(true);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const { elements } = harness;
+  elements.get('vision-purpose').value = 'trial_traffic';
+  elements.get('vision-purpose').listeners.change();
+  elements.get('media-file').files = [{
+    type: 'video/mp4', name: 'public.mp4', size: 100, lastModified: 7,
+    slice: (start, end) => ({ size: end - start }),
+  }];
+  elements.get('media-file').listeners.change();
+  await elements.get('vision-form').listeners.submit({ preventDefault() {} });
+  const start = harness.calls.find((call) => call.url === '/api/manager/vision-uploads' && call.options.method === 'POST');
+  assert.ok(start);
+  const metadata = JSON.parse(start.options.body);
+  assert.equal(metadata.purpose, 'trial');
+  assert.equal(metadata.trial_mode, 'traffic');
+  assert.deepEqual(metadata.observation_regions, []);
+  assert.equal(metadata.lng, undefined);
+});
+
+test('public flood mode explains that videos are unsupported', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setFloodAssistance({ ready: true, enabled: true, automatic_flood: true });
+  harness.intervalCallbacks[0]();
+  await flush();
+  const { elements } = harness;
+  elements.get('vision-purpose').value = 'trial';
+  elements.get('vision-purpose').listeners.change();
+  elements.get('media-file').files = [{ type: 'video/mp4', name: 'public.mp4', size: 100 }];
+  elements.get('media-file').listeners.change();
+  assert.equal(elements.get('submit-vision').disabled, true);
+  assert.match(elements.get('vision-message').textContent, /仅支持图片/);
 });
 
 test('public flood image submits without drawing a road when automatic proposals are available', async () => {

@@ -3342,6 +3342,7 @@ def _vision_worker_capabilities(database_url=None) -> dict:
         operational = next((detail for role, detail in decoded if role in {"shared", "operational"}), {})
         trial = next((detail for role, detail in decoded if role in {"shared", "trial"} and (
             detail.get("trial_accident_supported") is True or detail.get("trial_flood_supported") is True
+            or detail.get("trial_traffic_supported") is True
             or detail.get("flood_assistance_supported") is True)), {})
         return {**{key: value for key, value in operational.items() if not key.startswith("trial_")},
                 **{key: value for key, value in trial.items()
@@ -3357,7 +3358,7 @@ def _vision_submission_purpose(value):
         return None, _err("invalid_vision_purpose", "影像任务类型无效。", 400)
     if purpose == "trial":
         capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
-        trial_model_ready = (
+        trial_model_ready = capabilities.get("trial_traffic_supported") is True or (
             config.VISION_TRIAL_ENABLED and (
                 capabilities.get("trial_accident_supported") is True
                 or capabilities.get("trial_flood_supported") is True
@@ -3368,11 +3369,41 @@ def _vision_submission_purpose(value):
     return purpose, None
 
 
-def _validate_trial_regions(purpose, regions, media_kind):
+def _vision_trial_mode(purpose, value):
+    mode = "legacy" if value is None or value == "" else value
+    if not isinstance(mode, str) or mode not in {"legacy", "traffic", "flood"}:
+        return None, _err("invalid_trial_mode", "公开影像分析类型无效。", 400)
+    if purpose != "trial" and mode != "legacy":
+        return None, _err("invalid_trial_mode", "公开影像分析类型只能用于试用任务。", 400)
+    return mode, None
+
+
+def _tag_public_trial_mode(regions, purpose, mode):
+    tagged = list(regions or [])
+    if purpose == "trial" and mode in {"traffic", "flood"}:
+        tagged.append({"kind": "public_" + mode + "_analysis"})
+    return tagged
+
+
+def _validate_trial_regions(purpose, regions, media_kind, trial_mode="legacy"):
     if purpose != "trial":
         return None
     capabilities = _vision_worker_capabilities(current_app.config.get("DATABASE_URL"))
     kinds = {region.get("kind") for region in regions or []}
+    if trial_mode == "traffic":
+        if capabilities.get("trial_traffic_supported") is not True:
+            return _err("trial_traffic_not_ready", "公开影像人车识别尚未就绪。", 503)
+        if not _vision_inference_readiness(current_app.config.get("DATABASE_URL"))[0]:
+            return _err("vision_not_ready", "人车识别模型或工作进程尚未就绪。", 503)
+        return None
+    if trial_mode == "flood":
+        if media_kind != "image":
+            return _err("trial_image_required", "公开影像积水识别仅支持图片。", 400)
+        if capabilities.get("trial_flood_supported") is not True:
+            return _err("trial_flood_not_ready", "公开影像积水识别尚未就绪。", 503)
+        if "road_surface" not in kinds and capabilities.get("trial_flood_automatic_supported") is not True:
+            return _err("trial_region_required", "请圈选需要检查的路面。", 400)
+        return None
     temporal = (capabilities.get("trial_accident_supported") is True and
                 capabilities.get("trial_accident_media") == "video")
     flood_image_only = capabilities.get("trial_flood_media") == "image"
@@ -3617,10 +3648,12 @@ def manager_vision_status():
         "max_video_bytes": config.VISION_MAX_VIDEO_BYTES,
         "upload_chunk_bytes": config.VISION_CHUNK_BYTES,
         "trial": {
-            "enabled": bool((config.VISION_TRIAL_ENABLED and inference_ready and (
+            "enabled": bool((inference_ready and worker_capabilities.get("trial_traffic_supported") is True)
+                or (config.VISION_TRIAL_ENABLED and inference_ready and (
                 worker_capabilities.get("trial_accident_supported") is True
                 or worker_capabilities.get("trial_flood_supported") is True))
                 or flood_assistance_ready),
+            "traffic": bool(inference_ready and worker_capabilities.get("trial_traffic_supported") is True),
             "accident": worker_capabilities.get("trial_accident_supported") is True,
             "accident_media": worker_capabilities.get("trial_accident_media", "frame"),
             "flood": worker_capabilities.get("trial_flood_supported") is True,
@@ -3702,6 +3735,9 @@ def start_manager_vision_upload():
     purpose, purpose_error = _vision_submission_purpose(body.get("purpose"))
     if purpose_error:
         return purpose_error
+    trial_mode, mode_error = _vision_trial_mode(purpose, body.get("trial_mode"))
+    if mode_error:
+        return mode_error
     safe_name = secure_filename(str(body.get("filename", "")))
     extension = Path(safe_name).suffix.lower()
     size = body.get("size")
@@ -3733,9 +3769,10 @@ def start_manager_vision_upload():
             )
         else:
             observation_regions = _parse_vision_observation_regions(body.get("observation_regions"))
-        region_error = _validate_trial_regions(purpose, observation_regions, "video")
+        region_error = _validate_trial_regions(purpose, observation_regions, "video", trial_mode)
         if region_error:
             return region_error
+        observation_regions = _tag_public_trial_mode(observation_regions, purpose, trial_mode)
     except (TypeError, ValueError) as error:
         return _err("invalid_observation_metadata", str(error), 400)
     anchor_gcj = None
@@ -4019,6 +4056,9 @@ def manager_vision_jobs():
     purpose, purpose_error = _vision_submission_purpose(request.form.get("purpose"))
     if purpose_error:
         return purpose_error
+    trial_mode, mode_error = _vision_trial_mode(purpose, request.form.get("trial_mode"))
+    if mode_error:
+        return mode_error
     flood_assistance, flag_error = _parse_flood_assistance_flag(request.form.get("flood_assistance"))
     if flag_error:
         return flag_error
@@ -4073,7 +4113,9 @@ def manager_vision_jobs():
             observation_regions = _parse_vision_observation_regions(
                 request.form.get("observation_regions"),
             )
-        region_error = _validate_trial_regions(purpose, observation_regions, "video" if is_video else "image")
+        region_error = _validate_trial_regions(
+            purpose, observation_regions, "video" if is_video else "image", trial_mode,
+        )
         if region_error:
             return region_error
         region_error = _validate_flood_assistance_request(
@@ -4151,6 +4193,7 @@ def manager_vision_jobs():
             )
         final_regions = scene_values.get("observation_regions", observation_regions)
         final_regions = _tag_assisted_flood_regions(final_regions, flood_assistance)
+        final_regions = _tag_public_trial_mode(final_regions, purpose, trial_mode)
         final_anchor = scene_values.get("anchor_gcj", anchor_gcj)
         if flood_assistance and final_anchor is None:
             target.unlink(missing_ok=True)

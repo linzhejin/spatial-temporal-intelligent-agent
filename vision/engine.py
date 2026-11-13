@@ -58,7 +58,7 @@ def _video_checkpoint_fingerprint(*, path: Path, width: int, height: int,
                                   dense_trigger_threshold: float, dense_window_seconds: float,
                                   camera_stabilized: bool, regions: list[dict] | None,
                                   anchor_gcj: dict | None, detector, accident_model,
-                                  flood_segmenter) -> str:
+                                  flood_segmenter, video_decoder_threads: int | None = None) -> str:
     source_stat = path.stat()
     contract = {
         "analysis_revision": VIDEO_CHECKPOINT_ANALYSIS_REVISION,
@@ -79,6 +79,8 @@ def _video_checkpoint_fingerprint(*, path: Path, width: int, height: int,
             "flood": _checkpoint_model_identity(flood_segmenter),
         },
     }
+    if video_decoder_threads is not None:
+        contract["sampling"]["video_decoder_threads"] = video_decoder_threads
     encoded = json.dumps(contract, sort_keys=True, separators=(",", ":"), default=str).encode("utf-8")
     return hashlib.sha256(encoded).hexdigest()
 
@@ -102,13 +104,24 @@ def _validate_frame_dimensions(width: int, height: int, *, max_pixels: int | Non
         )
 
 
+def _open_video_capture(cv2, path: Path, decoder_threads: int | None = None):
+    if decoder_threads is None:
+        return cv2.VideoCapture(str(path))
+    if isinstance(decoder_threads, bool) or not isinstance(decoder_threads, int) or decoder_threads < 1:
+        raise ValueError("视频解码线程数必须为正整数")
+    if not hasattr(cv2, "CAP_FFMPEG") or not hasattr(cv2, "CAP_PROP_N_THREADS"):
+        raise VisionConfigurationError("当前视频解码器不支持限制解码线程")
+    return cv2.VideoCapture(str(path), cv2.CAP_FFMPEG, [cv2.CAP_PROP_N_THREADS, decoder_threads])
+
+
 class OnnxDetector:
     """Loads a local, fixed-shape RT-DETRv4 ONNX model using CPU execution only."""
 
     def __init__(self, model_path: str, *, session=None,
                  confidence_threshold: float | None = None,
                  tracking_low_confidence_threshold: float | None = None,
-                 model_id: str | None = None, model_version: str | None = None):
+                 model_id: str | None = None, model_version: str | None = None,
+                 cpu_memory_arena: bool = True):
         if session is None and (not model_path or not Path(model_path).is_file()):
             raise VisionConfigurationError("VISION_MODEL_PATH 未配置或 ONNX 权重文件不存在")
         cpu_threads = config.resolve_vision_cpu_threads() if session is None else None
@@ -124,6 +137,8 @@ class OnnxDetector:
             options.inter_op_num_threads = 1
             options.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
             options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
+            if not cpu_memory_arena:
+                options.enable_cpu_mem_arena = False
             try:
                 session = ort.InferenceSession(
                     str(model_path), sess_options=options, providers=["CPUExecutionProvider"],
@@ -740,7 +755,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                   cancel_check=None, target_sample_fps: float | None = None,
                   max_frame_pixels: int | None = None, max_video_seconds: float | None = None,
                   require_flood_success: bool = False, inplace_flood_rgb: bool = False,
-                  automatic_flood: bool = False) -> dict:
+                  automatic_flood: bool = False, video_decoder_threads: int | None = None) -> dict:
     """Analyze all sampled frames in bounded chunks and retain resumable review evidence."""
     path = Path(media_path)
     if not path.is_file():
@@ -848,7 +863,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
         )
         completed_segments = [{"start_seconds": 0.0, "end_seconds": 0.0, **analysis}]
     elif media_kind == "video":
-        capture = cv2.VideoCapture(str(path))
+        capture = _open_video_capture(cv2, path, video_decoder_threads)
         if not capture.isOpened():
             raise ValueError("视频无法解码，请上传有效的视频文件")
         try:
@@ -858,7 +873,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
             anchor_gray = None
             anchor_scale = 1.0
             if regions and not camera_stabilized:
-                anchor_capture = cv2.VideoCapture(str(path))
+                anchor_capture = _open_video_capture(cv2, path, video_decoder_threads)
                 try:
                     anchor_ok, anchor_frame = anchor_capture.read()
                     if not anchor_ok or anchor_frame is None:
@@ -985,6 +1000,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                 camera_stabilized=camera_stabilized, regions=regions,
                 anchor_gcj=anchor_gcj, detector=detector,
                 accident_model=accident_model, flood_segmenter=flood_segmenter,
+                video_decoder_threads=video_decoder_threads,
             )
 
             def report_checkpoint_reset():
@@ -1104,7 +1120,7 @@ def analyze_media(media_path: str | Path, media_kind: str, anchor_gcj: dict | No
                     # A failed seek may still move the decoder. Reopen the media
                     # instead of trusting the partially repositioned capture.
                     capture.release()
-                    capture = cv2.VideoCapture(str(path))
+                    capture = _open_video_capture(cv2, path, video_decoder_threads)
                     if not capture.isOpened():
                         raise ValueError("视频恢复失败，无法从头重新打开文件")
                     reset_position = (

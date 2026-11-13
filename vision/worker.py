@@ -257,6 +257,7 @@ def _requires_vision_capacity_lock():
 def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                      detector=None, accident_model=None, flood_segmenter=None,
                      trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                     trial_traffic_supported=False,
                      assisted_flood_supported=False,
                      automatic_flood_supported=False,
                      reserve_assisted=False,
@@ -264,6 +265,7 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
     options = {"detector": detector, "accident_model": accident_model, "flood_segmenter": flood_segmenter,
                "trial_accident_model": trial_accident_model, "trial_flood_segmenter": trial_flood_segmenter,
                "trial_only": trial_only,
+               "trial_traffic_supported": trial_traffic_supported,
                "assisted_flood_supported": assisted_flood_supported,
                "automatic_flood_supported": automatic_flood_supported,
                "reserve_assisted": reserve_assisted}
@@ -321,6 +323,7 @@ def process_next_job(database_url: str, worker_id: str, lease_seconds: int = 90,
 def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds: int = 90, *,
                                detector=None, accident_model=None, flood_segmenter=None,
                                trial_accident_model=None, trial_flood_segmenter=None, trial_only=False,
+                               trial_traffic_supported=False,
                                assisted_flood_supported=False,
                                automatic_flood_supported=False,
                                reserve_assisted=False,
@@ -328,6 +331,7 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
     allow_trial = trial_accident_model is not None or trial_flood_segmenter is not None
     job = vision_repository.claim_next_job(database_url, worker_id, lease_seconds,
                                           allow_trial=allow_trial, trial_only=trial_only,
+                                          allow_trial_traffic=trial_traffic_supported,
                                           allow_assisted=assisted_flood_supported,
                                           reserve_assisted=reserve_assisted)
     if not job:
@@ -359,16 +363,38 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
                     and region.get("flood_assistance_mode") == "assisted_review"
                     for region in job.get("observation_regions") or [])
         )
-        specialized_job = job.get("purpose") == "trial" or is_assisted_flood_job
+        is_trial_traffic = bool(job.get("purpose") == "trial" and any(
+            isinstance(region, dict) and region.get("kind") == "public_traffic_analysis"
+            for region in job.get("observation_regions") or []
+        ))
+        is_trial_flood = bool(job.get("purpose") == "trial" and any(
+            isinstance(region, dict) and region.get("kind") == "public_flood_analysis"
+            for region in job.get("observation_regions") or []
+        ))
+        specialized_job = (job.get("purpose") == "trial" and not is_trial_traffic) or is_assisted_flood_job
         trial_flood_video_unchecked = bool(
             job.get("purpose") == "trial" and job.get("media_kind") == "video"
             and getattr(trial_flood_segmenter, "single_image_trigger_threshold", None) is not None
         )
         if job.get("purpose") == "trial":
-            if not allow_trial:
+            if not is_trial_traffic and not allow_trial:
                 raise RuntimeError("试用模型尚未就绪，无法分析这条测试影像。")
-            accident_model = trial_accident_model
-            flood_segmenter = None if trial_flood_video_unchecked else trial_flood_segmenter
+            if is_trial_traffic:
+                if not trial_traffic_supported:
+                    raise RuntimeError("公开影像人车识别尚未就绪。")
+                if detector is None:
+                    detector = OnnxDetector(
+                        config.VISION_MODEL_PATH,
+                        model_id=getattr(config, "VISION_MODEL_ID", "visdrone-rtdetrv4-s"),
+                        model_version=getattr(config, "VISION_MODEL_REVISION", "unspecified"),
+                        cpu_memory_arena=False,
+                    )
+                accident_model, flood_segmenter = None, None
+            else:
+                if is_trial_flood and trial_flood_segmenter is None:
+                    raise RuntimeError("公开影像积水识别尚未就绪。")
+                accident_model = None if is_trial_flood else trial_accident_model
+                flood_segmenter = None if trial_flood_video_unchecked else trial_flood_segmenter
         elif is_assisted_flood_job:
             if trial_flood_segmenter is None:
                 raise RuntimeError("积水辅助识别未就绪，不能把任务当作未发现积水。")
@@ -416,7 +442,9 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
             and (has_automatic_marker or (job.get("purpose") == "trial" and "road_surface" not in kinds))
         )
         analysis_regions = [region for region in job_regions
-                            if region.get("kind") != "automatic_flood_analysis"]
+                            if region.get("kind") not in {
+                                "automatic_flood_analysis", "public_traffic_analysis", "public_flood_analysis",
+                            }]
         temporal_only = bool(temporal_accident is not None and job["media_kind"] == "video" and
                              not (flood_segmenter is not None and "road_surface" in kinds))
         supervised_trial_image = bool(
@@ -487,13 +515,15 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
             trial_options = ({"target_sample_fps": min(1.0, config.VISION_TRIAL_SAMPLE_FPS),
                               "max_frame_pixels": config.VISION_TRIAL_MAX_FRAME_PIXELS,
                               "max_video_seconds": config.VISION_TRIAL_MAX_VIDEO_SECONDS} if is_trial else {})
+            if is_trial_traffic and job["media_kind"] == "video":
+                trial_options["video_decoder_threads"] = 1
             result = analyze_media(
                 path, job["media_kind"], job["anchor_gcj"],
                 camera_stabilized=job["camera_stabilized"],
                 detector=_TrialNoVehicleDetector() if specialized_job else detector,
                 accident_model=None if temporal_accident else accident_model,
                 flood_segmenter=flood_segmenter,
-                regions=job.get("observation_regions") or [],
+                regions=analysis_regions,
                 progress_callback=save_progress,
                 resume_state=job.get("checkpoint"),
                 cancel_check=cancellation_requested,
@@ -502,8 +532,12 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
             )
         if automatic_flood:
             result["automatic_flood"] = True
-        if job.get("purpose") == "trial":
+        if is_trial_traffic:
+            result["trial_mode"] = "traffic"
+        elif job.get("purpose") == "trial":
             result["trial_specialized_only"] = True
+            if is_trial_flood:
+                result["trial_mode"] = "flood"
         elif is_assisted_flood_job:
             result["flood_assistance"] = {
                 "mode": "assisted_review",
@@ -528,7 +562,7 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
                 "scope": "temporal_window", "windows_analyzed": temporal_result["windows_analyzed"],
                 "windows": temporal_result["windows"],
             }
-        if job.get("purpose") == "trial":
+        if job.get("purpose") == "trial" and not is_trial_traffic:
             safety = result.get("safety") or {}
             counts = (result.get("metrics") or {}).get("specialized_model_frames") or {}
             result["trial_coverage"] = {
@@ -668,9 +702,13 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
         trial_capabilities = {}
         if role != "operational":
             trial_models, trial_capabilities = load_trial_models(include_assisted_flood=role == "trial")
+            trial_capabilities["trial_traffic_supported"] = bool(
+                _requires_vision_capacity_lock()
+                and config.VISION_MODEL_PATH and Path(config.VISION_MODEL_PATH).is_file()
+            )
         optional_capabilities.update(trial_capabilities)
         status_detail = json.dumps(optional_capabilities, separators=(",", ":"))
-        ready = role != "trial" or any(trial_models.values()) or (
+        ready = role != "trial" or any(trial_models.values()) or trial_capabilities.get("trial_traffic_supported") is True or (
             trial_capabilities.get("flood_assistance_supported") is True
         )
     except Exception as error:
@@ -713,6 +751,7 @@ def run_forever(database_url=None, idle_seconds=1.0, heartbeat_seconds=10.0):
                     trial_accident_model=trial_models["accident"],
                     trial_flood_segmenter=trial_models["flood"],
                     trial_only=role == "trial",
+                    trial_traffic_supported=optional_capabilities.get("trial_traffic_supported") is True,
                     assisted_flood_supported=(
                         role == "trial" and optional_capabilities.get("flood_assistance_supported") is True
                     ),

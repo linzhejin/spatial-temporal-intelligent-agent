@@ -10,7 +10,7 @@
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261112-auto-flood-v2" defer></script>
+  <script src="/js/manager.js?v=20261113-public-vision-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -174,8 +174,8 @@
               <label>影像用途
                 <select id="vision-purpose">
                   <option value="operational">校园巡查</option>
-                  <option id="vision-flood-assistance-option" value="flood_assisted" disabled>积水辅助识别（图片）</option>
-                  <option id="vision-trial-option" value="trial" disabled>公开影像试用（模型未就绪）</option>
+                  <option id="vision-traffic-trial-option" value="trial_traffic" disabled>公开影像（行人车流）</option>
+                  <option id="vision-trial-option" value="trial" disabled>公开影像（积水）</option>
                 </select>
                 <small id="vision-purpose-note">校园巡查可在人工核实后登记路况。</small>
               </label>
@@ -189,6 +189,7 @@
                   <span>如需更换，重新点击上方选择区域。</span>
                 </div>
               </div>
+              <div id="vision-campus-metadata">
               <label>实际拍摄时间
                 <input id="captured-at" type="datetime-local" step="1" required>
                 <small>图片和视频都请填写实际拍摄时间。过期影像可留作回放，不能直接发布为当前路况。</small>
@@ -200,6 +201,7 @@
               <button id="show-dji-track" class="outline-button dji-track-preview-button" type="button" hidden>在地图上查看无人机航迹</button>
               <button id="pick-anchor" class="outline-button" type="button">⌖ 标注影像所在校园区域</button>
               <div id="selected-anchor" class="selected-road">尚未标注影像区域</div>
+              </div>
               <details id="observation-editor" class="observation-editor" hidden open>
                 <summary>手动圈选观察区域</summary>
                 <div class="observation-editor-heading"><strong>标注画面中的观察区域</strong><span>点选顶点，完成后形成多边形</span></div>
@@ -243,8 +245,10 @@
                 </div>
               <small id="observation-region-note" class="stabilization-note">视频中的圈选区域会随无人机移动，镜头改变后请重新圈选。积水分析不估算水深。</small>
               </details>
+              <div id="vision-stabilization-fields">
               <label class="stabilization-option"><input id="camera-stabilized" type="checkbox"> 视频来自固定机位或已完成稳像（可选）</label>
               <small class="stabilization-note">拥堵与人群候选需要圈定画面区域，且固定机位或完成稳像。</small>
+              </div>
               <button id="submit-vision" class="primary-button" type="submit" disabled>提交分析任务 <span>→</span></button>
               <div id="vision-upload-progress" class="vision-upload-progress" hidden>
                 <progress id="vision-upload-bar" max="100" value="0" aria-label="视频上传进度"></progress>
