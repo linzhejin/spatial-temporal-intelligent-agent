@@ -1,0 +1,35 @@
+{
+  "scope": "development_counterexample_frozen_graph",
+  "case": "search_02",
+  "turn": 1,
+  "source_run": "20261113T143530Z-470ecaaa",
+  "source_provider_sha256": "2d1139355f5c48190909e695184630380dae44d6e091f70dac348931c3a402e2",
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "anchor_snapshot_sha256": "deb4f9f9c3029c45238d715f6cc60fd4509e6358ac0041dc7ced4f7178ec85e4",
+  "raw_provider_record": {
+    "id": "B0FFF904AN",
+    "name": "武汉大学信息学部篮球场",
+    "type": "体育休闲服务;运动场馆;篮球场馆",
+    "typecode": "080104",
+    "location": "114.362252,30.528372"
+  },
+  "provider_anchor": {
+    "poi_id": "amap:B0FFF904AN",
+    "name": "武汉大学信息学部篮球场",
+    "node_id": 3631666757,
+    "snap_distance_m": 23.944,
+    "access_status": "last_meter_unverified"
+  },
+  "origin_poi_id": "poi_424",
+  "radius_m": 1000,
+  "mode": "walk",
+  "avoid_steps": true,
+  "independent_scope": {
+    "verdict": "pass",
+    "reason": "confirmed_edge_path",
+    "graph_length_m": 380.921,
+    "access_lower_bound_m": 36.702,
+    "boundary": "frozen graph and straight-line connector estimates; physical access unverified"
+  },
+  "boundary": "直线接驳及现场入口未核实；这仅证明冻结图和同次供应商记录内存在满足已建模条件的候选。"
+}

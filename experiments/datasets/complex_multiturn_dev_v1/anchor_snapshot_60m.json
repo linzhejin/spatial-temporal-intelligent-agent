@@ -1,0 +1,3107 @@
+{
+  "anchors": [
+    {
+      "access_status": "last_meter_unverified",
+      "name": "信息学部",
+      "node_id": 13227634451,
+      "poi_id": "area_信息学部",
+      "snap_distance_m": 16.951
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部",
+      "node_id": 4320485468,
+      "poi_id": "area_工学部",
+      "snap_distance_m": 28.929
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "文理学部",
+      "node_id": 13265776312,
+      "poi_id": "area_文理学部",
+      "snap_distance_m": 13.247
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "枫园",
+      "node_id": 13565526934,
+      "poi_id": "area_枫园",
+      "snap_distance_m": 20.678
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂园",
+      "node_id": 13732671435,
+      "poi_id": "area_桂园",
+      "snap_distance_m": 7.927
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园",
+      "node_id": 13266173089,
+      "poi_id": "area_梅园",
+      "snap_distance_m": 9.084
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "樱园",
+      "node_id": 13247000156,
+      "poi_id": "area_樱园",
+      "snap_distance_m": 5.686
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨",
+      "node_id": 13545293384,
+      "poi_id": "area_湖滨",
+      "snap_distance_m": 26.872
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园综合楼",
+      "node_id": 13273047778,
+      "poi_id": "poi_001",
+      "snap_distance_m": 13.882
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武大动力与机械学院机械工程系",
+      "node_id": 12862472451,
+      "poi_id": "poi_002",
+      "snap_distance_m": 15.292
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学万林艺术博物馆",
+      "node_id": 13241429496,
+      "poi_id": "poi_004",
+      "snap_distance_m": 10.615
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学人工智能学院",
+      "node_id": 13613500814,
+      "poi_id": "poi_005",
+      "snap_distance_m": 29.203
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学人文社会科学研究院",
+      "node_id": 13684703311,
+      "poi_id": "poi_006",
+      "snap_distance_m": 23.524
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学刘少奇研究中心",
+      "node_id": 13273232939,
+      "poi_id": "poi_007",
+      "snap_distance_m": 21.608
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学力学实验教学中心",
+      "node_id": 13732671517,
+      "poi_id": "poi_008",
+      "snap_distance_m": 9.591
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学动力与机械学院智慧能源研究中心",
+      "node_id": 13550983522,
+      "poi_id": "poi_009",
+      "snap_distance_m": 26.344
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学动力与机械学院自主制作车间",
+      "node_id": 13545187533,
+      "poi_id": "poi_010",
+      "snap_distance_m": 10.215
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学化学与分子科学学院西区",
+      "node_id": 13613500880,
+      "poi_id": "poi_011",
+      "snap_distance_m": 28.777
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学化学实验教学中心",
+      "node_id": 13613500886,
+      "poi_id": "poi_012",
+      "snap_distance_m": 34.164
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学历史学院",
+      "node_id": 13255061963,
+      "poi_id": "poi_013",
+      "snap_distance_m": 4.598
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学国际教育学院(桂园楼)",
+      "node_id": 13510725041,
+      "poi_id": "poi_014",
+      "snap_distance_m": 15.904
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学图书馆(总馆)",
+      "node_id": 13239742873,
+      "poi_id": "poi_015",
+      "snap_distance_m": 10.331
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学图书馆工学分馆",
+      "node_id": 13704644560,
+      "poi_id": "poi_016",
+      "snap_distance_m": 10.699
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学土木建筑工程学院工程结构实验中心",
+      "node_id": 13555966708,
+      "poi_id": "poi_017",
+      "snap_distance_m": 3.31
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学土木建筑工程学院结构楼",
+      "node_id": 13555966748,
+      "poi_id": "poi_018",
+      "snap_distance_m": 17.553
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学城市设计学院",
+      "node_id": 13563537473,
+      "poi_id": "poi_019",
+      "snap_distance_m": 12.732
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学大学生创业俱乐部",
+      "node_id": 13563537498,
+      "poi_id": "poi_020",
+      "snap_distance_m": 5.855
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学大学生工程训练与创新实践中心",
+      "node_id": 13701919399,
+      "poi_id": "poi_021",
+      "snap_distance_m": 31.543
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学实验室与设备管理处",
+      "node_id": 4052778657,
+      "poi_id": "poi_022",
+      "snap_distance_m": 12.963
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学广东省电力设计研究院智能电网研究中心",
+      "node_id": 12862472428,
+      "poi_id": "poi_023",
+      "snap_distance_m": 1.47
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学当代楼",
+      "node_id": 13240918473,
+      "poi_id": "poi_024",
+      "snap_distance_m": 33.169
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学教1楼",
+      "node_id": 13269409014,
+      "poi_id": "poi_025",
+      "snap_distance_m": 7.255
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学教学楼9号楼",
+      "node_id": 12862472424,
+      "poi_id": "poi_026",
+      "snap_distance_m": 31.847
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学教育科学学院",
+      "node_id": 3112677665,
+      "poi_id": "poi_027",
+      "snap_distance_m": 6.663
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学数学与统计学院",
+      "node_id": 3631666628,
+      "poi_id": "poi_028",
+      "snap_distance_m": 54.43
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文学院",
+      "node_id": 8823668184,
+      "poi_id": "poi_029",
+      "snap_distance_m": 21.089
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文理学部教3楼",
+      "node_id": 13556582695,
+      "poi_id": "poi_030",
+      "snap_distance_m": 5.639
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文理学部第4教学楼",
+      "node_id": 13713923966,
+      "poi_id": "poi_031",
+      "snap_distance_m": 18.458
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文理学部第二教学楼",
+      "node_id": 13255223601,
+      "poi_id": "poi_032",
+      "snap_distance_m": 8.685
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学新型电力系统与国际标准研究院",
+      "node_id": 13668234406,
+      "poi_id": "poi_033",
+      "snap_distance_m": 13.982
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学早期建筑图书馆",
+      "node_id": 13246670887,
+      "poi_id": "poi_034",
+      "snap_distance_m": 9.906
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学早期建筑工学院",
+      "node_id": 13273047790,
+      "poi_id": "poi_035",
+      "snap_distance_m": 5.468
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学早期建筑法学院",
+      "node_id": 13249113638,
+      "poi_id": "poi_036",
+      "snap_distance_m": 5.139
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学机器人学院",
+      "node_id": 3631666628,
+      "poi_id": "poi_037",
+      "snap_distance_m": 16.893
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园教学楼",
+      "node_id": 12889055292,
+      "poi_id": "poi_038",
+      "snap_distance_m": 5.563
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园阅览室",
+      "node_id": 13565526940,
+      "poi_id": "poi_039",
+      "snap_distance_m": 12.83
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桃园教8楼",
+      "node_id": 4320485465,
+      "poi_id": "poi_040",
+      "snap_distance_m": 9.489
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学水利水电学院",
+      "node_id": 4320485465,
+      "poi_id": "poi_041",
+      "snap_distance_m": 24.264
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学水力机械过渡过程教育部重点实验室(弘毅大道)",
+      "node_id": 4320485437,
+      "poi_id": "poi_042",
+      "snap_distance_m": 31.019
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学水工程科学研究院",
+      "node_id": 13555966817,
+      "poi_id": "poi_043",
+      "snap_distance_m": 24.376
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学物理学院报告厅",
+      "node_id": 13243694291,
+      "poi_id": "poi_044",
+      "snap_distance_m": 11.352
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学物理学院新楼",
+      "node_id": 13243738597,
+      "poi_id": "poi_045",
+      "snap_distance_m": 34.785
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学理学院",
+      "node_id": 13251027384,
+      "poi_id": "poi_046",
+      "snap_distance_m": 8.674
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学生命科学学院",
+      "node_id": 13243780144,
+      "poi_id": "poi_047",
+      "snap_distance_m": 44.555
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学生命科学学院实验动物中心",
+      "node_id": 13732671171,
+      "poi_id": "poi_048",
+      "snap_distance_m": 20.598
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学生命科学学院附楼",
+      "node_id": 1807154909,
+      "poi_id": "poi_049",
+      "snap_distance_m": 37.452
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学电子信息学院",
+      "node_id": 13556596324,
+      "poi_id": "poi_050",
+      "snap_distance_m": 32.105
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学电子信息学院教学实验中心",
+      "node_id": 13583496644,
+      "poi_id": "poi_051",
+      "snap_distance_m": 37.546
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学电子信息学院海态实验室",
+      "node_id": 13643850930,
+      "poi_id": "poi_052",
+      "snap_distance_m": 17.449
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学社会主义学院",
+      "node_id": 1197829902,
+      "poi_id": "poi_053",
+      "snap_distance_m": 19.246
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学社会保障研究中心",
+      "node_id": 1199744358,
+      "poi_id": "poi_054",
+      "snap_distance_m": 27.941
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学科学技术发展研究院",
+      "node_id": 1417701739,
+      "poi_id": "poi_055",
+      "snap_distance_m": 12.425
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学第五教学楼",
+      "node_id": 13239742844,
+      "poi_id": "poi_056",
+      "snap_distance_m": 2.014
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学董辅礽经济社会发展研究院",
+      "node_id": 12847386071,
+      "poi_id": "poi_057",
+      "snap_distance_m": 28.958
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学计算机学院",
+      "node_id": 12862472402,
+      "poi_id": "poi_058",
+      "snap_distance_m": 41.843
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学资源与环境科学学院环境工程系",
+      "node_id": 13563512961,
+      "poi_id": "poi_059",
+      "snap_distance_m": 19.964
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学雷达与信号处理实验室",
+      "node_id": 13556596326,
+      "poi_id": "poi_060",
+      "snap_distance_m": 23.703
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学高等研究院",
+      "node_id": 13584122203,
+      "poi_id": "poi_061",
+      "snap_distance_m": 23.689
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉数学与智能研究院",
+      "node_id": 13583901609,
+      "poi_id": "poi_062",
+      "snap_distance_m": 36.124
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉震旦法商专修学院(武大校区)",
+      "node_id": 13694127541,
+      "poi_id": "poi_064",
+      "snap_distance_m": 29.493
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "枫园风味食堂",
+      "node_id": 12802032504,
+      "poi_id": "poi_067",
+      "snap_distance_m": 9.126
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂园一食堂",
+      "node_id": 13510725037,
+      "poi_id": "poi_068",
+      "snap_distance_m": 10.393
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂园二食堂",
+      "node_id": 12862467397,
+      "poi_id": "poi_069",
+      "snap_distance_m": 15.276
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂园食堂",
+      "node_id": 12862467397,
+      "poi_id": "poi_070",
+      "snap_distance_m": 19.703
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园教工食堂",
+      "node_id": 13239968076,
+      "poi_id": "poi_071",
+      "snap_distance_m": 23.518
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园食堂",
+      "node_id": 13565526940,
+      "poi_id": "poi_072",
+      "snap_distance_m": 9.028
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园食堂",
+      "node_id": 13239968076,
+      "poi_id": "poi_073",
+      "snap_distance_m": 24.993
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨风味食堂",
+      "node_id": 13545293354,
+      "poi_id": "poi_074",
+      "snap_distance_m": 15.193
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学田园食堂",
+      "node_id": 13545141149,
+      "poi_id": "poi_075",
+      "snap_distance_m": 6.798
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "老樱园食堂",
+      "node_id": 13249113627,
+      "poi_id": "poi_076",
+      "snap_distance_m": 25.997
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "凌波门游泳池",
+      "node_id": 13621444528,
+      "poi_id": "poi_077",
+      "snap_distance_m": 9.019
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园排球场",
+      "node_id": 13244569662,
+      "poi_id": "poi_078",
+      "snap_distance_m": 22.079
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园羽毛球场",
+      "node_id": 13647688081,
+      "poi_id": "poi_079",
+      "snap_distance_m": 14.751
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学九一二运动场",
+      "node_id": 13265839489,
+      "poi_id": "poi_080",
+      "snap_distance_m": 51.243
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学宋卿体育馆",
+      "node_id": 13264256702,
+      "poi_id": "poi_081",
+      "snap_distance_m": 15.305
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园小操场",
+      "node_id": 13244712022,
+      "poi_id": "poi_082",
+      "snap_distance_m": 1.89
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学篮球场(文体路)",
+      "node_id": 13244569715,
+      "poi_id": "poi_083",
+      "snap_distance_m": 28.605
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学网球场",
+      "node_id": 13563512967,
+      "poi_id": "poi_084",
+      "snap_distance_m": 27.011
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学风雨操场",
+      "node_id": 13510725031,
+      "poi_id": "poi_086",
+      "snap_distance_m": 8.737
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "枫园六舍、七舍",
+      "node_id": 12889030468,
+      "poi_id": "poi_087",
+      "snap_distance_m": 9.095
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂园一舍",
+      "node_id": 13510725040,
+      "poi_id": "poi_088",
+      "snap_distance_m": 9.162
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园五舍",
+      "node_id": 13271173974,
+      "poi_id": "poi_089",
+      "snap_distance_m": 17.952
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园四舍",
+      "node_id": 13271173974,
+      "poi_id": "poi_090",
+      "snap_distance_m": 23.333
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学学生14舍",
+      "node_id": 13704755624,
+      "poi_id": "poi_091",
+      "snap_distance_m": 2.909
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园10舍",
+      "node_id": 12889030485,
+      "poi_id": "poi_092",
+      "snap_distance_m": 10.641
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园11舍",
+      "node_id": 12805750198,
+      "poi_id": "poi_093",
+      "snap_distance_m": 21.556
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园12舍",
+      "node_id": 12889055218,
+      "poi_id": "poi_094",
+      "snap_distance_m": 30.906
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园13舍",
+      "node_id": 12889055215,
+      "poi_id": "poi_095",
+      "snap_distance_m": 10.134
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园14舍",
+      "node_id": 13511031957,
+      "poi_id": "poi_096",
+      "snap_distance_m": 21.657
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园1舍",
+      "node_id": 13565054779,
+      "poi_id": "poi_097",
+      "snap_distance_m": 39.765
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园2舍",
+      "node_id": 13728848125,
+      "poi_id": "poi_098",
+      "snap_distance_m": 27.419
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园3舍",
+      "node_id": 13565585818,
+      "poi_id": "poi_099",
+      "snap_distance_m": 4.38
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园4舍",
+      "node_id": 13565573391,
+      "poi_id": "poi_100",
+      "snap_distance_m": 20.035
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园5舍",
+      "node_id": 12805570364,
+      "poi_id": "poi_101",
+      "snap_distance_m": 25.669
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园8舍",
+      "node_id": 12889030477,
+      "poi_id": "poi_102",
+      "snap_distance_m": 9.368
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园9舍",
+      "node_id": 12889030489,
+      "poi_id": "poi_103",
+      "snap_distance_m": 8.581
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园留学生宿舍",
+      "node_id": 13732671501,
+      "poi_id": "poi_104",
+      "snap_distance_m": 23.357
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园留学生宿舍三号楼D区",
+      "node_id": 12889055226,
+      "poi_id": "poi_105",
+      "snap_distance_m": 0.988
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园2舍",
+      "node_id": 13556582660,
+      "poi_id": "poi_106",
+      "snap_distance_m": 11.923
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园3舍",
+      "node_id": 13708303514,
+      "poi_id": "poi_107",
+      "snap_distance_m": 10.796
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园4舍",
+      "node_id": 13708303517,
+      "poi_id": "poi_108",
+      "snap_distance_m": 14.639
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园5舍",
+      "node_id": 13556582662,
+      "poi_id": "poi_109",
+      "snap_distance_m": 6.828
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园6舍",
+      "node_id": 13708303515,
+      "poi_id": "poi_110",
+      "snap_distance_m": 7.234
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园7舍",
+      "node_id": 12848622705,
+      "poi_id": "poi_111",
+      "snap_distance_m": 33.771
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园8舍",
+      "node_id": 13732671297,
+      "poi_id": "poi_112",
+      "snap_distance_m": 15.131
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学桂园9舍",
+      "node_id": 13732671444,
+      "poi_id": "poi_113",
+      "snap_distance_m": 25.85
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园2舍",
+      "node_id": 13269409092,
+      "poi_id": "poi_114",
+      "snap_distance_m": 8.479
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园3舍",
+      "node_id": 13269409053,
+      "poi_id": "poi_115",
+      "snap_distance_m": 6.369
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园6舍",
+      "node_id": 13269409060,
+      "poi_id": "poi_116",
+      "snap_distance_m": 15.942
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园一舍",
+      "node_id": 13266196560,
+      "poi_id": "poi_117",
+      "snap_distance_m": 6.548
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学樱园学生1宿舍",
+      "node_id": 13247000169,
+      "poi_id": "poi_118",
+      "snap_distance_m": 17.194
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学樱园学生3宿舍",
+      "node_id": 13250395809,
+      "poi_id": "poi_119",
+      "snap_distance_m": 0.403
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学樱园学生4宿舍",
+      "node_id": 13250395816,
+      "poi_id": "poi_120",
+      "snap_distance_m": 2.722
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨15舍",
+      "node_id": 13550822534,
+      "poi_id": "poi_121",
+      "snap_distance_m": 37.466
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍10舍",
+      "node_id": 13565054786,
+      "poi_id": "poi_122",
+      "snap_distance_m": 23.147
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍11舍",
+      "node_id": 13565054789,
+      "poi_id": "poi_123",
+      "snap_distance_m": 19.942
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍1舍",
+      "node_id": 13550831478,
+      "poi_id": "poi_124",
+      "snap_distance_m": 20.958
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍3舍",
+      "node_id": 13545293370,
+      "poi_id": "poi_125",
+      "snap_distance_m": 29.028
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍4舍",
+      "node_id": 12808058166,
+      "poi_id": "poi_126",
+      "snap_distance_m": 29.291
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍5舍",
+      "node_id": 12808058168,
+      "poi_id": "poi_127",
+      "snap_distance_m": 11.095
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍7舍",
+      "node_id": 12808058170,
+      "poi_id": "poi_128",
+      "snap_distance_m": 36.728
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍8舍",
+      "node_id": 13613667173,
+      "poi_id": "poi_129",
+      "snap_distance_m": 35.488
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学湖滨学生宿舍9舍",
+      "node_id": 13565054791,
+      "poi_id": "poi_130",
+      "snap_distance_m": 21.299
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学珞珈山公寓(东湖宿舍区)",
+      "node_id": 13565666149,
+      "poi_id": "poi_131",
+      "snap_distance_m": 7.365
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨14舍",
+      "node_id": 13668234594,
+      "poi_id": "poi_132",
+      "snap_distance_m": 24.367
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨二舍",
+      "node_id": 13565054725,
+      "poi_id": "poi_133",
+      "snap_distance_m": 9.149
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨十七舍",
+      "node_id": 13732671349,
+      "poi_id": "poi_134",
+      "snap_distance_m": 24.628
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨13舍",
+      "node_id": 13545293384,
+      "poi_id": "poi_135",
+      "snap_distance_m": 40.424
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湖滨十六舍",
+      "node_id": 1199819279,
+      "poi_id": "poi_136",
+      "snap_distance_m": 46.362
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "凌波门",
+      "node_id": 13732671357,
+      "poi_id": "poi_137",
+      "snap_distance_m": 6.927
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞南门",
+      "node_id": 13704368126,
+      "poi_id": "poi_138",
+      "snap_distance_m": 8.187
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学科技门",
+      "node_id": 3186610000,
+      "poi_id": "poi_139",
+      "snap_distance_m": 13.238
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈门",
+      "node_id": 13239152679,
+      "poi_id": "poi_140",
+      "snap_distance_m": 5.98
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "凌波门东湖观景点",
+      "node_id": 1196701925,
+      "poi_id": "poi_141",
+      "snap_distance_m": 23.595
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "凌波门栈桥",
+      "node_id": 13621444528,
+      "poi_id": "poi_142",
+      "snap_distance_m": 1.994
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "凌波门码头",
+      "node_id": 1371798842,
+      "poi_id": "poi_143",
+      "snap_distance_m": 30.891
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "国立武汉大学日字斋",
+      "node_id": 13250395818,
+      "poi_id": "poi_144",
+      "snap_distance_m": 9.476
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学六一纪念亭",
+      "node_id": 3113067142,
+      "poi_id": "poi_145",
+      "snap_distance_m": 14.246
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学半山庐",
+      "node_id": 13684703311,
+      "poi_id": "poi_146",
+      "snap_distance_m": 26.811
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学早期建筑",
+      "node_id": 13249059776,
+      "poi_id": "poi_147",
+      "snap_distance_m": 6.479
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学李四光塑像",
+      "node_id": 13264256692,
+      "poi_id": "poi_148",
+      "snap_distance_m": 4.987
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学李达故居",
+      "node_id": 1197829902,
+      "poi_id": "poi_149",
+      "snap_distance_m": 19.246
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学枫园",
+      "node_id": 13565526940,
+      "poi_id": "poi_150",
+      "snap_distance_m": 34.685
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学梅园",
+      "node_id": 13239968076,
+      "poi_id": "poi_151",
+      "snap_distance_m": 21.276
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学樱园",
+      "node_id": 13732671280,
+      "poi_id": "poi_152",
+      "snap_distance_m": 5.111
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学樱花大道",
+      "node_id": 1196701892,
+      "poi_id": "poi_153",
+      "snap_distance_m": 0.792
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学法治文化公园(珞珈山路)",
+      "node_id": 13567266507,
+      "poi_id": "poi_154",
+      "snap_distance_m": 31.562
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学火石山",
+      "node_id": 13269409029,
+      "poi_id": "poi_155",
+      "snap_distance_m": 12.971
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学狮子山(樱园西路)",
+      "node_id": 13249059765,
+      "poi_id": "poi_156",
+      "snap_distance_m": 40.736
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学珞珈山",
+      "node_id": 13394364533,
+      "poi_id": "poi_157",
+      "snap_distance_m": 12.189
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学珞珈山水塔",
+      "node_id": 11780148702,
+      "poi_id": "poi_158",
+      "snap_distance_m": 51.938
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学珞珈广场",
+      "node_id": 3110802263,
+      "poi_id": "poi_159",
+      "snap_distance_m": 9.521
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学电力广场",
+      "node_id": 13555966817,
+      "poi_id": "poi_160",
+      "snap_distance_m": 15.151
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学老斋舍",
+      "node_id": 13247000162,
+      "poi_id": "poi_161",
+      "snap_distance_m": 2.296
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学落英湖",
+      "node_id": 13244569636,
+      "poi_id": "poi_162",
+      "snap_distance_m": 21.165
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "闻一多雕像",
+      "node_id": 13732671308,
+      "poi_id": "poi_163",
+      "snap_distance_m": 30.894
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学鲲鹏广场",
+      "node_id": 13256761725,
+      "poi_id": "poi_164",
+      "snap_distance_m": 13.236
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈山庄",
+      "node_id": 13394304292,
+      "poi_id": "poi_165",
+      "snap_distance_m": 25.547
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "中国工商银行(武汉珞珈山支行)",
+      "node_id": 13732671441,
+      "poi_id": "poi_166",
+      "snap_distance_m": 13.28
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "中国邮政(武汉大学樱花邮政所)",
+      "node_id": 13545141143,
+      "poi_id": "poi_167",
+      "snap_distance_m": 16.728
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学医院",
+      "node_id": 13243780119,
+      "poi_id": "poi_168",
+      "snap_distance_m": 16.226
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学教职工活动中心",
+      "node_id": 12802598340,
+      "poi_id": "poi_169",
+      "snap_distance_m": 20.987
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学老干部活动中心",
+      "node_id": 13723351567,
+      "poi_id": "poi_170",
+      "snap_distance_m": 10.415
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "前沿交叉学科研究院",
+      "node_id": 12847386069,
+      "poi_id": "poi_171",
+      "snap_distance_m": 23.421
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部7号教学楼",
+      "node_id": 4159413690,
+      "poi_id": "poi_172",
+      "snap_distance_m": 39.986
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学中国边界与海洋研究院",
+      "node_id": 12862472430,
+      "poi_id": "poi_173",
+      "snap_distance_m": 6.207
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息管理学院",
+      "node_id": 12889055279,
+      "poi_id": "poi_174",
+      "snap_distance_m": 8.105
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学先进制造与人工智能实验室",
+      "node_id": 3631666750,
+      "poi_id": "poi_175",
+      "snap_distance_m": 31.111
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学区域经济研究中心",
+      "node_id": 13732671352,
+      "poi_id": "poi_176",
+      "snap_distance_m": 22.498
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学发展研究院",
+      "node_id": 12848622702,
+      "poi_id": "poi_177",
+      "snap_distance_m": 3.59
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学商学院EMBA中心",
+      "node_id": 13565527037,
+      "poi_id": "poi_178",
+      "snap_distance_m": 46.633
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学国家文化发展研究院",
+      "node_id": 13732671200,
+      "poi_id": "poi_179",
+      "snap_distance_m": 16.31
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学外国语言文学学院",
+      "node_id": 12889055214,
+      "poi_id": "poi_180",
+      "snap_distance_m": 18.546
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部10教学楼",
+      "node_id": 13555966753,
+      "poi_id": "poi_181",
+      "snap_distance_m": 14.115
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部11教学楼",
+      "node_id": 13728848122,
+      "poi_id": "poi_182",
+      "snap_distance_m": 18.514
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部3教学楼",
+      "node_id": 12862472428,
+      "poi_id": "poi_183",
+      "snap_distance_m": 19.377
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部5教楼",
+      "node_id": 13563109954,
+      "poi_id": "poi_184",
+      "snap_distance_m": 10.137
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部6教学楼",
+      "node_id": 13621348284,
+      "poi_id": "poi_185",
+      "snap_distance_m": 22.951
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部A教学楼",
+      "node_id": 9552100004,
+      "poi_id": "poi_186",
+      "snap_distance_m": 14.738
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部一教",
+      "node_id": 13555966819,
+      "poi_id": "poi_187",
+      "snap_distance_m": 25.429
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部四教学楼",
+      "node_id": 13563109949,
+      "poi_id": "poi_188",
+      "snap_distance_m": 6.138
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部水资源与水电工程科学国家重点实验室",
+      "node_id": 4320485443,
+      "poi_id": "poi_189",
+      "snap_distance_m": 10.191
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部高电压绝缘监测实验室",
+      "node_id": 12848622703,
+      "poi_id": "poi_190",
+      "snap_distance_m": 14.002
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学新闻与传播学院",
+      "node_id": 12862472431,
+      "poi_id": "poi_191",
+      "snap_distance_m": 20.154
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学机械工程实验教学中心现代加工部",
+      "node_id": 4320485417,
+      "poi_id": "poi_192",
+      "snap_distance_m": 6.923
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学机械工程实验教学中心车削加工部",
+      "node_id": 4320485420,
+      "poi_id": "poi_193",
+      "snap_distance_m": 25.16
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学法学图书馆",
+      "node_id": 12889055213,
+      "poi_id": "poi_194",
+      "snap_distance_m": 30.796
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学法学院",
+      "node_id": 12889055213,
+      "poi_id": "poi_195",
+      "snap_distance_m": 19.68
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学爱平音乐厅",
+      "node_id": 13545293322,
+      "poi_id": "poi_196",
+      "snap_distance_m": 22.173
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学留学生教育学院",
+      "node_id": 12889030473,
+      "poi_id": "poi_197",
+      "snap_distance_m": 11.712
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学社会学院",
+      "node_id": 13701919380,
+      "poi_id": "poi_198",
+      "snap_distance_m": 19.396
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学经济与管理学院",
+      "node_id": 13565164143,
+      "poi_id": "poi_199",
+      "snap_distance_m": 59.211
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学艺术学院",
+      "node_id": 12862472434,
+      "poi_id": "poi_200",
+      "snap_distance_m": 31.619
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部三食堂",
+      "node_id": 13563157045,
+      "poi_id": "poi_201",
+      "snap_distance_m": 12.979
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部一食堂",
+      "node_id": 3842096764,
+      "poi_id": "poi_202",
+      "snap_distance_m": 13.918
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部学生一食堂",
+      "node_id": 13563109920,
+      "poi_id": "poi_203",
+      "snap_distance_m": 12.573
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部体育馆",
+      "node_id": 13678604209,
+      "poi_id": "poi_204",
+      "snap_distance_m": 32.437
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部篮球场",
+      "node_id": 13550842840,
+      "poi_id": "poi_206",
+      "snap_distance_m": 38.017
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部15舍",
+      "node_id": 4052778622,
+      "poi_id": "poi_207",
+      "snap_distance_m": 16.485
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部3舍",
+      "node_id": 9681727709,
+      "poi_id": "poi_208",
+      "snap_distance_m": 28.779
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部5舍",
+      "node_id": 13563537468,
+      "poi_id": "poi_209",
+      "snap_distance_m": 33.941
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部8舍",
+      "node_id": 3842096767,
+      "poi_id": "poi_210",
+      "snap_distance_m": 6.819
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部9舍",
+      "node_id": 13668225770,
+      "poi_id": "poi_211",
+      "snap_distance_m": 26.881
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部10舍",
+      "node_id": 13668225769,
+      "poi_id": "poi_212",
+      "snap_distance_m": 17.919
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部11舍",
+      "node_id": 12848166028,
+      "poi_id": "poi_213",
+      "snap_distance_m": 27.446
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部12舍",
+      "node_id": 13668225767,
+      "poi_id": "poi_214",
+      "snap_distance_m": 4.3
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部16舍",
+      "node_id": 4808966295,
+      "poi_id": "poi_215",
+      "snap_distance_m": 20.969
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部17舍",
+      "node_id": 13550831465,
+      "poi_id": "poi_216",
+      "snap_distance_m": 20.06
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部1舍",
+      "node_id": 9681727696,
+      "poi_id": "poi_217",
+      "snap_distance_m": 15.796
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部2舍",
+      "node_id": 9681727672,
+      "poi_id": "poi_218",
+      "snap_distance_m": 19.906
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部4舍",
+      "node_id": 13563154197,
+      "poi_id": "poi_219",
+      "snap_distance_m": 15.046
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部6舍",
+      "node_id": 13732671341,
+      "poi_id": "poi_220",
+      "snap_distance_m": 17.17
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部学生7舍",
+      "node_id": 13563157065,
+      "poi_id": "poi_221",
+      "snap_distance_m": 13.851
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部学生宿舍新2舍",
+      "node_id": 12805315794,
+      "poi_id": "poi_222",
+      "snap_distance_m": 26.693
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学留学生宿舍1号楼",
+      "node_id": 12888527017,
+      "poi_id": "poi_223",
+      "snap_distance_m": 27.508
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学留学生宿舍2号楼",
+      "node_id": 13565527038,
+      "poi_id": "poi_224",
+      "snap_distance_m": 41.203
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "留学生宿舍3号楼",
+      "node_id": 13565527046,
+      "poi_id": "poi_225",
+      "snap_distance_m": 16.202
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学茶港门",
+      "node_id": 13246350954,
+      "poi_id": "poi_226",
+      "snap_distance_m": 7.099
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "洪波门",
+      "node_id": 1371798845,
+      "poi_id": "poi_227",
+      "snap_distance_m": 19.635
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学周恩来故居",
+      "node_id": 11780148702,
+      "poi_id": "poi_228",
+      "snap_distance_m": 19.605
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "闻一多纪念馆",
+      "node_id": 13397418486,
+      "poi_id": "poi_229",
+      "snap_distance_m": 24.451
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部大学生活动中心",
+      "node_id": 3842096761,
+      "poi_id": "poi_230",
+      "snap_distance_m": 14.182
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈自强超市",
+      "node_id": 13565526944,
+      "poi_id": "poi_231",
+      "snap_distance_m": 9.632
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "信息学部西区综合楼",
+      "node_id": 13227038588,
+      "poi_id": "poi_234",
+      "snap_distance_m": 22.097
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星湖综合实验大楼",
+      "node_id": 13251028695,
+      "poi_id": "poi_237",
+      "snap_distance_m": 5.535
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部1号教学楼",
+      "node_id": 13227634466,
+      "poi_id": "poi_238",
+      "snap_distance_m": 8.016
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部2教学楼",
+      "node_id": 13563537490,
+      "poi_id": "poi_239",
+      "snap_distance_m": 5.918
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部图书馆",
+      "node_id": 12877128255,
+      "poi_id": "poi_240",
+      "snap_distance_m": 17.462
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部星湖教3楼",
+      "node_id": 13563537492,
+      "poi_id": "poi_241",
+      "snap_distance_m": 11.963
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部测绘学院",
+      "node_id": 12928862569,
+      "poi_id": "poi_242",
+      "snap_distance_m": 16.871
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部测绘遥感信息工程全国重点实验室",
+      "node_id": 13513425369,
+      "poi_id": "poi_243",
+      "snap_distance_m": 7.333
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部现代大地测量与地球动力学教育部重点实验室",
+      "node_id": 5223029959,
+      "poi_id": "poi_244",
+      "snap_distance_m": 5.528
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部西区B4教学楼",
+      "node_id": 3123587161,
+      "poi_id": "poi_245",
+      "snap_distance_m": 12.784
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部资源与环境科学学院",
+      "node_id": 12167319848,
+      "poi_id": "poi_246",
+      "snap_distance_m": 18.571
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部遥感信息工程学院(5号教学楼)",
+      "node_id": 13723351591,
+      "poi_id": "poi_247",
+      "snap_distance_m": 8.756
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学宇航科学与技术研究院",
+      "node_id": 13704300596,
+      "poi_id": "poi_248",
+      "snap_distance_m": 11.653
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文理学院珞涵屯",
+      "node_id": 13685384931,
+      "poi_id": "poi_249",
+      "snap_distance_m": 20.657
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学遥感信息工程学院",
+      "node_id": 13563537487,
+      "poi_id": "poi_250",
+      "snap_distance_m": 10.041
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "信息学部清真食堂",
+      "node_id": 13704300575,
+      "poi_id": "poi_253",
+      "snap_distance_m": 19.063
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生一食堂",
+      "node_id": 13227634453,
+      "poi_id": "poi_254",
+      "snap_distance_m": 11.941
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生三食堂",
+      "node_id": 13704300572,
+      "poi_id": "poi_255",
+      "snap_distance_m": 11.892
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生四食堂",
+      "node_id": 13704300567,
+      "poi_id": "poi_256",
+      "snap_distance_m": 11.874
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星湖体育馆",
+      "node_id": 13704353118,
+      "poi_id": "poi_257",
+      "snap_distance_m": 19.15
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部体育场",
+      "node_id": 13704353117,
+      "poi_id": "poi_258",
+      "snap_distance_m": 22.049
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部体育馆",
+      "node_id": 12803991864,
+      "poi_id": "poi_259",
+      "snap_distance_m": 7.926
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部操场",
+      "node_id": 6222270511,
+      "poi_id": "poi_260",
+      "snap_distance_m": 45.868
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部游泳池",
+      "node_id": 13510900008,
+      "poi_id": "poi_261",
+      "snap_distance_m": 7.182
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部篮球场",
+      "node_id": 3631666757,
+      "poi_id": "poi_262",
+      "snap_distance_m": 23.944
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "信息学部17舍",
+      "node_id": 13227634458,
+      "poi_id": "poi_263",
+      "snap_distance_m": 20.795
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部6舍",
+      "node_id": 13227634451,
+      "poi_id": "poi_270",
+      "snap_distance_m": 18.922
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部国软C4舍",
+      "node_id": 13510827098,
+      "poi_id": "poi_271",
+      "snap_distance_m": 12.104
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生21舍",
+      "node_id": 13704300581,
+      "poi_id": "poi_272",
+      "snap_distance_m": 8.862
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍10舍",
+      "node_id": 13704300591,
+      "poi_id": "poi_273",
+      "snap_distance_m": 3.997
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍11舍",
+      "node_id": 12889030499,
+      "poi_id": "poi_274",
+      "snap_distance_m": 7.163
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍12舍",
+      "node_id": 12889030500,
+      "poi_id": "poi_275",
+      "snap_distance_m": 14.753
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍13舍",
+      "node_id": 12889055201,
+      "poi_id": "poi_276",
+      "snap_distance_m": 10.747
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍14舍",
+      "node_id": 12889055202,
+      "poi_id": "poi_277",
+      "snap_distance_m": 7.199
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍15舍",
+      "node_id": 12808976314,
+      "poi_id": "poi_278",
+      "snap_distance_m": 21.034
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍16舍",
+      "node_id": 12805592863,
+      "poi_id": "poi_279",
+      "snap_distance_m": 17.646
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍18舍",
+      "node_id": 13505885376,
+      "poi_id": "poi_280",
+      "snap_distance_m": 6.907
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍19舍",
+      "node_id": 13510827099,
+      "poi_id": "poi_281",
+      "snap_distance_m": 7.378
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍3舍",
+      "node_id": 12877128242,
+      "poi_id": "poi_282",
+      "snap_distance_m": 9.356
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍4舍",
+      "node_id": 12877128253,
+      "poi_id": "poi_283",
+      "snap_distance_m": 9.647
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍5舍",
+      "node_id": 12877128252,
+      "poi_id": "poi_284",
+      "snap_distance_m": 14.163
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍7舍",
+      "node_id": 5223114811,
+      "poi_id": "poi_285",
+      "snap_distance_m": 9.135
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍8舍",
+      "node_id": 1369722873,
+      "poi_id": "poi_286",
+      "snap_distance_m": 28.452
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生宿舍9舍",
+      "node_id": 13578050859,
+      "poi_id": "poi_287",
+      "snap_distance_m": 8.89
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍1栋",
+      "node_id": 12808976311,
+      "poi_id": "poi_288",
+      "snap_distance_m": 26.743
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍23栋",
+      "node_id": 12825006680,
+      "poi_id": "poi_289",
+      "snap_distance_m": 25.055
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍2栋",
+      "node_id": 12803401524,
+      "poi_id": "poi_290",
+      "snap_distance_m": 14.216
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍3栋",
+      "node_id": 12825006680,
+      "poi_id": "poi_291",
+      "snap_distance_m": 13.293
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍4栋",
+      "node_id": 12825006679,
+      "poi_id": "poi_292",
+      "snap_distance_m": 11.972
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部青年楼宿舍5栋",
+      "node_id": 12803752239,
+      "poi_id": "poi_293",
+      "snap_distance_m": 17.538
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学国际软件学院C7舍",
+      "node_id": 13704353116,
+      "poi_id": "poi_294",
+      "snap_distance_m": 10.128
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学文澜门",
+      "node_id": 13613667190,
+      "poi_id": "poi_295",
+      "snap_distance_m": 5.289
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞瑜二门",
+      "node_id": 13708188224,
+      "poi_id": "poi_296",
+      "snap_distance_m": 9.387
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞瑜门",
+      "node_id": 13732671008,
+      "poi_id": "poi_297",
+      "snap_distance_m": 4.602
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星湖",
+      "node_id": 13704300521,
+      "poi_id": "poi_298",
+      "snap_distance_m": 22.376
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息学部学生活动中心",
+      "node_id": 13704300430,
+      "poi_id": "poi_299",
+      "snap_distance_m": 23.647
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学口腔医院",
+      "node_id": 13680519615,
+      "poi_id": "poi_300",
+      "snap_distance_m": 27.147
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "弘毅门",
+      "node_id": 13241555633,
+      "poi_id": "poi_301",
+      "snap_distance_m": 13.735
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "北门",
+      "node_id": 8101909381,
+      "poi_id": "poi_302",
+      "snap_distance_m": 5.992
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "扬波门",
+      "node_id": 13565585882,
+      "poi_id": "poi_303",
+      "snap_distance_m": 16.407
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "五洲餐厅(求是大道店)",
+      "node_id": 13732671085,
+      "poi_id": "poi_305",
+      "snap_distance_m": 4.514
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "沙县小吃(信息学部店)",
+      "node_id": 13523586154,
+      "poi_id": "poi_306",
+      "snap_distance_m": 26.468
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星湖园食堂",
+      "node_id": 13513425376,
+      "poi_id": "poi_307",
+      "snap_distance_m": 9.336
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "佳乐粉面馆(信息学部)",
+      "node_id": 13732671105,
+      "poi_id": "poi_308",
+      "snap_distance_m": 21.855
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "大浪咖啡包子铺(信息学部)",
+      "node_id": 13732671120,
+      "poi_id": "poi_309",
+      "snap_distance_m": 18.887
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "库迪咖啡(信息学部店)",
+      "node_id": 13704300567,
+      "poi_id": "poi_310",
+      "snap_distance_m": 7.01
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "柚见鲜茶(信息学部三食堂店)",
+      "node_id": 13704300572,
+      "poi_id": "poi_311",
+      "snap_distance_m": 6.385
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "沫芝墨汁酸奶捞(信部CBD店)",
+      "node_id": 13704353192,
+      "poi_id": "poi_312",
+      "snap_distance_m": 7.963
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(信息学部店)",
+      "node_id": 13704353192,
+      "poi_id": "poi_313",
+      "snap_distance_m": 4.982
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "霸王茶姬(信息学部店)",
+      "node_id": 3631666774,
+      "poi_id": "poi_314",
+      "snap_distance_m": 14.089
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "肯德基(信息学部店)",
+      "node_id": 13704353192,
+      "poi_id": "poi_315",
+      "snap_distance_m": 9.775
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "古茗(信息学部店)",
+      "node_id": 9558228570,
+      "poi_id": "poi_316",
+      "snap_distance_m": 12.082
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "Manner Coffee(信息学部店)",
+      "node_id": 12877128233,
+      "poi_id": "poi_317",
+      "snap_distance_m": 8.067
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "一品豆花(信息学部店)",
+      "node_id": 12877128233,
+      "poi_id": "poi_318",
+      "snap_distance_m": 6.238
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "柠季手打柠檬茶(信息学部店)",
+      "node_id": 12877128233,
+      "poi_id": "poi_319",
+      "snap_distance_m": 11.83
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "爱的锅三汁焖锅(信息学部店)",
+      "node_id": 9558228570,
+      "poi_id": "poi_320",
+      "snap_distance_m": 13.337
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "鱼你在一起(信息学部店)",
+      "node_id": 13704353196,
+      "poi_id": "poi_321",
+      "snap_distance_m": 8.182
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "煎百味(信息学部店)",
+      "node_id": 12877128233,
+      "poi_id": "poi_322",
+      "snap_distance_m": 16.592
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "老乡鸡(信息学部店)",
+      "node_id": 13704353196,
+      "poi_id": "poi_323",
+      "snap_distance_m": 21.523
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "鱼籽村秘制拌饭(武大店)",
+      "node_id": 13576370717,
+      "poi_id": "poi_324",
+      "snap_distance_m": 16.893
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "超牛堡炙烤牛肉汉堡(武大进校店)",
+      "node_id": 13704406753,
+      "poi_id": "poi_325",
+      "snap_distance_m": 11.039
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "金闪闪炸鸡腿(武大店)",
+      "node_id": 2505909454,
+      "poi_id": "poi_326",
+      "snap_distance_m": 27.684
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "好味道粉面馆(武大店)",
+      "node_id": 13704406753,
+      "poi_id": "poi_327",
+      "snap_distance_m": 9.286
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "糯米包油条(武大文理学部店)",
+      "node_id": 13704406753,
+      "poi_id": "poi_328",
+      "snap_distance_m": 21.018
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "丁记炒饭(武大可送校内店)",
+      "node_id": 12802598350,
+      "poi_id": "poi_329",
+      "snap_distance_m": 23.78
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "有家黄焖鸡(武大店)",
+      "node_id": 13704406753,
+      "poi_id": "poi_330",
+      "snap_distance_m": 10.563
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "刘府井北京烤鸭(武大店)",
+      "node_id": 2505909454,
+      "poi_id": "poi_331",
+      "snap_distance_m": 29.117
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "Greenhouse花房咖啡",
+      "node_id": 1196688782,
+      "poi_id": "poi_332",
+      "snap_distance_m": 19.218
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "鹏记热干面(白锦街店)",
+      "node_id": 13732671126,
+      "poi_id": "poi_333",
+      "snap_distance_m": 21.47
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "初山饭团(武大店)",
+      "node_id": 12875262043,
+      "poi_id": "poi_334",
+      "snap_distance_m": 20.859
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "金麦坊面包房(武大店)",
+      "node_id": 13732671393,
+      "poi_id": "poi_335",
+      "snap_distance_m": 26.367
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "香茵波克现烤汉堡(武大校区店)",
+      "node_id": 12802598340,
+      "poi_id": "poi_336",
+      "snap_distance_m": 13.216
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "古茗(梅园南区店)",
+      "node_id": 13732671175,
+      "poi_id": "poi_337",
+      "snap_distance_m": 16.779
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(梅园店)",
+      "node_id": 12802032542,
+      "poi_id": "poi_338",
+      "snap_distance_m": 18.633
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "茶颜悦色(梅园店)",
+      "node_id": 13271252065,
+      "poi_id": "poi_339",
+      "snap_distance_m": 16.905
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "周麻婆川式小炒(武大店)",
+      "node_id": 13271252065,
+      "poi_id": "poi_340",
+      "snap_distance_m": 19.904
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "小肆川(梅园店)",
+      "node_id": 13239968076,
+      "poi_id": "poi_341",
+      "snap_distance_m": 24.949
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "呷哺呷哺(梅园店)",
+      "node_id": 13239968076,
+      "poi_id": "poi_342",
+      "snap_distance_m": 21.438
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "饱立来(梅园店)",
+      "node_id": 13239968076,
+      "poi_id": "poi_343",
+      "snap_distance_m": 24.949
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "氧气层(梅园店)",
+      "node_id": 13239968076,
+      "poi_id": "poi_344",
+      "snap_distance_m": 24.506
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "饱嗝便当(梅园店)",
+      "node_id": 13704644556,
+      "poi_id": "poi_345",
+      "snap_distance_m": 15.933
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "鱼你在一起(梅园店)",
+      "node_id": 13266173089,
+      "poi_id": "poi_346",
+      "snap_distance_m": 13.067
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "肯德基(梅园店)",
+      "node_id": 13565336598,
+      "poi_id": "poi_347",
+      "snap_distance_m": 11.056
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "麦当劳(梅园店)",
+      "node_id": 1199722376,
+      "poi_id": "poi_348",
+      "snap_distance_m": 4.402
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "布咖啡(武汉大学校园店)",
+      "node_id": 13545143088,
+      "poi_id": "poi_349",
+      "snap_distance_m": 12.181
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "栀否栀否冰激淋糖水(武大校内店)",
+      "node_id": 13545143088,
+      "poi_id": "poi_350",
+      "snap_distance_m": 12.181
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蔬三时轻食(武大校内店)",
+      "node_id": 13241429487,
+      "poi_id": "poi_351",
+      "snap_distance_m": 13.421
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "达美乐比萨(枫园店)",
+      "node_id": 13732671233,
+      "poi_id": "poi_352",
+      "snap_distance_m": 11.668
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "麦当劳(枫园店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_353",
+      "snap_distance_m": 20.066
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(枫园店)",
+      "node_id": 4808835822,
+      "poi_id": "poi_354",
+      "snap_distance_m": 22.178
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "库迪咖啡(枫园CBD店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_355",
+      "snap_distance_m": 9.252
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "1973继光香香鸡(武大店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_356",
+      "snap_distance_m": 15.298
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "孃孃出川(枫园店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_357",
+      "snap_distance_m": 8.924
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蛋挞家的烫饭(枫园店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_358",
+      "snap_distance_m": 19.788
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "沙县小吃(枫园店)",
+      "node_id": 13565526940,
+      "poi_id": "poi_359",
+      "snap_distance_m": 4.688
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蜜雪冰城(枫园店)",
+      "node_id": 13565526934,
+      "poi_id": "poi_360",
+      "snap_distance_m": 20.894
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "匠心卤(枫园食堂店)",
+      "node_id": 13565526944,
+      "poi_id": "poi_361",
+      "snap_distance_m": 22.17
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "京津炸鸡(枫园店)",
+      "node_id": 13565526934,
+      "poi_id": "poi_362",
+      "snap_distance_m": 25.168
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "三津汤包(枫园店)",
+      "node_id": 12808058135,
+      "poi_id": "poi_363",
+      "snap_distance_m": 10.999
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "初莳牛排焗饭意面(武大校内店)",
+      "node_id": 1196701983,
+      "poi_id": "poi_364",
+      "snap_distance_m": 8.327
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "祝芝兰手作东方茶(枫园食堂店)",
+      "node_id": 1196701983,
+      "poi_id": "poi_365",
+      "snap_distance_m": 15.41
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "青柠欢喜咖啡果饮(武大店)",
+      "node_id": 13545293368,
+      "poi_id": "poi_366",
+      "snap_distance_m": 23.2
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈面馆(湖滨店)",
+      "node_id": 13550854044,
+      "poi_id": "poi_367",
+      "snap_distance_m": 13.792
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蜜雪冰城(湖滨店)",
+      "node_id": 3631666748,
+      "poi_id": "poi_368",
+      "snap_distance_m": 12.692
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(湖滨店)",
+      "node_id": 3631666746,
+      "poi_id": "poi_369",
+      "snap_distance_m": 12.871
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈饮品(桂园店)",
+      "node_id": 13701927128,
+      "poi_id": "poi_370",
+      "snap_distance_m": 2.25
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "WHU1893咖啡馆",
+      "node_id": 13249113627,
+      "poi_id": "poi_371",
+      "snap_distance_m": 6.739
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈山庄餐厅",
+      "node_id": 13565368160,
+      "poi_id": "poi_372",
+      "snap_distance_m": 11.626
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "Manner coffee(工学部店)",
+      "node_id": 13732671501,
+      "poi_id": "poi_373",
+      "snap_distance_m": 33.72
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "喜茶(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_374",
+      "snap_distance_m": 30.423
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_375",
+      "snap_distance_m": 27.419
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "饱嗝食集(工学天地店)",
+      "node_id": 13678604208,
+      "poi_id": "poi_376",
+      "snap_distance_m": 11.94
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "茶百道(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_377",
+      "snap_distance_m": 12.759
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "赛百味(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_378",
+      "snap_distance_m": 13.128
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "吉野家(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_379",
+      "snap_distance_m": 10.982
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "遇见小面(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_380",
+      "snap_distance_m": 29.186
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "袁记云饺(武大店)",
+      "node_id": 3842095844,
+      "poi_id": "poi_381",
+      "snap_distance_m": 19.278
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "朴大叔拌饭(工学部店)",
+      "node_id": 3842095844,
+      "poi_id": "poi_382",
+      "snap_distance_m": 31.641
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星巴克(工学部店)",
+      "node_id": 13563157045,
+      "poi_id": "poi_383",
+      "snap_distance_m": 5.318
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "库迪咖啡(工学部店)",
+      "node_id": 3842095844,
+      "poi_id": "poi_384",
+      "snap_distance_m": 15.974
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "书亦烧仙草(工学部店)",
+      "node_id": 4052778622,
+      "poi_id": "poi_385",
+      "snap_distance_m": 8.712
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "花焙格各音乐餐吧",
+      "node_id": 12872909105,
+      "poi_id": "poi_386",
+      "snap_distance_m": 12.435
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "小食坊粉丝煲(工学部集贸市场)",
+      "node_id": 13550957419,
+      "poi_id": "poi_387",
+      "snap_distance_m": 34.211
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "桂圆馄饨(工学部集贸市场)",
+      "node_id": 13550957419,
+      "poi_id": "poi_388",
+      "snap_distance_m": 31.801
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "恩施炕小土豆(武大店)",
+      "node_id": 13550957419,
+      "poi_id": "poi_389",
+      "snap_distance_m": 24.638
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "不颠哥港式甜品店(武大店)",
+      "node_id": 13550957419,
+      "poi_id": "poi_390",
+      "snap_distance_m": 27.026
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武大第一炒酸奶店",
+      "node_id": 13550957414,
+      "poi_id": "poi_391",
+      "snap_distance_m": 18.823
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蔡明纬(工学部店)",
+      "node_id": 13550957419,
+      "poi_id": "poi_392",
+      "snap_distance_m": 13.671
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "小伙计(工学部店)",
+      "node_id": 13550957419,
+      "poi_id": "poi_393",
+      "snap_distance_m": 29.275
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "土黄牛肉面(工学部店)",
+      "node_id": 13556582613,
+      "poi_id": "poi_394",
+      "snap_distance_m": 22.917
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "皇冠幸福里(工学部店)",
+      "node_id": 12805594657,
+      "poi_id": "poi_395",
+      "snap_distance_m": 34.488
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "湘菜馆(武汉大学内店)",
+      "node_id": 13732671480,
+      "poi_id": "poi_396",
+      "snap_distance_m": 25.393
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "川味坊(桂园一路店)",
+      "node_id": 13732671480,
+      "poi_id": "poi_397",
+      "snap_distance_m": 19.306
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学家常菜(桂园一路)",
+      "node_id": 13732671480,
+      "poi_id": "poi_398",
+      "snap_distance_m": 20.327
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "大囍螺蛳粉(桂园一路)",
+      "node_id": 979936013,
+      "poi_id": "poi_399",
+      "snap_distance_m": 30.667
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "农家小炒(桂园一路)",
+      "node_id": 12872909108,
+      "poi_id": "poi_400",
+      "snap_distance_m": 29.77
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "沙县小吃(工学部店)",
+      "node_id": 13732671452,
+      "poi_id": "poi_401",
+      "snap_distance_m": 15.155
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "重庆小面(弘毅大道店)",
+      "node_id": 12888527080,
+      "poi_id": "poi_402",
+      "snap_distance_m": 16.923
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "云山俏云南小锅米线(工学部店)",
+      "node_id": 13732671450,
+      "poi_id": "poi_403",
+      "snap_distance_m": 6.033
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "宝岛小厨(工学部店)",
+      "node_id": 13732671452,
+      "poi_id": "poi_404",
+      "snap_distance_m": 11.303
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "瑞幸咖啡(田园食堂店)",
+      "node_id": 13545141149,
+      "poi_id": "poi_405",
+      "snap_distance_m": 4.967
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "蜜雪冰城(工学部田园店)",
+      "node_id": 13545141149,
+      "poi_id": "poi_406",
+      "snap_distance_m": 5.758
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "爷爷不泡茶(田园店)",
+      "node_id": 13545141150,
+      "poi_id": "poi_407",
+      "snap_distance_m": 5.58
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "古茗(工学部田园店)",
+      "node_id": 13545141149,
+      "poi_id": "poi_408",
+      "snap_distance_m": 22.257
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "秀味馄饨(工学部店)",
+      "node_id": 3113066251,
+      "poi_id": "poi_409",
+      "snap_distance_m": 23.52
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈山下文创咖啡",
+      "node_id": 12805321012,
+      "poi_id": "poi_410",
+      "snap_distance_m": 20.549
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "欢喜水果捞(工学部店)",
+      "node_id": 3113066251,
+      "poi_id": "poi_411",
+      "snap_distance_m": 17.919
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞家拾光(工学部店)",
+      "node_id": 12805321012,
+      "poi_id": "poi_412",
+      "snap_distance_m": 21.579
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "舌尖大师铁板锅(武大珞珈山店)",
+      "node_id": 12805315794,
+      "poi_id": "poi_413",
+      "snap_distance_m": 14.049
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "谭小嗨热卤牛骨火锅鸡(武大珞珈山店)",
+      "node_id": 12805594628,
+      "poi_id": "poi_414",
+      "snap_distance_m": 18.012
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学工学部集贸市场",
+      "node_id": 13550957419,
+      "poi_id": "poi_415",
+      "snap_distance_m": 29.317
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学明珠园",
+      "node_id": 13550983522,
+      "poi_id": "poi_416",
+      "snap_distance_m": 26.501
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "月湖",
+      "node_id": 1196701951,
+      "poi_id": "poi_417",
+      "snap_distance_m": 20.226
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "卓尔体育馆",
+      "node_id": 8101928703,
+      "poi_id": "poi_418",
+      "snap_distance_m": 57.945
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "澄波门",
+      "node_id": 12805315799,
+      "poi_id": "poi_419",
+      "snap_distance_m": 42.065
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞东二门",
+      "node_id": 13732671137,
+      "poi_id": "poi_420",
+      "snap_distance_m": 11.922
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞南二门",
+      "node_id": 13576370715,
+      "poi_id": "poi_421",
+      "snap_distance_m": 3.716
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞南三门",
+      "node_id": 13704368129,
+      "poi_id": "poi_422",
+      "snap_distance_m": 6.535
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "梅园快递服务中心",
+      "node_id": 13273046912,
+      "poi_id": "poi_423",
+      "snap_distance_m": 4.309
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "信息学部快递服务中心",
+      "node_id": 1369724916,
+      "poi_id": "poi_424",
+      "snap_distance_m": 12.758
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学医院二门诊部",
+      "node_id": 13510900007,
+      "poi_id": "poi_425",
+      "snap_distance_m": 2.875
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部社区卫生服务中心",
+      "node_id": 979945409,
+      "poi_id": "poi_426",
+      "snap_distance_m": 30.135
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学水电服务大厅",
+      "node_id": 13613500617,
+      "poi_id": "poi_427",
+      "snap_distance_m": 16.879
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学邮政室",
+      "node_id": 13273047027,
+      "poi_id": "poi_428",
+      "snap_distance_m": 7.064
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学一站式学生服务中心",
+      "node_id": 4320485415,
+      "poi_id": "poi_429",
+      "snap_distance_m": 25.191
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "武汉大学信息中心",
+      "node_id": 13613667195,
+      "poi_id": "poi_430",
+      "snap_distance_m": 36.255
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "卓尔附馆",
+      "node_id": 8823668022,
+      "poi_id": "poi_431",
+      "snap_distance_m": 30.86
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "工学部排球场",
+      "node_id": 12805877877,
+      "poi_id": "poi_432",
+      "snap_distance_m": 25.923
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "测量仪器陈列馆",
+      "node_id": 13704353154,
+      "poi_id": "poi_433",
+      "snap_distance_m": 10.065
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "博观楼",
+      "node_id": 13510708594,
+      "poi_id": "poi_435",
+      "snap_distance_m": 14.57
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "水工大厅",
+      "node_id": 12848166028,
+      "poi_id": "poi_436",
+      "snap_distance_m": 51.47
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "河流泥沙研究室",
+      "node_id": 3112677663,
+      "poi_id": "poi_437",
+      "snap_distance_m": 21.122
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "教材中心",
+      "node_id": 9681727692,
+      "poi_id": "poi_438",
+      "snap_distance_m": 19.275
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "高电压试验大厅",
+      "node_id": 13563109921,
+      "poi_id": "poi_439",
+      "snap_distance_m": 11.901
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "尖端科技楼",
+      "node_id": 13547452115,
+      "poi_id": "poi_440",
+      "snap_distance_m": 31.067
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "机电排灌楼",
+      "node_id": 1358787377,
+      "poi_id": "poi_441",
+      "snap_distance_m": 25.121
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "水工实验楼",
+      "node_id": 13732671462,
+      "poi_id": "poi_442",
+      "snap_distance_m": 19.408
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星空广场",
+      "node_id": 9549826647,
+      "poi_id": "poi_443",
+      "snap_distance_m": 9.817
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "博望亭",
+      "node_id": 13704300521,
+      "poi_id": "poi_444",
+      "snap_distance_m": 21.794
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "星湖运动场",
+      "node_id": 13518537618,
+      "poi_id": "poi_445",
+      "snap_distance_m": 28.507
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "竹园网球场",
+      "node_id": 13704300448,
+      "poi_id": "poi_446",
+      "snap_distance_m": 19.605
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "露天羽毛球场",
+      "node_id": 13563157063,
+      "poi_id": "poi_447",
+      "snap_distance_m": 14.921
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "大学生体育活动中心",
+      "node_id": 8101928703,
+      "poi_id": "poi_448",
+      "snap_distance_m": 30.326
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "玉兰2门",
+      "node_id": 1204194363,
+      "poi_id": "poi_449",
+      "snap_distance_m": 3.036
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "乒乓球馆",
+      "node_id": 12803991864,
+      "poi_id": "poi_450",
+      "snap_distance_m": 19.89
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "竹园羽毛球场",
+      "node_id": 12803991857,
+      "poi_id": "poi_451",
+      "snap_distance_m": 17.892
+    },
+    {
+      "access_status": "last_meter_unverified",
+      "name": "珞珈咖啡（万林艺术博物馆店）",
+      "node_id": 3709156217,
+      "poi_id": "poi_452",
+      "snap_distance_m": 20.104
+    }
+  ],
+  "boundary_wkt": "POLYGON ((114.37596193718525 30.532611632587617, 114.37626236644877 30.52531368609981, 114.37346513228889 30.517319260470284, 114.36447382854973 30.51513138863033, 114.35448608583458 30.51534659147729, 114.34899348450402 30.51935464450616, 114.34849360945618 30.52635328991996, 114.34849304511077 30.532851178907254, 114.34629592738682 30.53735357521625, 114.34999009583163 30.541645650729187, 114.34799307865146 30.540949365641502, 114.34929098023083 30.543146355000832, 114.35048898544298 30.546143266160513, 114.35648029685872 30.5513315290113, 114.36447063208234 30.5518193280079, 114.37146386390071 30.55081056065647, 114.3724633683 30.546810754934363, 114.37296330837317 30.54281153593303, 114.37296361371041 30.5393127125453, 114.37096582570955 30.533317063085615, 114.36376277287945 30.532718778044465, 114.37596193718525 30.532611632587617), (114.35049013239835 30.532947683024105, 114.35049001946666 30.534247255670007, 114.35698113456195 30.53423650961866, 114.35723087760597 30.53348636140834, 114.35698112586368 30.534336476675552, 114.35049001077937 30.534347222727355, 114.35049013239738 30.532947683024105, 114.35049013239835 30.532947683024105), (114.35927839783658 30.532233576792155, 114.35927836303114 30.53263344575105, 114.35927836303108 30.53263344575105, 114.35927839783658 30.532233576792155))",
+  "excluded": [
+    {
+      "nearest_distance_m": 61.356,
+      "poi_id": "poi_085",
+      "reason": "too_far_from_permitted_graph"
+    },
+    {
+      "nearest_distance_m": 70.842,
+      "poi_id": "poi_205",
+      "reason": "too_far_from_permitted_graph"
+    },
+    {
+      "nearest_distance_m": 70.903,
+      "poi_id": "poi_434",
+      "reason": "too_far_from_permitted_graph"
+    }
+  ],
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "max_snap_m": 60,
+  "poi_sha256": "83765ab06f4dc63c1bbdda65d1d807348e9130533e160947d649d9aad7d92e67",
+  "scope": "development_only",
+  "warning": "Geometric graph anchors only; building entrances and site access are unverified."
+}

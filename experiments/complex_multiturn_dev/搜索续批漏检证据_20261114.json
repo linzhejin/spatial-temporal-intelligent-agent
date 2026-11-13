@@ -1,0 +1,28 @@
+{
+  "run": "20261113T162254Z-7ddab9c7",
+  "case": "search_04",
+  "later_turn": 3,
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "provider_evidence_sha256": "159510e6a860cc3698db514e28f8c9527fedc4e282ca7516230cf7564359f050",
+  "provider_record_from_separate_case": {
+    "id": "B0FFF904AN",
+    "name": "武汉大学信息学部篮球场",
+    "type": "体育休闲服务;运动场馆;篮球场馆",
+    "typecode": "080104",
+    "location": "114.362252,30.528372"
+  },
+  "query_origin": "poi_004",
+  "radius_m": 2000,
+  "source_candidate_anchor": {
+    "node_id": 3631666757,
+    "snap_distance_m": 23.944
+  },
+  "independent_scope": {
+    "verdict": "pass",
+    "reason": "confirmed_edge_path",
+    "graph_length_m": 1148.46,
+    "access_lower_bound_m": 34.559
+  },
+  "model_text": "2 公里步行范围内的篮球场只有此前展示过的两处，候选池已无未展示的新地点，因此不重复推荐。可扩大范围或改查其他场地类型。",
+  "boundary": "provider observation from a separate case in the same batch; frozen-graph and straight-line estimates only, not proof of current physical access or opening"
+}

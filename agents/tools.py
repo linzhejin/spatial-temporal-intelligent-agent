@@ -647,7 +647,17 @@ def _haversine(lat1, lon1, lat2, lon2):
 def _poi_public(poi: dict, with_coords: bool = True, with_provenance: bool = False) -> dict:
     """给 LLM/前端看的精简 POI 结构（坐标保持 GCJ-02，与前端一致）。"""
     subcategory = poi.get("subcategory", "")
-    supported_activities = sorted(activities_for_poi(poi))
+    supported_activities = set(activities_for_poi(poi))
+    provider_type = (str(poi.get("type_name") or "").strip()[:200]
+                     if poi.get("source") == "amap_online" else "")
+    provider_activities = set()
+    if provider_type and poi.get("type") == "sports":
+        evidence = resolve_activity_query(provider_type) or {}
+        provider_activities = set(evidence.get("activities") or []) & {
+            "basketball", "badminton", "table_tennis", "football", "volleyball", "tennis",
+            "running", "fitness", "swimming"}
+        supported_activities.update(provider_activities)
+    supported_activities = sorted(supported_activities)
     out = {
         "name": poi.get("name", ""),
         "type": poi.get("type", ""),
@@ -659,6 +669,12 @@ def _poi_public(poi: dict, with_coords: bool = True, with_provenance: bool = Fal
         "description": (poi.get("description") or "")[:120],
         "scenery_score": poi.get("scenery_score"),
     }
+    if provider_type:
+        out["type_name"] = provider_type
+    if provider_activities:
+        out["activity_basis"] = "地图类型记录：" + provider_type
+    elif poi.get("activity_basis"):
+        out["activity_basis"] = str(poi["activity_basis"])[:300]
     if with_coords:
         out["lat"] = poi.get("lat")
         out["lng"] = poi.get("lon") or poi.get("lng")
@@ -1542,6 +1558,39 @@ def _tool_find_reachable_places(args, ctx):
     if not isinstance(start_ref, dict):
         return {"error": "invalid_endpoint", "message": "起点格式不正确"}, None
     context = dict(ctx) if isinstance(ctx, dict) else {}
+    activities = args.get("activities")
+    constraints = args.get("constraints") or {}
+    intent = context.get("_semantic_request")
+    sports = {"basketball", "badminton", "table_tennis", "football", "volleyball", "tennis",
+              "running", "fitness", "swimming"}
+    if (context.get("_model_dialogue") is True and
+            isinstance(intent, dict) and intent.get("operation") == "place_search" and
+            not isinstance(context.get("_candidate_pool"), list) and
+            isinstance(activities, list) and len(activities) == 1 and
+            isinstance(activities[0], str) and activities[0] in sports and
+            has_distance and 100 <= max_distance <= 5000 and isinstance(constraints, dict) and
+            constraints.get("max_duration_s") is None and context.get("_search_scope_duration_s") is None):
+        # The local catalogue alone is not a complete sport search. Reuse the
+        # normal provider discovery, which calls this function with a bounded
+        # candidate pool and the same frozen route/condition snapshots.
+        from agents.discovery import search_places_for_dialogue
+        return search_places_for_dialogue(args, context)
+    scope_distance = context.get("_search_scope_distance_m") if context.get("_model_dialogue") is True else None
+    scope_duration = context.get("_search_scope_duration_s") if context.get("_model_dialogue") is True else None
+    if scope_distance is not None:
+        try:
+            scope_distance = float(scope_distance)
+            if not math.isfinite(scope_distance) or not 1 <= scope_distance <= 10000:
+                raise ValueError
+        except (TypeError, ValueError):
+            return {"error": "invalid_reachability_budget", "message": "搜索半径无效。"}, None
+    if scope_duration is not None:
+        try:
+            scope_duration = float(scope_duration)
+            if not math.isfinite(scope_duration) or scope_duration <= 0:
+                raise ValueError
+        except (TypeError, ValueError):
+            return {"error": "invalid_reachability_budget", "message": "搜索时间上限无效。"}, None
     graph = context.get("_route_graph_snapshot")
     if graph is None:
         graph = _ensure_graph()
@@ -1746,8 +1795,20 @@ def _tool_find_reachable_places(args, ctx):
                             for u, v in zip(path, path[1:])]
             network_path_distance = sum(item[0] for item in path_metrics)
             network_path_time = sum(item[1] for item in path_metrics)
-            constrained = route_distance_limit is not None or route_duration_limit is not None
-            if constrained and not satisfies_route_budget(network_path_distance, network_path_time):
+            access_distance_total = start_access_distance + access_distance
+            if scope_distance is not None and access_distance_total > scope_distance:
+                continue
+            access_duration_s = access_distance_total / meters_per_minute * 60.0
+            if scope_duration is not None and access_duration_s > scope_duration:
+                continue
+            within_scope = (scope_distance is None or
+                            network_path_distance + access_distance_total <= scope_distance + 1e-9)
+            within_time = (scope_duration is None or
+                           network_path_time * 60.0 + access_duration_s <= scope_duration + 1e-9)
+            constrained = (route_distance_limit is not None or route_duration_limit is not None
+                           or scope_distance is not None or scope_duration is not None)
+            if constrained and (not satisfies_route_budget(network_path_distance, network_path_time)
+                                or not within_scope or not within_time):
                 if ((not by_time and route_distance_limit is not None
                      and network_path_distance > route_distance_limit + 0.15)
                         or (by_time and route_duration_limit is not None
@@ -1757,10 +1818,17 @@ def _tool_find_reachable_places(args, ctx):
                 # candidate is eligible only if one path meets both limits.
                 from spatial.routing import _budgeted_path
 
-                access_distance_total = start_access_distance + access_distance
                 graph_distance_limit = (None if by_time else max_distance - access_distance_total)
                 graph_duration_limit = ((max_time - access_distance_total / meters_per_minute) * 60
                                         if by_time else None)
+                if scope_duration is not None:
+                    scope_graph_duration = scope_duration - access_duration_s
+                    graph_duration_limit = (min(graph_duration_limit, scope_graph_duration)
+                                            if graph_duration_limit is not None else scope_graph_duration)
+                if scope_distance is not None:
+                    scope_graph_limit = scope_distance - access_distance_total
+                    graph_distance_limit = (min(graph_distance_limit, scope_graph_limit)
+                                            if graph_distance_limit is not None else scope_graph_limit)
                 if route_distance_limit is not None:
                     graph_distance_limit = min(graph_distance_limit, route_distance_limit) if graph_distance_limit is not None else route_distance_limit
                 if route_duration_limit is not None:
@@ -1775,6 +1843,8 @@ def _tool_find_reachable_places(args, ctx):
                     duration = sum(item[1] for item in metrics)
                     if (satisfies_route_budget(distance, duration)
                             and (by_time or distance + access_distance_total <= max_distance + 1e-9)
+                            and (scope_distance is None or distance + access_distance_total <= scope_distance + 1e-9)
+                            and (scope_duration is None or duration * 60.0 + access_duration_s <= scope_duration + 1e-9)
                             and (not by_time or duration + access_distance_total / meters_per_minute <= max_time + 1e-9)):
                         return distance, duration
                     return None
@@ -1806,7 +1876,9 @@ def _tool_find_reachable_places(args, ctx):
             logger.warning("可达地点路径信息发生变化，拒绝返回部分候选", exc_info=True)
             return {"error": "reachability_failed", "message": "附近地点暂时查不到，请稍后重试"}, None
         if ((by_time and estimated_time > max_time + 1e-9)
-                or (not by_time and network_distance > max_distance + 1e-9)):
+                or (not by_time and network_distance > max_distance + 1e-9)
+                or (scope_distance is not None and network_distance > scope_distance + 1e-9)
+                or (scope_duration is not None and estimated_time * 60.0 > scope_duration + 1e-9)):
             continue
         public = _poi_public(poi, with_provenance=True)
         public["network_path_distance_m"] = round(network_path_distance)

@@ -1,0 +1,28 @@
+{
+  "scope": "development_supplement",
+  "formal_test": false,
+  "description": "额外核查只指定通行时间时不会被无依据的一公里搜索半径截断；不属于冻结的32题。",
+  "cases": [
+    {
+      "id": "supplement_time_only_same_center",
+      "group": "search",
+      "phase": "core",
+      "title": "仅限通行时间且搜索中心与起点相同",
+      "basis": "出发点 poi_004。冻结路网内、来源已记录的 poi_206 的最短见证距离约1030米，步行模型见证约824秒；该地点入口与实际开放状态未经实测。模型可选择其他符合条件的地点。",
+      "turns": [
+        {"user": "我在万林艺术博物馆，找步行20分钟内能到的篮球场。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_004"}, {"field": "mode", "op": "eq", "value": "walk"},
+          {"field": "max_duration_s", "op": "eq", "value": 1200}, {"field": "route_max_distance_m", "op": "absent"},
+          {"field": "candidate_ids", "op": "exists"}, {"field": "time_only_scope_integrity", "op": "eq", "value": true}]},
+        {"user": "改成骑行。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_004"}, {"field": "mode", "op": "eq", "value": "bike"},
+          {"field": "max_duration_s", "op": "eq", "value": 1200}, {"field": "route_max_distance_m", "op": "absent"},
+          {"field": "time_only_scope_integrity", "op": "eq", "value": true}]},
+        {"user": "最多15分钟。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_004"}, {"field": "mode", "op": "eq", "value": "bike"},
+          {"field": "max_duration_s", "op": "eq", "value": 900}, {"field": "route_max_distance_m", "op": "absent"},
+          {"field": "time_only_scope_integrity", "op": "eq", "value": true}]}
+      ]
+    }
+  ]
+}

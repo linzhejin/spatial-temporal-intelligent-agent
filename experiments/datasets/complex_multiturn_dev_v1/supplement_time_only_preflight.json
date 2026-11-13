@@ -1,0 +1,195 @@
+{
+  "scope": "development_graph_only",
+  "formal_test": false,
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "poi_sha256": "83765ab06f4dc63c1bbdda65d1d807348e9130533e160947d649d9aad7d92e67",
+  "anchor_sha256": "deb4f9f9c3029c45238d715f6cc60fd4509e6358ac0041dc7ced4f7178ec85e4",
+  "checker_sha256": "b9cab831b40c7aa7510a3c8ea6630fc281b23d272924f99bd0e64a443eee984d",
+  "origin": "poi_004",
+  "candidate": "poi_206",
+  "source_refs": [
+    {
+      "source": "OpenStreetMap",
+      "id": "way/1477325046",
+      "license": "ODbL-1.0"
+    }
+  ],
+  "within_1500m": {
+    "verdict": "pass",
+    "reason": "confirmed_edge_path",
+    "graph_length_m": 980.894,
+    "access_lower_bound_m": 48.632,
+    "boundary": "frozen graph and straight-line connector estimates; physical access unverified"
+  },
+  "outside_1000m": {
+    "verdict": "fail",
+    "reason": "distance_budget_exceeded",
+    "graph_length_m": null,
+    "access_lower_bound_m": 48.632,
+    "boundary": "frozen graph and straight-line connector estimates; physical access unverified"
+  },
+  "within_20min": {
+    "verdict": "pass",
+    "reason": "independent_shortest_path_witness",
+    "estimated_seconds": 823.621,
+    "route_edge_ids": [
+      [
+        13241429496,
+        3709160028,
+        0
+      ],
+      [
+        3709160028,
+        12808367705,
+        0
+      ],
+      [
+        12808367705,
+        12808367709,
+        0
+      ],
+      [
+        12808367709,
+        12808367710,
+        0
+      ],
+      [
+        12808367710,
+        13244569661,
+        0
+      ],
+      [
+        13244569661,
+        13244749935,
+        0
+      ],
+      [
+        13244749935,
+        13244749939,
+        0
+      ],
+      [
+        13244749939,
+        13244749937,
+        0
+      ],
+      [
+        13244749937,
+        12808367706,
+        0
+      ],
+      [
+        12808367706,
+        13246710079,
+        0
+      ],
+      [
+        13246710079,
+        13246710091,
+        0
+      ],
+      [
+        13246710091,
+        13246710082,
+        0
+      ],
+      [
+        13246710082,
+        13246710089,
+        0
+      ],
+      [
+        13246710089,
+        13732671287,
+        0
+      ],
+      [
+        13732671287,
+        13246710096,
+        0
+      ],
+      [
+        13246710096,
+        13246710099,
+        0
+      ],
+      [
+        13246710099,
+        13246710098,
+        0
+      ],
+      [
+        13246710098,
+        13269304582,
+        0
+      ],
+      [
+        13269304582,
+        13266081039,
+        0
+      ],
+      [
+        13266081039,
+        13266007647,
+        0
+      ],
+      [
+        13266007647,
+        12848608572,
+        0
+      ],
+      [
+        12848608572,
+        1196701917,
+        0
+      ],
+      [
+        1196701917,
+        13732671305,
+        0
+      ],
+      [
+        13732671305,
+        1196701888,
+        0
+      ],
+      [
+        1196701888,
+        13701919381,
+        0
+      ],
+      [
+        13701919381,
+        1196701976,
+        0
+      ],
+      [
+        1196701976,
+        13701919346,
+        0
+      ],
+      [
+        13701919346,
+        1199819047,
+        0
+      ],
+      [
+        1199819047,
+        1199819071,
+        0
+      ],
+      [
+        1199819071,
+        1199818999,
+        0
+      ],
+      [
+        1199818999,
+        13550842840,
+        0
+      ]
+    ],
+    "boundary": "frozen graph speed model and straight-line connectors; physical access unverified"
+  },
+  "boundary": "No evidence of opening hours, current venue availability, or real-world access."
+}

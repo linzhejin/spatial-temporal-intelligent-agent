@@ -9,6 +9,7 @@ import json
 import math
 import os
 import re
+import unicodedata
 from copy import deepcopy
 from difflib import SequenceMatcher
 from typing import Optional
@@ -259,6 +260,46 @@ def source_refs_for_poi(poi: dict) -> list:
         return refs
     poi_id = str(poi.get("id") or poi.get("poi_id") or "")
     return list((_SOURCE_BACKED_POI_REFS or {}).get(poi_id, []))
+
+
+def same_display_place(left: dict, right: dict) -> bool:
+    """Identify duplicate display records only with matching names and locations.
+
+    This does not equate stable IDs for routing or user selections.
+    """
+    if not isinstance(left, dict) or not isinstance(right, dict):
+        return False
+    normalize = lambda value: re.sub(r"\s+", "", unicodedata.normalize("NFKC", str(value or ""))).casefold()
+    name = normalize(left.get("name"))
+    if not name or name != normalize(right.get("name")):
+        return False
+    first_type, second_type = left.get("type") or left.get("category"), right.get("type") or right.get("category")
+    if first_type and second_type and first_type != second_type:
+        return False
+    first_crs = str(left.get("coordinate_system") or left.get("coordinate_crs") or "GCJ-02").upper()
+    second_crs = str(right.get("coordinate_system") or right.get("coordinate_crs") or "GCJ-02").upper()
+    if first_crs != second_crs or first_crs not in {"GCJ-02", "WGS-84", "WGS84"}:
+        return False
+
+    def point(row):
+        coords = row.get("coordinates") if isinstance(row.get("coordinates"), dict) else {}
+        try:
+            lng = float(coords.get("lng", row.get("lon", row.get("lng"))))
+            lat = float(coords.get("lat", row.get("lat")))
+            if math.isfinite(lng) and math.isfinite(lat) and -180 <= lng <= 180 and -90 <= lat <= 90:
+                return lng, lat
+        except (TypeError, ValueError):
+            pass
+        return None
+
+    first, second = point(left), point(right)
+    if first is None or second is None:
+        return False
+    lng1, lat1 = first
+    lng2, lat2 = second
+    distance = math.hypot((lng1 - lng2) * 111320 * math.cos(math.radians((lat1 + lat2) / 2)),
+                          (lat1 - lat2) * 110540)
+    return distance <= 5.0
 
 
 def filter_reported_absent_provider_results(candidates: list[dict], *, max_distance_m: float = 100.0) -> list[dict]:

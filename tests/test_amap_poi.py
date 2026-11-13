@@ -216,6 +216,67 @@ def test_text_search_distinguishes_missing_key_from_provider_empty(monkeypatch):
     assert search_text('梅园 火锅') == {'status': 'missing_key', 'candidates': []}
 
 
+def test_specific_provider_type_wins_over_a_food_court_in_the_business_name():
+    from spatial.amap_poi import _dining_subcategory
+
+    assert _dining_subcategory({"name": "某咖啡(校园食堂店)", "typecode": "050500",
+                                "type": "餐饮服务;咖啡厅;咖啡厅"}) == "coffee"
+    assert _dining_subcategory({"name": "某茶饮(校园食堂店)", "typecode": "050600",
+                                "type": "餐饮服务;茶饮店"}) == "tea_drink"
+    assert _dining_subcategory({"name": "饮品店", "typecode": "050400",
+                                "type": "餐饮服务;休闲餐饮场所"}) == "other"
+    assert _dining_subcategory({"name": "校园学生食堂", "typecode": "050000",
+                                "type": "餐饮服务;餐饮相关"}) == "canteen"
+
+
+def test_named_online_sports_venue_is_not_labeled_as_dining(monkeypatch):
+    from spatial.amap_poi import lookup
+
+    monkeypatch.setenv("AMAP_WEB_KEY", "test-key")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"status": "1", "pois": [{"id": "SPORT001", "name": "校园篮球场",
+                    "type": "体育休闲服务;运动场馆;篮球场馆", "typecode": "080104",
+                    "location": "114.36,30.53"}]}
+
+    class Client:
+        def get(self, _url, params):
+            return Response()
+
+    venue = lookup("校园篮球场", client=Client())
+    assert venue["type"] == "sports"
+    assert venue["category"] == "sports"
+    assert venue["subcategory"] == "court"
+
+
+def test_nearby_sports_search_uses_the_provider_sports_category(monkeypatch):
+    from spatial.amap_poi import search_nearby
+    monkeypatch.setenv("AMAP_WEB_KEY", "test-key")
+
+    class Response:
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return {"status": "1", "count": "1", "pois": [{"id": "SPORT001", "name": "校园篮球场",
+                    "type": "体育休闲服务;运动场馆;篮球场馆", "typecode": "080104",
+                    "location": "114.36,30.53", "distance": "20"}]}
+
+    class Client:
+        def get(self, _url, params):
+            assert params["types"] == "体育休闲服务"
+            assert params["keywords"] == "篮球场"
+            return Response()
+
+    result = search_nearby({"lng": 114.36, "lat": 30.53}, keywords="篮球场", poi_type="sports", client=Client())
+    assert result["candidates"][0]["type"] == "sports"
+    assert result["candidates"][0]["subcategory"] == "court"
+
+
 @pytest.mark.parametrize(('type_code', 'expected'), [
     ('050101', 'restaurant'),
     ('050301', 'fastfood'),

@@ -171,6 +171,29 @@ def test_new_task_commits_distinct_start_and_search_anchor_before_spatial_tools(
     assert result["candidates"][0]["poi_id"] == candidate["poi_id"]
 
 
+def test_candidate_delivery_retry_preserves_assistant_reasoning(model, monkeypatch):
+    candidate = place("amap:RETRY123", "测试候选")
+    monkeypatch.setattr(planner.agent_tools, "_prepare_route_context", lambda _context: ({}, None))
+    monkeypatch.setattr(planner.agent_tools, "execute_tool", lambda *_args: (
+        {"status": "ok", "count": 1, "candidates": [candidate]}, {"candidates": [candidate]}))
+    interim = reply(text="这里有一个候选。")
+    interim.choices[0].message.reasoning_content = "测试推理内容"
+    model.side_effect = [
+        reply(update_task={"relation": "new", "operation": "place_search", "keywords": ["餐饮"]},
+              search_poi_candidates={"keyword": "餐饮"}),
+        interim,
+        reply(present_places={"introduction": "可以看看这个。", "places": [
+            {"poi_id": candidate["poi_id"], "reason": ""}]}),
+    ]
+
+    result = planner.run_agent("帮我找餐饮")
+
+    retried = model.call_args_list[2].kwargs["messages"]
+    interim_message = next(item for item in retried if item.get("content") == "这里有一个候选。")
+    assert interim_message["reasoning_content"] == "测试推理内容"
+    assert result["candidates"][0]["poi_id"] == candidate["poi_id"]
+
+
 def test_new_task_cannot_execute_spatial_tool_before_intent_is_saved(model, monkeypatch):
     candidate = place("amap:ANCHOR123", "总图附近餐厅")
     executed = []
@@ -777,6 +800,59 @@ def test_discovery_searches_a_specific_area_without_an_origin(monkeypatch):
     assert [row["poi_id"] for row in result["candidates"]] == ["amap:A123"]
     assert result["search_area"] == "梅园"
     assert artifact["candidates"] == result["candidates"]
+
+
+def test_discovery_filters_online_candidates_by_requested_activity(monkeypatch):
+    from agents import discovery, tools
+
+    def candidate(ident, name, kind, code, subcategory):
+        return {"id": ident, "name": name, "source": "amap_online",
+                "coordinates": {"lng": 114.36, "lat": 30.54}, "lon": 114.36, "lat": 30.54,
+                "type_name": kind, "type_code": code, "subcategory": subcategory}
+
+    sport = candidate("amap:SPORT", "校园篮球场", "体育休闲服务;运动场馆;篮球场", "080101", "court")
+    coffee = candidate("amap:COFFEE", "篮球场咖啡店", "餐饮服务;咖啡厅;咖啡厅", "050500", "coffee")
+    unknown = candidate("amap:UNKNOWN", "校园综合服务", "生活服务;其他", "070000", "other")
+    queries = []
+    monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(discovery.amap_poi, "search_text", lambda query, **_kwargs: (
+        queries.append(query) or {"status": "ok", "candidates": [sport, coffee, unknown]}))
+    monkeypatch.setattr(discovery.amap_poi, "lookup", lambda _name: coffee)
+
+    result, _ = discovery.search_places_for_dialogue(
+        {"keyword": "篮球场", "activities": ["basketball"], "candidate_names": [coffee["name"]]},
+        {"_semantic_request": {}},
+    )
+
+    assert queries == ["篮球场"]
+    assert [row["poi_id"] for row in result["candidates"]] == ["amap:SPORT"]
+
+
+def test_discovery_keeps_valid_online_food_and_preserves_provider_errors(monkeypatch):
+    from agents import discovery, tools
+
+    def candidate(ident, name, kind, code, subcategory):
+        return {"id": ident, "name": name, "source": "amap_online",
+                "coordinates": {"lng": 114.36, "lat": 30.54}, "lon": 114.36, "lat": 30.54,
+                "type_name": kind, "type_code": code, "subcategory": subcategory}
+
+    meal = candidate("amap:MEAL", "校园餐馆", "餐饮服务;中餐厅;中餐厅", "050100", "restaurant")
+    coffee = candidate("amap:COFFEE", "校园咖啡", "餐饮服务;咖啡厅;咖啡厅", "050500", "coffee")
+    monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: [])
+    monkeypatch.setattr(discovery.amap_poi, "search_text", lambda *_args, **_kwargs:
+                        {"status": "ok", "candidates": [meal, coffee]})
+    meal_result, _ = discovery.search_places_for_dialogue(
+        {"keyword": "吃饭", "activities": ["meal"]}, {"_semantic_request": {}})
+    coffee_result, _ = discovery.search_places_for_dialogue(
+        {"keyword": "咖啡", "activities": ["coffee"]}, {"_semantic_request": {}})
+    assert [row["poi_id"] for row in meal_result["candidates"]] == ["amap:MEAL"]
+    assert [row["poi_id"] for row in coffee_result["candidates"]] == ["amap:COFFEE"]
+
+    monkeypatch.setattr(discovery.amap_poi, "search_text", lambda *_args, **_kwargs:
+                        {"status": "network_error", "candidates": []})
+    failed, _ = discovery.search_places_for_dialogue(
+        {"keyword": "咖啡", "activities": ["coffee"]}, {"_semantic_request": {}})
+    assert failed["status"] == "network_error"
 
 
 def test_search_center_can_differ_from_route_origin(monkeypatch):

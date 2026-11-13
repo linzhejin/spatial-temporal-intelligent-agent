@@ -1,0 +1,176 @@
+{
+  "scope": "development_rubric_strengthening",
+  "formal_test": false,
+  "note": "按题目原文明示的活动、换批和路线距离条件补足检查；v2 保留，v3 只增强不放宽原标准。",
+  "dataset_sha256": "9a3de4ab7bbff2ac96d5eff737908db99b94846e75c74210efcd59fc546b9422",
+  "cases": {
+    "search_01": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "meal",
+        "must_not_repeat": false,
+        "forbidden_activity": "coffee",
+        "route_distance_absent": true
+      },
+      {
+        "activity": "meal",
+        "must_not_repeat": false,
+        "forbidden_activity": "coffee",
+        "route_distance_absent": true
+      }
+    ],
+    "search_02": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "forbidden_activity": "basketball",
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "forbidden_activity": "basketball",
+        "route_distance_absent": true
+      }
+    ],
+    "search_03": [
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      }
+    ],
+    "search_04": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": true,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": true,
+        "route_distance_absent": true
+      }
+    ],
+    "search_05": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      }
+    ],
+    "search_06": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      }
+    ],
+    "search_07": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "forbidden_activity": "basketball",
+        "route_distance_absent": true
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false,
+        "forbidden_activity": "basketball",
+        "route_distance_absent": true
+      }
+    ],
+    "search_08": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false,
+        "route_distance_absent": true
+      }
+    ],
+    "clarification_02": [
+      {
+        "activity": null,
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      }
+    ],
+    "clarification_03": [
+      {
+        "clarification": "ambiguous_destination"
+      },
+      {},
+      {}
+    ]
+  }
+}

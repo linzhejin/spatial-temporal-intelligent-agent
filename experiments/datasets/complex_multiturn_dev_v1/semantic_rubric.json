@@ -1,0 +1,145 @@
+{
+  "scope": "development_rubric_strengthening",
+  "formal_test": false,
+  "note": "按题目原文明示的活动及换批要求补足检查；只增强，不替换或放宽原标准。",
+  "dataset_sha256": "9a3de4ab7bbff2ac96d5eff737908db99b94846e75c74210efcd59fc546b9422",
+  "cases": {
+    "search_01": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "meal",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "meal",
+        "must_not_repeat": false
+      }
+    ],
+    "search_02": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      }
+    ],
+    "search_03": [
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      }
+    ],
+    "search_04": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": true
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": true
+      }
+    ],
+    "search_05": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      }
+    ],
+    "search_06": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "basketball",
+        "must_not_repeat": false
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false
+      }
+    ],
+    "search_07": [
+      {
+        "activity": "basketball",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      }
+    ],
+    "search_08": [
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "coffee",
+        "must_not_repeat": false
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false
+      },
+      {
+        "activity": null,
+        "must_not_repeat": false
+      }
+    ],
+    "clarification_02": [
+      {
+        "activity": null,
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      },
+      {
+        "activity": "badminton",
+        "must_not_repeat": false
+      }
+    ],
+    "clarification_03": [
+      {
+        "clarification": "ambiguous_destination"
+      },
+      {},
+      {}
+    ]
+  }
+}

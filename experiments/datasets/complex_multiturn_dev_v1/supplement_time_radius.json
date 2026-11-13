@@ -1,0 +1,44 @@
+{
+  "scope": "development_supplement",
+  "formal_test": false,
+  "description": "修复时间与范围组合问题的额外开发复测，不替代冻结的32题。地点及路线以项目冻结目录和路网为依据，入口及营业情况未实地核验。",
+  "cases": [
+    {
+      "id": "supplement_time_radius_same_origin",
+      "group": "search",
+      "phase": "core",
+      "title": "相同起点的时间与范围同时生效",
+      "basis": "出发点 poi_424；步行时间与搜索半径各自保存；无结果时如实说明，不推断现实中不存在。",
+      "turns": [
+        {"user": "我在信息学部快递服务中心，找500米范围内、步行20分钟内能到的篮球场。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_424"}, {"field": "mode", "op": "eq", "value": "walk"},
+          {"field": "radius_m", "op": "eq", "value": 500}, {"field": "max_duration_s", "op": "eq", "value": 1200}]},
+        {"user": "范围扩大到一公里。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_424"}, {"field": "mode", "op": "eq", "value": "walk"},
+          {"field": "radius_m", "op": "eq", "value": 1000}, {"field": "max_duration_s", "op": "eq", "value": 1200}]},
+        {"user": "最多走15分钟。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_424"}, {"field": "mode", "op": "eq", "value": "walk"},
+          {"field": "radius_m", "op": "eq", "value": 1000}, {"field": "max_duration_s", "op": "eq", "value": 900}]}
+      ]
+    },
+    {
+      "id": "supplement_time_radius_separate_center",
+      "group": "search",
+      "phase": "core",
+      "title": "搜索中心与实际起点分别限制范围和时间",
+      "basis": "个人起点 poi_140，搜索中心先为 poi_257 后改为 poi_004；时间应从个人起点核验，半径以搜索中心为参照。",
+      "turns": [
+        {"user": "我在珞珈门，找星湖体育馆一公里范围内、从我这里步行20分钟能到的羽毛球场。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_140"}, {"field": "search_anchor", "op": "eq", "value": "poi_257"},
+          {"field": "mode", "op": "eq", "value": "walk"}, {"field": "radius_m", "op": "eq", "value": 1000},
+          {"field": "max_duration_s", "op": "eq", "value": 1200}]},
+        {"user": "搜索中心改到万林艺术博物馆。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_140"}, {"field": "search_anchor", "op": "eq", "value": "poi_004"},
+          {"field": "radius_m", "op": "eq", "value": 1000}, {"field": "max_duration_s", "op": "eq", "value": 1200}]},
+        {"user": "用时放宽到30分钟。", "checks": [
+          {"field": "origin", "op": "eq", "value": "poi_140"}, {"field": "search_anchor", "op": "eq", "value": "poi_004"},
+          {"field": "radius_m", "op": "eq", "value": 1000}, {"field": "max_duration_s", "op": "eq", "value": 1800}]}
+      ]
+    }
+  ]
+}

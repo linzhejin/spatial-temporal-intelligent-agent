@@ -1,0 +1,18 @@
+{
+  "scope": "development_rubric_strengthening",
+  "formal_test": false,
+  "note": "补充核对题目明示的参考路线两端；先前运行及原标准完整保留。",
+  "dataset_sha256": "9a3de4ab7bbff2ac96d5eff737908db99b94846e75c74210efcd59fc546b9422",
+  "cases": {
+    "clarification_04": {
+      "reference_origin": "poi_004",
+      "reference_destination": "poi_137",
+      "quoted_basis": "万林艺术博物馆到凌波门"
+    },
+    "clarification_08": {
+      "reference_origin": "poi_140",
+      "reference_destination": "poi_004",
+      "quoted_basis": "珞珈门到万林艺术博物馆"
+    }
+  }
+}

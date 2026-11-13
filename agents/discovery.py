@@ -7,7 +7,8 @@ import re
 import config
 from spatial import amap_poi
 from spatial.coord_transform import wgs84_to_gcj02
-from spatial.poi import filter_reported_absent_provider_results, has_source_backed_record
+from spatial.poi import filter_reported_absent_provider_results, has_source_backed_record, same_display_place
+from spatial.poi_taxonomy import ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi, resolve_activity_query
 
 
 def _within_campus(poi):
@@ -51,21 +52,57 @@ def _is_generic_meal_request(keyword, keywords, activities):
 
 
 def _provider_keyword(keyword, keywords, activities, candidate_names):
-    normalized = re.sub(r"[\s，,、。!！?？·]+", "", str(keyword or "")).casefold()
     generic_meal = _is_generic_meal_request(keyword, keywords, activities)
-    if candidate_names or generic_meal:
+    if generic_meal:
         return "餐饮"
-    return str(keyword or "").strip()
+    return str(keyword or "").strip() or (candidate_names[0] if candidate_names else "")
+
+
+def _provider_supports_activities(poi, activities):
+    """Require provider type evidence before using an online POI for an activity."""
+    requested = {str(item) for item in activities or [] if item}
+    if not requested:
+        return True
+    if requested & {"eat", "eating", "food", "dining"}:
+        requested.add("meal")
+    supported = activities_for_poi(poi)
+    subcategory = poi.get("subcategory")
+    # Dining subcategories are derived from the provider's specific type; a
+    # shared sports category such as "court" is not proof of a particular game.
+    for activity in ("meal", "canteen_meal", "restaurant_meal", "fast_food", "coffee", "tea_drink"):
+        if subcategory in ACTIVITY_SUBCATEGORIES[activity]:
+            supported.add(activity)
+    type_name = str(poi.get("type_name") or "")
+    type_code = str(poi.get("type_code") or "")
+    if type_name and "餐饮" not in type_name and not type_code.startswith("05"):
+        evidence = resolve_activity_query(type_name) or {}
+        supported.update(evidence.get("activities") or [])
+        if "体育" in type_name or "运动场馆" in type_name:
+            evidence = resolve_activity_query(str(poi.get("name") or "")) or {}
+            supported.update(evidence.get("activities") or [])
+    return bool(supported & requested)
 
 
 def search_places_for_dialogue(args: dict, ctx: dict):
     """Search all requested providers; route-distance calculation stays in tools.py."""
     from agents import tools
 
+    constraints = args.get("constraints") or {}
+    if not isinstance(constraints, dict):
+        return {"error": "invalid_constraints", "message": "通行约束格式不正确。"}, None
+    try:
+        origin_duration = tools.positive_budget(constraints, "max_duration_s")
+        origin_distance = tools.positive_budget(constraints, "max_distance_m")
+    except ValueError:
+        return {"error": "invalid_constraints", "message": "路线距离或时间上限无效。"}, None
+    if (origin_duration is not None or origin_distance is not None) and not args.get("start"):
+        return {"error": "origin_required_for_route_budget",
+                "message": "请先明确实际出发点，才能核验从出发点到候选地点的时间或距离。"}, None
     query_state = ctx.get("_semantic_request") or {}
     keyword = str(args.get("keyword") or " ".join(query_state.get("keywords") or "")).strip()[:80]
     area = str(args.get("area") or query_state.get("area") or "武汉大学")[:80]
-    subcategories = args.get("subcategories") or ctx.get("_semantic_request", {}).get("subcategories") or []
+    subcategories = (args.get("subcategories") or ([args["subcategory"]] if args.get("subcategory") else None)
+                     or ctx.get("_semantic_request", {}).get("subcategories") or [])
     activities = args.get("activities") or ctx.get("_semantic_request", {}).get("activities") or []
     exclusions = args.get("exclude_terms") or query_state.get("exclude_terms") or []
     raw_candidate_names = args.get("candidate_names") or []
@@ -89,17 +126,22 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     online = []
     search_center_gcj = None
     generic_meal = _is_generic_meal_request(keyword, query_state.get("keywords"), activities)
-    wants_online = bool(candidate_names) or generic_meal or bool(
+    sports = [item for item in activities if item in {
+        "basketball", "badminton", "table_tennis", "football", "volleyball", "tennis",
+        "running", "fitness", "swimming"}]
+    wants_online = bool(candidate_names) or generic_meal or bool(sports) or bool(
         set(subcategories or []) & tools._ONLINE_DINING_SUBCATEGORIES) or (
         not subcategories and bool(keyword))
     map_keyword = _provider_keyword(keyword, query_state.get("keywords"), activities, candidate_names)
+    if not map_keyword and sports:
+        map_keyword = ACTIVITY_LABELS[sports[0]]
     if not map_keyword and set(subcategories) & tools._ONLINE_DINING_SUBCATEGORIES:
         # A structured category is enough to query the provider; no sentence
         # classification or fabricated candidate name is needed.
         map_keyword = "餐饮"
     provider_categories = set(subcategories or [])
     if generic_meal:
-        provider_categories.update({"restaurant", "fastfood"})
+        provider_categories.update({"canteen", "restaurant", "fastfood"})
     if wants_online:
         if not map_keyword:
             online_status = "query_required"
@@ -113,7 +155,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
                 search_center_gcj = {"lng": lng, "lat": lat}
                 response = amap_poi.search_nearby({"lng": lng, "lat": lat}, keywords=map_keyword,
                                                   radius_m=min(5000, max(100, int(args.get("max_distance_m") or 1000))),
-                                                  pages=3)
+                                                  pages=3, **({"poi_type": "sports"} if sports else {}))
                 online_status = response.get("status", "provider_error")
                 online = list(response.get("candidates") or [])
         else:
@@ -130,6 +172,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             online = [item for item in online if _within_campus(item)]
         online = [item for item in online if not _matches_exclusions(item, exclusions)]
         online = filter_reported_absent_provider_results(online)
+        online = [item for item in online if _provider_supports_activities(item, activities)]
         if provider_categories:
             online = [item for item in online if item.get("subcategory") in provider_categories]
 
@@ -140,6 +183,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             response = amap_poi.search_nearby(
                 search_center_gcj, keywords=name,
                 radius_m=min(5000, max(100, int(args.get("max_distance_m") or 1000))), pages=2,
+                **({"poi_type": "sports"} if sports else {}),
             )
             candidate = amap_poi.choose_match(name, response.get("candidates") or [])
         if not candidate:
@@ -155,6 +199,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
         candidate.update({"poi_id": identifier, "source": "amap_online"})
         resolved_online.append(candidate)
     resolved_online = filter_reported_absent_provider_results(resolved_online)
+    resolved_online = [item for item in resolved_online if _provider_supports_activities(item, activities)]
     if provider_categories:
         resolved_online = [item for item in resolved_online
                            if item.get("subcategory") in provider_categories]
@@ -166,6 +211,8 @@ def search_places_for_dialogue(args: dict, ctx: dict):
         identifier = poi.get("id") or poi.get("poi_id")
         if identifier:
             poi["poi_id"] = identifier
+            if identifier not in by_id and any(same_display_place(poi, existing) for existing in by_id.values()):
+                continue
             by_id[identifier] = poi
     pool = list(by_id.values())
     if not pool:
@@ -180,16 +227,25 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     # The same accepted route tool computes path distance and applies closure,
     # mode and accessibility filters to this exact server-fetched pool.
     if distance_origin:
+        from agents.dialogue import _same_accepted_location
+        separate_origin = bool(search_center and anchor and
+                               not _same_accepted_location(search_center, anchor, tools))
+        scope_constraints = dict(constraints)
+        if separate_origin:
+            scope_constraints.pop("max_duration_s", None)
+            scope_constraints.pop("max_distance_m", None)
         distance_args = {"start": distance_origin, "mode": args.get("mode") or "walk",
                          "subcategories": list(subcategories or []), "activities": list(activities or []),
                          "max_distance_m": min(10000, max(100, int(args.get("max_distance_m") or
                                                                       (1000 if search_center else 10000)))),
-                         "limit": 20, "constraints": args.get("constraints") or {}}
+                         "limit": 20, "constraints": scope_constraints}
         route_context = {key: deepcopy(ctx[key]) for key in (
             "_route_graph_snapshot", "_route_conditions_snapshot", "_route_weather_snapshot",
         ) if key in ctx}
         route_context.update({"query": "", "_candidate_pool": pool, "_model_dialogue": True,
                               "_excluded_candidate_ids": list(query_state.get("shown_ids") or [])})
+        if origin_duration is not None and not separate_origin:
+            route_context["_search_scope_duration_s"] = origin_duration
         result, artifact = tools._tool_find_reachable_places(distance_args, route_context)
         if result.get("error"):
             return result, None
@@ -200,6 +256,39 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             item["distance_reference_name"] = (result.get("start_name")
                 or (distance_origin.get("name") if isinstance(distance_origin, dict) else None)
                 or "搜索中心")
+        if separate_origin and (origin_duration is not None or origin_distance is not None) and candidates:
+            scope_rows = {row.get("poi_id"): row for row in candidates}
+            source_rows = [row for row in pool if (row.get("poi_id") or row.get("id")) in scope_rows]
+            origin_args = {"start": anchor, "mode": args.get("mode") or "walk",
+                           "subcategories": list(subcategories or []), "activities": list(activities or []),
+                           "limit": 20, "constraints": constraints}
+            if origin_duration is not None:
+                if origin_duration > 180 * 60:
+                    return {"error": "invalid_reachability_budget", "message": "时间上限超过可核验范围。"}, None
+                origin_args["max_time_min"] = max(1.0, origin_duration / 60.0)
+            else:
+                if origin_distance > 10000:
+                    return {"error": "invalid_reachability_budget", "message": "路线距离上限超过可核验范围。"}, None
+                origin_args["max_distance_m"] = origin_distance
+            origin_context = {**route_context, "_candidate_pool": source_rows}
+            if origin_duration is not None:
+                origin_context["_search_scope_duration_s"] = origin_duration
+            from_origin, _ = tools._tool_find_reachable_places(origin_args, origin_context)
+            if from_origin.get("error"):
+                return from_origin, None
+            reachable = []
+            for row in from_origin.get("candidates") or []:
+                scoped = scope_rows.get(row.get("poi_id"))
+                if scoped:
+                    reachable.append({**scoped, "origin_distance_m": row.get("network_distance_m"),
+                                      "estimated_duration_min": row.get("estimated_duration_min"),
+                                      "duration_reference_name": from_origin.get("start_name")})
+            if not reachable and result.get("has_more"):
+                return {"error": "reachability_incomplete",
+                        "message": "候选较多，暂无法完整核验从出发点可达的地点，请缩小范围。"}, None
+            candidates = reachable
+            result["total_count"] = len(candidates) if not result.get("has_more") else None
+            artifact = {"candidates": candidates}
         result.update({"candidates": candidates, "count": len(candidates),
                        "online_status": online_status, "search_area": area,
                        "search_keyword": map_keyword})

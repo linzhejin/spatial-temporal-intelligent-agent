@@ -1,0 +1,2193 @@
+{
+  "version": "complex_multiturn_dev_v1",
+  "scope": "development_only",
+  "formal_test": false,
+  "variant_exposure": "run_after_core_fixes",
+  "cases": [
+    {
+      "id": "search_01",
+      "group": "search",
+      "phase": "core",
+      "title": "更换地点用途并扩大搜索半径",
+      "turns": [
+        {
+          "user": "我在卓尔体育馆，想找万林艺术博物馆附近的咖啡店，之后步行过去，避开台阶。先推荐几个。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "先不喝咖啡了，改成附近吃饭的地方。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "搜索范围扩大到两公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_02",
+      "group": "search",
+      "phase": "core",
+      "title": "更换球类并保留起点",
+      "turns": [
+        {
+          "user": "我从信息学部快递服务中心步行出发，找附近的篮球场，别走台阶。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "不打篮球了，帮我找羽毛球场。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "范围设为一公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 1000
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_03",
+      "group": "search",
+      "phase": "core",
+      "title": "缩小范围后的空候选",
+      "turns": [
+        {
+          "user": "从工学部社区卫生服务中心出发，找附近羽毛球场，先按一公里范围。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 1000
+            }
+          ]
+        },
+        {
+          "user": "范围缩到100米。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 100
+            }
+          ]
+        },
+        {
+          "user": "如果没有符合范围的，就直接告诉我。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 100
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_04",
+      "group": "search",
+      "phase": "core",
+      "title": "条件不变时换一批",
+      "turns": [
+        {
+          "user": "我在万林艺术博物馆，找两公里内的篮球场，步行。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "换一批看看。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "不要重复刚才展示过的。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_05",
+      "group": "search",
+      "phase": "core",
+      "title": "修改搜索中心但不修改起点",
+      "turns": [
+        {
+          "user": "我在珞珈门，帮我找万林艺术博物馆附近的咖啡店，走路过去。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_004"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "改成在星湖体育馆附近找。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_257"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "范围扩大到两公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_257"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_06",
+      "group": "search",
+      "phase": "core",
+      "title": "选择已展示候选并续接",
+      "turns": [
+        {
+          "user": "我在信息学部快递服务中心，推荐附近可以打篮球的地方，我步行去。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "范围扩大到两公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "user": "去第一个。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "selected_matches_first",
+              "op": "eq",
+              "value": true
+            }
+          ],
+          "action": "select_first_candidate"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_01",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "替换中间一站",
+      "turns": [
+        {
+          "user": "从珞珈门步行出发，先去信息学部快递服务中心，再去星湖体育馆，最后去星湖园食堂，避开台阶。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_424",
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "体育馆换成信息学部篮球场。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_424",
+                "poi_262",
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "就按这个顺序走。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_424",
+                "poi_262",
+                "poi_307"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_02",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "删除首个活动",
+      "turns": [
+        {
+          "user": "我从卓尔体育馆步行出发，先去梅园快递服务中心，再去万林艺术博物馆，最后到凌波门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_423",
+                "poi_004",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "快递先不取了。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_137"
+              ]
+            },
+            {
+              "field": "stops",
+              "op": "not_contains",
+              "value": "poi_423"
+            }
+          ]
+        },
+        {
+          "user": "给我更新后的路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_137"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_03",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "交换目的地顺序",
+      "turns": [
+        {
+          "user": "从工学部社区卫生服务中心走路出发，先去工学部网球场，再去凌波门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_084",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "顺序反过来，先去凌波门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_137",
+                "poi_084"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "继续步行。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_137",
+                "poi_084"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_04",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "插入途中站点",
+      "turns": [
+        {
+          "user": "我从珞珈门步行去凌波门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "中途先去万林艺术博物馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "再在博物馆后面加上卓尔体育馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_418",
+                "poi_137"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_05",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "更换出行方式但保留站点",
+      "turns": [
+        {
+          "user": "从信息学部快递服务中心出发，步行先去星湖体育馆，再去星湖园食堂。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "改成骑车。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "先后顺序就这样。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_06",
+      "group": "itinerary",
+      "phase": "core",
+      "title": "已完成的活动不再重复",
+      "turns": [
+        {
+          "user": "从珞珈门步行，先去梅园快递服务中心，再去万林艺术博物馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_423",
+                "poi_004"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "快递已经取完了，我现在就在梅园快递服务中心。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "接下来去博物馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_01",
+      "group": "clarification",
+      "phase": "core",
+      "title": "缺少实际起点",
+      "turns": [
+        {
+          "user": "我想先去工学部网球场，再去凌波门，帮我安排步行路线。",
+          "checks": [
+            {
+              "field": "clarification_slot",
+              "op": "eq",
+              "value": "start"
+            }
+          ]
+        },
+        {
+          "user": "我现在在工学部社区卫生服务中心。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_084",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "顺序反过来，先去凌波门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_137",
+                "poi_084"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_02",
+      "group": "clarification",
+      "phase": "core",
+      "title": "补充模糊运动类型",
+      "turns": [
+        {
+          "user": "从星湖园食堂出发，我想找地方打球，步行过去。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_307"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "打羽毛球。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_307"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "找一公里范围内的。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_307"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 1000
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_03",
+      "group": "clarification",
+      "phase": "core",
+      "title": "补充场馆校区",
+      "turns": [
+        {
+          "user": "我想去体育馆，从珞珈门步行出发。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "我指的是信息学部的星湖体育馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "尽量走最短的路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_04",
+      "group": "clarification",
+      "phase": "core",
+      "title": "明确要求独立景点间路线",
+      "turns": [
+        {
+          "user": "只看万林艺术博物馆到凌波门的步行参考路线，不用考虑我从哪里出发。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "中间加上卓尔体育馆。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_418",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "按最短距离。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_418",
+                "poi_137"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_05",
+      "group": "clarification",
+      "phase": "core",
+      "title": "只撤销避台阶限制",
+      "turns": [
+        {
+          "user": "从珞珈门步行到万林艺术博物馆，避开台阶。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "台阶现在可以走了。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": false
+            }
+          ]
+        },
+        {
+          "user": "还是去博物馆，按最短距离。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": false
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_06",
+      "group": "clarification",
+      "phase": "core",
+      "title": "切换任务后恢复原行程",
+      "turns": [
+        {
+          "user": "从卓尔体育馆步行去万林艺术博物馆，避开台阶。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        },
+        {
+          "user": "先不改这个行程，告诉我珞珈门在哪里。",
+          "checks": [
+            {
+              "field": "status",
+              "op": "eq",
+              "value": "completed"
+            }
+          ]
+        },
+        {
+          "user": "回到刚才去博物馆的路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "events_01",
+      "group": "events",
+      "phase": "core",
+      "title": "原路线封闭后绕行",
+      "turns": [
+        {
+          "user": "从卓尔体育馆步行去万林艺术博物馆，走最短路。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "按当前路况更新这条路。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "再核对一次当前路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "detour"
+    },
+    {
+      "id": "events_02",
+      "group": "events",
+      "phase": "core",
+      "title": "封闭不可达后撤销",
+      "turns": [
+        {
+          "user": "从梅园综合楼步行去梅园快递服务中心。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_001"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "当前路况下还能走通吗？",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_001"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "根据最新路况再规划。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_001"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "revoked"
+            }
+          ],
+          "event_stage": "revoked"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "blocked"
+    },
+    {
+      "id": "events_03",
+      "group": "events",
+      "phase": "core",
+      "title": "改骑行并遇到骑行限制",
+      "turns": [
+        {
+          "user": "从枫园食堂步行去万林艺术博物馆，按最短距离。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_072"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "改成骑车，按当前路况走。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_072"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "现在的路况再更新一下。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_072"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "expired"
+            }
+          ],
+          "event_stage": "expired"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "bike_only"
+    },
+    {
+      "id": "events_04",
+      "group": "events",
+      "phase": "core",
+      "title": "单方向限制",
+      "turns": [
+        {
+          "user": "从珞珈门步行去卓尔体育馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "结合当前管制更新路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "现在反过来，从卓尔体育馆去珞珈门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "direction"
+    },
+    {
+      "id": "events_05",
+      "group": "events",
+      "phase": "core",
+      "title": "无关道路事件",
+      "turns": [
+        {
+          "user": "从信息学部快递服务中心步行去星湖体育馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "有新路况，看看我的路线需不需要变。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "重新核对这条步行路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "off_path"
+    },
+    {
+      "id": "events_06",
+      "group": "events",
+      "phase": "core",
+      "title": "事件生效前后及到期",
+      "turns": [
+        {
+          "user": "从卓尔体育馆步行到万林艺术博物馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "before"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "现在路况有变化吗？",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "过一会儿再按当前路况算。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "expired"
+            }
+          ],
+          "event_stage": "expired"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "lifecycle"
+    },
+    {
+      "id": "search_07",
+      "group": "search",
+      "phase": "variant",
+      "title": "变体：起点与远处搜索中心",
+      "turns": [
+        {
+          "user": "我人还在工学部社区卫生服务中心，想看看星湖体育馆附近有什么篮球场，步行。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_257"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "改找羽毛球场。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_257"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "以体育馆为中心，半径两公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_426"
+            },
+            {
+              "field": "search_anchor",
+              "op": "eq",
+              "value": "poi_257"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "search_08",
+      "group": "search",
+      "phase": "variant",
+      "title": "变体：选点后修改路线偏好",
+      "turns": [
+        {
+          "user": "我在梅园快递服务中心，推荐附近能喝咖啡的地方，走路去。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "范围放大到两公里。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "radius_m",
+              "op": "eq",
+              "value": 2000
+            }
+          ]
+        },
+        {
+          "user": "就去第一个。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "selected_matches_first",
+              "op": "eq",
+              "value": true
+            }
+          ],
+          "action": "select_first_candidate"
+        },
+        {
+          "user": "这条路改走最短距离。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_423"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_07",
+      "group": "itinerary",
+      "phase": "variant",
+      "title": "变体：替换后再删除",
+      "turns": [
+        {
+          "user": "从凌波门走路先到工学部网球场，再到工学部篮球场，最后去珞珈门。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_137"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_084",
+                "poi_206",
+                "poi_140"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "篮球场换成工学部排球场。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_137"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_084",
+                "poi_432",
+                "poi_140"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "网球场不去了。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_137"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_432",
+                "poi_140"
+              ]
+            },
+            {
+              "field": "stops",
+              "op": "not_contains",
+              "value": "poi_084"
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "itinerary_08",
+      "group": "itinerary",
+      "phase": "variant",
+      "title": "变体：插入站点并调整方式",
+      "turns": [
+        {
+          "user": "从信息学部快递服务中心到星湖园食堂，步行。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "先到星湖体育馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "骑车去。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_424"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_257",
+                "poi_307"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_07",
+      "group": "clarification",
+      "phase": "variant",
+      "title": "变体：先补起点后撤销约束",
+      "turns": [
+        {
+          "user": "带我步行去万林艺术博物馆，再去凌波门，别走台阶。",
+          "checks": [
+            {
+              "field": "clarification_slot",
+              "op": "eq",
+              "value": "start"
+            }
+          ]
+        },
+        {
+          "user": "从卓尔体育馆出发。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_137"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "台阶没关系了。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": false
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_004",
+                "poi_137"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "clarification_08",
+      "group": "clarification",
+      "phase": "variant",
+      "title": "变体：无起点的独立参考路线",
+      "turns": [
+        {
+          "user": "不考虑我的位置，只给珞珈门到万林艺术博物馆的步行参考路线。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ]
+        },
+        {
+          "user": "途经卓尔体育馆。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_418",
+                "poi_004"
+              ]
+            }
+          ]
+        },
+        {
+          "user": "再按最短距离看看。",
+          "checks": [
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "stops",
+              "op": "ordered_contains",
+              "value": [
+                "poi_418",
+                "poi_004"
+              ]
+            }
+          ]
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实"
+    },
+    {
+      "id": "events_07",
+      "group": "events",
+      "phase": "variant",
+      "title": "变体：不适用方式的事件",
+      "turns": [
+        {
+          "user": "从卓尔体育馆步行去万林艺术博物馆。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "按当前路况确认步行路线。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "现在改成骑车。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_418"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "bike"
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "bike_only"
+    },
+    {
+      "id": "events_08",
+      "group": "events",
+      "phase": "variant",
+      "title": "变体：封闭恢复后继续原需求",
+      "turns": [
+        {
+          "user": "我从珞珈门步行到卓尔体育馆，避开台阶。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            }
+          ],
+          "event_stage": "before"
+        },
+        {
+          "user": "路况变了，帮我重新规划。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "active"
+            }
+          ],
+          "event_stage": "active"
+        },
+        {
+          "user": "按现在的路况再算一遍。",
+          "checks": [
+            {
+              "field": "origin",
+              "op": "eq",
+              "value": "poi_140"
+            },
+            {
+              "field": "mode",
+              "op": "eq",
+              "value": "walk"
+            },
+            {
+              "field": "avoid_steps",
+              "op": "eq",
+              "value": true
+            },
+            {
+              "field": "event_state",
+              "op": "eq",
+              "value": "revoked"
+            }
+          ],
+          "event_stage": "revoked"
+        }
+      ],
+      "basis": "固定校园地点目录与图内证据；地点营业及现场通行未核实；道路事件为隔离模拟，不代表校园真实路况",
+      "event_scenario": "detour"
+    }
+  ]
+}

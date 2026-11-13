@@ -1,0 +1,3845 @@
+{
+  "boundary": "product polygon, not field surveyed",
+  "campus_truth": false,
+  "fixtures": [
+    {
+      "active_reference": {
+        "length_m": 825.044,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            13242244648,
+            0
+          ],
+          [
+            13242244648,
+            13510724998,
+            0
+          ],
+          [
+            13510724998,
+            13613500834,
+            0
+          ],
+          [
+            13613500834,
+            13242244705,
+            0
+          ],
+          [
+            13242244705,
+            13556596321,
+            1
+          ],
+          [
+            13556596321,
+            13613500919,
+            0
+          ],
+          [
+            13613500919,
+            13556596326,
+            0
+          ],
+          [
+            13556596326,
+            13556596322,
+            0
+          ],
+          [
+            13556596322,
+            13613500807,
+            0
+          ],
+          [
+            13613500807,
+            979935998,
+            0
+          ],
+          [
+            979935998,
+            13613500809,
+            0
+          ],
+          [
+            13613500809,
+            13732671409,
+            0
+          ],
+          [
+            13732671409,
+            13732671410,
+            0
+          ],
+          [
+            13732671410,
+            13732671408,
+            0
+          ],
+          [
+            13732671408,
+            13732671406,
+            0
+          ],
+          [
+            13732671406,
+            13732671405,
+            0
+          ],
+          [
+            13732671405,
+            13254342820,
+            0
+          ],
+          [
+            13254342820,
+            13254342853,
+            0
+          ],
+          [
+            13254342853,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 724.241,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244640,
+            0
+          ],
+          [
+            13242244640,
+            8101995044,
+            0
+          ],
+          [
+            8101995044,
+            8101995043,
+            0
+          ],
+          [
+            8101995043,
+            13242244677,
+            0
+          ],
+          [
+            13242244677,
+            3631666614,
+            0
+          ],
+          [
+            3631666614,
+            3631666613,
+            0
+          ],
+          [
+            3631666613,
+            13583931949,
+            0
+          ],
+          [
+            13583931949,
+            9158437414,
+            0
+          ],
+          [
+            9158437414,
+            13713923951,
+            0
+          ],
+          [
+            13713923951,
+            13238420138,
+            0
+          ],
+          [
+            13238420138,
+            13613500788,
+            0
+          ],
+          [
+            13613500788,
+            3631666640,
+            0
+          ],
+          [
+            3631666640,
+            13254316045,
+            0
+          ],
+          [
+            13254316045,
+            1197850795,
+            0
+          ],
+          [
+            1197850795,
+            13239326473,
+            0
+          ],
+          [
+            13239326473,
+            12808341227,
+            0
+          ],
+          [
+            12808341227,
+            13732671403,
+            0
+          ],
+          [
+            13732671403,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_01",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "武汉大学万林艺术博物馆",
+        "node_id": 13241429496,
+        "poi_id": "poi_004",
+        "snap_distance_m": 10.615
+      },
+      "end_poi_id": "poi_004",
+      "kind": "detour",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              8823668056,
+              13242244652,
+              0
+            ],
+            [
+              13242244652,
+              8823668056,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_01_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "卓尔体育馆",
+        "node_id": 8101928703,
+        "poi_id": "poi_418",
+        "snap_distance_m": 57.945
+      },
+      "start_poi_id": "poi_418"
+    },
+    {
+      "active_reference": {
+        "length_m": null,
+        "reason": "no_path_in_frozen_eligible_graph",
+        "route_edge_ids": [],
+        "scope": "frozen_graph_only",
+        "verdict": "infeasible"
+      },
+      "baseline": {
+        "length_m": 204.889,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13273047778,
+            13273047777,
+            0
+          ],
+          [
+            13273047777,
+            13273196378,
+            0
+          ],
+          [
+            13273196378,
+            12862472457,
+            0
+          ],
+          [
+            12862472457,
+            13269383983,
+            0
+          ],
+          [
+            13269383983,
+            1199738795,
+            0
+          ],
+          [
+            1199738795,
+            13269409006,
+            0
+          ],
+          [
+            13269409006,
+            13269383994,
+            0
+          ],
+          [
+            13269383994,
+            1197845980,
+            0
+          ],
+          [
+            1197845980,
+            13271173988,
+            0
+          ],
+          [
+            13271173988,
+            13271173970,
+            0
+          ],
+          [
+            13271173970,
+            13271173966,
+            0
+          ],
+          [
+            13271173966,
+            13271173965,
+            0
+          ],
+          [
+            13271173965,
+            13273046912,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_02",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "梅园快递服务中心",
+        "node_id": 13273046912,
+        "poi_id": "poi_423",
+        "snap_distance_m": 4.309
+      },
+      "end_poi_id": "poi_423",
+      "kind": "blocked",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              13273047777,
+              13273047778,
+              0
+            ],
+            [
+              13273047778,
+              13273047777,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047777,
+                "v": 13273047778
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047778,
+                "v": 13273047777
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047777,
+                "v": 13273047778
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047778,
+                "v": 13273047777
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047777,
+                "v": 13273047778
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047778,
+                "v": 13273047777
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047777,
+                "v": 13273047778
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13273047778,
+                "v": 13273047777
+              },
+              "end_time": 1792969200,
+              "id": "events_02_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "梅园综合楼",
+        "node_id": 13273047778,
+        "poi_id": "poi_001",
+        "snap_distance_m": 13.882
+      },
+      "start_poi_id": "poi_001"
+    },
+    {
+      "active_reference": {
+        "length_m": 1309.157,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13565526940,
+            13565526939,
+            0
+          ],
+          [
+            13565526939,
+            13565526934,
+            0
+          ],
+          [
+            13565526934,
+            12808058135,
+            0
+          ],
+          [
+            12808058135,
+            3631666728,
+            0
+          ],
+          [
+            3631666728,
+            13565527016,
+            0
+          ],
+          [
+            13565527016,
+            12889055226,
+            0
+          ],
+          [
+            12889055226,
+            12802032504,
+            0
+          ],
+          [
+            12802032504,
+            3631666729,
+            0
+          ],
+          [
+            3631666729,
+            12805570366,
+            0
+          ],
+          [
+            12805570366,
+            12848608570,
+            0
+          ],
+          [
+            12848608570,
+            12802032521,
+            0
+          ],
+          [
+            12802032521,
+            13732671232,
+            0
+          ],
+          [
+            13732671232,
+            13394364509,
+            0
+          ],
+          [
+            13394364509,
+            13732671236,
+            0
+          ],
+          [
+            13732671236,
+            12802032517,
+            0
+          ],
+          [
+            12802032517,
+            13565585819,
+            0
+          ],
+          [
+            13565585819,
+            13545143094,
+            0
+          ],
+          [
+            13545143094,
+            13732671241,
+            0
+          ],
+          [
+            13732671241,
+            12802032531,
+            0
+          ],
+          [
+            12802032531,
+            1196689538,
+            0
+          ],
+          [
+            1196689538,
+            13246423618,
+            0
+          ],
+          [
+            13246423618,
+            13246423610,
+            0
+          ],
+          [
+            13246423610,
+            13732671245,
+            0
+          ],
+          [
+            13732671245,
+            13246423611,
+            0
+          ],
+          [
+            13246423611,
+            13269304555,
+            0
+          ],
+          [
+            13269304555,
+            13273102322,
+            0
+          ],
+          [
+            13273102322,
+            13273047785,
+            0
+          ],
+          [
+            13273047785,
+            13273196386,
+            0
+          ],
+          [
+            13273196386,
+            13266007640,
+            0
+          ],
+          [
+            13266007640,
+            13273196358,
+            0
+          ],
+          [
+            13273196358,
+            13273047790,
+            0
+          ],
+          [
+            13273047790,
+            13273047788,
+            0
+          ],
+          [
+            13273047788,
+            13266002386,
+            0
+          ],
+          [
+            13266002386,
+            1196701971,
+            0
+          ],
+          [
+            1196701971,
+            1199821217,
+            0
+          ],
+          [
+            1199821217,
+            12805668771,
+            0
+          ],
+          [
+            12805668771,
+            13244712010,
+            0
+          ],
+          [
+            13244712010,
+            12809012186,
+            0
+          ],
+          [
+            12809012186,
+            13266196559,
+            0
+          ],
+          [
+            13266196559,
+            13266196567,
+            0
+          ],
+          [
+            13266196567,
+            1196701894,
+            0
+          ],
+          [
+            1196701894,
+            1196672318,
+            0
+          ],
+          [
+            1196672318,
+            1196701965,
+            0
+          ],
+          [
+            1196701965,
+            3709156221,
+            0
+          ],
+          [
+            3709156221,
+            13241429489,
+            0
+          ],
+          [
+            13241429489,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 1115.947,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13565526940,
+            13565526939,
+            0
+          ],
+          [
+            13565526939,
+            13565526936,
+            0
+          ],
+          [
+            13565526936,
+            12808058133,
+            0
+          ],
+          [
+            12808058133,
+            13545143098,
+            0
+          ],
+          [
+            13545143098,
+            13545143093,
+            0
+          ],
+          [
+            13545143093,
+            13545143094,
+            0
+          ],
+          [
+            13545143094,
+            13732671241,
+            0
+          ],
+          [
+            13732671241,
+            12802032531,
+            0
+          ],
+          [
+            12802032531,
+            1196689538,
+            0
+          ],
+          [
+            1196689538,
+            13246423618,
+            0
+          ],
+          [
+            13246423618,
+            13246423610,
+            0
+          ],
+          [
+            13246423610,
+            13732671245,
+            0
+          ],
+          [
+            13732671245,
+            13246423611,
+            0
+          ],
+          [
+            13246423611,
+            13269304555,
+            0
+          ],
+          [
+            13269304555,
+            13273102322,
+            0
+          ],
+          [
+            13273102322,
+            13273047785,
+            0
+          ],
+          [
+            13273047785,
+            13273196386,
+            0
+          ],
+          [
+            13273196386,
+            13266007640,
+            0
+          ],
+          [
+            13266007640,
+            13273196358,
+            0
+          ],
+          [
+            13273196358,
+            13273047790,
+            0
+          ],
+          [
+            13273047790,
+            13273047788,
+            0
+          ],
+          [
+            13273047788,
+            13266002386,
+            0
+          ],
+          [
+            13266002386,
+            1196701971,
+            0
+          ],
+          [
+            1196701971,
+            1199821217,
+            0
+          ],
+          [
+            1199821217,
+            12805668771,
+            0
+          ],
+          [
+            12805668771,
+            13244712010,
+            0
+          ],
+          [
+            13244712010,
+            12809012186,
+            0
+          ],
+          [
+            12809012186,
+            13266196559,
+            0
+          ],
+          [
+            13266196559,
+            13266196567,
+            0
+          ],
+          [
+            13266196567,
+            1196701894,
+            0
+          ],
+          [
+            1196701894,
+            1196672318,
+            0
+          ],
+          [
+            1196672318,
+            1196701965,
+            0
+          ],
+          [
+            1196701965,
+            3709156221,
+            0
+          ],
+          [
+            3709156221,
+            13241429489,
+            0
+          ],
+          [
+            13241429489,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_03",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "武汉大学万林艺术博物馆",
+        "node_id": 13241429496,
+        "poi_id": "poi_004",
+        "snap_distance_m": 10.615
+      },
+      "end_poi_id": "poi_004",
+      "kind": "bike_only",
+      "mode": "bike",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              13565526936,
+              13565526939,
+              0
+            ],
+            [
+              13565526939,
+              13565526936,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526936,
+                "v": 13565526939
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526939,
+                "v": 13565526936
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526936,
+                "v": 13565526939
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526939,
+                "v": 13565526936
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526936,
+                "v": 13565526939
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526939,
+                "v": 13565526936
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526936,
+                "v": 13565526939
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13565526939,
+                "v": 13565526936
+              },
+              "end_time": 1792969200,
+              "id": "events_03_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "武汉大学枫园食堂",
+        "node_id": 13565526940,
+        "poi_id": "poi_072",
+        "snap_distance_m": 9.028
+      },
+      "start_poi_id": "poi_072"
+    },
+    {
+      "active_reference": {
+        "length_m": 613.367,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13239152679,
+            13238420132,
+            0
+          ],
+          [
+            13238420132,
+            1272837643,
+            0
+          ],
+          [
+            1272837643,
+            13239152677,
+            0
+          ],
+          [
+            13239152677,
+            3110802176,
+            0
+          ],
+          [
+            3110802176,
+            3110802177,
+            0
+          ],
+          [
+            3110802177,
+            2505909443,
+            0
+          ],
+          [
+            2505909443,
+            4516248589,
+            0
+          ],
+          [
+            4516248589,
+            7414953042,
+            0
+          ],
+          [
+            7414953042,
+            9967436550,
+            0
+          ],
+          [
+            9967436550,
+            13241555633,
+            0
+          ],
+          [
+            13241555633,
+            3631666607,
+            0
+          ],
+          [
+            3631666607,
+            3631666593,
+            0
+          ],
+          [
+            3631666593,
+            8101928711,
+            0
+          ],
+          [
+            8101928711,
+            13583901644,
+            0
+          ],
+          [
+            13583901644,
+            8101928712,
+            0
+          ],
+          [
+            8101928712,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8101928703,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 613.266,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13239152679,
+            13239152697,
+            0
+          ],
+          [
+            13239152697,
+            1272837643,
+            0
+          ],
+          [
+            1272837643,
+            13239152677,
+            0
+          ],
+          [
+            13239152677,
+            3110802176,
+            0
+          ],
+          [
+            3110802176,
+            3110802177,
+            0
+          ],
+          [
+            3110802177,
+            2505909443,
+            0
+          ],
+          [
+            2505909443,
+            4516248589,
+            0
+          ],
+          [
+            4516248589,
+            7414953042,
+            0
+          ],
+          [
+            7414953042,
+            9967436550,
+            0
+          ],
+          [
+            9967436550,
+            13241555633,
+            0
+          ],
+          [
+            13241555633,
+            3631666607,
+            0
+          ],
+          [
+            3631666607,
+            3631666593,
+            0
+          ],
+          [
+            3631666593,
+            8101928711,
+            0
+          ],
+          [
+            8101928711,
+            13583901644,
+            0
+          ],
+          [
+            13583901644,
+            8101928712,
+            0
+          ],
+          [
+            8101928712,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8101928703,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_04",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "卓尔体育馆",
+        "node_id": 8101928703,
+        "poi_id": "poi_418",
+        "snap_distance_m": 57.945
+      },
+      "end_poi_id": "poi_418",
+      "kind": "direction",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              13239152679,
+              13239152697,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "direction": "forward",
+              "edge": {
+                "geometry_gcj": [
+                  [
+                    114.35735637530848,
+                    30.532677610279926
+                  ],
+                  [
+                    114.35738000997469,
+                    30.532693755560423
+                  ]
+                ],
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_04_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "direction": "forward",
+              "edge": {
+                "geometry_gcj": [
+                  [
+                    114.35735637530848,
+                    30.532677610279926
+                  ],
+                  [
+                    114.35738000997469,
+                    30.532693755560423
+                  ]
+                ],
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_04_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "direction": "forward",
+              "edge": {
+                "geometry_gcj": [
+                  [
+                    114.35735637530848,
+                    30.532677610279926
+                  ],
+                  [
+                    114.35738000997469,
+                    30.532693755560423
+                  ]
+                ],
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_04_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "direction": "forward",
+              "edge": {
+                "geometry_gcj": [
+                  [
+                    114.35735637530848,
+                    30.532677610279926
+                  ],
+                  [
+                    114.35738000997469,
+                    30.532693755560423
+                  ]
+                ],
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_04_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "珞珈门",
+        "node_id": 13239152679,
+        "poi_id": "poi_140",
+        "snap_distance_m": 5.98
+      },
+      "start_poi_id": "poi_140"
+    },
+    {
+      "active_reference": {
+        "length_m": 454.261,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            1369724916,
+            13704353200,
+            0
+          ],
+          [
+            13704353200,
+            13732671037,
+            0
+          ],
+          [
+            13732671037,
+            9558228580,
+            0
+          ],
+          [
+            9558228580,
+            4060915715,
+            0
+          ],
+          [
+            4060915715,
+            3123587154,
+            0
+          ],
+          [
+            3123587154,
+            13513425315,
+            0
+          ],
+          [
+            13513425315,
+            1204185484,
+            0
+          ],
+          [
+            1204185484,
+            13732671039,
+            0
+          ],
+          [
+            13732671039,
+            1199840474,
+            0
+          ],
+          [
+            1199840474,
+            13704300581,
+            0
+          ],
+          [
+            13704300581,
+            9552100025,
+            0
+          ],
+          [
+            9552100025,
+            3123587158,
+            0
+          ],
+          [
+            3123587158,
+            13704300635,
+            0
+          ],
+          [
+            13704300635,
+            3123587159,
+            0
+          ],
+          [
+            3123587159,
+            13227038582,
+            1
+          ],
+          [
+            13227038582,
+            3123587161,
+            0
+          ],
+          [
+            3123587161,
+            13227038591,
+            0
+          ],
+          [
+            13227038591,
+            3123587162,
+            0
+          ],
+          [
+            3123587162,
+            13704353117,
+            0
+          ],
+          [
+            13704353117,
+            13704353118,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 454.261,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            1369724916,
+            13704353200,
+            0
+          ],
+          [
+            13704353200,
+            13732671037,
+            0
+          ],
+          [
+            13732671037,
+            9558228580,
+            0
+          ],
+          [
+            9558228580,
+            4060915715,
+            0
+          ],
+          [
+            4060915715,
+            3123587154,
+            0
+          ],
+          [
+            3123587154,
+            13513425315,
+            0
+          ],
+          [
+            13513425315,
+            1204185484,
+            0
+          ],
+          [
+            1204185484,
+            13732671039,
+            0
+          ],
+          [
+            13732671039,
+            1199840474,
+            0
+          ],
+          [
+            1199840474,
+            13704300581,
+            0
+          ],
+          [
+            13704300581,
+            9552100025,
+            0
+          ],
+          [
+            9552100025,
+            3123587158,
+            0
+          ],
+          [
+            3123587158,
+            13704300635,
+            0
+          ],
+          [
+            13704300635,
+            3123587159,
+            0
+          ],
+          [
+            3123587159,
+            13227038582,
+            1
+          ],
+          [
+            13227038582,
+            3123587161,
+            0
+          ],
+          [
+            3123587161,
+            13227038591,
+            0
+          ],
+          [
+            13227038591,
+            3123587162,
+            0
+          ],
+          [
+            3123587162,
+            13704353117,
+            0
+          ],
+          [
+            13704353117,
+            13704353118,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_05",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "星湖体育馆",
+        "node_id": 13704353118,
+        "poi_id": "poi_257",
+        "snap_distance_m": 19.15
+      },
+      "end_poi_id": "poi_257",
+      "kind": "off_path",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              286074435,
+              1358787402,
+              0
+            ],
+            [
+              1358787402,
+              286074435,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 286074435,
+                "v": 1358787402
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 1358787402,
+                "v": 286074435
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 286074435,
+                "v": 1358787402
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 1358787402,
+                "v": 286074435
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 286074435,
+                "v": 1358787402
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 1358787402,
+                "v": 286074435
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 286074435,
+                "v": 1358787402
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 1358787402,
+                "v": 286074435
+              },
+              "end_time": 1792969200,
+              "id": "events_05_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "信息学部快递服务中心",
+        "node_id": 1369724916,
+        "poi_id": "poi_424",
+        "snap_distance_m": 12.758
+      },
+      "start_poi_id": "poi_424"
+    },
+    {
+      "active_reference": {
+        "length_m": 825.044,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            13242244648,
+            0
+          ],
+          [
+            13242244648,
+            13510724998,
+            0
+          ],
+          [
+            13510724998,
+            13613500834,
+            0
+          ],
+          [
+            13613500834,
+            13242244705,
+            0
+          ],
+          [
+            13242244705,
+            13556596321,
+            1
+          ],
+          [
+            13556596321,
+            13613500919,
+            0
+          ],
+          [
+            13613500919,
+            13556596326,
+            0
+          ],
+          [
+            13556596326,
+            13556596322,
+            0
+          ],
+          [
+            13556596322,
+            13613500807,
+            0
+          ],
+          [
+            13613500807,
+            979935998,
+            0
+          ],
+          [
+            979935998,
+            13613500809,
+            0
+          ],
+          [
+            13613500809,
+            13732671409,
+            0
+          ],
+          [
+            13732671409,
+            13732671410,
+            0
+          ],
+          [
+            13732671410,
+            13732671408,
+            0
+          ],
+          [
+            13732671408,
+            13732671406,
+            0
+          ],
+          [
+            13732671406,
+            13732671405,
+            0
+          ],
+          [
+            13732671405,
+            13254342820,
+            0
+          ],
+          [
+            13254342820,
+            13254342853,
+            0
+          ],
+          [
+            13254342853,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 724.241,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244640,
+            0
+          ],
+          [
+            13242244640,
+            8101995044,
+            0
+          ],
+          [
+            8101995044,
+            8101995043,
+            0
+          ],
+          [
+            8101995043,
+            13242244677,
+            0
+          ],
+          [
+            13242244677,
+            3631666614,
+            0
+          ],
+          [
+            3631666614,
+            3631666613,
+            0
+          ],
+          [
+            3631666613,
+            13583931949,
+            0
+          ],
+          [
+            13583931949,
+            9158437414,
+            0
+          ],
+          [
+            9158437414,
+            13713923951,
+            0
+          ],
+          [
+            13713923951,
+            13238420138,
+            0
+          ],
+          [
+            13238420138,
+            13613500788,
+            0
+          ],
+          [
+            13613500788,
+            3631666640,
+            0
+          ],
+          [
+            3631666640,
+            13254316045,
+            0
+          ],
+          [
+            13254316045,
+            1197850795,
+            0
+          ],
+          [
+            1197850795,
+            13239326473,
+            0
+          ],
+          [
+            13239326473,
+            12808341227,
+            0
+          ],
+          [
+            12808341227,
+            13732671403,
+            0
+          ],
+          [
+            13732671403,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_06",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "武汉大学万林艺术博物馆",
+        "node_id": 13241429496,
+        "poi_id": "poi_004",
+        "snap_distance_m": 10.615
+      },
+      "end_poi_id": "poi_004",
+      "kind": "lifecycle",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              8823668056,
+              13242244652,
+              0
+            ],
+            [
+              13242244652,
+              8823668056,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244652
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244652,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_06_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "卓尔体育馆",
+        "node_id": 8101928703,
+        "poi_id": "poi_418",
+        "snap_distance_m": 57.945
+      },
+      "start_poi_id": "poi_418"
+    },
+    {
+      "active_reference": {
+        "length_m": 771.949,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            8101928712,
+            0
+          ],
+          [
+            8101928712,
+            8101995040,
+            0
+          ],
+          [
+            8101995040,
+            8101995043,
+            0
+          ],
+          [
+            8101995043,
+            13242244677,
+            0
+          ],
+          [
+            13242244677,
+            3631666614,
+            0
+          ],
+          [
+            3631666614,
+            3631666613,
+            0
+          ],
+          [
+            3631666613,
+            13583931949,
+            0
+          ],
+          [
+            13583931949,
+            9158437414,
+            0
+          ],
+          [
+            9158437414,
+            13713923951,
+            0
+          ],
+          [
+            13713923951,
+            13238420138,
+            0
+          ],
+          [
+            13238420138,
+            13613500788,
+            0
+          ],
+          [
+            13613500788,
+            3631666640,
+            0
+          ],
+          [
+            3631666640,
+            13254316045,
+            0
+          ],
+          [
+            13254316045,
+            1197850795,
+            0
+          ],
+          [
+            1197850795,
+            13239326473,
+            0
+          ],
+          [
+            13239326473,
+            12808341227,
+            0
+          ],
+          [
+            12808341227,
+            13732671403,
+            0
+          ],
+          [
+            13732671403,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 724.241,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            8101928703,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244640,
+            0
+          ],
+          [
+            13242244640,
+            8101995044,
+            0
+          ],
+          [
+            8101995044,
+            8101995043,
+            0
+          ],
+          [
+            8101995043,
+            13242244677,
+            0
+          ],
+          [
+            13242244677,
+            3631666614,
+            0
+          ],
+          [
+            3631666614,
+            3631666613,
+            0
+          ],
+          [
+            3631666613,
+            13583931949,
+            0
+          ],
+          [
+            13583931949,
+            9158437414,
+            0
+          ],
+          [
+            9158437414,
+            13713923951,
+            0
+          ],
+          [
+            13713923951,
+            13238420138,
+            0
+          ],
+          [
+            13238420138,
+            13613500788,
+            0
+          ],
+          [
+            13613500788,
+            3631666640,
+            0
+          ],
+          [
+            3631666640,
+            13254316045,
+            0
+          ],
+          [
+            13254316045,
+            1197850795,
+            0
+          ],
+          [
+            1197850795,
+            13239326473,
+            0
+          ],
+          [
+            13239326473,
+            12808341227,
+            0
+          ],
+          [
+            12808341227,
+            13732671403,
+            0
+          ],
+          [
+            13732671403,
+            13265787064,
+            0
+          ],
+          [
+            13265787064,
+            12805673955,
+            0
+          ],
+          [
+            12805673955,
+            13264256569,
+            0
+          ],
+          [
+            13264256569,
+            13264256599,
+            0
+          ],
+          [
+            13264256599,
+            13264256601,
+            0
+          ],
+          [
+            13264256601,
+            13264256588,
+            0
+          ],
+          [
+            13264256588,
+            13264256592,
+            0
+          ],
+          [
+            13264256592,
+            13701927151,
+            0
+          ],
+          [
+            13701927151,
+            13701927152,
+            0
+          ],
+          [
+            13701927152,
+            3709160028,
+            0
+          ],
+          [
+            3709160028,
+            13241429496,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_07",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "武汉大学万林艺术博物馆",
+        "node_id": 13241429496,
+        "poi_id": "poi_004",
+        "snap_distance_m": 10.615
+      },
+      "end_poi_id": "poi_004",
+      "kind": "bike_only",
+      "mode": "bike",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              8823668056,
+              13242244640,
+              0
+            ],
+            [
+              13242244640,
+              8823668056,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244640
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244640,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244640
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244640,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244640
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244640,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 8823668056,
+                "v": 13242244640
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "bike"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13242244640,
+                "v": 8823668056
+              },
+              "end_time": 1792969200,
+              "id": "events_07_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "卓尔体育馆",
+        "node_id": 8101928703,
+        "poi_id": "poi_418",
+        "snap_distance_m": 57.945
+      },
+      "start_poi_id": "poi_418"
+    },
+    {
+      "active_reference": {
+        "length_m": 613.367,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13239152679,
+            13238420132,
+            0
+          ],
+          [
+            13238420132,
+            1272837643,
+            0
+          ],
+          [
+            1272837643,
+            13239152677,
+            0
+          ],
+          [
+            13239152677,
+            3110802176,
+            0
+          ],
+          [
+            3110802176,
+            3110802177,
+            0
+          ],
+          [
+            3110802177,
+            2505909443,
+            0
+          ],
+          [
+            2505909443,
+            4516248589,
+            0
+          ],
+          [
+            4516248589,
+            7414953042,
+            0
+          ],
+          [
+            7414953042,
+            9967436550,
+            0
+          ],
+          [
+            9967436550,
+            13241555633,
+            0
+          ],
+          [
+            13241555633,
+            3631666607,
+            0
+          ],
+          [
+            3631666607,
+            3631666593,
+            0
+          ],
+          [
+            3631666593,
+            8101928711,
+            0
+          ],
+          [
+            8101928711,
+            13583901644,
+            0
+          ],
+          [
+            13583901644,
+            8101928712,
+            0
+          ],
+          [
+            8101928712,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8101928703,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "baseline": {
+        "length_m": 613.266,
+        "reason": "confirmed_edge_path",
+        "route_edge_ids": [
+          [
+            13239152679,
+            13239152697,
+            0
+          ],
+          [
+            13239152697,
+            1272837643,
+            0
+          ],
+          [
+            1272837643,
+            13239152677,
+            0
+          ],
+          [
+            13239152677,
+            3110802176,
+            0
+          ],
+          [
+            3110802176,
+            3110802177,
+            0
+          ],
+          [
+            3110802177,
+            2505909443,
+            0
+          ],
+          [
+            2505909443,
+            4516248589,
+            0
+          ],
+          [
+            4516248589,
+            7414953042,
+            0
+          ],
+          [
+            7414953042,
+            9967436550,
+            0
+          ],
+          [
+            9967436550,
+            13241555633,
+            0
+          ],
+          [
+            13241555633,
+            3631666607,
+            0
+          ],
+          [
+            3631666607,
+            3631666593,
+            0
+          ],
+          [
+            3631666593,
+            8101928711,
+            0
+          ],
+          [
+            8101928711,
+            13583901644,
+            0
+          ],
+          [
+            13583901644,
+            8101928712,
+            0
+          ],
+          [
+            8101928712,
+            8823668056,
+            0
+          ],
+          [
+            8823668056,
+            13242244652,
+            0
+          ],
+          [
+            13242244652,
+            8101928703,
+            0
+          ]
+        ],
+        "scope": "frozen_graph_only",
+        "verdict": "feasible"
+      },
+      "case_id": "events_08",
+      "end_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "卓尔体育馆",
+        "node_id": 8101928703,
+        "poi_id": "poi_418",
+        "snap_distance_m": 57.945
+      },
+      "end_poi_id": "poi_418",
+      "kind": "detour",
+      "mode": "walk",
+      "stages": {
+        "active": {
+          "epoch": 1792962000,
+          "expected_closed_edges": [
+            [
+              13239152679,
+              13239152697,
+              0
+            ],
+            [
+              13239152697,
+              13239152679,
+              0
+            ]
+          ],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152697,
+                "v": 13239152679
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "before": {
+          "epoch": 1792961999,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152697,
+                "v": 13239152679
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "expired": {
+          "epoch": 1792969200,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152697,
+                "v": 13239152679
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        },
+        "revoked": {
+          "epoch": 1792969199,
+          "expected_closed_edges": [],
+          "rows": [
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152679,
+                "v": 13239152697
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_1",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            },
+            {
+              "action": "closure",
+              "affected_modes": [
+                "walk"
+              ],
+              "edge": {
+                "key": 0,
+                "u": 13239152697,
+                "v": 13239152679
+              },
+              "end_time": 1792969200,
+              "id": "events_08_edge_2",
+              "name": "模拟道路限制（仅隔离测试）",
+              "revoked_at": 1792969199,
+              "source": {
+                "campus_truth": false,
+                "kind": "research_simulated",
+                "scope": "synthetic_development_only"
+              },
+              "start_time": 1792962000,
+              "type": "closure"
+            }
+          ]
+        }
+      },
+      "start_anchor": {
+        "access_status": "last_meter_unverified",
+        "name": "珞珈门",
+        "node_id": 13239152679,
+        "poi_id": "poi_140",
+        "snap_distance_m": 5.98
+      },
+      "start_poi_id": "poi_140"
+    }
+  ],
+  "graph_sha256": "94a5fa3cc4c1c98d97e034eb05c05b68e7d4ae1144a7471791550056dc432a41",
+  "poi_sha256": "83765ab06f4dc63c1bbdda65d1d807348e9130533e160947d649d9aad7d92e67",
+  "scope": "synthetic_development_only",
+  "snap_limit_m": 60
+}

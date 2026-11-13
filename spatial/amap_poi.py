@@ -62,18 +62,41 @@ def _dining_subcategory(raw):
     name = _text(raw.get('name'))
     type_code = _text(raw.get('typecode'))
     type_name = _text(raw.get('type'))
-    if '食堂' in name or '食堂' in type_name:
-        return 'canteen'
-    if type_code.startswith('0503') or any(token in type_name for token in ('快餐', '小吃')):
-        return 'fastfood'
     if type_code.startswith('0505') or '咖啡' in type_name:
         return 'coffee'
     if type_code.startswith('0506') or any(token in type_name for token in ('茶饮', '奶茶')):
         return 'tea_drink'
-    if type_code.startswith(('0501', '0502', '0504')) or any(
-            token in type_name for token in ('中餐', '外国餐厅', '休闲餐饮')):
+    if type_code.startswith('0503') or any(token in type_name for token in ('快餐', '小吃')):
+        return 'fastfood'
+    if '食堂' in type_name or (name.endswith('食堂') and not type_code.startswith(('0501', '0502', '0504'))):
+        return 'canteen'
+    if type_code.startswith(('0501', '0502')) or any(
+            token in type_name for token in ('中餐', '外国餐厅')):
         return 'restaurant'
     return 'other'
+
+
+def _provider_category(raw):
+    """Map provider type evidence without labeling every online venue as food."""
+    type_code, type_name = _text(raw.get('typecode')), _text(raw.get('type'))
+    if type_code.startswith('05') or '餐饮' in type_name:
+        return {'type': 'dining', 'category': 'dining', 'subcategory': _dining_subcategory(raw)}
+    if type_code.startswith('08') or '体育' in type_name or '运动场馆' in type_name:
+        from spatial.poi_taxonomy import resolve_activity_query
+        evidence = resolve_activity_query(type_name + ' ' + _text(raw.get('name'))) or {}
+        activities = set(evidence.get('activities') or [])
+        if activities & {'basketball', 'badminton', 'table_tennis', 'volleyball', 'tennis'}:
+            subcategory = 'court'
+        elif activities & {'football', 'running'}:
+            subcategory = 'field'
+        elif 'swimming' in activities:
+            subcategory = 'pool'
+        elif 'fitness' in activities:
+            subcategory = 'gym'
+        else:
+            subcategory = 'sports_other'
+        return {'type': 'sports', 'category': 'sports', 'subcategory': subcategory}
+    return {'type': 'other', 'category': 'other', 'subcategory': 'other'}
 
 
 def _provider_get(client, url, **kwargs):
@@ -138,8 +161,7 @@ def search_text(keywords, *, city="420100", pages=3, client=None):
         if not poi or poi["id"] == "amap:" or poi["id"] in seen:
             continue
         seen.add(poi["id"])
-        poi.update({"type": "dining", "category": "dining",
-                    "subcategory": _dining_subcategory(raw), "campus": "",
+        poi.update({**_provider_category(raw), "campus": "",
                     "source": "amap_online", "observed_at": observed_at,
                     "business_area": _text(raw.get("adname") or raw.get("address")),
                     "provider_rating": _text((raw.get("biz_ext") or {}).get("rating")),
@@ -171,8 +193,11 @@ def _text_pages(client, params, pages):
     return rows, total, None
 
 
-def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None):
-    """Search nearby dining from a worker or request without retaining provider state."""
+def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None, poi_type='dining'):
+    """Search nearby dining or sports venues without retaining provider state."""
+    provider_types = {'dining': '050000', 'sports': '体育休闲服务'}
+    if poi_type not in provider_types:
+        return {'status': 'invalid_query', 'candidates': []}
     location = _coord(f"{center.get('lng')},{center.get('lat')}") if isinstance(center, dict) else None
     if location is None:
         return {'status': 'invalid_center', 'candidates': []}
@@ -191,7 +216,7 @@ def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None)
         'key': key,
         'location': f"{location['lng']},{location['lat']}",
         'radius': radius_m,
-        'types': '050000',
+        'types': provider_types[poi_type],
         'offset': 25,
         'extensions': 'all',
     }
@@ -231,9 +256,7 @@ def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None)
             continue
         seen.add(poi['id'])
         poi.update({
-            'type': 'dining',
-            'category': 'dining',
-            'subcategory': _dining_subcategory(raw),
+            **_provider_category(raw),
             'campus': '',
             'distance_m': round(distance),
             'distance_basis': 'amap_provider_distance_from_search_center',
@@ -347,8 +370,7 @@ def lookup(name, known=None, client=None):
             row = normalize_poi(raw)
             if not row:
                 continue
-            row.update({'type': 'dining', 'category': 'dining',
-                        'subcategory': _dining_subcategory(raw), 'campus': '',
+            row.update({**_provider_category(raw), 'campus': '',
                         'source': 'amap_online',
                         'observed_at': datetime.now(timezone.utc).isoformat()})
             rows.append(row)

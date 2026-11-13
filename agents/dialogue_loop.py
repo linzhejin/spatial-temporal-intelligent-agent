@@ -175,15 +175,63 @@ def _finish_with_read_failures(dialogue, text, failures, successful_reads):
     return result
 
 
+def _has_verified_empty_search(dialogue):
+    last = dialogue.last_search
+    return (dialogue.intent.get("operation") == "place_search" and not dialogue.place_service_error
+            and isinstance(last, dict) and not last.get("error")
+            and last.get("count") == 0 and last.get("candidates") == []
+            and not last.get("has_more")
+            and not dialogue.pending.get("candidate_pool"))
+
+
+def _bounded_empty_reply(dialogue, text):
+    """Avoid unverified provider claims or stale numeric conditions in an empty reply."""
+    if (_has_verified_empty_search(dialogue) and not dialogue.candidates and not dialogue.route and not dialogue.comparison):
+        from agents.distance_evidence import distance_mentions_m
+        constraints = dialogue.pending.get("constraints") or {}
+        allowed_distances = {value for value in (dialogue.pending.get("search_radius_m"), constraints.get("max_distance_m"))
+                             if type(value) in (int, float)}
+        parts = re.split(r"(?<=[。！？!?\n])", text)
+        clean = []
+        for part in parts:
+            unsupported_distance = any(value not in allowed_distances for value in distance_mentions_m(part))
+            unqueried_map = (not dialogue._map_search_completed
+                             and re.search(r"(?:地图|高德).{0,25}(?:查|检索|搜索|返回|找到|结果|暂无|没有|未|无)", part))
+            if unsupported_distance or unqueried_map:
+                replacement = "当前查询暂未找到符合条件的地点，可以考虑调整条件或扩大范围。"
+                if replacement not in clean:
+                    clean.append(replacement)
+            else:
+                clean.append(part)
+        answer = "".join(clean)
+        unsupported_cause = (r"(?:说明|表明|意味着|证明)(?:(?!可能|或许|无法确认|不能确定|不确定).){0,35}"
+                             r"(?:路网|地图|数据).{0,15}(?:不足|缺失|不全|不完整|不完善|有误)")
+        answer = re.sub(r"[（(][^（）()]{0,120}" + unsupported_cause + r"[^（）()]{0,120}[）)]", "", answer)
+        answer = re.sub(r"[，,]?\s*" + unsupported_cause, "", answer)
+        mentions_empty = re.search(
+            r"(?:未|没|没有|暂未|尚未).{0,10}(?:找到|查到|检索到|返回).{0,16}"
+            r"(?:地点|场地|场所|候选|球场|餐厅|记录|结果)"
+            r"|(?:暂无|没有|无).{0,12}(?:地点|场地|场所|候选|球场|餐厅|记录|结果)", answer)
+        if not mentions_empty:
+            answer = re.sub(r"(?:以上|上面|以下|下面)(?:就是|是)?(?:目前|当前|本次|这次)?(?:的)?"
+                            r"(?:检索|搜索|查询)?结果[，,、]?", "", answer)
+            answer = "当前查询暂未找到符合条件的地点。" + answer
+        return answer
+    return text
+
+
 def run_dialogue_loop(dialogue):
     from agents.deadline import shared_deadline
-    with shared_deadline(dialogue.deadline_monotonic):
-        return _run_dialogue_loop(dialogue)
+    # Reserve time for the workflow to persist and deliver a bounded failure.
+    # Otherwise a provider/tool finishing at the database deadline loses its
+    # lease before compose_result can emit or save the response.
+    work_deadline = min(time.monotonic() + 75.0, dialogue.deadline_monotonic) - 5.0
+    with shared_deadline(work_deadline):
+        return _run_dialogue_loop(dialogue, work_deadline)
 
 
-def _run_dialogue_loop(dialogue):
+def _run_dialogue_loop(dialogue, deadline):
     started = time.monotonic()
-    deadline = min(started + 75.0, getattr(dialogue, "deadline_monotonic", started + 75.0))
     try:
         if not config.DEEPSEEK_API_KEY:
             raise RuntimeError("model_not_configured")
@@ -262,17 +310,23 @@ def _run_dialogue_loop(dialogue):
             if dialogue.route_tool_failure and not dialogue.route and not dialogue.candidates:
                 return _failure(dialogue, dialogue.route_tool_failure["message"] + " 已保留已有需求，可调整条件后重试。",
                                 dialogue.route_tool_failure["code"])
-            if dialogue.turn_action == "next_batch" and not dialogue.candidates:
+            searched_for_places = (dialogue.place_search_count > 0
+                                   and dialogue.intent.get("operation") == "place_search")
+            if (dialogue.turn_action == "next_batch" or searched_for_places) and not dialogue.candidates:
                 remaining = dialogue.browse_candidates({})
                 if remaining["count"]:
                     undelivered_candidate_responses += 1
                     if undelivered_candidate_responses > 2:
                         return _failure(dialogue, "仍有候选尚未完成筛选，已保留当前需求，请重试。", "candidate_delivery_incomplete")
-                    dialogue.messages.append({"role": "assistant", "content": text})
+                    dialogue.messages.append({"role": "assistant", "content": text,
+                                              **({"reasoning_content": msg.reasoning_content}
+                                                 if getattr(msg, "reasoning_content", None) is not None else {})})
                     dialogue.messages.append({"role": "system", "content":
                         "服务器核验仍有未展示的候选记录。请调用 browse_candidates 查看具体地点，再用 present_places 交付；"
                         "如果查看后没有符合条件的地点，调用 conclude_without_places 说明原因。"})
                     continue
+            if searched_for_places:
+                text = _bounded_empty_reply(dialogue, text)
             if read_failures:
                 return _finish_with_read_failures(dialogue, text, read_failures, successful_reads)
             return dialogue.result(text) if text else _failure(dialogue, "本轮没有形成回答，请重试。", "model_empty_response")
@@ -337,7 +391,8 @@ def _run_dialogue_loop(dialogue):
                         raise ValueError("end_turn_if_success must be a boolean")
                     end_turn_requested |= end_turn_for_tool
                 if (dialogue.bind_task and dialogue.bound_task is None
-                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page", "read_result", "browse_candidates"}):
+                        and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page",
+                                         "read_result", "browse_candidates", "resolve_poi", "get_place_details"}):
                     raise ValueError("task_binding_required: 先用 update_task 选择或创建任务")
                 if name == "update_task":
                     answer = dialogue.update(args)
@@ -396,15 +451,31 @@ def _run_dialogue_loop(dialogue):
             if answer.get("error"):
                 fingerprint = (name, str(answer["error"]), str(answer.get("message") or ""))
                 repeated_errors[fingerprint] = repeated_errors.get(fingerprint, 0) + 1
-                if repeated_errors[fingerprint] >= 3:
+                threshold = 2 if answer["error"] in {"duplicate_empty_search", "empty_search_retry_limit"} else 3
+                if repeated_errors[fingerprint] >= threshold:
                     if answer["error"] in read_errors:
                         return _finish_with_read_failures(dialogue, "", read_failures, successful_reads)
+                    empty_retry = ((name in {"search_poi_candidates", "find_reachable_places"}
+                                    and answer["error"] in {"task_update_required", "search_center_mismatch",
+                                                            "duplicate_empty_search", "empty_search_retry_limit"})
+                                   or (name in {"plan_route", "plan_via_route"}
+                                       and answer["error"] == "candidate_scope_unverified"))
+                    if (empty_retry
+                            and _has_verified_empty_search(dialogue)):
+                        return _finish_with_read_failures(dialogue,
+                            "当前查询结果中暂未找到符合条件的地点，可以考虑扩大范围或更换条件。",
+                            read_failures, successful_reads)
                     return _failure(dialogue, "本轮结果反复未通过校验，已保留当前需求，请重试。", "repeated_tool_error")
             if answer.get("error") == "place_service_unavailable":
                 return _failure(dialogue, "地点服务暂时不可用，本轮没有查到地点，请稍后重试。", "place_service_unavailable")
             if answer.get("error") == "place_search_limit":
+                if _has_verified_empty_search(dialogue):
+                    return _finish_with_read_failures(dialogue,
+                        "当前查询结果中暂未找到符合条件的地点，可以考虑扩大范围或更换条件。",
+                        read_failures, successful_reads)
                 return _failure(dialogue, "本轮地点查询次数已用完，已保留当前需求，请重试。", "place_search_limit")
         if final is not None:
+            final = _bounded_empty_reply(dialogue, final)
             return _finish_with_read_failures(dialogue, final, read_failures, successful_reads)
         if dialogue.clarify:
             return _finish_with_read_failures(dialogue, dialogue.clarify.get("question", "请补充具体要求。"),

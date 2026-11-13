@@ -6,3 +6,14 @@ experiments/datasets/controlled_recommendation_pilot_v2/*.json text eol=lf
 experiments/datasets/controlled_event_pilot_v1/*.json text eol=lf
 experiments/datasets/controlled_event_pilot_v2/*.json text eol=lf
 experiments/datasets/controlled_event_pilot_v3/*.json text eol=lf
+
+# Preserve the exact bytes bound into the complex multi-turn development fixtures.
+data/whu_road_network.graphml text eol=crlf
+data/pois.json text eol=crlf
+experiments/datasets/complex_multiturn_dev_v1/cases.json text eol=crlf
+experiments/datasets/complex_multiturn_dev_v1/cases_event_endpoint_revised.json text eol=crlf
+experiments/datasets/complex_multiturn_dev_v1/anchor_snapshot_60m.json text eol=crlf
+experiments/datasets/complex_multiturn_dev_v1/supplement_time_only.json text eol=lf
+experiments/datasets/complex_multiturn_dev_v1/supplement_time_radius.json text eol=lf
+experiments/datasets/complex_multiturn_dev_v1/supplement_time_radius_v2.json text eol=lf
+experiments/complex_multiturn_dev/candidate_checks.py text eol=lf
