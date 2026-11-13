@@ -35,7 +35,7 @@ def tool_schemas():
 
     clearable_fields = ["budget_per_person", "limit", "requirements", "area", "keywords",
                         "exclude_terms", "web_page_read_requested", "start", "search_anchor",
-                        "strategy", "activities", "subcategories", "selected_poi_id"]
+                        "strategy", "activities", "subcategories", "selected_poi_id", "tour_stops", "tour_scope"]
     clearable_fields.extend(f"constraints.{field}" for field in HardConstraints.model_fields)
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -57,6 +57,10 @@ def tool_schemas():
         if name == "resolve_poi":
             item["function"]["description"] = ("核对具体地名并查询校园/在线目录记录；多分店返回候选，不擅自选定。"
                 "名称和坐标匹配不代表现场存在、营业或入口可通行。")
+        elif name == "plan_tour":
+            item["function"]["description"] += (
+                "实际出行须先通过 update_task 保存用户明确的出发点；只提及想去的景点不代表从第一个景点出发。"
+                "用户明确只要景点间的独立参考路线时，可在任务中设置 tour_scope=independent。")
         elif name in {"get_weather", "plan_route"}:
             parameters = item["function"]["parameters"]
             parameters["properties"]["end_turn_if_success"] = {
@@ -75,6 +79,10 @@ def tool_schemas():
                            "description": "本轮语义任务类型；按主要用户目标选择"},
              "goal": {"type": "string"},
              "start": {**_ENDPOINT_SCHEMA, "description": "实际出发地点，即用户表示当前所在或从哪里出发的位置。不能用用户另行指定的搜索区域代替"},
+             "tour_stops": {"type": "array", "maxItems": 8, "items": {"type": "string", "maxLength": 160},
+                            "description": "用户明确要游览的地点名称，完整保存；不是用户的出发点。只在用户修改地点时替换。"},
+             "tour_scope": {"type": "string", "enum": ["from_user", "independent"],
+                            "description": "实际个人出行填 from_user；仅用户明确要求不考虑本人出发位置、只看景点间参考路线时填 independent。"},
              "search_anchor": {**_ENDPOINT_SCHEMA, "description": "用户希望在哪个地点附近或区域内搜索的参照点。用户另行说了搜索地点时必须保留该地点，不能复制start来替代；只有用户未给搜索地点时才可省略"},
              "search_radius_m": {"type": "integer", "minimum": 100, "maximum": 5000},
              "expand_search_radius": {"type": "boolean", "description": "用户只说扩大范围且未指定幅度时设为 true；服务器翻倍，最高 5 公里"},
@@ -298,6 +306,79 @@ def _reason_is_supported(reason, place, sources=()):
     return True
 
 
+def _task_with_unconfirmed_tour_origin(task):
+    """Do not revive an old implicit tour anchor as the user's departure."""
+    item = deepcopy(task)
+    state = item.get("state") if isinstance(item, dict) else None
+    pending = state.get("place_request") if isinstance(state, dict) else None
+    intent = pending.get("semantic_request") if isinstance(pending, dict) else None
+    if not isinstance(intent, dict) or intent.get("tour_origin_confirmed"):
+        return item
+    route = item.get("route_state") or intent.get("route_to_modify") or {}
+    tour = route.get("tour") if isinstance(route, dict) else None
+    places = tour.get("pois") if isinstance(tour, dict) else None
+    origin = pending.get("start")
+    first = places[0] if isinstance(places, list) and places else None
+    provenance = state.get("field_provenance") or {}
+    has_source = any(key in provenance for key in ("place_request.start", "route_spec.start"))
+    if (isinstance(route, dict) and route.get("route_kind") == "tour"
+            and isinstance(origin, dict) and isinstance(first, dict)
+            and origin.get("name") and origin.get("name") == first.get("name") and not has_source):
+        pending.pop("start", None)
+        pending["pending_slot"] = "start"
+        intent["tour_origin_unconfirmed"] = True
+        if isinstance(state.get("route_spec"), dict):
+            state["route_spec"]["start"] = None
+    return item
+
+
+def _missing_tour_stops(route, requested, tools):
+    """Compare model-saved destinations with the verified route's actual stops."""
+    state = route.get("route_state") if isinstance(route, dict) else None
+    state = state if isinstance(state, dict) else {}
+    refs = []
+
+    def add(ref):
+        if isinstance(ref, str):
+            refs.append({"name": ref})
+        elif isinstance(ref, dict):
+            if ref.get("type") == "multi" and isinstance(ref.get("points"), list):
+                for item in ref["points"]:
+                    add(item)
+            elif ref.get("name") or ref.get("poi_id") or ref.get("id"):
+                refs.append(ref)
+
+    for field in ("start", "end", "via"):
+        add(state.get(field))
+    for item in (state.get("tour") or {}).get("pois") or []:
+        add(item)
+    for item in (state.get("itinerary") or {}).get("stops") or []:
+        add(item.get("poi") or item if isinstance(item, dict) else item)
+    for leg in state.get("legs") or []:
+        if isinstance(leg, dict):
+            add(leg.get("start"))
+            add(leg.get("end"))
+            add(leg.get("via"))
+    add(route.get("start_name"))
+    add(route.get("end_name"))
+
+    def identity(name):
+        if not isinstance(name, str) or not name.strip():
+            return None
+        poi, _ = tools.find_poi_ambiguous(name.strip())
+        return (poi or {}).get("id")
+
+    known = [(str(ref.get("name") or "").strip(), ref.get("poi_id") or ref.get("id")) for ref in refs]
+    known = [(name, identifier or identity(name)) for name, identifier in known]
+    missing = []
+    for name in requested:
+        target = str(name).strip()
+        target_id = identity(target)
+        if not any(target == actual or (target_id and target_id == actual_id) for actual, actual_id in known):
+            missing.append(target)
+    return missing
+
+
 class Dialogue:
     def __init__(self, query, *, context=None, history=None, coord_start=None, coord_end=None,
                  coord_waypoints=None, travel_mode=None, uid=None, execute_tool, client_factory, trace,
@@ -309,7 +390,8 @@ class Dialogue:
         self.bound_task = None
         self.modified_fields = set()
         self.deadline_monotonic = deadline_monotonic if deadline_monotonic is not None else time.monotonic() + 75
-        self.available_tasks = {str(item.get("task_id")): item for item in self.context.get("available_tasks", [])
+        self.available_tasks = {str(item.get("task_id")): _task_with_unconfirmed_tour_origin(item)
+                                for item in self.context.get("available_tasks", [])
                                 if isinstance(item, dict) and item.get("task_id")}
         self.execute_tool, self.client_factory, self.trace = execute_tool, client_factory, trace
         self.pending = deepcopy(self.context.get("place_request") or {})
@@ -335,6 +417,7 @@ class Dialogue:
             self.pending["selected_place"] = deepcopy(self.known[selected_id])
         self.turn_action = "recommend"
         self.candidates, self.route, self.route_kind, self.comparison = None, None, None, None
+        self.route_is_independent_tour = False
         self.weather = None
         self.route_tool_failure = None
         self.no_path, self.clarify, self.suggestions = None, None, None
@@ -426,15 +509,21 @@ class Dialogue:
             if not self.previous_route or self.context.get("route_context_uncertain"):
                 raise ValueError("prior_route_unavailable: 请确认要修改的路线")
             state = self.previous_route
-            pending.update({"start": deepcopy(state["start"]), "mode": state["travel_mode"],
+            pending_intent = pending.get("semantic_request") or {}
+            independent_tour = ((pending_intent.get("tour_scope") == "independent" and not pending.get("start"))
+                                or pending_intent.get("tour_origin_unconfirmed") is True)
+            pending.update({"mode": state["travel_mode"],
                             "constraints": _resume_constraints(pending.get("constraints"), state["hard_constraints"])})
+            if not independent_tour:
+                pending["start"] = deepcopy(state["start"])
             strategy = state.get("strategy") or {}
             pending["strategy"] = strategy.get("name", "shortest") if isinstance(strategy, dict) else strategy
             pending.setdefault("semantic_request", {})["route_to_modify"] = deepcopy(state)
         intent = pending.setdefault("semantic_request", {}) or {}
         changed_search = relation == "new"
         for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms",
-                      "web_research_requested", "web_page_read_requested", "budget_per_person", "limit"):
+                      "web_research_requested", "web_page_read_requested", "budget_per_person", "limit",
+                      "tour_stops", "tour_scope"):
             if field in args:
                 value = args[field]
                 if field == "operation" and (not isinstance(value, str) or value not in _OPERATIONS):
@@ -445,6 +534,13 @@ class Dialogue:
                     if (relation != "new" and field in {"requirements", "exclude_terms"}
                             and field not in args.get("clear_fields", [])):
                         value = list(dict.fromkeys([*(intent.get(field) or []), *value]))
+                if field == "tour_stops":
+                    if (not isinstance(value, list) or len(value) > 8 or
+                            any(not isinstance(x, str) or not x.strip() or len(x) > 160 for x in value)):
+                        raise ValueError("invalid tour_stops")
+                    value = list(dict.fromkeys(x.strip() for x in value))
+                if field == "tour_scope" and value not in {"from_user", "independent"}:
+                    raise ValueError("invalid tour_scope")
                 if field == "goal" and (not isinstance(value, str) or not 0 < len(value) <= 2000):
                     raise ValueError("invalid goal")
                 if field == "limit" and (type(value) is not int or not 1 <= value <= 20):
@@ -468,6 +564,13 @@ class Dialogue:
                 if field in {"start", "search_anchor", "mode", "activities", "subcategories"}:
                     changed_search |= args[field] != pending.get(field)
                 pending[field] = deepcopy(args[field])
+                if field == "start":
+                    if pending.get("pending_slot") == "start":
+                        pending["pending_slot"] = None
+                    intent["tour_origin_confirmed"] = True
+                    intent.pop("tour_origin_unconfirmed", None)
+                    if intent.get("tour_scope") == "independent" and "tour_scope" not in args:
+                        intent["tour_scope"] = "from_user"
         changed_search_without_radius = changed_search
         radius_before_update = pending.get("search_radius_m") or 1000
         radius_note = None
@@ -511,7 +614,7 @@ class Dialogue:
             changed_search_without_radius |= constraints_changed
         for field in args.get("clear_fields", []):
             if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms",
-                         "web_page_read_requested"}:
+                         "web_page_read_requested", "tour_stops", "tour_scope"}:
                 if field not in args:
                     intent.pop(field, None)
                 changed_search = True
@@ -672,6 +775,34 @@ class Dialogue:
                 args["constraints"] = self._constraints(args.get("constraints"))
         route_tools = {"plan_route", "plan_via_route", "plan_itinerary", "plan_multimodal_route", "plan_tour", "compare_routes"}
         if name in route_tools:
+            if name == "plan_tour":
+                stops = self.intent.get("tour_stops")
+                if not stops and isinstance(args.get("poi_names"), list):
+                    names = args["poi_names"]
+                    if len(names) <= 8 and all(isinstance(p, str) and p.strip() and len(p) <= 160 for p in names):
+                        stops = list(dict.fromkeys(p.strip() for p in names))
+                        if stops:
+                            self.intent["tour_stops"] = stops
+                if stops:
+                    args["poi_names"] = deepcopy(stops)
+            personal_itinerary = (self.intent.get("operation") == "itinerary"
+                                  and self.intent.get("tour_scope") != "independent"
+                                  and name != "compare_routes")
+            if personal_itinerary:
+                accepted_start = self.pending.get("start") or (
+                    {"type": "coord", **self.coord_start} if self.coord_start else None)
+                if not accepted_start:
+                    self.pending["pending_slot"] = "start"
+                    if args.get("start"):
+                        message = "请先用 update_task 保存用户明确给出的出发点；若未给出，询问用户，不要把游览地点当作出发点。"
+                        self.route_tool_failure = {"code": "task_update_required", "message": message}
+                        return {"error": "task_update_required", "message": message}
+                    question = "你们从哪里出发？可以告诉我地点，或在地图上选择起点。"
+                    self.clarify = {"question": question, "options": [], "slot": "start"}
+                    return {"question": question, "slot": "start", "needs_input": True}
+                args["start"] = deepcopy(accepted_start)
+                self.intent["tour_origin_confirmed"] = True
+                self.intent.pop("tour_origin_unconfirmed", None)
             if "start" not in args:
                 args["start"] = self.pending.get("start") or ({"type": "coord", **self.coord_start} if self.coord_start else None)
             if "end" not in args and self.coord_end:
@@ -735,10 +866,19 @@ class Dialogue:
         if isinstance(route, dict):
             if (route.get("route_verification") or {}).get("status") != "pass":
                 return {"error": "route_verification_failed", "message": "路线未通过核验，不可展示，请检查参数与约束。"}
+            if self.intent.get("operation") == "itinerary" and self.intent.get("tour_stops"):
+                missing = _missing_tour_stops(route, self.intent["tour_stops"], tools)
+                if missing:
+                    message = "路线尚未包含这些已保存的游览地点：" + "、".join(missing) + "。请保留原起点并重新规划完整路线。"
+                    self.route_tool_failure = {"code": "itinerary_stops_missing", "message": message}
+                    return {"error": "itinerary_stops_missing", "message": message, "missing_stops": missing}
             self.route, self.route_kind = route, artifact.get("route_kind") or "direct"
+            self.route_is_independent_tour = (self.intent.get("tour_scope") == "independent"
+                                              and not self.pending.get("start") and not self.coord_start)
             self.route_tool_failure = None
             state = route.get("route_state") or {}
-            self.pending["start"] = deepcopy(state.get("start") or args.get("start"))
+            if not self.route_is_independent_tour:
+                self.pending["start"] = deepcopy(state.get("start") or args.get("start"))
             end_id = (args.get("end") or {}).get("poi_id")
             if name in {"plan_route", "plan_via_route"} and end_id in self.known:
                 self.pending["selected_poi_id"] = end_id
@@ -754,6 +894,8 @@ class Dialogue:
             self.weather = deepcopy(result)
         if artifact.get("clarify"):
             self.clarify = artifact["clarify"]
+            if self.intent.get("operation") == "itinerary" and self.clarify.get("slot") == "start":
+                self.pending["pending_slot"] = "start"
         if artifact.get("suggestions"):
             self.suggestions = artifact["suggestions"]
         return result
@@ -846,6 +988,8 @@ class Dialogue:
             message = "结果已保留，可以选择地点或换一批。"
         elif failed and self.route:
             message = "路线已保留，请稍后重试。"
+        if self.route_is_independent_tour and not ("参考" in message and "出发" in message):
+            message = "这是景点间的参考路线，未包含你的出发路段。" + str(message or "")
         self.intent["sources"] = list(self.sources.values())[-12:]
         self.pending["semantic_request"] = self.intent
         kind = "route" if self.route else "route_comparison" if self.comparison else "candidates" if self.candidates else "clarify" if self.clarify else "chat"

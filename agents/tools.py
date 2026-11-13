@@ -3378,17 +3378,19 @@ def _tool_plan_tour(args, ctx):
     max_pois = max(2, min(int(args.get("max_pois", _TOUR_DEFAULT_MAX_POIS) or _TOUR_DEFAULT_MAX_POIS), 8))
     query = context.get("query")
     excluded_names = _infer_excluded_tour_poi_names(query)
-    inferred_names, inferred_missing = _infer_explicit_tour_poi_names(query)
-    requested_names = [str(name).strip() for name in (args.get("poi_names") or []) if str(name).strip()]
-    if inferred_names or inferred_missing:
-        requested_names = inferred_names
-        if inferred_missing:
-            return {
-                "error": "tour_poi_not_found",
-                "message": "找不到这些指定游览地点：" + "、".join(inferred_missing)
-                           + "。我不会改成普通校园景点环线。",
-                "missing_pois": inferred_missing,
-            }, None
+    model_stops = (context.get("_semantic_request") or {}).get("tour_stops") if context.get("_model_dialogue") else None
+    requested_names = [str(name).strip() for name in (model_stops or args.get("poi_names") or []) if str(name).strip()]
+    if not model_stops:
+        inferred_names, inferred_missing = _infer_explicit_tour_poi_names(query)
+        if inferred_names or inferred_missing:
+            requested_names = inferred_names
+            if inferred_missing:
+                return {
+                    "error": "tour_poi_not_found",
+                    "message": "找不到这些指定游览地点：" + "、".join(inferred_missing)
+                               + "。我不会改成普通校园景点环线。",
+                    "missing_pois": inferred_missing,
+                }, None
     requested_names = [
         name for name in requested_names
         if (find_poi_ambiguous(name)[0] or {}).get("name", name) not in excluded_names
