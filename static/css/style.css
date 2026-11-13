@@ -3080,6 +3080,12 @@ body { background: #F4F7F7; }
 .candidate-page-btn { border-color: #C9D9D6; color: #176B5B; font-size: 13px; }
 .candidate-page-btn:not(:disabled):hover { background: #EAF3F1; }
 .candidate-reason { flex: 1 0 100%; margin-top: 2px; color: #52656D; font-size: 12px; line-height: 1.45; }
+.candidate-entry .candidate-card { display: grid; grid-template-columns: 26px minmax(0, 1fr) fit-content(42%); gap: 3px 8px; }
+.candidate-entry .candidate-index { grid-column: 1; grid-row: 1 / span 2; }
+.candidate-entry .candidate-name { grid-column: 2; grid-row: 1; }
+.candidate-entry .candidate-meta { grid-column: 3; grid-row: 1; max-width: 100%; overflow-wrap: anywhere; }
+.candidate-entry .candidate-meta > * { min-width: 0; overflow-wrap: anywhere; }
+.candidate-entry .candidate-reason { grid-column: 2 / -1; grid-row: 2; min-width: 0; margin-top: 0; overflow-wrap: anywhere; }
 .candidate-map-pin { border-color: #fff; background: #176B5B; box-shadow: 0 3px 10px rgba(23,43,50,.28); }
 .candidate-map-pin.is-group { background: #2563EB; }
 .candidate-map-choice { min-height: 44px; border-color: #DDE6E5; color: #172B32; }

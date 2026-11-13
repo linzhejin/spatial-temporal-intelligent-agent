@@ -39,6 +39,9 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
     app_asset = lambda root: re.search(r'src="(/js/app\.js\?[^\"]+)"',
                                        (root / "index.html").read_text(encoding="utf-8")).group(1)
     old_asset, new_asset = app_asset(old_static), app_asset(new_static)
+    style_asset = lambda root: re.search(r'href="(/css/style\.css\?[^\"]+)"',
+                                         (root / "index.html").read_text(encoding="utf-8")).group(1)
+    old_style, new_style = style_asset(old_static), style_asset(new_static)
     assert old_cache != new_cache
     # A deployed checkout updates changed files' mtimes.  Git archives carry
     # commit timestamps, which can be newer than the candidate working files.
@@ -100,13 +103,16 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
             page.reload(wait_until="domcontentloaded")
             page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
 
-            result = page.evaluate("""async ({name, asset}) => {
+            result = page.evaluate("""async ({name, asset, stylesheet}) => {
                 const cache = await caches.open(name);
                 const script = await cache.match(asset);
-                return {keys: await caches.keys(), app: script ? await script.text() : ''};
-            }""", {"name": new_cache, "asset": new_asset})
+                const css = await cache.match(stylesheet);
+                return {keys: await caches.keys(), app: script ? await script.text() : '',
+                        css: css ? await css.text() : ''};
+            }""", {"name": new_cache, "asset": new_asset, "stylesheet": new_style})
             assert result["keys"] == [new_cache]
             assert result["app"].replace("\r\n", "\n") == (new_static / "js/app.js").read_text(encoding="utf-8")
+            assert result["css"].replace("\r\n", "\n") == (new_static / "css/style.css").read_text(encoding="utf-8")
 
             # A rollback must also replace the newly installed shell, not leave
             # a newer cached manager/client bundle paired with the old backend.
@@ -133,13 +139,16 @@ def test_production_service_worker_cache_upgrades_and_rolls_back(tmp_path):
             wait_for_cache(page, old_cache, new_cache)
             page.reload(wait_until="domcontentloaded")
             page.wait_for_function("() => navigator.serviceWorker.controller !== null", timeout=10000)
-            rollback = page.evaluate("""async ({name, asset}) => {
+            rollback = page.evaluate("""async ({name, asset, stylesheet}) => {
                 const cache = await caches.open(name);
                 const script = await cache.match(asset);
-                return {keys: await caches.keys(), app: script ? await script.text() : ''};
-            }""", {"name": old_cache, "asset": old_asset})
+                const css = await cache.match(stylesheet);
+                return {keys: await caches.keys(), app: script ? await script.text() : '',
+                        css: css ? await css.text() : ''};
+            }""", {"name": old_cache, "asset": old_asset, "stylesheet": old_style})
             assert rollback["keys"] == [old_cache]
             assert rollback["app"].replace("\r\n", "\n") == (old_static / "js/app.js").read_text(encoding="utf-8")
+            assert rollback["css"].replace("\r\n", "\n") == (old_static / "css/style.css").read_text(encoding="utf-8")
             context.close()
             browser.close()
     finally:
