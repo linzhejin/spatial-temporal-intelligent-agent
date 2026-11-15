@@ -9,7 +9,10 @@ from pathlib import Path
 
 import networkx as nx
 
-from experiments.complex_multiturn_dev.candidate_checks import inspect_candidate_scope, inspect_candidate_time, provider_anchor, time_distance_limit
+from experiments.complex_multiturn_dev.candidate_checks import (
+    inspect_candidate_scope, inspect_candidate_time, provider_anchor, time_distance_limit,
+)
+from experiments.complex_multiturn_dev.endpoint_anchors import permitted_walk_nodes
 from experiments.independent_source_snapshot import mode_edge_evidence
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -44,13 +47,8 @@ def main():
     anchors = {row["poi_id"]: row for row in snapshot["anchors"]}
     evidence = {mode: mode_edge_evidence(graph, mode, require_boundary=True, boundary_wkt=snapshot["boundary_wkt"])
                 for mode in ("walk", "bike", "drive")}
-    from shapely import wkt
-    from shapely.geometry import Point
     from spatial.coord_transform import gcj02_to_wgs84
-    boundary = wkt.loads(snapshot["boundary_wkt"])
-    edge_nodes = {node for u, v, _ in evidence["walk"]["permitted"] for node in (u, v)}
-    permitted_nodes = {node for node in edge_nodes if boundary.covers(
-        Point(float(graph.nodes[node]["x"]), float(graph.nodes[node]["y"]))) }
+    permitted_nodes = permitted_walk_nodes(graph, evidence, snapshot["boundary_wkt"])
     provider_path = args.run_dir / "provider_evidence.jsonl"
     provider = [json.loads(line) for line in provider_path.read_text(encoding="utf-8").splitlines()] if provider_path.exists() else []
     source = args.run_dir / "restored_observations.jsonl"

@@ -269,41 +269,170 @@ def inspect_time_only_scope(observed, calls, lookup):
     return None if not valid or uncertain else True
 
 
-def inspect_empty_search(rule, observed, result, calls, lookup):
+_EMPTY_MESSAGE = re.compile(
+    r"未找到|没找到|没查到|未查到|暂未查到|未检索到|没检索到|"
+    r"(?:未|没有)返回.{0,16}(?:候选|结果|记录)|暂无.{0,8}(?:候选|结果)|没有.{0,5}(?:查到|找到)|"
+    r"没有[^。；;！？!?\n]{0,12}(?:场地|地点|候选|结果|记录|选项)")
+_EXHAUSTED_MESSAGE = re.compile(
+    r"就这|只有这|都已经?[^。；;！？!?\n]{0,12}(?:看过|展示|给你)|"
+    r"没有(?:别的|其他|新的|更多)|换不(?:出|到)")
+_DEFERRED_RECOMPUTE = re.compile(
+    r"(?:等|到时候|到时|出发前|准备出发|需要时)[^。；;！？!?\n]{0,24}(?:再|重新)"
+    r"[^。；;！？!?\n]{0,16}(?:算|规划|查|看|核|确认)")
+_NUMERIC_CLAIM = re.compile(r"(?<![A-Za-z\d.])(\d+(?:\.\d+)?)\s*(公里|千米|km|KM|米|m)(?![A-Za-z\d])")
+
+
+def _distance_claims(text):
+    claims = []
+    for match in _NUMERIC_CLAIM.finditer(str(text or "")):
+        value = float(match.group(1))
+        claims.append(value * 1000.0 if match.group(2) in {"公里", "千米", "km", "KM"} else value)
+    return claims
+
+
+def _claims_supported(text, allowed):
+    values = [float(item) for item in allowed or [] if isinstance(item, (int, float))]
+    for claim in _distance_claims(text):
+        if not any(abs(claim - value) <= max(5.0, 0.05 * value) for value in values):
+            return False
+    return True
+
+
+def _scope_matches(rule, args):
+    """Reject keyword or subcategory narrowing that does not cover the requested activity."""
     from spatial.poi_taxonomy import ACTIVITY_SUBCATEGORIES
+    categories = set(args.get("subcategories") or ([args["subcategory"]] if args.get("subcategory") else []))
+    full_categories = set(ACTIVITY_SUBCATEGORIES.get(rule.get("activity"), ()))
+    if categories and not (full_categories and full_categories.issubset(categories)):
+        return False
+    keywords = {"basketball": ("篮球",), "badminton": ("羽毛球",), "coffee": ("咖啡",),
+                "meal": ("餐饮", "餐厅", "吃饭", "食堂", "快餐", "用餐")}
+    keyword = str(args.get("keyword") or "")
+    return not keyword or any(word in keyword for word in keywords.get(rule.get("activity"), ()))
+
+
+def _matching_prior_searches(rule, observed, calls, lookup):
+    """Return prior searches whose scope still matches the saved requirements."""
+    expected_center = observed.get("search_anchor") or observed.get("origin")
+    accepted = _ACTIVITY_EVIDENCE.get(rule.get("activity"), set())
+    matched = []
+    for call in calls or []:
+        args, answer = call.get("args") or {}, call.get("result") or {}
+        if call.get("tool") not in {"search_poi_candidates", "find_reachable_places"}:
+            continue
+        center = _id(args.get("search_anchor") or args.get("start"), lookup)
+        if (not expected_center or center != expected_center
+                or args.get("max_distance_m") != observed.get("radius_m")
+                or args.get("mode") != observed.get("mode")
+                or not set(args.get("activities") or []).intersection(accepted)
+                or not _scope_matches(rule, args)
+                or observed.get("avoid_steps") and (args.get("constraints") or {}).get("avoid_steps") is not True
+                or answer.get("error") is not None
+                or answer.get("online_status") not in {None, "ok", "not_requested"}
+                or answer.get("has_more")):
+            continue
+        matched.append(answer)
+    return matched
+
+
+def inspect_empty_search(rule, observed, result, calls, lookup, *, previously_shown=None,
+                         shown_rows=None, prior_calls=None):
     text = str(result.get("assistant_text") or result.get("message") or "")
     if re.search(r"(?:说明|表明|意味着|证明)(?:(?!可能|或许|无法确认|不能确定|不确定).){0,35}"
                  r"(?:路网|地图|数据).{0,15}(?:不足|缺失|不全|不完整|不完善|有误)", text):
         return {"verdict": "fail", "reason": "empty_search_unverified_data_cause"}
-    if result.get("candidates") or not re.search(r"未找到|没找到|没查到|未查到|暂未查到|未检索到|没检索到|"
-            r"(?:未|没有)返回.{0,16}(?:候选|结果|记录)|暂无.{0,8}(?:候选|结果)|没有.{0,5}(?:查到|找到)", text):
+    if result.get("candidates"):
         return {"verdict": "unknown", "reason": "empty_search_message_unverified"}
+    shown = {str(item) for item in previously_shown or set()}
+    allowed = [observed.get("radius_m")] + [row.get("distance_m") for row in shown_rows or []
+                                            if isinstance(row, dict)]
     if rule.get("must_not_repeat"):
-        return {"verdict": "unknown", "reason": "exhaustion_of_unshown_candidates_unverified"}
-    expected_center = observed.get("search_anchor") or observed.get("origin")
-    expected_activity = rule.get("activity")
-    accepted_activities = _ACTIVITY_EVIDENCE.get(expected_activity, set())
-    keywords = {"basketball": ("篮球",), "badminton": ("羽毛球",), "coffee": ("咖啡",),
-                "meal": ("餐饮", "餐厅", "吃饭", "食堂", "快餐", "用餐")}
+        if not _EXHAUSTED_MESSAGE.search(text):
+            return {"verdict": "unknown", "reason": "empty_search_message_unverified"}
+        counts = [answer.get("count") for answer in _matching_prior_searches(rule, observed, prior_calls, lookup)
+                  if type(answer.get("count")) is int and answer["count"] > 0]
+        unique_rows = {str(row.get("poi_id")) for row in shown_rows or [] if isinstance(row, dict) and row.get("poi_id")}
+        if not counts or max(counts) > len(unique_rows) or max(counts) > len(shown):
+            return {"verdict": "unknown", "reason": "exhaustion_of_unshown_candidates_unverified"}
+        if not _claims_supported(text, allowed):
+            return {"verdict": "unknown", "reason": "search_distance_claim_unverified"}
+        return {"verdict": "pass", "reason": "previously_exhausted_search_reused"}
+    if not _EMPTY_MESSAGE.search(text):
+        return {"verdict": "unknown", "reason": "empty_search_message_unverified"}
+    if prior_calls and any(answer.get("count") == 0 for answer in _matching_prior_searches(rule, observed, prior_calls, lookup)):
+        if not _claims_supported(text, allowed):
+            return {"verdict": "unknown", "reason": "search_distance_claim_unverified"}
+        return {"verdict": "pass", "reason": "previously_empty_search_reused"}
     for call in reversed(calls or []):
         args, answer = call.get("args") or {}, call.get("result") or {}
-        center = _id(args.get("search_anchor") or args.get("start"), lookup)
-        activities = set(args.get("activities") or [])
-        categories = set(args.get("subcategories") or ([args["subcategory"]] if args.get("subcategory") else []))
-        full_categories = set(ACTIVITY_SUBCATEGORIES.get(expected_activity, ()))
-        category_coverage = not categories or bool(full_categories and full_categories.issubset(categories))
-        keyword = str(args.get("keyword") or "")
-        keyword_supported = not keyword or any(word in keyword for word in keywords.get(expected_activity, ()))
         if (call.get("tool") in {"search_poi_candidates", "find_reachable_places"}
-                and expected_center and center == expected_center
+                and _id(args.get("search_anchor") or args.get("start"), lookup) == (observed.get("search_anchor") or observed.get("origin"))
                 and args.get("max_distance_m") == observed.get("radius_m")
                 and args.get("mode") == observed.get("mode")
-                and activities.intersection(accepted_activities) and keyword_supported and category_coverage
-                and (not observed.get("avoid_steps") or (args.get("constraints") or {}).get("avoid_steps") is True)
+                and set(args.get("activities") or []).intersection(_ACTIVITY_EVIDENCE.get(rule.get("activity"), set()))
+                and _scope_matches(rule, args)
                 and answer.get("error") is None and answer.get("count") == 0 and not answer.get("has_more")
                 and answer.get("online_status") in {None, "ok", "not_requested"}):
             return {"verdict": "pass", "reason": "matching_empty_tool_search_and_cautious_message"}
     return {"verdict": "unknown", "reason": "empty_search_scope_or_category_unverified"}
+
+
+def inspect_retained_route(previous, observed, result, user_text):
+    """Accept a chat confirmation only when the verified route is demonstrably unchanged."""
+    if not isinstance(previous, dict):
+        return {"verdict": "unknown", "reason": "no_previously_verified_route"}
+    if result.get("candidates") or result.get("recommended_edge_ids"):
+        return {"verdict": "unknown", "reason": "retained_route_confirmation_has_new_delivery"}
+    if result.get("response_kind") not in {None, "chat"}:
+        return {"verdict": "unknown", "reason": "retained_route_confirmation_kind_unverified"}
+    if observed.get("origin") != previous.get("origin") or observed.get("destination") != previous.get("destination"):
+        return {"verdict": "unknown", "reason": "retained_route_endpoints_differ"}
+    stops = observed.get("stops") if isinstance(observed.get("stops"), list) else None
+    if stops is None or list(stops[:-1]) != list(previous.get("via") or []):
+        return {"verdict": "unknown", "reason": "retained_route_stops_differ"}
+    if observed.get("mode") != previous.get("mode"):
+        return {"verdict": "unknown", "reason": "retained_route_mode_differs"}
+    if bool(observed.get("avoid_steps")) != bool(previous.get("avoid_steps")):
+        return {"verdict": "unknown", "reason": "retained_route_constraints_differ"}
+    if "最短" in str(user_text or "") and previous.get("strategy") != "shortest":
+        return {"verdict": "unknown", "reason": "shortest_strategy_unverified"}
+    allowed = [previous.get("length_m"), observed.get("radius_m")]
+    if not _claims_supported(result.get("assistant_text") or result.get("message"), allowed):
+        return {"verdict": "unknown", "reason": "retained_route_distance_claim_unverified"}
+    return {"verdict": "pass", "reason": "retained_previously_verified_route"}
+
+
+def inspect_place_detail_answer(result, calls, lookup):
+    """Accept a chat answer grounded in a catalog lookup for the named place."""
+    if result.get("candidates") or result.get("recommended_edge_ids"):
+        return {"verdict": "unknown", "reason": "catalog_answer_has_other_delivery"}
+    if result.get("response_kind") not in {None, "chat"}:
+        return {"verdict": "unknown", "reason": "catalog_answer_kind_unverified"}
+    text = str(result.get("assistant_text") or result.get("message") or "")
+    for call in reversed(calls or []):
+        if call.get("tool") != "get_place_details":
+            continue
+        answer = call.get("result") or {}
+        name = str((call.get("args") or {}).get("name") or "").strip()
+        if answer.get("found") is True and answer.get("error") is None and name and name in text:
+            return {"verdict": "pass", "reason": "catalog_place_detail_answer"}
+    return {"verdict": "unknown", "reason": "catalog_place_answer_unverified"}
+
+
+def inspect_deferred_recompute(result, expected_stage, event_stage):
+    """Accept an explicit deferral when the turn was asking to recompute later."""
+    if expected_stage is None:
+        return {"verdict": "unknown", "reason": "deferred_recompute_not_expected"}
+    if event_stage != expected_stage:
+        return {"verdict": "unknown", "reason": "event_stage_does_not_match_turn"}
+    if result.get("candidates") or result.get("recommended_edge_ids"):
+        return {"verdict": "unknown", "reason": "deferred_recompute_has_new_delivery"}
+    if result.get("response_kind") not in {None, "chat"}:
+        return {"verdict": "unknown", "reason": "deferred_recompute_kind_unverified"}
+    text = str(result.get("assistant_text") or result.get("message") or "")
+    if not _DEFERRED_RECOMPUTE.search(text) or _NUMERIC_CLAIM.search(text):
+        return {"verdict": "unknown", "reason": "deferred_recompute_unverified"}
+    return {"verdict": "pass", "reason": "deferred_recompute_matches_event_stage"}
 
 
 def inspect_start_clarification(turn, result):

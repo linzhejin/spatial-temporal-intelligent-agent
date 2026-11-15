@@ -15,15 +15,18 @@ from experiments.complex_multiturn_dev.graph_checks import (
     inspect_delivery_route, inspect_expected_route_fields, inspect_radius_transition, inspect_reference_endpoints,
     timeout_evidence,
 )
-from experiments.complex_multiturn_dev.observation import _id
+from experiments.complex_multiturn_dev.endpoint_anchors import permitted_walk_nodes, provider_endpoint_anchor
+from experiments.complex_multiturn_dev.observation import _id, _refs
 from experiments.complex_multiturn_dev.semantic_checks import (
-    inspect_candidate_semantics, inspect_destination_clarification, inspect_empty_search,
-    inspect_expected_no_path, inspect_route_distance_requirement, inspect_stale_center_requirement,
+    inspect_candidate_semantics, inspect_deferred_recompute, inspect_destination_clarification, inspect_empty_search,
+    inspect_expected_no_path, inspect_place_detail_answer, inspect_retained_route,
+    inspect_route_distance_requirement, inspect_stale_center_requirement,
     inspect_provider_type_denial, inspect_sport_clarification, inspect_start_clarification, inspect_time_only_scope,
     inspect_unconfirmed_position, inspect_saved_stop_orders,
 )
 from experiments.independent_source_snapshot import active_closed_edges, mode_edge_evidence
 from experiments.scenario_live_adapter import build_poi_lookup
+from spatial.coord_transform import gcj02_to_wgs84
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,6 +48,7 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
     evidence = {mode: mode_edge_evidence(graph, mode, require_boundary=True,
                                          boundary_wkt=anchors_data["boundary_wkt"])
                 for mode in ("walk", "bike", "drive")}
+    permitted_nodes = permitted_walk_nodes(graph, evidence, anchors_data["boundary_wkt"])
     poi_rows = json.loads(poi_path.read_text(encoding="utf-8"))["pois"]
     lookup = build_poi_lookup(poi_rows)
     local_pois = {row["id"]: row for row in poi_rows if row.get("id")}
@@ -70,6 +74,7 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
     previous_radius = {}
     previously_shown, shown_rows, tool_history, previous_centers = {}, {}, {}, {}
     previous_routes, prior_user_inputs = {}, {}
+    verified_routes = {}
     provider_path = run_dir / "provider_evidence.jsonl"
     provider_records = [json.loads(line) for line in provider_path.read_text(encoding="utf-8").splitlines()] if provider_path.exists() else []
     candidate_scope = {}
@@ -124,6 +129,10 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
             clarification = result.get("clarify") if isinstance(result.get("clarify"), dict) else {}
             if result.get("response_kind") == "clarify" and isinstance(clarification.get("slot"), str):
                 obs["clarification_slot"] = clarification["slot"]
+            if "event_state" not in obs and isinstance(item.get("event_proof"), dict):
+                stage = item["event_proof"].get("stage")
+                if isinstance(stage, str) and stage:
+                    obs["event_state"] = stage
             if not obs.get("destination") and isinstance(result.get("route_state"), dict):
                 destination = _id(result["route_state"].get("end"), lookup)
                 if destination:
@@ -191,8 +200,10 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
                             base["unknowns"].append("candidate_time_unverified:" + str(row.get("candidate")))
             shown = previously_shown.setdefault(item["case"], set())
             prior_candidates = shown_rows.setdefault(item["case"], [])
-            tool_history.setdefault(item["case"], []).extend(item.get("tool_observations") or [])
+            prior_tool_calls = list(tool_history.setdefault(item["case"], []))
+            tool_history[item["case"]].extend(item.get("tool_observations") or [])
             semantic_ok = False
+            semantic_basis = None
             if rule.get("activity"):
                 if candidates and not visible_candidates:
                     base["failures"].append("candidate_cards_not_visible")
@@ -212,13 +223,17 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
                     semantic_ok = (not checked["failures"] and not checked["unknowns"]
                                    and expected_ids == scoped_ids and len(scope_rows) == len(candidates)
                                    and all(row.get("verdict") == "pass" for row in scope_rows))
+                    semantic_basis = "candidate_scope_and_semantics_verified" if semantic_ok else None
                 else:
                     checked = inspect_candidate_semantics(rule, [], obs.get("activities"), local_pois, [], shown,
                                                           requirements=requirements)
                     base["failures"].extend(checked["failures"])
                     base["unknowns"].extend(checked["unknowns"])
-                    empty = inspect_empty_search(rule, obs, result, tool_history[item["case"]], lookup)
+                    empty = inspect_empty_search(rule, obs, result, tool_history[item["case"]], lookup,
+                                                 previously_shown=shown, shown_rows=prior_candidates,
+                                                 prior_calls=prior_tool_calls)
                     semantic_ok = empty["verdict"] == "pass" and not checked["failures"] and not checked["unknowns"]
+                    semantic_basis = empty["reason"] if semantic_ok else None
                     if empty["verdict"] == "fail":
                         base["failures"].append(empty["reason"])
                     elif empty["verdict"] != "pass":
@@ -254,6 +269,7 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
                 elif checked["verdict"] == "unknown":
                     base["unknowns"].append(checked["reason"])
             route = None
+            delivery_basis, provider_anchored = None, []
             if is_route:
                 delivered = inspect_expected_route_fields(turn, result, lookup)
                 base["failures"].extend(delivered["failures"])
@@ -267,12 +283,44 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
                     base["unknowns"].extend(checked["unknowns"])
                 expected_steps = next((check["value"] for check in turn["checks"]
                                        if check["field"] == "avoid_steps" and check["op"] == "eq"), None)
-                route = inspect_delivery_route(graph, anchors, evidence, lookup, result, closed,
+                route_state = result.get("route_state") if isinstance(result.get("route_state"), dict) else {}
+                edges = result.get("recommended_edge_ids")
+                start_node = (edges[0][0] if isinstance(edges, list) and edges and isinstance(edges[0], list)
+                              and len(edges[0]) == 3 else None)
+                end_node = (edges[-1][1] if isinstance(edges, list) and edges and isinstance(edges[-1], list)
+                            and len(edges[-1]) == 3 else None)
+                start_id = _id(route_state.get("start"), lookup)
+                end_id = _id(route_state.get("end"), lookup)
+                anchors_turn = dict(anchors)
+                for ident in [start_id, end_id] + [_id(ref, lookup) for ref in _refs(route_state.get("via"))]:
+                    if not ident or ident in anchors_turn or not str(ident).startswith("amap:"):
+                        continue
+                    candidate = next((row for row in prior_candidates
+                                      if isinstance(row, dict) and row.get("poi_id") == ident), None)
+                    found, basis = provider_endpoint_anchor(
+                        graph, permitted_nodes, candidate, prior_raw, to_wgs84=gcj02_to_wgs84,
+                        product_node=start_node if ident == start_id else end_node if ident == end_id else None,
+                    ) if candidate else (None, None)
+                    if found:
+                        anchors_turn[ident] = found
+                        provider_anchored.append({"poi_id": ident, "basis": basis,
+                                                  "snap_distance_m": found.get("snap_distance_m")})
+                route = inspect_delivery_route(graph, anchors_turn, evidence, lookup, result, closed,
                                                avoid_steps=expected_steps)
                 if route["verdict"] == "fail":
                     base["failures"].extend("route:" + issue for issue in route["issues"])
                 elif route["verdict"] == "unknown":
                     base["unknowns"].extend("route:" + issue for issue in route["unknowns"])
+                if route["verdict"] == "pass" and not base["failures"]:
+                    verified_routes[item["case"]] = {
+                        "origin": _id(route_state.get("start"), lookup),
+                        "destination": _id(route_state.get("end"), lookup),
+                        "via": [_id(ref, lookup) for ref in _refs(route_state.get("via"))],
+                        "mode": route_state.get("travel_mode") or result.get("mode"),
+                        "avoid_steps": bool((route_state.get("hard_constraints") or {}).get("avoid_steps")),
+                        "strategy": (route_state.get("strategy") or {}).get("name"),
+                        "length_m": route.get("length_m"),
+                    }
                 if event:
                     expected_end = event["end_poi_id"]
                     if item["case"] == "events_04" and item["turn"] == 3:
@@ -291,16 +339,32 @@ def audit(run_dir: Path, dataset: Path, output_name: str = "independent_route_au
                     if checked["verdict"] != "pass":
                         base["unknowns"].append(checked["reason"])
                 elif semantic_ok:
-                    pass
+                    delivery_basis = semantic_basis
                 else:
-                    base["unknowns"].append("non_route_delivery_requires_semantic_review")
+                    expected_stage = next((check["value"] for check in turn["checks"]
+                                           if check["field"] == "event_state" and check["op"] == "eq"), None)
+                    proof = item.get("event_proof") if isinstance(item.get("event_proof"), dict) else {}
+                    checks = [
+                        inspect_deferred_recompute(result, expected_stage, proof.get("stage")),
+                        inspect_place_detail_answer(result, item.get("tool_observations"), lookup),
+                        inspect_retained_route(verified_routes.get(item["case"]), obs, result, user_text),
+                    ]
+                    chosen = next((checked for checked in checks if checked["verdict"] == "pass"), None)
+                    if chosen:
+                        delivery_basis = chosen["reason"]
+                    else:
+                        base["unknowns"].append("non_route_delivery_requires_semantic_review")
             verdict = "fail" if base["failures"] else "unknown" if base["unknowns"] else "pass"
             summary[verdict] += 1
-            dest.write(json.dumps({"case": item["case"], "turn": item["turn"], "verdict": verdict,
-                                   "failures": base["failures"], "unknowns": base["unknowns"],
-                                   "route_check": route,
-                                   "boundary": "frozen graph only; site access and provider freshness unverified"},
-                                  ensure_ascii=False, default=str) + "\n")
+            row = {"case": item["case"], "turn": item["turn"], "verdict": verdict,
+                   "failures": base["failures"], "unknowns": base["unknowns"],
+                   "route_check": route,
+                   "boundary": "frozen graph only; site access and provider freshness unverified"}
+            if delivery_basis:
+                row["delivery_basis"] = delivery_basis
+            if provider_anchored:
+                row["provider_anchored_endpoints"] = provider_anchored
+            dest.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
     return {"output": str(output), "turn_counts": dict(summary), "scope": "development_graph_only"}
 
 

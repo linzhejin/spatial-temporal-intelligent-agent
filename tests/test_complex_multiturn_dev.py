@@ -822,6 +822,103 @@ def test_empty_search_requires_matching_scope_category_and_honest_message():
     assert inspect_empty_search({"activity": "badminton"}, obs, result, [call], lookup)["verdict"] == "unknown"
 
 
+def test_empty_search_reuse_requires_matching_prior_scope_and_supported_claims():
+    from experiments.complex_multiturn_dev.semantic_checks import inspect_empty_search
+    lookup = {"names": {}, "ids": {"poi_001"}}
+    obs = {"origin": "poi_001", "mode": "walk", "radius_m": 100, "activities": ["badminton"]}
+    prior = {"tool": "search_poi_candidates",
+             "args": {"start": {"poi_id": "poi_001"}, "mode": "walk", "max_distance_m": 100,
+                      "activities": ["badminton"]},
+             "result": {"count": 0, "has_more": False, "online_status": "ok", "error": None}}
+    result = {"response_kind": "chat", "assistant_text": "100米范围内没有羽毛球场地。", "candidates": []}
+    rule = {"activity": "badminton"}
+    assert inspect_empty_search(rule, obs, result, [], lookup, prior_calls=[prior])["verdict"] == "pass"
+    assert inspect_empty_search(rule, dict(obs, radius_m=500), result, [], lookup,
+                                prior_calls=[prior])["verdict"] == "unknown"
+    result["assistant_text"] = "100米范围内没有羽毛球场，最近的约680米。"
+    assert inspect_empty_search(rule, obs, result, [], lookup, prior_calls=[prior])["verdict"] == "unknown"
+
+
+def test_exhausted_search_reuse_requires_all_results_already_shown():
+    from experiments.complex_multiturn_dev.semantic_checks import inspect_empty_search
+    lookup = {"names": {}, "ids": {"poi_001"}}
+    obs = {"origin": "poi_001", "mode": "walk", "radius_m": 2000, "activities": ["basketball"]}
+    prior = {"tool": "find_reachable_places",
+             "args": {"start": {"poi_id": "poi_001"}, "mode": "walk", "max_distance_m": 2000,
+                      "activities": ["basketball"]},
+             "result": {"count": 2, "has_more": False, "online_status": "ok", "error": None}}
+    rows = [{"poi_id": "poi_a"}, {"poi_id": "poi_b"}]
+    result = {"response_kind": "chat", "assistant_text": "两公里内的篮球场就这两处，都已经给你看过了。",
+              "candidates": []}
+    rule = {"activity": "basketball", "must_not_repeat": True}
+    assert inspect_empty_search(rule, obs, result, [], lookup, previously_shown={"poi_a", "poi_b"},
+                                shown_rows=rows, prior_calls=[prior])["verdict"] == "pass"
+    assert inspect_empty_search(rule, obs, result, [], lookup, previously_shown={"poi_a"},
+                                shown_rows=rows[:1], prior_calls=[prior])["verdict"] == "unknown"
+    result["assistant_text"] = "两公里内没有篮球场。"
+    assert inspect_empty_search(rule, obs, result, [], lookup, previously_shown={"poi_a", "poi_b"},
+                                shown_rows=rows, prior_calls=[prior])["verdict"] == "unknown"
+
+
+def test_retained_route_confirmation_requires_the_same_verified_route():
+    from experiments.complex_multiturn_dev.semantic_checks import inspect_retained_route
+    previous = {"origin": "poi_140", "destination": "poi_307", "via": ["poi_424", "poi_262"],
+                "mode": "walk", "avoid_steps": True, "strategy": "shortest", "length_m": 1401.078}
+    obs = {"origin": "poi_140", "destination": "poi_307", "stops": ["poi_424", "poi_262", "poi_307"],
+           "mode": "walk", "avoid_steps": True, "radius_m": 1000}
+    result = {"response_kind": "chat", "assistant_text": "就按这个顺序走，全程约1.4公里。", "candidates": []}
+    assert inspect_retained_route(previous, obs, result, "就按这个顺序走。")["verdict"] == "pass"
+    swapped = dict(obs, stops=["poi_262", "poi_424", "poi_307"])
+    assert inspect_retained_route(previous, swapped, result, "就按这个顺序走。")["verdict"] == "unknown"
+    assert inspect_retained_route(dict(previous, strategy="scenic"), obs, result,
+                                  "按最短距离。")["verdict"] == "unknown"
+    result["assistant_text"] = "就按这个顺序走，全程约3.8公里。"
+    assert inspect_retained_route(previous, obs, result, "就按这个顺序走。")["verdict"] == "unknown"
+
+
+def test_catalog_place_answer_requires_a_found_lookup_for_the_named_place():
+    from experiments.complex_multiturn_dev.semantic_checks import inspect_place_detail_answer
+    lookup = {"names": {"珞珈门": "poi_140"}, "ids": {"poi_140"}}
+    call = {"tool": "get_place_details", "args": {"name": "珞珈门"},
+            "result": {"found": True, "error": None}}
+    result = {"response_kind": "chat", "assistant_text": "珞珈门就是武大正门。", "candidates": []}
+    assert inspect_place_detail_answer(result, [call], lookup)["verdict"] == "pass"
+    result["assistant_text"] = "在文理学部八一路上。"
+    assert inspect_place_detail_answer(result, [call], lookup)["verdict"] == "unknown"
+    call["result"]["found"] = False
+    result["assistant_text"] = "珞珈门就是武大正门。"
+    assert inspect_place_detail_answer(result, [call], lookup)["verdict"] == "unknown"
+
+
+def test_deferred_recompute_needs_the_matching_stage_and_no_claimed_numbers():
+    from experiments.complex_multiturn_dev.semantic_checks import inspect_deferred_recompute
+    result = {"response_kind": "chat",
+              "assistant_text": "好，等你准备出发时说一声，我再按那时的实时路况重新算一遍。",
+              "candidates": []}
+    assert inspect_deferred_recompute(result, "expired", "expired")["verdict"] == "pass"
+    assert inspect_deferred_recompute(result, "expired", "active")["verdict"] == "unknown"
+    result["assistant_text"] = "好，约1.2公里，等你出发时再算。"
+    assert inspect_deferred_recompute(result, "expired", "expired")["verdict"] == "unknown"
+    assert inspect_deferred_recompute(result, None, "expired")["verdict"] == "unknown"
+
+
+def test_provider_endpoint_anchor_accepts_only_within_the_declared_budget():
+    import networkx as nx
+    from experiments.complex_multiturn_dev.endpoint_anchors import provider_endpoint_anchor
+    graph = nx.MultiDiGraph()
+    graph.add_node(1, x=114.36, y=30.53)
+    graph.add_node(2, x=114.3604, y=30.53)
+    graph.add_node(3, x=114.362, y=30.53)
+    candidate = {"poi_id": "amap:A123", "name": "某咖啡", "lng": 114.36, "lat": 30.53}
+    source = {"id": "A123", "name": "某咖啡", "location": "114.36,30.53"}
+    anchor, basis = provider_endpoint_anchor(graph, {1, 2, 3}, candidate, [source],
+                                             to_wgs84=lambda x, y: (x, y), product_node=2)
+    assert anchor["node_id"] == 2 and basis.startswith("provider_center_within")
+    anchor, basis = provider_endpoint_anchor(graph, {1, 2, 3}, candidate, [source],
+                                             to_wgs84=lambda x, y: (x, y), product_node=3)
+    assert anchor["node_id"] == 1 and basis == "provider_center_snap_mismatch"
+
+
 def test_dataset_rejects_duplicate_ids_or_exposed_formal_claim():
     data = read_dataset(DATASET)
     broken = deepcopy(data)
