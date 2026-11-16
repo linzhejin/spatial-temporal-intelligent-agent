@@ -5,7 +5,7 @@ const vm = require('node:vm');
 
 function loadSuggestedBasisLabel() {
   const source = fs.readFileSync(require.resolve('../../static/js/manager.js'), 'utf8');
-  const marker = 'function appendSuggestedEdges(card, job, edges) {';
+  const marker = 'function appendSuggestedEdges(card, job, payload) {';
   const end = source.indexOf(marker);
   assert.ok(end > 0, 'manager.js suggested-edges boundary exists');
   const context = vm.createContext({

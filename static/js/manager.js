@@ -22,6 +22,8 @@
   state.roadRebindReason = '';
   state.roadRebindBusy = false;
   state.suggestedEdgesCache = Object.create(null);
+  state.footprintLayer = null;
+  state.footprintJobId = null;
   state.visionActionBusy = new Set();
   var byId = function (id) { return document.getElementById(id); };
   var message = function (id, text, good) {
@@ -579,6 +581,8 @@
       message('vision-message', '公开影像积水识别仅支持图片，请选择一张图片。');
     } else if (isVideoFile(file) && fileMatchesPending(file, readPendingVisionUpload())) {
       message('vision-message', '发现这段视频的未完成上传；提交后会从已上传位置继续。', true);
+    } else if (state.djiCameraPose) {
+      message('vision-message', '已读取 SRT 姿态，提交后可直接定位覆盖范围；位置不准时可再点“修正定位”。', true);
     } else {
       message('vision-message', isVisionTrafficTrial()
         ? '可自动识别画面中的行人和车辆，无需圈选。试用结果不会进入真实路况。'
@@ -1265,10 +1269,14 @@
     var center = cfg.mapCenter || [114.363, 30.5365];
     state.map = L.map('manager-map', { zoomControl: true, preferCanvas: true })
       .setView([center[1], center[0]], cfg.mapZoom || 15);
-    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+    state.baseLayer = L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
       subdomains: ['1', '2', '3', '4'], maxZoom: 18,
       attribution: '© <a href="https://ditu.amap.com/" target="_blank" rel="noopener">高德地图</a>',
     }).addTo(state.map);
+    state.satelliteLayer = L.tileLayer('https://webst0{s}.is.autonavi.com/appmaptile?style=6&x={x}&y={y}&z={z}', {
+      subdomains: ['1', '2', '3', '4'], maxZoom: 18,
+      attribution: '© <a href="https://ditu.amap.com/" target="_blank" rel="noopener">高德卫星</a>',
+    });
     state.eventLayers = L.layerGroup().addTo(state.map);
     state.visionLayers = L.layerGroup().addTo(state.map);
     state.map.on('click', handleMapClick);
@@ -2865,6 +2873,14 @@
         meta.textContent += ' · 时间来自 ' + captureSource
           + (job.capture_timezone ? ' · 时区 ' + job.capture_timezone : '');
       }
+      var pose = job.camera_pose;
+      if (pose && Array.isArray(pose.trajectory) && pose.trajectory.length) {
+        var poseSource = pose.source === 'srt' ? 'DJI SRT'
+          : String(pose.source || '').indexOf('image') === 0 ? '照片定位信息' : '影像姿态';
+        meta.textContent += ' · ' + poseSource + (pose.pose_quality === 'no_yaw' ? '（无航向）' : '');
+      } else if (!job.anchor_gcj) {
+        meta.textContent += ' · 无姿态/位置';
+      }
     }
     title.appendChild(meta);
     var stateLabel = document.createElement('span'); stateLabel.className = 'vision-job-state ' + job.status;
@@ -3204,11 +3220,47 @@
     return '邻近路段参考';
   }
 
-  function appendSuggestedEdges(card, job, edges) {
-    var list = Array.isArray(edges) ? edges : [];
+  function clearFootprint() {
+    if (state.footprintLayer && state.map) state.map.removeLayer(state.footprintLayer);
+    state.footprintLayer = null;
+    state.footprintJobId = null;
+  }
+
+  function drawFootprint(job, payload) {
+    var points = payload && payload.footprint;
+    if (!state.map || !Array.isArray(points) || points.length < 4) return;
+    var toggle = byId('vision-show-footprint');
+    if (toggle && !toggle.checked) { clearFootprint(); return; }
+    if (state.footprintJobId === job.job_id && state.footprintLayer) return;
+    var latlngs = points.map(function (point) {
+      var lng = Number(point && point[0]);
+      var lat = Number(point && point[1]);
+      return [lat, lng];
+    }).filter(function (pair) {
+      return Number.isFinite(pair[0]) && Number.isFinite(pair[1]);
+    });
+    if (latlngs.length < 4) return;
+    clearFootprint();
+    state.footprintLayer = L.polygon(latlngs, {
+      color: '#2b7bba', weight: 2, dashArray: '7 6', opacity: .9,
+      fillColor: '#2b7bba', fillOpacity: .08,
+    }).addTo(state.map);
+    state.footprintLayer.bindTooltip('影像覆盖范围');
+    state.footprintJobId = job.job_id;
+    var bounds = state.footprintLayer.getBounds && state.footprintLayer.getBounds();
+    if (bounds && typeof bounds.isValid === 'function' && bounds.isValid()) {
+      state.map.fitBounds(bounds, { padding: [30, 30], maxZoom: 18 });
+    }
+  }
+
+  function appendSuggestedEdges(card, job, payload) {
+    var list = Array.isArray(payload) ? payload : (payload && payload.suggested_edges);
+    list = Array.isArray(list) ? list : [];
     if (!list.length) {
       var empty = document.createElement('p'); empty.className = 'vision-job-meta';
-      empty.textContent = '附近没有可参考的道路，请在地图上选路。';
+      empty.textContent = payload && payload.basis === 'radius_only'
+        ? '没有姿态定位结果，附近也没有可参考的道路，请在地图上选路。'
+        : '附近没有可参考的道路，请在地图上选路。';
       card.appendChild(empty);
       return;
     }
@@ -3217,7 +3269,19 @@
     var heading = document.createElement('strong');
     heading.textContent = '疑似受影响路段';
     section.appendChild(heading);
-    list.forEach(function (edge) {
+    if (!Array.isArray(payload) && payload && payload.calibration_status) {
+      var metaLine = document.createElement('p');
+      metaLine.className = 'vision-job-meta suggested-calibration';
+      if (payload.calibration_status === 'calibrated') {
+        var residual = Number(payload.calibration_residual_m);
+        metaLine.textContent = '相机已标定' + (Number.isFinite(residual) ? '（残差约 ' + residual.toFixed(1) + ' 米）' : '')
+          + '；路段按影像覆盖范围排序，仍需现场确认。';
+      } else {
+        metaLine.textContent = '相机未标定，以下仅是姿态参考；请在地图上核对覆盖范围后再选路。';
+      }
+      section.appendChild(metaLine);
+    }
+    list.forEach(function (edge, index) {
       if (!edge || !Number.isFinite(Number(edge.snap_lng_gcj)) || !Number.isFinite(Number(edge.snap_lat_gcj))) return;
       var item = document.createElement('div');
       item.className = 'candidate-card';
@@ -3225,6 +3289,12 @@
       summary.textContent = (edge.road_name || '未命名道路') + ' · 吸附偏移约 ' +
         Math.round(Number(edge.dist_m) || 0) + ' 米' +
         (edge.chain_length_m ? ' · ' + Math.round(Number(edge.chain_length_m)) + ' 米路段' : '');
+      if (!Array.isArray(payload) && payload && payload.calibration_status === 'calibrated' && index === 0) {
+        var badge = document.createElement('span');
+        badge.className = 'suggested-recommended';
+        badge.textContent = '推荐';
+        summary.appendChild(badge);
+      }
       var basisLine = document.createElement('p');
       basisLine.className = 'suggested-basis';
       basisLine.textContent = suggestedBasisLabel(edge.basis);
@@ -3242,12 +3312,26 @@
     if (section.children.length > 1) card.appendChild(section);
   }
 
+  function maybeAutoPickRecommended(job, payload) {
+    if (!payload || payload.calibration_status !== 'calibrated') return;
+    if (state.sourceJobId !== job.job_id || state.sourceMode !== 'candidate') return;
+    if (!isConfirmedVisionCandidate(job, state.sourceCandidateIndex)) return;
+    if (state.picked) return;
+    var edge = (payload.suggested_edges || [])[0];
+    if (!edge) return;
+    var feedback = document.createElement('p');
+    feedback.className = 'vision-job-meta';
+    pickSuggestedEdge(job, edge, feedback);
+  }
+
   function loadSuggestedEdges(card, job, cacheKey) {
     var host = document.createElement('div');
     card.appendChild(host);
-    function show(edges) {
+    function show(payload) {
       host.replaceChildren();
-      appendSuggestedEdges(host, job, edges);
+      drawFootprint(job, payload);
+      appendSuggestedEdges(host, job, payload);
+      maybeAutoPickRecommended(job, payload);
     }
     function load() {
       host.replaceChildren();
@@ -3256,9 +3340,9 @@
       host.appendChild(feedback);
       request('/api/manager/vision-jobs/' + encodeURIComponent(job.job_id) + '/suggested-edges', 'GET')
         .then(function (data) {
-          var edges = (data && data.suggested_edges) || [];
-          state.suggestedEdgesCache[cacheKey] = edges;
-          show(edges);
+          var payload = data && typeof data === 'object' ? data : { suggested_edges: [] };
+          state.suggestedEdgesCache[cacheKey] = payload;
+          show(payload);
         })
         .catch(function () {
           feedback.textContent = '附近道路暂时不可用。';
@@ -3268,7 +3352,7 @@
           host.appendChild(retry);
         });
     }
-    if (Array.isArray(state.suggestedEdgesCache[cacheKey])) show(state.suggestedEdgesCache[cacheKey]);
+    if (state.suggestedEdgesCache[cacheKey]) show(state.suggestedEdgesCache[cacheKey]);
     else load();
   }
 
@@ -3355,6 +3439,7 @@
       Object.keys(state.suggestedEdgesCache).forEach(function (key) {
         if (!activePreviewJobIds.has(String(key).split(':')[0])) delete state.suggestedEdgesCache[key];
       });
+      if (state.footprintJobId && !activePreviewJobIds.has(String(state.footprintJobId))) clearFootprint();
       var jobScrollTop = root.scrollTop;
       root.replaceChildren();
       if (!jobs.length) {
@@ -3562,6 +3647,14 @@
   byId('vision-purpose').addEventListener('change', function () {
     updateVisionPurpose();
     byId('observation-editor').open = !automaticFloodAvailable(byId('media-file').files[0]);
+  });
+  byId('vision-show-footprint').addEventListener('change', function () {
+    if (!this.checked) clearFootprint();
+  });
+  byId('manager-satellite').addEventListener('change', function () {
+    if (!state.map || !state.satelliteLayer) return;
+    if (this.checked) state.satelliteLayer.addTo(state.map);
+    else state.map.removeLayer(state.satelliteLayer);
   });
   byId('pick-anchor').addEventListener('click', function () { setPicking(true, 'vision'); });
   byId('start-region').addEventListener('click', function () {

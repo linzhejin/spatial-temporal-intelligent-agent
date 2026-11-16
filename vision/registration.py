@@ -1,8 +1,11 @@
-"""Pixel-to-ground registration primitives for isolated validation.
+"""Pixel-to-ground registration primitives.
 
-Production road suggestions currently use proximity only. The pose-based
-transform requires explicit ground-relative altitude, orientation and calibrated
-intrinsics; it does not establish real-world registration accuracy by itself.
+Production road suggestions use the pose-footprint path once camera intrinsics
+are calibrated; without calibration or pose they fall back to proximity. The
+pose-based transform requires explicit ground-relative altitude, orientation and
+calibrated intrinsics; it does not establish real-world registration accuracy
+by itself. The mask-projection path remains gated by an injected registration
+object and is not enabled by default.
 """
 
 from __future__ import annotations

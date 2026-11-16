@@ -4,6 +4,14 @@
 
 **当前状态：产品网页和 App 壳已上线；积水图片辅助识别已开启并要求人工复核；事故模型保持关闭；论文实验暂停。** 当前任务是交接，不要把交接本身当成启动新实验、清理工作区或再次部署的指令。
 
+## 0. 影像方向重置（2026-11-16）
+
+产品方向回到“影像自动对应路段”：视频用 SRT、照片用 EXIF/XMP 读取位置与姿态，配合相机内参算出地面覆盖范围，再由覆盖范围与路网相交给出候选路段；人工只确认道路是否真受影响，不再承担把影像放到地图上的定位工作。实施计划见 `.trae/documents/影像自动对应路段恢复与方向纠偏.md`，产品分支为 `codex/vision-auto-localization-20261116`。
+
+论文验收、Songdo/CRASAR 复核、检查点与标注线已冻结在 `codex/vision-road-registration-20261113`（标签 `research/vision-acceptance-20261116`），不合并进 `main`。跑偏方向的文档与实验产物已移到 `research/local/vision_acceptance_20261116/`，不再出现在 Git 状态和产品文档索引里。
+
+当前阻塞：相机内参与离地高度现场标定。未标定前只显示“姿态参考”，不自动预选路段；标定门槛与回退开关见计划文件。不要因为本次方向调整就宣称自动定位已验收，也不要修改路线权重或发布闸门。
+
 ## 1. 从哪里接手
 
 - 当前主线：`C:\Users\HUAWEI\Desktop\campus-spatial-intelligence-agent`，分支 `main`。交接时本机 HEAD、GitHub `main`、Gitee `main` 和生产 HEAD 均为 `6b0ee95`。
@@ -12,7 +20,7 @@
 - Android App 为 `1.4.2`、versionCode `7`；本轮网页和积水功能不需要重新安装 APK。用户此前对对话体验给过正面反馈，但本次影像功能和最新网页在 App 真机上的逐项验收仍待用户反馈；手机尺寸浏览器不等于真机。
 - 本地资料入口：`C:\Users\HUAWEI\Desktop\homework\珞珈智行`；其中 `04_代码\本地仓库` 是指向桌面仓库的 Junction，`当前交接` 入口指向本文件。[项目目录说明](docs/项目目录说明.md)与 `04_代码\工作区索引.txt` 已于 2026-11-10 按收拢后的 8 个工作区重写，可直接作为当前入口；更早的索引版本是历史快照。
 
-交接前的桌面仓库已有用户工作：`docs/README.md` 修改、`.screenshots/`、未跟踪的 [60 号记录](docs/development/60_公开事故与积水影像模型验证_20261109.md) 和 [63 号记录](docs/development/63_事故与积水模型对照验收_20261109.md)。本文件本次也有交接编辑。它们均需保留，不要顺手暂存、覆盖或清理；60／63 号目前只是本机文件，不能假定远端也有。
+交接前的桌面仓库已有用户工作：`docs/README.md` 修改、`.screenshots/`、未跟踪的 60 号和 63 号记录。60／63 号与 `.screenshots/` 已按 2026-11-16 的方向重置移到 `research/local/vision_acceptance_20261116/`，不再属于产品文档索引；需要历史证据时从该目录读取，不要搬回 `docs/development/`。
 
 ## 2. 产品和对话框架
 
@@ -34,13 +42,13 @@
 - 使用 Doodleverse FloodNet Res-UNet v7，FP32 ONNX SHA-256 `1ef47ccd3aef9cafee359485cfb38c65edcd6625e1552d02e23afacd98f7eb52`，概率阈值 `0.001`、圈选路面疑似积水比例阈值 `0.08`。生产模式为 `assisted_review`，`field_validated=false`；事故识别关闭，视频积水不在首版。
 - 用户已明确接受**人工辅助模式不以校园现场精度报告为开启前置条件**。这不代表现场模型精度达标：模型可误报、漏报，不推断水深或实际通行能力；发布真实路况前仍需管理员核对现场。
 - 单图完整分析共用 120 秒期限；人车检测和积水分割顺序运行、受监管子进程回收，取消要求 5 秒内终止。视觉 worker 通过数据库全局锁协调负载。试用 worker 完成任务后会正常退出，由 systemd 重新启动，期间可能有数秒等待；不能仅凭重启计数认定崩溃。
-- 影像建议在生产仅为“邻近道路参考”，未标定姿态／掩膜投影不投入生产。候选、复核、拍摄时间、现场依据、具体 `edge_ref`、绑定令牌、方向和路网版本由服务端核验。相关代码见 `vision/worker.py`、`vision/assisted_image*.py`、`vision/specialized.py`、`vision/model_release.py`、`api/routes.py`、`storage/vision_repository.py`、`static/js/manager.js` 和 `spatial/road_conditions.py`。
+- 影像建议当前仍是“邻近道路参考”，未标定姿态／掩膜投影不投入生产；2026-11-16 起按第 0 节恢复自动定位，标定通过前不得把姿态结果写成已定位。候选、复核、拍摄时间、现场依据、具体 `edge_ref`、绑定令牌、方向和路网版本由服务端核验。相关代码见 `vision/worker.py`、`vision/assisted_image*.py`、`vision/specialized.py`、`vision/model_release.py`、`api/routes.py`、`storage/vision_repository.py`、`static/js/manager.js` 和 `spatial/road_conditions.py`。
 
 ### 验收与边界
 
 - 2026-11-10 的实际模型链路在隔离数据库和真实浏览器完成提示、缓行、封闭、发布和撤销；公网以 `purpose=trial` 的公开图片实际生成并确认候选，另一个任务取消到终态为 0.835 秒，未创建虚假校园路况。四种页面宽度与真实 Service Worker 升级／回退当时通过。[64 号记录](docs/development/64_积水图片辅助识别实施与上线状态_20261110.md)包含原始失败、回退和证据，不能改写为全部首次通过。
 - 64 张验证图和 69 张测试图的原模型／ONNX 数值对照通过：最大面积比例差约 0.211 个百分点、汇总掩膜 IoU 0.99837、8% 候选决策一致。这是**转换一致性**，不是识别准确率。
-- 在公开 Ian 测试主样本中，Doodleverse 以 0.001 阈值检出积水 25/30，干燥道路正确 19/30；后者未达原选模 80% 门槛，且不能排除训练场景重叠。用户后来授权人工辅助上线，不应把旧对照结论篡改成通过，也不能把公开样本当校园现场精度。详见本机未跟踪的 [63 号记录](docs/development/63_事故与积水模型对照验收_20261109.md)。
+- 在公开 Ian 测试主样本中，Doodleverse 以 0.001 阈值检出积水 25/30，干燥道路正确 19/30；后者未达原选模 80% 门槛，且不能排除训练场景重叠。用户后来授权人工辅助上线，不应把旧对照结论篡改成通过，也不能把公开样本当校园现场精度。详见 `research/local/vision_acceptance_20261116/63_事故与积水模型对照验收_20261109.md`。
 - Linux 完整 worker 在 640 MiB、75% CPU、无交换下连续处理 10 张混合图片；大图预检峰值 616.09 MiB，余量约 24 MiB。现有服务器已能运行，不需要先申请 GPU，但小规模检查不保证长时间或高并发稳定。
 - 本地证据：`D:\LuoJiaValidation\doodleverse_onnx_parity_low_memory_20261110.json`、`D:\LuoJiaValidation\flood_resource_20261110_f661c60939\resource_acceptance.json`、`D:\LuoJiaValidation\flood_public_browser_final_20261110`。这些证据主要对应 `71b5f32` 的积水发布，不能冒充对后续 `670fc53` 的全量回归；本次交接只重新检查了当前线上能力与服务状态。
 - 已发布模型清单为 `/home/ubuntu/luojia-models/floodnet-v7-f661c60939-r5/release.json`，模型和独立运行时在同目录。当前清单批准有效期至 **2027-02-08 15:38:56（北京时间）**；到期后的新启动／重新加载可能拒绝就绪，需按届时实际证据和授权处理，不要只改日期伪造验收。

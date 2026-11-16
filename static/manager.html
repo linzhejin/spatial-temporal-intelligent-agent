@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261111-auto-flood-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261116-auto-localization-v1">
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261113-public-vision-v1" defer></script>
+  <script src="/js/manager.js?v=20261116-auto-localization-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -52,7 +52,7 @@
 
       <div id="road-workspace" class="workspace-grid">
         <section class="map-card" aria-label="校园道路地图">
-          <div class="map-topline"><span>武汉大学校园</span><span id="pick-state">选择路段后再填写事件</span></div>
+          <div class="map-topline"><span>武汉大学校园</span><label class="map-layer-toggle"><input id="manager-satellite" type="checkbox"> 卫星底图</label><span id="pick-state">选择路段后再填写事件</span></div>
           <div id="manager-map"></div>
           <div class="map-caption"><span class="map-key"></span>选中路段 <span class="caption-separator">·</span> 绿点为点击位置，橙点为吸附位置，虚线表示两点间距</div>
         </section>
@@ -164,7 +164,7 @@
       </div>
 
       <section id="vision-workspace" class="vision-section">
-        <div class="events-heading"><div><span class="eyebrow">AERIAL OBSERVATION</span><h2>机载影像巡查</h2></div><div class="vision-heading-actions"><span class="review-badge">人工复核后才进入路况流程</span></div></div>
+        <div class="events-heading"><div><span class="eyebrow">AERIAL OBSERVATION</span><h2>机载影像巡查</h2></div><div class="vision-heading-actions"><label class="vision-footprint-toggle"><input id="vision-show-footprint" type="checkbox" checked> 显示影像覆盖范围</label><span class="review-badge">人工复核后才进入路况流程</span></div></div>
         <div class="vision-grid">
           <div id="vision-upload-card" class="vision-upload-card">
             <div id="vision-status" class="vision-status">正在读取分析状态…</div>

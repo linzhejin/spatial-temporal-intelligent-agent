@@ -561,6 +561,58 @@ def test_vision_suggested_edges_pose_aware(monkeypatch, tmp_path):
             conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
 
 
+def test_vision_suggested_edges_pose_footprint_without_anchor(monkeypatch, tmp_path):
+    import api.routes as routes
+    database.initialize(DATABASE_URL)
+    anchor = _real_network_anchor()
+    client = _vision_manager_http_client(monkeypatch, tmp_path)
+    monkeypatch.setattr(routes.config, "VISION_AUTO_LOCALIZATION", "nominal")
+    job = vision_repository.create_job(
+        DATABASE_URL,
+        created_by="web",
+        original_name="suggested-edges-pose-only.png",
+        media_kind="image",
+        media_path="unused.png",
+        sha256="f" * 64,
+        anchor_gcj=None,
+        camera_pose={
+            "source": "image_xmp",
+            "trajectory": [{
+                "seconds": 0.0,
+                "lng": anchor["wgs"]["lng"],
+                "lat": anchor["wgs"]["lat"],
+                "rel_alt_m": 80.0,
+                "height_agl_m": 80.0,
+                "gb_yaw_deg": 0.0,
+                "gb_pitch_deg": -90.0,
+                "gb_roll_deg": 0.0,
+                "focal_len_35mm": 24.0,
+            }],
+        },
+    )
+    try:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute(
+                "UPDATE manager_vision_job SET result=%s WHERE job_id=%s",
+                (
+                    Jsonb({"media": {"kind": "image", "width": 1000, "height": 1000},
+                           "candidates": []}),
+                    job["job_id"],
+                ),
+            )
+        response = client.get(f"/api/manager/vision-jobs/{job['job_id']}/suggested-edges")
+        assert response.status_code == 200, response.get_json()
+        data = response.get_json()["data"]
+        assert data["basis"] == "pose_footprint"
+        assert data["anchor_source"] == "pose"
+        assert data["pose_source"] == "image_xmp"
+        assert data["suggested_edges"]
+        assert len(data["footprint"]) >= 4
+    finally:
+        with database.connect(DATABASE_URL) as conn:
+            conn.execute("DELETE FROM manager_vision_job WHERE job_id=%s", (job["job_id"],))
+
+
 def test_vision_suggested_edges_requires_anchor(monkeypatch, tmp_path):
     database.initialize(DATABASE_URL)
     client = _vision_manager_http_client(monkeypatch, tmp_path)
