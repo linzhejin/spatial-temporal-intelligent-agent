@@ -243,6 +243,36 @@ def test_mask_time_matching_selects_seconds_pose():
     assert "正下方" not in names
 
 
+# ---- 影像自带定位：无人工锚点 ----
+
+def test_pose_only_without_anchor_uses_footprint():
+    G = _road_graph()
+    point = _pose_point()
+    point.pop("intrinsics")
+    result = score_suggested_edges(
+        G, None,
+        camera_pose={"trajectory": [point], "source": "image_xmp"},
+        media={"kind": "image", "width": 1000, "height": 1000},
+        camera_profile={"focal_35mm": 24.0, "fx_px": None, "fy_px": None},
+        calibration={"status": "nominal", "residual_m": None, "ground_offset_m": 0.0},
+    )
+    assert result["basis"] == "pose_footprint"
+    assert result["anchor_source"] == "pose"
+    assert result["pose_source"] == "image_xmp"
+    assert result["calibration_status"] == "nominal"
+    assert "footprint" in result
+    assert len(result["footprint"]) == 4
+    assert result["footprint"][0] != result["footprint"][-1]
+    assert all(len(item) == 2 for item in result["footprint"])
+
+
+def test_no_anchor_and_no_pose_raises():
+    G = _road_graph()
+    with pytest.raises(ValueError):
+        score_suggested_edges(G, None, camera_pose=None,
+                               media={"kind": "image", "width": 1000, "height": 1000})
+
+
 def test_mask_time_out_of_range_falls_back_to_radius():
     pytest.importorskip("numpy")
     import vision.registration as registration

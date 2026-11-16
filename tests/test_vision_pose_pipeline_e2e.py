@@ -94,6 +94,7 @@ def test_backend_accepts_what_the_frontend_actually_uploads(frontend_upload_payl
         "lat": 30.535117,
         "rel_alt_m": pytest.approx(82.104),
         "abs_alt_m": pytest.approx(109.538),
+        "height_agl_m": None,
         "yaw_deg": None,
         "gb_yaw_deg": pytest.approx(-92.2),
         "gb_pitch_deg": pytest.approx(-79.3),

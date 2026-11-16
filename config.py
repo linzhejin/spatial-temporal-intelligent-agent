@@ -101,6 +101,11 @@ VISION_MODEL_ID = os.getenv("VISION_MODEL_ID", "visdrone-rtdetrv4-s")
 VISION_MODEL_REVISION = os.getenv(
     "VISION_MODEL_REVISION", "820fca3d962243f7d611dd35cf2a64d267635499",
 )
+# Image-to-ground localization: camera profile, ground offset, and rollout switch.
+VISION_CAMERA_PROFILE_PATH = os.getenv("VISION_CAMERA_PROFILE_PATH", "")
+VISION_GROUND_OFFSET_M = _env_float("VISION_GROUND_OFFSET_M", 0.0)
+VISION_POSE_CALIBRATION_PATH = os.getenv("VISION_POSE_CALIBRATION_PATH", "")
+VISION_AUTO_LOCALIZATION = os.getenv("VISION_AUTO_LOCALIZATION", "off").strip().lower()
 VISION_ACCIDENT_ENABLED = os.getenv("VISION_ACCIDENT_ENABLED", "false").strip().lower() in {
     "1", "true", "yes", "on",
 }

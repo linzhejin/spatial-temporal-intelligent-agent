@@ -73,6 +73,9 @@ from spatial.road_conditions import (
     RoadConditionBindingError, RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
     _directional_corridor_edges,
 )
+from vision.camera_profile import calibration_status as vision_calibration_status
+from vision.camera_profile import resolve_profile as resolve_camera_profile
+from spatial.vision_suggest import score_suggested_edges
 from spatial import weather as weather_mod
 from storage import vision_scene_repository
 
@@ -354,6 +357,7 @@ def _parse_vision_camera_pose(value) -> dict | None:
                 or not -180 <= lng <= 180 or not -90 <= lat <= 90):
             continue
         rel_alt_m, abs_alt_m = point.get("rel_alt_m"), point.get("abs_alt_m")
+        height_agl_m = point.get("height_agl_m")
         yaw_deg = point.get("yaw_deg")
         gb_yaw_deg, gb_pitch_deg = point.get("gb_yaw_deg"), point.get("gb_pitch_deg")
         gb_roll_deg = point.get("gb_roll_deg")
@@ -365,6 +369,8 @@ def _parse_vision_camera_pose(value) -> dict | None:
                                        and -500 <= rel_alt_m <= 9000) else None,
             "abs_alt_m": abs_alt_m if (_camera_pose_finite_number(abs_alt_m)
                                        and -500 <= abs_alt_m <= 9000) else None,
+            "height_agl_m": height_agl_m if (_camera_pose_finite_number(height_agl_m)
+                                             and -500 <= height_agl_m <= 9000) else None,
             "yaw_deg": yaw_deg if (_camera_pose_finite_number(yaw_deg)
                                    and -360 <= yaw_deg <= 360) else None,
             "gb_yaw_deg": gb_yaw_deg if (_camera_pose_finite_number(gb_yaw_deg)
@@ -382,6 +388,49 @@ def _parse_vision_camera_pose(value) -> dict | None:
     result = dict(value)
     result["trajectory"] = cleaned_points
     return result
+
+
+def _vision_pose_calibration() -> dict:
+    path = (getattr(config, "VISION_POSE_CALIBRATION_PATH", "") or "").strip()
+    if not path:
+        return {}
+    candidate = Path(path)
+    if not candidate.is_file():
+        return {}
+    try:
+        data = json.loads(candidate.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        logger.info("姿态标定文件无法读取，按未标定处理", exc_info=True)
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _prepare_vision_camera_pose(value, media_path, media_kind) -> dict | None:
+    """合并客户端 SRT 与照片 EXIF/XMP，并补离地高度。"""
+    from vision import pose_metadata
+
+    client_pose = _parse_vision_camera_pose(value)
+    image_pose = None
+    if media_kind == "image":
+        try:
+            image_pose = pose_metadata.parse_image_pose(media_path)
+        except Exception:
+            logger.info("照片 EXIF/XMP 姿态读取失败", exc_info=True)
+    merged = pose_metadata.merge_camera_pose(client_pose, image_pose)
+    if merged is None:
+        return None
+    calibration = _vision_pose_calibration()
+    ground_elevation = calibration.get("ground_elevation_m")
+    try:
+        ground_elevation = float(ground_elevation) if ground_elevation is not None else None
+    except (TypeError, ValueError):
+        ground_elevation = None
+    prepared = pose_metadata.with_height_agl(
+        merged,
+        ground_offset_m=float(getattr(config, "VISION_GROUND_OFFSET_M", 0.0) or 0.0),
+        ground_elevation_m=ground_elevation,
+    )
+    return _parse_vision_camera_pose(prepared)
 
 
 def _parse_vision_capture_time(value, *, required: bool) -> datetime | None:
@@ -3587,6 +3636,10 @@ def manager_vision_status():
         "max_image_bytes": config.VISION_MAX_MEDIA_BYTES,
         "max_video_bytes": config.VISION_MAX_VIDEO_BYTES,
         "upload_chunk_bytes": config.VISION_CHUNK_BYTES,
+        "auto_localization": {
+            "mode": getattr(config, "VISION_AUTO_LOCALIZATION", "off"),
+            "calibration": vision_calibration_status(),
+        },
         "trial": {
             "enabled": bool((config.VISION_TRIAL_ENABLED and inference_ready and (
                 worker_capabilities.get("trial_accident_supported") is True
@@ -3921,7 +3974,9 @@ def complete_manager_vision_upload(upload_id):
                         "observation_regions", metadata.get("observation_regions") or [],
                     ),
                     observation_scene_id=scene_values.get("scene_id"),
-                    camera_pose=metadata.get("camera_pose"),
+                    camera_pose=_prepare_vision_camera_pose(
+                        metadata.get("camera_pose"), target, "video",
+                    ),
                     purpose=purpose,
                 )
             except Exception:
@@ -4141,6 +4196,10 @@ def manager_vision_jobs():
             capture_timezone=capture_timezone,
             observation_regions=final_regions,
             observation_scene_id=scene_values.get("scene_id"),
+            camera_pose=_prepare_vision_camera_pose(
+                request.form.get("camera_pose"), target,
+                "image" if extension in image_extensions else "video",
+            ),
             purpose=purpose,
         )
         return _ok({"job": _public_vision_job(job)}, status=202)
@@ -4215,26 +4274,52 @@ def manager_vision_suggested_edges(job_id):
         return _err("job_not_found", "影像任务不存在。", 404)
     anchor = job.get("anchor_gcj")
     if not isinstance(anchor, dict) or "lng" not in anchor or "lat" not in anchor:
-        return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
-    try:
-        lng = float(anchor["lng"])
-        lat = float(anchor["lat"])
-    except (TypeError, ValueError):
-        return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+        anchor = None
+    camera_pose = job.get("camera_pose")
+    mode = getattr(config, "VISION_AUTO_LOCALIZATION", "off")
     G, err = _ensure_network()
     if err is not None:
         return err
-    # Camera parameters are not yet calibrated against the campus ground.
-    # Keep production suggestions as proximity references until field validation.
-    logger.info("影像道路建议使用邻近参考：相机投影尚未完成现场标定")
+    if mode not in {"nominal", "calibrated"}:
+        if anchor is None:
+            return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+        try:
+            lng = float(anchor["lng"])
+            lat = float(anchor["lat"])
+        except (TypeError, ValueError):
+            return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+        try:
+            result = {"suggested_edges": [
+                {**item, "score": 0.0, "basis": "radius_only"}
+                for item in nearest_edges(G, lng, lat)
+            ], "basis": "radius_only", "auto_localization": "off",
+                "anchor_source": "manual", "pose_source": None,
+                "calibration_status": "nominal", "calibration_residual_m": None}
+        except Exception:
+            logger.exception("邻近道路建议失败")
+            return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
+        return _ok(result)
+    if anchor is None and not isinstance(camera_pose, dict):
+        return _err("suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400)
+    result_data = job.get("result") if isinstance(job.get("result"), dict) else {}
+    media = result_data.get("media") if isinstance(result_data.get("media"), dict) else None
+    candidates = result_data.get("candidates")
+    profile = resolve_camera_profile()
+    calibration = vision_calibration_status(profile)
     try:
-        result = {"suggested_edges": [
-            {**item, "score": 0.0, "basis": "radius_only"}
-            for item in nearest_edges(G, lng, lat)
-        ], "basis": "radius_only"}
-    except Exception:
-        logger.exception("邻近道路建议失败")
+        result = score_suggested_edges(
+            G, anchor, camera_pose=camera_pose, media=media, candidates=candidates,
+            camera_profile=profile, calibration=calibration,
+        )
+    except ValueError as error:
+        if "anchor or camera pose required" in str(error):
+            return _err("suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400)
+        logger.exception("影像道路建议参数无效")
         return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
+    except Exception:
+        logger.exception("影像道路建议失败")
+        return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
+    result["auto_localization"] = mode
     return _ok(result)
 
 

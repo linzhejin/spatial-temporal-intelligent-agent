@@ -5,16 +5,16 @@
   - L1：姿态拍摄范围 footprint（spatial.vision_footprint）
   - L0：半径圈（spatial.road_conditions.nearest_edges）
 
-此模块仅供隔离验证；生产接口只提供邻近参考。registration 由调用方注入。
-camera_pose 与路网内部为 WGS-84，anchor 与输出展示字段为 GCJ-02。
+生产在相机内参标定通过后使用 footprint；未标定或缺少姿态时降级为邻近参考。
+registration 由调用方注入。camera_pose 与路网内部为 WGS-84，anchor 与输出展示字段为 GCJ-02。
 """
 
 import logging
 import math
 
-from shapely.geometry import Polygon
+from shapely.geometry import LineString, Polygon
 
-from spatial.coord_transform import gcj02_to_wgs84
+from spatial.coord_transform import gcj02_to_wgs84, wgs84_to_gcj02
 from spatial.road_conditions import nearest_edges
 from spatial.vision_footprint import pose_to_footprint, project_footprint_to_edges
 
@@ -97,9 +97,14 @@ def _alt_near_anchor(camera_pose, anchor_lng_wgs: float, anchor_lat_wgs: float) 
 
 
 def _pick_pose(camera_pose, anchor, time_seconds=None, *, require_time=False) -> dict:
-    """从轨迹挑出与 mask 时间 / anchor 距离最近的姿态点；无可用点抛 ValueError。"""
-    anchor_lng_wgs, anchor_lat_wgs = gcj02_to_wgs84(
-        float(anchor["lng"]), float(anchor["lat"]))
+    """从轨迹挑出与 mask 时间 / anchor 距离最近的姿态点；无可用点抛 ValueError。
+
+    anchor 为 None 时只按时间或第一个有效点选取，用于“影像自带定位”路径。
+    """
+    anchor_lng_wgs = anchor_lat_wgs = None
+    if anchor is not None:
+        anchor_lng_wgs, anchor_lat_wgs = gcj02_to_wgs84(
+            float(anchor["lng"]), float(anchor["lat"]))
     trajectory = camera_pose.get("trajectory") if isinstance(camera_pose, dict) else None
     if not isinstance(trajectory, list):
         raise ValueError("camera_pose.trajectory missing or not a list")
@@ -125,7 +130,22 @@ def _pick_pose(camera_pose, anchor, time_seconds=None, *, require_time=False) ->
             raise ValueError("no sufficiently close camera pose")
         return closest
 
+    if anchor_lng_wgs is None:
+        return valid[0]
     return min(valid, key=lambda pt: _dist_sq_m(pt, anchor_lng_wgs, anchor_lat_wgs))
+
+
+def _pose_anchor_gcj(camera_pose, time_seconds=None) -> dict | None:
+    """由姿态点生成 GCJ 锚点；无可用姿态返回 None。"""
+    try:
+        pose = _pick_pose(camera_pose, None, time_seconds=time_seconds)
+    except ValueError:
+        return None
+    try:
+        lng, lat = wgs84_to_gcj02(float(pose["lng"]), float(pose["lat"]))
+    except (TypeError, ValueError, KeyError):
+        return None
+    return {"lng": lng, "lat": lat, "crs": "GCJ02"}
 
 
 def _media_size(media):
@@ -137,6 +157,50 @@ def _media_size(media):
     if _positive_number(w) and _positive_number(h):
         return float(w), float(h)
     return None
+
+
+def _intrinsics_from_profile(profile, width, height):
+    fx = profile.get("fx_px") if isinstance(profile, dict) else None
+    fy = profile.get("fy_px") if isinstance(profile, dict) else None
+    if not (_positive_number(fx) and _positive_number(fy)):
+        focal = profile.get("focal_35mm") if isinstance(profile, dict) else None
+        focal = float(focal) if _positive_number(focal) else 24.0
+        fx = width * focal / 36.0
+        fy = fx
+    return {
+        "fx_px": float(fx),
+        "fy_px": float(fy),
+        "cx_px": width / 2.0,
+        "cy_px": height / 2.0,
+    }
+
+
+def _with_intrinsics(pose, profile, media):
+    if isinstance(pose.get("intrinsics"), dict):
+        return pose
+    if not isinstance(profile, dict):
+        raise ValueError("camera profile required for projection")
+    size = _media_size(media)
+    if size is None:
+        raise ValueError("image dimensions unavailable")
+    width, height = size
+    return {**pose, "intrinsics": _intrinsics_from_profile(profile, width, height)}
+
+
+def _footprint_to_gcj(polygon: Polygon, origin: dict) -> list[list[float]]:
+    """局部米制 footprint → GCJ-02 多边形坐标。"""
+    lng0 = float(origin["lng_wgs"])
+    lat0 = float(origin["lat_wgs"])
+    east_scale = _M_PER_DEG * math.cos(math.radians(lat0))
+    coords = []
+    for x, y in polygon.exterior.coords:
+        lng = lng0 + float(x) / east_scale
+        lat = lat0 + float(y) / _M_PER_DEG
+        gcj_lng, gcj_lat = wgs84_to_gcj02(lng, lat)
+        coords.append([round(gcj_lng, 7), round(gcj_lat, 7)])
+    if len(coords) > 1 and coords[0] == coords[-1]:
+        coords.pop()
+    return coords
 
 
 def _flood_outlines(candidates):
@@ -191,7 +255,7 @@ def _pool_index(pool):
     return {(item["u"], item["v"], item["key"]): item for item in pool}
 
 
-def _relay(score_map, pool_index, basis) -> dict:
+def _relay(score_map, pool_index, basis, *, extra=None) -> dict:
     """命中边按 (u,v,key) 转挂 pool 展示字段，加 score/basis，按 score 降序截断。"""
     items = []
     for key, overlap in score_map.items():
@@ -203,10 +267,13 @@ def _relay(score_map, pool_index, basis) -> dict:
         out["basis"] = basis
         items.append(out)
     items.sort(key=lambda it: it["score"], reverse=True)
-    return {"suggested_edges": items[:_MAX_SUGGESTED], "basis": basis}
+    result = {"suggested_edges": items[:_MAX_SUGGESTED], "basis": basis}
+    if extra:
+        result.update(extra)
+    return result
 
 
-def _radius_only(G, lng_gcj, lat_gcj) -> dict:
+def _radius_only(G, lng_gcj, lat_gcj, *, extra=None) -> dict:
     """L0：半径圈，沿用原有 nearest_edges 的顺序与字段。"""
     items = []
     for item in nearest_edges(G, lng_gcj, lat_gcj):
@@ -214,11 +281,14 @@ def _radius_only(G, lng_gcj, lat_gcj) -> dict:
         out["score"] = 0.0
         out["basis"] = "radius_only"
         items.append(out)
-    return {"suggested_edges": items[:_MAX_SUGGESTED], "basis": "radius_only"}
+    result = {"suggested_edges": items[:_MAX_SUGGESTED], "basis": "radius_only"}
+    if extra:
+        result.update(extra)
+    return result
 
 
 def _try_mask_projection(G, anchor, pool, pool_index, camera_pose, media,
-                         candidates, registration):
+                         candidates, registration, camera_profile):
     """L2：配准掩膜投影。前置条件不满足或任何异常 → None（降级 L1）。"""
     if registration is None:
         return None
@@ -237,6 +307,7 @@ def _try_mask_projection(G, anchor, pool, pool_index, camera_pose, media,
             if polygon is None:
                 continue
             pose = _pick_pose(camera_pose, anchor, time_seconds=outline_time, require_time=True)
+            pose = _with_intrinsics(pose, camera_profile, media)
             transform = registration.pose_to_homography_init(pose, int(width), int(height))
             for hit in registration.project_mask_to_edges(
                     polygon, transform, G, pool,
@@ -255,11 +326,13 @@ def _try_mask_projection(G, anchor, pool, pool_index, camera_pose, media,
     return _relay(merged, pool_index, basis="mask_projection")
 
 
-def _try_footprint(G, anchor, pool, pool_index, camera_pose, media, time_seconds=None):
+def _try_footprint(G, anchor, pool, pool_index, camera_pose, media, camera_profile,
+                   time_seconds=None):
     """L1：姿态拍摄范围 footprint。无轨迹/无高度/异常 → None（降级 L0）。"""
     try:
         pose = _pick_pose(camera_pose, anchor, time_seconds=time_seconds,
                           require_time=time_seconds is not None)
+        pose = _with_intrinsics(pose, camera_profile, media)
         size = _media_size(media)
         if size is None:
             raise ValueError("image dimensions unavailable")
@@ -271,56 +344,89 @@ def _try_footprint(G, anchor, pool, pool_index, camera_pose, media, time_seconds
         score_map = {
             (hit["u"], hit["v"], hit["k"]): float(hit["overlap_ratio"]) for hit in hits
         }
-        return _relay(score_map, pool_index, basis="pose_footprint")
+        return _relay(score_map, pool_index, basis="pose_footprint", extra={
+            "footprint": _footprint_to_gcj(foot["polygon"], foot["origin"]),
+            "footprint_area_m2": round(float(foot["polygon"].area), 1),
+        })
     except Exception as error:
         logger.warning("suggested-edges L1 footprint scoring skipped: %s", error)
         return None
 
 
-def score_suggested_edges(G, anchor: dict, *, camera_pose=None, media=None,
-                          candidates=None, registration=None) -> dict:
+def _context(camera_pose, anchor_source, calibration):
+    pose_source = None
+    if isinstance(camera_pose, dict):
+        pose_source = camera_pose.get("source") or "srt"
+    return {
+        "anchor_source": anchor_source,
+        "pose_source": pose_source,
+        "calibration_status": calibration.get("status", "nominal"),
+        "calibration_residual_m": calibration.get("residual_m"),
+        "calibration_ground_offset_m": calibration.get("ground_offset_m", 0.0),
+    }
+
+
+def score_suggested_edges(G, anchor=None, *, camera_pose=None, media=None,
+                          candidates=None, registration=None, camera_profile=None,
+                          calibration=None) -> dict:
     """给「疑似受影响路段」建议三级降级打分，返回 ≤5 条 + 实际执行的层级。
 
-    编排顺序：L2-mask（配准掩膜投影）→ L1-footprint（姿态拍摄范围）→ L0-radius
-    （半径圈）。任何一级未满足条件或异常都降级到下一级，绝不抛出。
+    anchor 缺省时用姿态点生成临时锚点，不再要求人工标点；两者都没有时抛
+    ValueError，由接口返回明确错误。编排顺序：L2-mask → L1-footprint → L0-radius。
     """
+    calibration = calibration if isinstance(calibration, dict) else {
+        "status": "nominal", "residual_m": None, "ground_offset_m": 0.0,
+    }
+    outlines, outline_time = _flood_outlines(candidates)
+    anchor_source = "manual"
+    if anchor is None:
+        anchor = _pose_anchor_gcj(
+            camera_pose,
+            time_seconds=outline_time if outlines is not None else None,
+        )
+        if anchor is None:
+            raise ValueError("anchor or camera pose required")
+        anchor_source = "pose"
+    context = _context(camera_pose, anchor_source, calibration)
+
     anchor_lng_gcj = float(anchor["lng"])
     anchor_lat_gcj = float(anchor["lat"])
 
-    # Step 1：取池（anchor 半径 R 内边，复用 nearest_edges 的距离/去重语义）
+    # Step 1：取池（锚点半径 R 内边，复用 nearest_edges 的距离/去重语义）
     anchor_lng_wgs, anchor_lat_wgs = gcj02_to_wgs84(anchor_lng_gcj, anchor_lat_gcj)
     alt = _alt_near_anchor(camera_pose, anchor_lng_wgs, anchor_lat_wgs)
     radius_m = min(500.0, max(50.0, 3.0 * alt))
-    pool = nearest_edges(G, anchor_lng_gcj, anchor_lat_gcj, max_dist_m=radius_m, limit=40)
+    pool = nearest_edges(G, anchor_lng_gcj, anchor_lat_gcj, max_dist_m=radius_m, limit=200)
     if not pool:
-        return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+        return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj, extra=context)
     pool_index = _pool_index(pool)
 
-    outlines, outline_time = _flood_outlines(candidates)
     if outlines is not None:
         try:
             _pick_pose(camera_pose, anchor, time_seconds=outline_time, require_time=True)
         except ValueError as error:
             logger.info("suggested-edges frame time unavailable; using proximity: %s", error)
-            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj, extra=context)
     else:
         trajectory = camera_pose.get("trajectory") if isinstance(camera_pose, dict) else None
         valid = [pt for pt in trajectory if _valid_point(pt)] if isinstance(trajectory, list) else []
         if not isinstance(media, dict) or media.get("kind") != "image" or len(valid) != 1:
             logger.info("suggested-edges image time or pose ambiguous; using proximity")
-            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+            return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj, extra=context)
 
     # Step 2：L2 配准掩膜投影
     result = _try_mask_projection(
-        G, anchor, pool, pool_index, camera_pose, media, candidates, registration)
+        G, anchor, pool, pool_index, camera_pose, media, candidates,
+        registration, camera_profile)
     if result is not None:
-        return result
+        return {**result, **context}
 
     # Step 3：L1 姿态 footprint
-    result = _try_footprint(G, anchor, pool, pool_index, camera_pose, media,
-                            time_seconds=outline_time if outlines is not None else None)
+    result = _try_footprint(
+        G, anchor, pool, pool_index, camera_pose, media, camera_profile,
+        time_seconds=outline_time if outlines is not None else None)
     if result is not None:
-        return result
+        return {**result, **context}
 
     # Step 4：L0 半径圈
-    return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj)
+    return _radius_only(G, anchor_lng_gcj, anchor_lat_gcj, extra=context)

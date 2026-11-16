@@ -311,8 +311,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261110-map-frame-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261110-manager-status-v3/);
+  assert.match(managerHtml, /manager\.css\?v=20261116-auto-localization-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261116-auto-localization-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerCss, /\.vision-grid\{height:560px\}/);
@@ -2201,4 +2201,12 @@ test('double-clicking retry recovery sends only one recovery request', async () 
   const recoverCalls = harness.calls.filter((call) =>
     call.url === '/api/manager/vision-jobs/recover-double/retry' && call.options.method === 'POST');
   assert.equal(recoverCalls.length, 1);
+});
+
+test('manager exposes footprint and satellite controls with guarded rendering', () => {
+  assert.match(managerHtml, /id="vision-show-footprint"/);
+  assert.match(managerHtml, /id="manager-satellite"/);
+  assert.match(source, /function drawFootprint\(/);
+  assert.match(source, /state\.footprintLayer/);
+  assert.match(source, /calibration_status === 'calibrated'/);
 });
