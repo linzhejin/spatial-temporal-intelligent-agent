@@ -1220,6 +1220,7 @@
     byId('login-panel').hidden = true;
     byId('workspace').hidden = false;
     byId('logout').hidden = false;
+    restoreVisionTab();
     if (!state.map) initMap();
     setTimeout(function () { state.map.invalidateSize(); }, 80);
     restoreWorkspaceSelection();
@@ -3415,6 +3416,48 @@
     return false;
   }
 
+  var visionTabStorageKey = 'whu-manager-vision-tab-v1';
+
+  function setVisionTab(tab) {
+    var jobsActive = tab === 'jobs';
+    if (byId('vision-upload-card')) byId('vision-upload-card').hidden = jobsActive;
+    if (byId('vision-jobs')) byId('vision-jobs').hidden = !jobsActive;
+    [[byId('vision-tab-upload'), !jobsActive], [byId('vision-tab-jobs'), jobsActive]].forEach(function (pair) {
+      if (!pair[0]) return;
+      pair[0].classList.toggle('is-active', pair[1]);
+      pair[0].setAttribute('aria-selected', pair[1] ? 'true' : 'false');
+      pair[0].setAttribute('tabindex', pair[1] ? '0' : '-1');
+    });
+    try { window.sessionStorage.setItem(visionTabStorageKey, jobsActive ? 'jobs' : 'upload'); } catch (_) {}
+  }
+
+  function restoreVisionTab() {
+    var saved = '';
+    try { saved = window.sessionStorage.getItem(visionTabStorageKey) || ''; } catch (_) {}
+    setVisionTab(saved === 'jobs' ? 'jobs' : 'upload');
+  }
+
+  function updateVisionJobsCount(jobs) {
+    var pending = (jobs || []).filter(function (job) {
+      return job && job.status === 'needs_review' && !job.review_status;
+    }).length;
+    var badge = byId('vision-jobs-count');
+    if (!badge) return;
+    badge.textContent = pending ? String(pending) : '';
+    badge.hidden = !pending;
+    var tab = byId('vision-tab-jobs');
+    if (tab) tab.setAttribute('aria-label', pending ? '分析结果，' + pending + ' 条待复核' : '分析结果');
+  }
+
+  function visionTabKeydown(event) {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    var next = event.currentTarget === byId('vision-tab-jobs') ? 'upload' : 'jobs';
+    setVisionTab(next);
+    var target = byId(next === 'jobs' ? 'vision-tab-jobs' : 'vision-tab-upload');
+    if (target && typeof target.focus === 'function') target.focus();
+  }
+
   async function refreshVisionJobs(force) {
     if (!byId('workspace') || byId('workspace').hidden) return;
     if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
@@ -3425,6 +3468,7 @@
       if (!force && visionJobsInteractionActive(root)) { visionJobsRefreshDeferred = true; return; }
       if (!force && playingVisionVideos.size) { visionJobsRefreshDeferred = true; return; }
       var jobs = (data.jobs || []).filter(function (job) { return !isVisionJobHidden(job.job_id); });
+      updateVisionJobsCount(jobs);
       if (force) {
         playingVisionVideos.forEach(function (video) {
           if (typeof video.pause === 'function') video.pause();
@@ -3451,6 +3495,7 @@
       } else { jobs.forEach(function (job) { root.appendChild(renderVisionJob(job)); }); }
       root.scrollTop = jobScrollTop;
     } catch (error) {
+      updateVisionJobsCount([]);
       root.replaceChildren(); var failed = document.createElement('div'); failed.className = 'empty-state';
       failed.textContent = error.message || '视觉任务记录暂时无法读取。'; root.appendChild(failed);
     }
@@ -3518,7 +3563,7 @@
         data = await request('/api/manager/vision-jobs', 'POST', form);
       }
       message('vision-message', '影像任务已入队。分析服务独立运行，不会阻塞路线规划。', true);
-      clearSelectedMedia(); refreshVisionJobs();
+      clearSelectedMedia(); setVisionTab('jobs'); refreshVisionJobs();
       state.observationRegions = []; state.currentRegionPoints = []; state.drawingRegion = false;
       state.observationSceneId = null;
       renderObservationRegionList();
@@ -3734,6 +3779,10 @@
     state.captureTimeEdited = true;
   });
   byId('vision-form').addEventListener('submit', submitVision);
+  byId('vision-tab-upload').addEventListener('click', function () { setVisionTab('upload'); });
+  byId('vision-tab-jobs').addEventListener('click', function () { setVisionTab('jobs'); });
+  byId('vision-tab-upload').addEventListener('keydown', visionTabKeydown);
+  byId('vision-tab-jobs').addEventListener('keydown', visionTabKeydown);
   byId('condition-form').addEventListener('submit', submitEvent);
   byId('refresh-events').addEventListener('click', refreshEvents);
   byId('logout').addEventListener('click', async function () {

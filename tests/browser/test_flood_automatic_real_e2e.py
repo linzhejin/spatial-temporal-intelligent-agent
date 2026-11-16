@@ -94,7 +94,7 @@ def test_public_image_generates_reviewable_candidates_without_drawing(monkeypatc
             page.locator("#password").fill("isolated-auto-flood-test")
             page.locator("#login-form button[type=submit]").click()
             expect(page.locator("#workspace")).to_be_visible(timeout=30000)
-            page.get_by_text("新建影像分析", exact=True).click()
+            page.locator("#vision-tab-upload").click()
             expect(page.locator("#vision-trial-option")).to_be_enabled(timeout=30000)
             page.locator("#vision-purpose").select_option("trial")
             page.locator("#media-file").set_input_files(str(image))

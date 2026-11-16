@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261116-manager-layout-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261116-vision-single-v1">
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261116-auto-localization-v1" defer></script>
+  <script src="/js/manager.js?v=20261116-vision-single-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -165,11 +165,13 @@
 
       <section id="vision-workspace" class="vision-section">
         <div class="events-heading"><div><span class="eyebrow">AERIAL OBSERVATION</span><h2>机载影像巡查</h2></div><div class="vision-heading-actions"><label class="vision-footprint-toggle"><input id="vision-show-footprint" type="checkbox" checked> 显示影像覆盖范围</label><span class="review-badge">人工复核后才进入路况流程</span></div></div>
+        <div id="vision-status" class="vision-status">正在读取分析状态…</div>
+        <div class="vision-tabs" role="tablist" aria-label="影像巡查视图">
+          <button id="vision-tab-upload" class="vision-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="vision-upload-card" tabindex="0">新建分析</button>
+          <button id="vision-tab-jobs" class="vision-tab" type="button" role="tab" aria-selected="false" aria-controls="vision-jobs" tabindex="-1">分析结果<span id="vision-jobs-count" class="vision-tab-count" hidden></span></button>
+        </div>
         <div class="vision-grid">
-          <div id="vision-upload-card" class="vision-upload-card">
-            <div id="vision-status" class="vision-status">正在读取分析状态…</div>
-            <details class="vision-new-analysis">
-              <summary>新建影像分析</summary>
+          <div id="vision-upload-card" class="vision-upload-card" role="tabpanel" aria-labelledby="vision-tab-upload">
             <form id="vision-form">
               <label>影像用途
                 <select id="vision-purpose">
@@ -256,14 +258,13 @@
               </div>
               <p id="vision-message" class="form-message" role="status"></p>
             </form>
-              <details class="vision-note-collapse">
-                <summary>识别说明与模型来源</summary>
-                <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
-                <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
-              </details>
+            <details class="vision-note-collapse">
+              <summary>识别说明与模型来源</summary>
+              <p class="vision-disclaimer">识别结果只提供画面线索，不代表地面精确位置，也不会自动改变路线。发布路况前仍须逐项复核、确认具体道路和有效期。</p>
+              <p class="vision-attribution">模型基于 <a href="https://github.com/VisDrone/VisDrone-Dataset" target="_blank" rel="noopener">VisDrone2019-DET（AISKYEYE 团队、天津大学）</a>训练，按 CC BY-NC-SA 3.0 仅用于非商业研究。模型卡报告的公开集指标不代表武大场景精度。</p>
             </details>
           </div>
-          <div id="vision-jobs" class="vision-jobs"><div class="empty-state">正在读取影像任务…</div></div>
+          <div id="vision-jobs" class="vision-jobs" role="tabpanel" aria-labelledby="vision-tab-jobs" hidden><div class="empty-state">正在读取影像任务…</div></div>
         </div>
       </section>
 

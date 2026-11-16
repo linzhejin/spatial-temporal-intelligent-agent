@@ -313,13 +313,18 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261116-manager-layout-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261116-auto-localization-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261116-vision-single-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261116-vision-single-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
-  assert.match(managerCss, /\.vision-grid\{[^}]*grid-template-columns:minmax\(0,400px\) minmax\(0,1fr\)/);
-  assert.match(managerCss, /\.vision-jobs\{[^}]*overflow-y:auto/);
-  assert.match(managerCss, /\.workspace-grid\{[^}]*grid-template-columns:minmax\(0,1\.5fr\) minmax\(400px,\.85fr\)/);
+  assert.match(managerHtml, /class="vision-tabs" role="tablist"/);
+  assert.match(managerHtml, /id="vision-tab-jobs"[^>]*aria-controls="vision-jobs"/);
+  assert.match(managerCss, /\.vision-grid\{[^}]*grid-template-columns:minmax\(0,1fr\)/);
+  assert.match(managerCss, /\.vision-jobs\{[^}]*display:grid[^}]*grid-template-columns:repeat\(auto-fit,minmax\(min\(100%,460px\),1fr\)\)/);
+  assert.match(managerCss, /\.vision-tabs\{[^}]*display:flex/);
+  assert.match(managerCss, /\.vision-tab\.is-active\{[^}]*background:var\(--pine\)/);
+  assert.match(managerCss, /#vision-form\{width:100%;max-width:860px;margin:0 auto\}/);
+  assert.doesNotMatch(managerCss, /vision-form-columns/);
   assert.match(managerCss, /\.map-card\{[^}]*position:sticky[^}]*top:136px[^}]*height:calc\(100vh - 160px\)/);
   assert.match(managerCss, /\.map-card #manager-map\{min-height:0\}/);
   assert.match(managerHtml, /class="masthead-count"><span id="active-count">0<\/span> 条生效/);
@@ -2392,4 +2397,41 @@ test('manager exposes footprint and satellite controls with guarded rendering', 
   assert.match(source, /function drawFootprint\(/);
   assert.match(source, /state\.footprintLayer/);
   assert.match(source, /calibration_status === 'calibrated'/);
+});
+
+test('vision workspace switches between upload and results tabs', async () => {
+  const harness = managerHarness();
+  await flush();
+  const { elements } = harness;
+  assert.equal(elements.get('vision-upload-card').hidden, false);
+  assert.equal(elements.get('vision-jobs').hidden, true);
+  assert.equal(elements.get('vision-tab-upload').attributes['aria-selected'], 'true');
+  assert.equal(elements.get('vision-tab-jobs').attributes['aria-selected'], 'false');
+
+  elements.get('vision-tab-jobs').listeners.click();
+  await flush();
+  assert.equal(elements.get('vision-upload-card').hidden, true);
+  assert.equal(elements.get('vision-jobs').hidden, false);
+  assert.equal(elements.get('vision-tab-jobs').attributes['aria-selected'], 'true');
+  assert.equal(elements.get('vision-tab-upload').attributes['aria-selected'], 'false');
+
+  elements.get('vision-tab-upload').listeners.click();
+  assert.equal(elements.get('vision-upload-card').hidden, false);
+  assert.equal(elements.get('vision-jobs').hidden, true);
+});
+
+test('pending review count appears on the results tab', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.setVisionJobs([{
+    job_id: 'pending-review', status: 'needs_review', media_kind: 'image',
+    original_name: '待复核.png',
+    result: { candidates: [{ kind: 'vehicle_cluster_review', confidence: 0.7 }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const badge = harness.elements.get('vision-jobs-count');
+  assert.equal(badge.textContent, '1');
+  assert.equal(badge.hidden, false);
+  assert.match(harness.elements.get('vision-tab-jobs').attributes['aria-label'], /1 条待复核/);
 });

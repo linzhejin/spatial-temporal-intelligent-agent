@@ -155,23 +155,23 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.context.close()
         self.assertEqual(self.errors, [], "manager must not raise browser errors")
 
-    def open_manager(self, *, open_analysis=True):
+    def open_manager(self, *, open_analysis=True, open_results=False):
         self.page.goto(self.url, wait_until="networkidle")
         expect(self.page.locator("#workspace")).to_be_visible()
-        if open_analysis:
-            disclosure = self.page.locator(".vision-new-analysis")
-            if not disclosure.evaluate("element => element.open"):
-                disclosure.locator("summary").click()
+        if open_results:
+            self.page.locator("#vision-tab-jobs").click()
+        elif open_analysis:
+            self.page.locator("#vision-tab-upload").click()
 
-    def test_vision_workspace_starts_with_task_list_and_collapsed_new_analysis(self):
+    def test_vision_workspace_switches_between_upload_and_results_tabs(self):
         self.open_manager(open_analysis=False)
-        disclosure = self.page.locator(".vision-new-analysis")
-        expect(disclosure.locator("summary")).to_have_text("新建影像分析")
-        self.assertFalse(disclosure.evaluate("element => element.open"))
-        self.assertLess(
-            self.page.locator("#vision-jobs").evaluate("element => getComputedStyle(element).order"),
-            self.page.locator("#vision-upload-card").evaluate("element => getComputedStyle(element).order"),
-        )
+        expect(self.page.locator("#vision-tab-upload")).to_have_attribute("aria-selected", "true")
+        expect(self.page.locator("#vision-upload-card")).to_be_visible()
+        expect(self.page.locator("#vision-jobs")).to_be_hidden()
+        self.page.locator("#vision-tab-jobs").click()
+        expect(self.page.locator("#vision-tab-jobs")).to_have_attribute("aria-selected", "true")
+        expect(self.page.locator("#vision-jobs")).to_be_visible()
+        expect(self.page.locator("#vision-upload-card")).to_be_hidden()
         self.page.locator("#vision-workspace").scroll_into_view_if_needed()
         self.page.screenshot(path=str(self.qa_dir / "vision-workspace-desktop.png"))
         self.page.set_viewport_size({"width": 390, "height": 844})
@@ -187,12 +187,13 @@ class ManagerEventControlsTest(unittest.TestCase):
         }]
         self.hold_suggestions = True
         self.page.goto(self.url, wait_until="domcontentloaded")
+        self.page.locator("#vision-tab-jobs").click()
         card = self.page.locator(".vision-job").filter(has_text="空道路测试.png")
         expect(card).to_contain_text("正在查询附近道路", timeout=10000)
         self.assertEqual(len(self.pending_suggestions), 1)
         self.pending_suggestions.pop().fulfill(json={"data": {"suggested_edges": [], "basis": "radius_only"}})
         self.page.wait_for_load_state("networkidle")
-        expect(card).to_contain_text("附近没有可参考的道路", timeout=10000)
+        expect(card).to_contain_text("附近也没有可参考的道路", timeout=10000)
 
     def test_event_history_filters_by_name_status_and_beijing_date(self):
         from datetime import datetime, timezone
@@ -354,7 +355,7 @@ class ManagerEventControlsTest(unittest.TestCase):
             "job_id": "12345678-1234-4234-8234-123456789abd", "status": "completed", "media_kind": "image",
             "original_name": "空候选回放.png", "result": {"research_replay": False, "candidates": []},
         })
-        self.open_manager()
+        self.open_manager(open_results=True)
         card = self.page.locator(".vision-job").filter(has_text="公开素材.mp4")
         expect(card).to_contain_text("原素材地点：Songdo")
         expect(card).to_contain_text("原拍摄时间：未知")
@@ -406,12 +407,12 @@ class ManagerEventControlsTest(unittest.TestCase):
                 }],
             },
         }]
-        self.open_manager()
+        self.open_manager(open_results=True)
 
         count_caveat = self.page.locator(".vision-count-caveat")
         expect(count_caveat).to_contain_text("抽样画面的模型检出数")
         expect(count_caveat).to_contain_text("人群密集时可能漏检")
-        expect(count_caveat).to_have_css("font-size", "11px")
+        expect(count_caveat).to_have_css("font-size", "13px")
 
         main_overlay = self.page.locator(".vision-job .video-detection-overlay").first
         self.assertEqual(self.vision_preview_requests, [], "the 5-second task-list poll must not fetch frame overlays")
@@ -777,7 +778,7 @@ class ManagerEventControlsTest(unittest.TestCase):
             "media_kind": "image", "original_name": "航拍.png",
             "result": {"metrics": {"peak_vehicle_count": 3}, "candidates": []},
         }]
-        self.open_manager()
+        self.open_manager(open_results=True)
         self.page.locator("#event-duration").select_option("ongoing")
         self.page.get_by_role("button", name="依据原片手工登记路况").click()
         expect(self.page.locator("#event-duration")).to_have_value("30")

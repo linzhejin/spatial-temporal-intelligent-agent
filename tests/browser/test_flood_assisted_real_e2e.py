@@ -115,7 +115,7 @@ def test_real_flood_image_upload_review_road_and_event(monkeypatch, tmp_path, im
             page.locator("#password").fill("isolated-flood-browser-only")
             page.locator("#login-form button[type=submit]").click()
             expect(page.locator("#workspace")).to_be_visible(timeout=30000)
-            page.get_by_text("新建影像分析", exact=True).click()
+            page.locator("#vision-tab-upload").click()
             expect(page.locator("#vision-flood-assistance-option")).to_be_enabled(timeout=30000)
             page.locator("#vision-purpose").select_option("flood_assisted")
             page.locator("#media-file").set_input_files(str(image))
