@@ -313,14 +313,14 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261116-auto-localization-v1/);
+  assert.match(managerHtml, /manager\.css\?v=20261116-manager-layout-v1/);
   assert.match(managerHtml, /manager\.js\?v=20261116-auto-localization-v1/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
-  assert.match(managerCss, /\.vision-grid\{height:560px\}/);
-  assert.match(managerCss, /\.vision-jobs\{max-height:100%;overflow-y:auto/);
-  assert.match(managerCss, /\.workspace-grid\{align-items:start\}/);
-  assert.match(managerCss, /\.map-card\{position:sticky;top:152px;height:calc\(100vh - 176px\)/);
+  assert.match(managerCss, /\.vision-grid\{[^}]*grid-template-columns:minmax\(0,400px\) minmax\(0,1fr\)/);
+  assert.match(managerCss, /\.vision-jobs\{[^}]*overflow-y:auto/);
+  assert.match(managerCss, /\.workspace-grid\{[^}]*grid-template-columns:minmax\(0,1\.5fr\) minmax\(400px,\.85fr\)/);
+  assert.match(managerCss, /\.map-card\{[^}]*position:sticky[^}]*top:136px[^}]*height:calc\(100vh - 160px\)/);
   assert.match(managerCss, /\.map-card #manager-map\{min-height:0\}/);
   assert.match(managerHtml, /class="masthead-count"><span id="active-count">0<\/span> 条生效/);
   assert.match(managerCss, /\.masthead-count\{/);
@@ -332,8 +332,8 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="show-dji-track"[^>]*hidden/);
   assert.match(managerCss, /\.dji-track-preview-button/);
   assert.match(managerCss, /\.vision-region-mapping/);
-  assert.match(managerCss, /\.vision-count-caveat\{[^}]*font-size:11px/);
-  assert.match(managerCss, /\.suggested-basis\{[^}]*font-size:12px/);
+  assert.match(managerCss, /\.vision-count-caveat\{[^}]*font-size:13px/);
+  assert.match(managerCss, /\.suggested-basis\{[^}]*font-size:13px/);
   assert.match(managerHtml, /value="road_surface"/);
   assert.match(managerHtml, /id="pick-anchor"/);
   assert.match(managerHtml, /id="start-region"/);
@@ -347,7 +347,7 @@ test('manager media summary has responsive preview styling and no rough-location
 test('visual polish keeps overflow, status and action semantics aligned', () => {
   assert.match(managerCss, /\.candidate-card p\{margin:5px 0 0[^}]*overflow-wrap:anywhere/);
   assert.match(managerCss, /\.vision-status\.is-ready\{[^}]*color:#2f6b4f/);
-  assert.match(managerCss, /\.suggested-edges > strong\{[^}]*display:block/);
+  assert.match(managerCss, /\.suggested-edges>strong\{[^}]*display:block/);
   assert.match(managerCss, /\.delete-vision,\s*\.dismiss-vision\{[^}]*color:#8b3a3a/);
   assert.match(managerHtml, /id="vision-jobs"[\s\S]*?empty-state">正在读取影像任务/);
   assert.doesNotMatch(source, /审核/);
