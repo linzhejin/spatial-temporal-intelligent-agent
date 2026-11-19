@@ -5,10 +5,9 @@
 再交给后端 `_parse_vision_camera_pose`，最后用同一份轨迹点在**显式相机
 标定参数**下走投影入口，验证「姿态解析链路」到投影消费之间没有字段断点。
 
-刻意不覆盖的部分：生产 `suggested-edges` 仍固定为 `radius_only`，未标定
-SRT 不参与投影（见 tests/test_vision_suggest.py 的
-`test_uncalibrated_srt_pose_cannot_generate_a_footprint` 和 browser E2E）。
-本文件只证明解析链路完整、投影入口可用，不改变生产行为。
+刻意不覆盖的部分：本测试验证的是姿态解析和投影入口，不验证生产影像候选的
+道路匹配。候选区域到道路的匹配由独立的 `road_association` 路径计算；本文件
+仍只证明解析链路完整、投影入口可用。
 """
 
 import json

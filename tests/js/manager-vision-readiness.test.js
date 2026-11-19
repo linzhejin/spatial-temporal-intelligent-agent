@@ -17,6 +17,7 @@ function managerHarness(sessionSeed = []) {
   const requested = [];
   const uploadResolvers = [];
   const impactPreviewResolvers = [];
+  const visionSuggestionResolvers = [];
   const createdObjectUrls = [];
   const revokedObjectUrls = [];
   const formEntries = [];
@@ -41,6 +42,7 @@ function managerHarness(sessionSeed = []) {
   let visionStatusFailure = false;
   let sessionExpired = false;
   let deferImpactPreviews = false;
+  let deferVisionSuggestions = false;
   let createdNodeCount = 0;
 
   function element(id) {
@@ -213,8 +215,12 @@ function managerHarness(sessionSeed = []) {
           visionSuggestedFailures -= 1;
           return { ok: false, status: 503, json: async () => ({ message: '邻近道路暂时不可用' }) };
         }
+        if (deferVisionSuggestions) {
+          return new Promise((resolve) => visionSuggestionResolvers.push({ jobId, resolve }));
+        }
+        const suggestions = visionSuggestedEdges.get(jobId) || [];
         return { ok: true, json: async () => ({ data: {
-          suggested_edges: visionSuggestedEdges.get(jobId) || [], basis: 'pose_footprint',
+          suggested_edges: suggestions, basis: 'pose_footprint',
         } }) };
       }
       if (url.startsWith('/api/road-conditions/') && options.method === 'DELETE') {
@@ -280,6 +286,15 @@ function managerHarness(sessionSeed = []) {
     setSessionExpired: (value) => { sessionExpired = value; },
     setStorageFailure: (value) => { storageFailure = value; },
     deferImpactPreviews: () => { deferImpactPreviews = true; },
+    deferVisionSuggestionRequests: () => { deferVisionSuggestions = true; },
+    hasPendingVisionSuggestion: (jobId) => visionSuggestionResolvers.some((item) => item.jobId === jobId),
+    resolveVisionSuggestion: (jobId, payload) => {
+      const index = visionSuggestionResolvers.findIndex((item) => item.jobId === jobId);
+      assert.notEqual(index, -1, `no pending suggestion request for ${jobId}`);
+      visionSuggestionResolvers.splice(index, 1)[0].resolve({
+        ok: true, json: async () => ({ data: payload }),
+      });
+    },
     hasPendingImpactPreview: (type) => impactPreviewResolvers.some((item) => item.type === type),
     resolveImpactPreview: (type, roadName) => {
       const index = impactPreviewResolvers.findIndex((item) => item.type === type);
@@ -314,7 +329,7 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
   assert.match(managerHtml, /manager\.css\?v=20261116-vision-single-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261116-vision-single-v1/);
+  assert.match(managerHtml, /manager\.js\?v=20261119-candidate-road-association-v2/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerHtml, /class="vision-tabs" role="tablist"/);
@@ -2162,6 +2177,86 @@ test('suggested edges show their basis and road name without an unverified match
   assert.match(text, /按影像轮廓投影排序/);
   assert.doesNotMatch(text, /匹配度/);
   assert.match(text, /樱园西路/);
+});
+
+test('a clear candidate road match is preselected after transfer before calibration and still requires confirmation', async () => {
+  const harness = managerHarness();
+  await flush();
+  const edge = {
+    u: 1, v: 2, key: 0, edges: [[1, 2, 0]], road_name: '候选匹配道路',
+    basis: 'candidate_region_projection', score: 0.31,
+    snap_lng_gcj: 114.36002, snap_lat_gcj: 30.53, dist_m: 2, chain_length_m: 80,
+    geometry_gcj: [[114.36, 30.53], [114.361, 30.53]],
+  };
+  harness.setVisionJobs([{
+    job_id: 'candidate-road-match', status: 'needs_review', media_kind: 'image',
+    review_status: 'confirmed', original_name: '候选匹配.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'possible_flooding', road_association: {
+      status: 'matched', selected_edge: edge, ranked_edges: [edge],
+      calibration_status: 'nominal',
+      score_semantics: 'road_buffer_overlap_ratio_not_probability',
+    } }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const cardText = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(cardText, /智能体已将候选区域匹配到 候选匹配道路/);
+  assert.match(cardText, /道路缓冲覆盖率约 31%/);
+  assert.match(cardText, /转入道路事件时会自动预选此路段/);
+
+  const transfer = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '将此候选转入道路事件');
+  assert.ok(transfer);
+  transfer.listeners.click();
+  await flush();
+
+  assert.equal(harness.elements.get('vision-source-banner').hidden, false);
+  assert.ok(harness.calls.some((call) => call.url.startsWith('/api/road-conditions/snap')),
+    'the candidate-specific match should preselect a road even while the profile is nominal');
+  assert.match(harness.elements.get('selected-road').textContent, /候选匹配道路/);
+  assert.equal(harness.elements.get('confirm-picked-road').hidden, false);
+  assert.equal(harness.elements.get('publish-event').disabled, true,
+    'a geometric match must not bypass road confirmation and field evidence');
+  assert.ok(harness.calls.some((call) => call.url.includes('/api/road-conditions/snap?lng=114.36002')));
+});
+
+test('an ambiguous candidate road association is shown without preselecting either road', async () => {
+  const harness = managerHarness();
+  await flush();
+  harness.deferVisionSuggestionRequests();
+  harness.setVisionJobs([{
+    job_id: 'candidate-road-ambiguous', status: 'needs_review', media_kind: 'image',
+    review_status: 'confirmed', original_name: '平行道路.png',
+    anchor_gcj: { lng: 114.36, lat: 30.53 },
+    result: { candidates: [{ kind: 'possible_congestion', road_association: {
+      status: 'ambiguous', selected_edge: null,
+      ranked_edges: [{ road_name: '平行路甲' }, { road_name: '平行路乙' }],
+    } }] },
+  }]);
+  harness.intervalCallbacks[0]();
+  await flush();
+  const card = harness.elements.get('vision-jobs').children[0];
+  const text = descendants(card).map((node) => node.textContent || '').join(' ');
+  assert.match(text, /平行路甲、平行路乙/);
+  const transfer = descendants(card).find((node) => node.tagName === 'button'
+    && node.textContent === '将此候选转入道路事件');
+  transfer.listeners.click();
+  await flush();
+  assert.equal(harness.hasPendingVisionSuggestion('candidate-road-ambiguous'), true);
+  const globalSuggestion = {
+    u: 9, v: 10, key: 0, edges: [[9, 10, 0]], road_name: '全局推荐道路',
+    basis: 'pose_footprint', score: 0.8,
+    snap_lng_gcj: 114.3601, snap_lat_gcj: 30.5301, dist_m: 2,
+    chain_length_m: 80, geometry_gcj: [[114.36, 30.53], [114.361, 30.53]],
+  };
+  harness.resolveVisionSuggestion('candidate-road-ambiguous', {
+    calibration_status: 'calibrated', suggested_edges: [globalSuggestion], basis: 'pose_footprint',
+  });
+  await flush();
+  assert.equal(harness.elements.get('confirm-picked-road').hidden, true);
+  assert.equal(harness.calls.some((call) => call.url.startsWith('/api/road-conditions/snap')), false);
 });
 
 test('a job with no suggested edges renders no affected-roads section', async () => {

@@ -14,7 +14,7 @@ import pytest
 from shapely.geometry import LineString
 
 from spatial.coord_transform import gcj02_to_wgs84
-from spatial.vision_suggest import score_suggested_edges
+from spatial.vision_suggest import score_candidate_road_association, score_suggested_edges
 
 ANCHOR = {"lng": 114.363, "lat": 30.5365, "crs": "GCJ02"}
 ORIGIN_LNG_WGS, ORIGIN_LAT_WGS = gcj02_to_wgs84(ANCHOR["lng"], ANCHOR["lat"])
@@ -56,6 +56,18 @@ def _road_graph():
     return G
 
 
+def _parallel_road_graph():
+    """Two near-parallel roads produce comparable overlap for one broad ROI."""
+    G = nx.MultiDiGraph()
+    for index, north in enumerate((-1.0, 1.0)):
+        u, v = 20 + index * 2, 21 + index * 2
+        forward = _h_edge(north)
+        G.add_edge(u, v, key=0, geometry=forward, name=f"平行路{index + 1}", length=160.0)
+        G.add_edge(v, u, key=0, geometry=LineString(list(reversed(forward.coords))),
+                   name=f"平行路{index + 1}", length=160.0)
+    return G
+
+
 def _pose_point(seconds=0.0, east=0.0, north=0.0, alt=100.0, yaw=0.0, pitch=-90.0):
     lng, lat = _wgs_point(east, north)
     point = {"lng": lng, "lat": lat, "height_agl_m": alt, "gb_yaw_deg": yaw,
@@ -87,6 +99,30 @@ def _flood_candidate(outline_polygons, outline_time_seconds=0.0):
     }]
 
 
+def _candidate_with_region(region_id="lane-east", *, time_seconds=0.0):
+    return {
+        "kind": "possible_congestion",
+        "evidence": {
+            "segments": [{"start_seconds": time_seconds, "end_seconds": time_seconds + 1}],
+            "summary": {"region_id": region_id},
+        },
+    }
+
+
+def _association_kwargs(graph, *, calibrated=True):
+    import vision.registration as registration
+    return {
+        "G": graph,
+        "anchor": ANCHOR,
+        "camera_pose": _nadir_camera_pose(),
+        "media": {"kind": "image", "width": 1000, "height": 1000},
+        "registration": registration,
+        "camera_profile": {"fx_px": 2000 / 3, "fy_px": 2000 / 3},
+        "calibration": {"status": "calibrated" if calibrated else "nominal"},
+        "observation_regions": [{"id": "lane-east", "kind": "vehicle_lane", "polygon": _CENTER_MASK[0]}],
+    }
+
+
 # ---- 无姿态 → L0 半径圈 ----
 
 def test_no_pose_falls_back_to_radius_only():
@@ -101,6 +137,40 @@ def test_no_pose_falls_back_to_radius_only():
         assert BASE_FIELDS <= set(item)
     # 默认 30m 半径内只有正下方边
     assert {item["road_name"] for item in items} == {"正下方"}
+
+
+def test_candidate_association_matches_the_candidate_region_to_one_road():
+    graph = _road_graph()
+    result = score_candidate_road_association(
+        _candidate_with_region(), **_association_kwargs(graph),
+    )
+    assert result["status"] == "matched"
+    assert result["basis"] == "candidate_region_projection"
+    assert result["selected_edge"]["road_name"] == "正下方"
+    assert result["selected_edge"]["score"] >= 0.05
+    assert result["score_semantics"] == "road_buffer_overlap_ratio_not_probability"
+
+
+def test_candidate_association_marks_parallel_roads_ambiguous():
+    graph = _parallel_road_graph()
+    result = score_candidate_road_association(
+        _candidate_with_region(), **_association_kwargs(graph),
+    )
+    assert result["status"] == "ambiguous"
+    assert result.get("selected_edge") is None
+    assert {edge["road_name"] for edge in result["ranked_edges"][:2]} == {"平行路1", "平行路2"}
+
+
+def test_candidate_association_keeps_a_clear_nominal_match_for_human_confirmation():
+    graph = _road_graph()
+    result = score_candidate_road_association(
+        _candidate_with_region(), **_association_kwargs(graph, calibrated=False),
+    )
+    assert result["status"] == "matched"
+    assert result["calibration_status"] == "nominal"
+    assert result["manual_confirmation_required"] is True
+    assert result["selected_edge"]["road_name"] == "正下方"
+    assert result["ranked_edges"][0]["road_name"] == "正下方"
 
 
 # ---- L1 footprint ----

@@ -1,0 +1,50 @@
+{
+  "schema": "whu-vision-calibration-points-v1",
+  "_instructions": [
+    "复制本文件到仓库外的工作目录（例如 D:/LuoJiaCalibration/20261120/），再填入自己的影像与控制点。",
+    "image_xy 用原始像素坐标，x 向右、y 向下；至少 4 个点，建议 6-10 个，覆盖画面四角与不同深度。",
+    "map_lng_gcj / map_lat_gcj 使用 GCJ-02（与高德底图一致），来自现场 GNSS 或高德地图拾取。",
+    "标定点应选路面上的清晰角点、标线交点或井盖中心，避免树冠、车身和阴影边缘。",
+    "填好后运行 prepare_calibration_session.py 预检；ready=true 再进入标定。"
+  ],
+  "image": "D:/LuoJiaCalibration/20261120/example.jpg",
+  "pose": "D:/LuoJiaCalibration/20261120/example.pose.json",
+  "points": [
+    {
+      "label": "西北角标线交点",
+      "image_xy": [420, 380],
+      "map_lng_gcj": 114.3612,
+      "map_lat_gcj": 30.5381
+    },
+    {
+      "label": "东北角路缘石",
+      "image_xy": [3350, 410],
+      "map_lng_gcj": 114.3617,
+      "map_lat_gcj": 30.5381
+    },
+    {
+      "label": "东南角井盖中心",
+      "image_xy": [3390, 1780],
+      "map_lng_gcj": 114.3617,
+      "map_lat_gcj": 30.5377
+    },
+    {
+      "label": "西南角标线交点",
+      "image_xy": [450, 1820],
+      "map_lng_gcj": 114.3612,
+      "map_lat_gcj": 30.5377
+    },
+    {
+      "label": "画面中心路口",
+      "image_xy": [1920, 1080],
+      "map_lng_gcj": 114.36145,
+      "map_lat_gcj": 30.5379
+    },
+    {
+      "label": "中心偏北标线",
+      "image_xy": [1920, 700],
+      "map_lng_gcj": 114.36145,
+      "map_lat_gcj": 30.538
+    }
+  ]
+}

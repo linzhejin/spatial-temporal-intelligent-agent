@@ -1,0 +1,55 @@
+{
+  "schema": "whu-vision-acceptance-manifest-v1",
+  "_instructions": [
+    "验收影像必须与标定影像分开：不要用同一张照片既标定又验收。",
+    "至少 6 个案例，覆盖不同机位、高度、朝向和路段；每个案例都要有 truth_center 或 truth_edges。",
+    "truth_center_lng_gcj / truth_center_lat_gcj 用 GCJ-02；truth_edges 用路网 (u, v, k)，可从 manager 地图或路网导出。",
+    "pose 可选；缺省时脚本读取照片 EXIF/XMP。没有姿态的照片会退回邻近道路，不能通过 footprint 门禁。",
+    "验收只做离线评估，不发布事件、不改生产配置。"
+  ],
+  "cases": [
+    {
+      "name": "工学部东门-正下视",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/a.jpg",
+      "pose": "D:/LuoJiaCalibration/acceptance/20261121/a.pose.json",
+      "truth_center_lng_gcj": 114.3618,
+      "truth_center_lat_gcj": 30.5379,
+      "truth_edges": [[1201, 1202, 0]]
+    },
+    {
+      "name": "工学部东门-斜视",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/b.jpg",
+      "truth_center_lng_gcj": 114.36195,
+      "truth_center_lat_gcj": 30.53775,
+      "truth_edges": [[1202, 1203, 0], [1203, 1204, 0]]
+    },
+    {
+      "name": "珞珈山路-高机位",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/c.jpg",
+      "truth_center_lng_gcj": 114.3626,
+      "truth_center_lat_gcj": 30.5386,
+      "truth_edges": [[2310, 2311, 0]]
+    },
+    {
+      "name": "珞珈山路-低机位",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/d.jpg",
+      "truth_center_lng_gcj": 114.36275,
+      "truth_center_lat_gcj": 30.53845,
+      "truth_edges": [[2311, 2312, 0]]
+    },
+    {
+      "name": "信息学部路口",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/e.jpg",
+      "truth_center_lng_gcj": 114.3642,
+      "truth_center_lat_gcj": 30.5352,
+      "truth_edges": [[3105, 3106, 0]]
+    },
+    {
+      "name": "文理学部路口",
+      "image": "D:/LuoJiaCalibration/acceptance/20261121/f.jpg",
+      "truth_center_lng_gcj": 114.3634,
+      "truth_center_lat_gcj": 30.5361,
+      "truth_edges": [[4020, 4021, 0], [4021, 4022, 0]]
+    }
+  ]
+}

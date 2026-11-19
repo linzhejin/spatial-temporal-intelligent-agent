@@ -28,6 +28,7 @@ from vision.model_release import (assisted_flood_runtime_config, check_automatic
                                   check_optional_model_release)
 from vision.specialized import DoodleverseFloodSegmenter, OnnxAiderClassifier, OnnxFloodSegmenter
 from vision.temporal_trial import OnnxTemporalAccident
+from vision.road_association import annotate_candidate_associations
 
 logger = logging.getLogger(__name__)
 VISION_CAPACITY_LOCK_KEY = 735182640120
@@ -578,6 +579,7 @@ def _process_next_job_unlocked(database_url: str, worker_id: str, lease_seconds:
                           "failed" if safety.get("flood_segmentation_supported") is False else
                           "checked" if counts.get("flood", 0) > 0 else "no_observation"),
             }
+        annotate_candidate_associations(job, result)
         if image_deadline is not None and time.monotonic() >= image_deadline:
             raise TimeoutError("积水图片分析超过 120 秒时限")
         finalizing_progress = {"phase": "finalizing", "percent": 99}

@@ -57,25 +57,20 @@ def _load_pose(case: dict, image_path: Path, profile: dict) -> dict:
     return with_height_agl(pose, ground_offset_m=float(profile.get("ground_offset_m") or 0.0))
 
 
-def main() -> None:
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", required=True, type=Path)
-    parser.add_argument("--graph", type=Path)
-    parser.add_argument("--output", required=True, type=Path)
-    parser.add_argument("--max-mean-center-m", type=float, default=10.0)
-    parser.add_argument("--min-top1", type=float, default=0.8)
-    args = parser.parse_args()
-
-    manifest = json.loads(args.manifest.read_text(encoding="utf-8"))
+def evaluate_manifest(manifest_path: Path, *, graph_path: Path | None = None,
+                      max_mean_center_m: float = 10.0,
+                      min_top1: float = 0.8) -> dict:
+    """按清单评估全部案例并返回报告字典（不写文件、不改运行状态）。"""
+    manifest = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     cases = manifest.get("cases") if isinstance(manifest, dict) else None
     if not isinstance(cases, list) or not cases:
         raise ValueError("manifest 必须包含非空 cases 列表")
     G = get_network() or load_or_download_network()
     if G is None:
         raise RuntimeError("校园路网不可用")
-    if args.graph is not None:
+    if graph_path is not None:
         import networkx as nx
-        G = nx.read_graphml(args.graph)
+        G = nx.read_graphml(graph_path)
     profile = resolve_profile()
     calibration = calibration_status(profile)
 
@@ -86,6 +81,9 @@ def main() -> None:
         try:
             with Image.open(image_path) as image:
                 width, height = image.size
+                image_format = (image.format or "").upper()
+            if image_format not in {"JPEG", "PNG", "WEBP"}:
+                raise ValueError(f"不支持的影像格式：{image_format or '未知'}；请使用 JPEG/PNG/WebP")
             pose = _load_pose(case, image_path, profile)
             pose["intrinsics"] = intrinsics_for(width, height, profile)
             media = {"kind": "image", "width": width, "height": height}
@@ -126,11 +124,11 @@ def main() -> None:
     top1_rate = (sum(1 for row in top1_rows if row["top1_hit"]) / len(top1_rows)) if top1_rows else None
     mean_center = (sum(errors) / len(errors)) if errors else None
     passed = bool(
-        mean_center is not None and mean_center <= args.max_mean_center_m
-        and (top1_rate is None or top1_rate >= args.min_top1)
+        mean_center is not None and mean_center <= max_mean_center_m
+        and (top1_rate is None or top1_rate >= min_top1)
     )
-    report = {
-        "manifest": str(args.manifest),
+    return {
+        "manifest": str(manifest_path),
         "profile": profile.get("name"),
         "calibration": calibration,
         "cases": rows,
@@ -144,8 +142,8 @@ def main() -> None:
                 sum(1 for row in top1_rows if row["top3_hit"]) / len(top1_rows), 3
             ) if top1_rows else None,
             "thresholds": {
-                "max_mean_center_m": args.max_mean_center_m,
-                "min_top1": args.min_top1,
+                "max_mean_center_m": max_mean_center_m,
+                "min_top1": min_top1,
             },
             "passed": passed,
         },
@@ -154,6 +152,21 @@ def main() -> None:
             "中心误差以 footprint 顶点均值为代理，不等同于绝对定位精度",
         ],
     }
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--manifest", required=True, type=Path)
+    parser.add_argument("--graph", type=Path)
+    parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--max-mean-center-m", type=float, default=10.0)
+    parser.add_argument("--min-top1", type=float, default=0.8)
+    args = parser.parse_args()
+
+    report = evaluate_manifest(
+        args.manifest, graph_path=args.graph,
+        max_mean_center_m=args.max_mean_center_m, min_top1=args.min_top1,
+    )
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps(report["summary"], ensure_ascii=False))

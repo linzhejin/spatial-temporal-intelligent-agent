@@ -1,0 +1,32 @@
+{
+  "graph_edges_directed": 14622,
+  "directed_edges_covered": 14622,
+  "sampled_undirected_pairs": 7076,
+  "fallback_no_geometry": 3506,
+  "buffer_m": 15.0,
+  "ndvi_source": "whu_s2_autumn_20251114_ndvi.tif",
+  "dem_source": "whu_terrain_20261015_v4_dem.tif",
+  "greenery_covered": 7076,
+  "slope_covered": 7076,
+  "greenery_hist": {
+    "1": 1414,
+    "2": 1416,
+    "3": 1415,
+    "4": 1415,
+    "5": 1416
+  },
+  "slope_hist": {
+    "1": 3775,
+    "2": 1514,
+    "3": 755,
+    "4": 609,
+    "5": 423
+  },
+  "ndvi_quantile_cuts": [
+    0.1052,
+    0.1807,
+    0.2555,
+    0.3319
+  ],
+  "ndvi_median": 0.218
+}

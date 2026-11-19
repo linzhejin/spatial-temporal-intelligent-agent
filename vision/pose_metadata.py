@@ -6,7 +6,12 @@ DJI 照片通常在 EXIF 里写 GPS，在 XMP 里写相对高度、云台角和�
 输出结构与前端 SRT 解析一致：
 {"trajectory": [{"lng", "lat", "rel_alt_m", "abs_alt_m",
                  "gb_yaw_deg", "gb_pitch_deg", "gb_roll_deg",
-                 "focal_len_35mm", "seconds"}], "source", "pose_quality"}
+                 "focal_len_35mm", "seconds"}], "source", "pose_quality",
+ "heading_source", "heading_quality"}
+
+EXIF GPSImgDirection 仅在参考方向为真北时进入投影 yaw；磁北或缺少参考方向时
+保留来源信息，但不把方向值作为真北角度使用。
+缺少云台角度时保留为 None，不将 GPS 定位等同于正下视相机姿态。
 """
 from __future__ import annotations
 
@@ -39,13 +44,21 @@ def _finite(value) -> float | None:
 
 
 def _ratio(value) -> float | None:
-    if isinstance(value, (tuple, list)) and len(value) == 2:
-        numerator = _finite(value[0])
-        denominator = _finite(value[1])
-        if numerator is None or not denominator:
+    if isinstance(value, str) and "/" in value:
+        parts = value.strip().split("/")
+        if len(parts) != 2:
             return None
-        return numerator / denominator
-    return _finite(value)
+        numerator, denominator = map(_finite, parts)
+    elif isinstance(value, (tuple, list)) and len(value) == 2:
+        numerator, denominator = map(_finite, value)
+    elif hasattr(value, "numerator") and hasattr(value, "denominator"):
+        numerator = _finite(value.numerator)
+        denominator = _finite(value.denominator)
+    else:
+        return _finite(value)
+    if numerator is None or denominator is None or denominator == 0:
+        return None
+    return numerator / denominator
 
 
 def _degrees(value, ref) -> float | None:
@@ -84,6 +97,27 @@ def _read_exif_gps(path: Path) -> dict:
     result = {"lng": lon, "lat": lat}
     if altitude is not None:
         result["abs_alt_m"] = altitude
+    direction = _ratio(gps.get(17))
+    direction_ref_value = gps.get(16)
+    if isinstance(direction_ref_value, bytes):
+        direction_ref_value = direction_ref_value.decode("ascii", errors="ignore")
+    direction_ref = (direction_ref_value.strip().upper()
+                     if isinstance(direction_ref_value, str) else None)
+    if gps.get(17) is not None:
+        result["gps_img_direction_deg"] = direction
+        result["gps_img_direction_ref"] = direction_ref
+        if direction is None or not 0 <= direction <= 360:
+            result["gps_img_direction_quality"] = "invalid_value"
+        else:
+            direction = 0.0 if direction == 360 else direction
+            result["gps_img_direction_deg"] = direction
+            if direction_ref == "T":
+                result["true_heading_deg"] = direction
+                result["gps_img_direction_quality"] = "exif_true_north"
+            elif direction_ref == "M":
+                result["gps_img_direction_quality"] = "magnetic_unconverted"
+            else:
+                result["gps_img_direction_quality"] = "reference_unknown"
     return result
 
 
@@ -131,15 +165,40 @@ def parse_image_pose(path: str | Path) -> dict | None:
 
     rel_alt = xmp.get("relative_altitude")
     abs_alt = xmp.get("absolute_altitude", exif.get("abs_alt_m"))
-    yaw = xmp.get("gimbal_yaw")
+    xmp_yaw = _finite(xmp.get("gimbal_yaw"))
+    if xmp_yaw is not None and not -360 <= xmp_yaw <= 360:
+        xmp_yaw = None
+    exif_heading = exif.get("true_heading_deg")
+    exif_direction = exif.get("gps_img_direction_deg")
+    exif_direction_ref = exif.get("gps_img_direction_ref")
+    if xmp_yaw is not None:
+        yaw = xmp_yaw
+        heading_source = "image_xmp_gimbal_yaw"
+        heading_quality = "xmp_gimbal"
+    elif exif_heading is not None:
+        yaw = exif_heading
+        heading_source = "exif_gps_img_direction_true"
+        heading_quality = "exif_true_north"
+    elif exif.get("gps_img_direction_quality") == "magnetic_unconverted":
+        yaw = None
+        heading_source = "exif_gps_img_direction_magnetic"
+        heading_quality = "magnetic_unconverted"
+    elif exif.get("gps_img_direction_quality") == "reference_unknown":
+        yaw = None
+        heading_source = "exif_gps_img_direction"
+        heading_quality = "reference_unknown"
+    elif exif.get("gps_img_direction_quality") == "invalid_value":
+        yaw = None
+        heading_source = "exif_gps_img_direction"
+        heading_quality = "invalid_value"
+    else:
+        yaw = None
+        heading_source = None
+        heading_quality = "missing"
     pitch = xmp.get("gimbal_pitch")
     roll = xmp.get("gimbal_roll")
     focal_35mm = xmp.get("focal_35mm")
     angles_complete = pitch is not None and roll is not None and yaw is not None
-    if pitch is None:
-        pitch = -90.0
-    if roll is None:
-        roll = 0.0
 
     point = {
         "lng": float(lng),
@@ -158,12 +217,16 @@ def parse_image_pose(path: str | Path) -> dict | None:
         source = "image_xmp"
     else:
         source = "image_exif"
-    quality = "full" if angles_complete else "no_yaw"
+    quality = "full" if angles_complete else "heading_only" if yaw is not None else "no_yaw"
     return {
         "trajectory": [point],
         "source": source,
         "pose_quality": quality,
-        "yaw_unknown": not angles_complete,
+        "yaw_unknown": yaw is None,
+        "heading_source": heading_source,
+        "heading_quality": heading_quality,
+        "heading_observation_deg": exif_direction,
+        "heading_reference": exif_direction_ref,
     }
 
 

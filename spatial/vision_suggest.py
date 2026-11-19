@@ -222,6 +222,158 @@ def _flood_outlines(candidates):
     return None, None
 
 
+def _candidate_region(candidate, observation_regions):
+    """Return candidate-specific normalized polygons, region id, and evidence time."""
+    if not isinstance(candidate, dict):
+        return None, None, None
+    evidence = candidate.get("evidence")
+    evidence = evidence if isinstance(evidence, dict) else {}
+    summary = evidence.get("summary")
+    summary = summary if isinstance(summary, dict) else evidence
+    region_id = summary.get("region_id") or evidence.get("region_id")
+
+    polygons = summary.get("outline_polygons")
+    if isinstance(polygons, list) and polygons:
+        polygons = polygons[:_MAX_OUTLINES]
+    else:
+        polygon = summary.get("region_polygon")
+        if not isinstance(polygon, (list, tuple)) and isinstance(region_id, str):
+            region = next((item for item in (observation_regions or [])
+                           if isinstance(item, dict) and item.get("id") == region_id), None)
+            polygon = region.get("polygon") if isinstance(region, dict) else None
+        polygons = [polygon] if isinstance(polygon, (list, tuple)) else None
+
+    time_seconds = summary.get("outline_time_seconds")
+    if not _finite_number(time_seconds):
+        time_seconds = summary.get("event_time_seconds")
+    if not _finite_number(time_seconds):
+        segments = evidence.get("segments")
+        segments = [item for item in segments if isinstance(item, dict)] if isinstance(segments, list) else []
+        timed = []
+        for segment in segments:
+            when = segment.get("time_seconds")
+            if not _finite_number(when):
+                start, end = segment.get("start_seconds"), segment.get("end_seconds")
+                if _finite_number(start) and _finite_number(end) and float(end) >= float(start):
+                    # Detector evidence timestamps the beginning of each sampled
+                    # interval; using its midpoint can exceed a sparse pose track.
+                    when = float(start)
+            if _finite_number(when):
+                timed.append((float(segment.get("confidence", 0.0))
+                              if _finite_number(segment.get("confidence", 0.0)) else 0.0,
+                              float(when)))
+        time_seconds = max(timed, default=(0.0, None))[1]
+    return polygons, region_id, time_seconds
+
+
+def score_candidate_road_association(candidate, G, anchor=None, *, observation_regions=None,
+                                     camera_pose=None, media=None, registration=None,
+                                     camera_profile=None, calibration=None) -> dict:
+    """Associate one candidate ROI with roads; only a clear geometric winner is selected.
+
+    ``score`` is a buffered-road overlap ratio, not a calibrated probability. A
+    candidate-specific projection is required; job-wide camera footprints and
+    radius suggestions are deliberately not promoted to a candidate match.
+    """
+    calibration = calibration if isinstance(calibration, dict) else {"status": "nominal"}
+    calibration_status = calibration.get("status", "nominal")
+    polygons, region_id, time_seconds = _candidate_region(candidate, observation_regions)
+    base = {
+        "status": "context_only",
+        "basis": "candidate_region_projection",
+        "region_id": region_id,
+        "calibration_status": calibration_status,
+        "ranked_edges": [],
+        "selected_edge": None,
+        "score_semantics": "road_buffer_overlap_ratio_not_probability",
+    }
+    if G is None or not hasattr(G, "edges"):
+        return {**base, "status": "unavailable", "reason_code": "road_network_unavailable"}
+    if registration is None:
+        return {**base, "status": "unavailable", "reason_code": "projection_runtime_unavailable"}
+    if not polygons:
+        return {**base, "reason_code": "candidate_region_geometry_missing"}
+    size = _media_size(media)
+    if size is None:
+        return {**base, "status": "insufficient_pose", "reason_code": "media_dimensions_missing"}
+    width, height = size
+    media_kind = media.get("kind") if isinstance(media, dict) else None
+    if media_kind == "image":
+        evidence = candidate.get("evidence") if isinstance(candidate, dict) else None
+        summary = evidence.get("summary") if isinstance(evidence, dict) else None
+        summary = summary if isinstance(summary, dict) else {}
+        explicit_time = summary.get("outline_time_seconds", summary.get("event_time_seconds"))
+        time_seconds = float(explicit_time) if _finite_number(explicit_time) else None
+    if media_kind == "video" and not _finite_number(time_seconds):
+        return {**base, "status": "insufficient_pose", "reason_code": "candidate_time_missing"}
+
+    try:
+        if anchor is None:
+            anchor = _pose_anchor_gcj(camera_pose, time_seconds=time_seconds)
+            if anchor is None:
+                return {**base, "status": "insufficient_pose", "reason_code": "anchor_missing"}
+        pose = _pick_pose(camera_pose, anchor, time_seconds=time_seconds,
+                          require_time=media_kind == "video")
+        if not _positive_number(pose.get("height_agl_m")):
+            return {**base, "status": "insufficient_pose", "reason_code": "height_agl_missing"}
+        for field, lower, upper in (
+            ("gb_yaw_deg", -360.0, 360.0),
+            ("gb_pitch_deg", -90.0, 0.0),
+            ("gb_roll_deg", -180.0, 180.0),
+        ):
+            value = pose.get(field)
+            in_range = (_finite_number(value) and lower <= float(value) and
+                        (float(value) < upper if field == "gb_pitch_deg" else float(value) <= upper))
+            if not in_range:
+                return {**base, "status": "insufficient_pose",
+                        "reason_code": f"{field}_missing_or_invalid"}
+        pose = _with_intrinsics(pose, camera_profile, media)
+        transform = registration.pose_to_homography_init(pose, int(width), int(height))
+    except Exception as error:
+        logger.info("candidate road association pose unavailable: %s", error)
+        return {**base, "status": "insufficient_pose", "reason_code": "pose_projection_unavailable"}
+
+    try:
+        anchor_lng_wgs, anchor_lat_wgs = gcj02_to_wgs84(float(anchor["lng"]), float(anchor["lat"]))
+        radius_m = min(500.0, max(50.0, 3.0 * float(pose["height_agl_m"])))
+        pool = nearest_edges(G, float(anchor["lng"]), float(anchor["lat"]),
+                             max_dist_m=radius_m, limit=200)
+        pool_index = _pool_index(pool)
+        if not pool:
+            return {**base, "status": "no_match", "reason_code": "no_roads_near_candidate"}
+        merged = {}
+        for outline in polygons:
+            polygon = _outline_polygon(outline, width, height)
+            if polygon is None:
+                continue
+            for hit in registration.project_mask_to_edges(
+                    polygon, transform, G, pool,
+                    image_w_px=int(width), image_h_px=int(height)):
+                ratio = float(hit.get("overlap_ratio", 0.0))
+                if not math.isfinite(ratio) or ratio <= 0:
+                    continue
+                key = (int(hit["u"]), int(hit["v"]), int(hit.get("k", hit.get("key", 0))))
+                merged[key] = max(merged.get(key, 0.0), ratio)
+    except Exception as error:
+        logger.warning("candidate road association projection skipped: %s", error)
+        return {**base, "status": "unavailable", "reason_code": "projection_failed"}
+
+    ranked = _relay(merged, pool_index, basis="candidate_region_projection")["suggested_edges"]
+    if not ranked or ranked[0]["score"] < 0.05:
+        return {**base, "status": "no_match", "ranked_edges": ranked,
+                "reason_code": "candidate_region_has_no_clear_road_overlap"}
+    second_score = ranked[1]["score"] if len(ranked) > 1 else 0.0
+    margin = round(ranked[0]["score"] - second_score, 4)
+    enriched = {**base, "ranked_edges": ranked, "score_margin": margin}
+    if margin < 0.05:
+        return {**enriched, "status": "ambiguous", "reason_code": "road_overlap_not_distinct"}
+    reason_code = ("calibrated_candidate_region_unique_overlap"
+                   if calibration_status == "calibrated"
+                   else "nominal_candidate_region_unique_overlap")
+    return {**enriched, "status": "matched", "selected_edge": ranked[0],
+            "manual_confirmation_required": True, "reason_code": reason_code}
+
+
 def _outline_polygon(outline, width, height):
     """归一化 outline → 像素坐标 Polygon；<3 点 / 非法 / 面积≤0 → None。"""
     if not isinstance(outline, (list, tuple)):

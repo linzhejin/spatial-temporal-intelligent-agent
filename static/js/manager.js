@@ -1159,6 +1159,10 @@
     if (job.anchor_gcj) state.map.setView([job.anchor_gcj.lat, job.anchor_gcj.lng], 17);
     setPicking(true, 'road');
     updatePublishState();
+    var association = candidate.road_association;
+    if (association && association.status === 'matched' && association.selected_edge) {
+      pickSuggestedEdge(job, association.selected_edge, document.createElement('p'));
+    }
     if (byId('road-workspace') && byId('road-workspace').scrollIntoView) {
       byId('road-workspace').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -2622,6 +2626,43 @@
     target.appendChild(note);
   }
 
+  function appendCandidateRoadAssociation(candidate, target) {
+    var association = candidate && candidate.road_association;
+    if (!association || typeof association !== 'object') return;
+    var ranked = Array.isArray(association.ranked_edges) ? association.ranked_edges : [];
+    var selected = association.selected_edge;
+    var names = ranked.slice(0, 2).map(function (edge) { return edge && edge.road_name; })
+      .filter(function (name) { return typeof name === 'string' && name; });
+    var line = document.createElement('p'); line.className = 'vision-job-meta candidate-road-association';
+    if (association.status === 'matched' && selected) {
+      var overlap = Number(selected.score);
+      line.textContent = '智能体已将候选区域匹配到 ' + (selected.road_name || '未命名道路') +
+        (Number.isFinite(overlap) ? '（道路缓冲覆盖率约 ' + Math.round(overlap * 100) + '%）' : '') +
+        '。转入道路事件时会自动预选此路段；请核对地图高亮和现场依据，再确认发布。';
+    } else if (association.status === 'ambiguous') {
+      line.textContent = '候选区域覆盖不止一条可能道路' + (names.length ? '（' + names.join('、') + '）' : '') +
+        '；系统不自动选路，请在地图上确认。';
+    } else if (association.status === 'no_match') {
+      line.textContent = '候选区域没有形成清晰的道路匹配，请结合地图和原片选择。';
+    } else if (association.status === 'insufficient_pose') {
+      var reasonCode = String(association.reason_code || '');
+      if (reasonCode === 'height_agl_missing') {
+        line.textContent = '影像缺少可靠离地高度，暂时不能投影候选区域；请补充高度信息或人工选路。';
+      } else if (/^gb_(yaw|pitch|roll)_deg_/.test(reasonCode)) {
+        line.textContent = '影像云台方向信息不完整，暂时不能可靠投影候选区域；请核对照片元数据或 SRT。';
+      } else if (reasonCode === 'candidate_time_missing') {
+        line.textContent = '候选区域没有可用的拍摄时刻，暂时不能匹配对应帧姿态。';
+      } else {
+        line.textContent = '影像定位或候选时刻不足，暂时不能把该候选关联到道路。';
+      }
+    } else if (association.status === 'unavailable') {
+      line.textContent = '本机道路数据或投影条件不可用，暂时不能计算候选道路匹配。';
+    } else {
+      line.textContent = '候选区域缺少可用于道路投影的位置范围；当前结果仅供人工核对。';
+    }
+    target.appendChild(line);
+  }
+
   function appendFloodReviewSummary(result, target) {
     var items = Array.isArray(result && result.flood_review) ? result.flood_review : [];
     if (!items.length) return;
@@ -3022,6 +3063,7 @@
         var why = document.createElement('p'); why.textContent = item.reason || '请结合原始影像复核。';
         candidate.append(titleNode, why);
         appendCandidateSummary(item, job.media_kind, candidate);
+        appendCandidateRoadAssociation(item, candidate);
         appendCandidateEvidence(item, previewMedia, job.media_kind, candidate, result);
         if (automaticSummary.region_origin === 'automatic_model' && previewMedia &&
             typeof previewMedia._focusFloodCandidate === 'function') {
@@ -3314,10 +3356,21 @@
   }
 
   function maybeAutoPickRecommended(job, payload) {
-    if (!payload || payload.calibration_status !== 'calibrated') return;
     if (state.sourceJobId !== job.job_id || state.sourceMode !== 'candidate') return;
     if (!isConfirmedVisionCandidate(job, state.sourceCandidateIndex)) return;
     if (state.picked) return;
+    var candidate = job.result && job.result.candidates && job.result.candidates[state.sourceCandidateIndex];
+    var association = candidate && candidate.road_association;
+    if (association) {
+      if (association.status === 'matched' && association.selected_edge &&
+          association.calibration_status === 'calibrated') {
+        var associationFeedback = document.createElement('p');
+        associationFeedback.className = 'vision-job-meta';
+        pickSuggestedEdge(job, association.selected_edge, associationFeedback);
+      }
+      return;
+    }
+    if (!payload || payload.calibration_status !== 'calibrated') return;
     var edge = (payload.suggested_edges || [])[0];
     if (!edge) return;
     var feedback = document.createElement('p');

@@ -1,10 +1,11 @@
 """用真实影像与地面控制点标定相机内参比例和离地高度偏移。
 
 输入：
-  --image    真实影像路径
-  --pose     可选，包含 trajectory 的 JSON；缺省从照片 EXIF/XMP 读取
-  --points   JSON：[{"image_xy":[x,y],"map_lng_gcj":..., "map_lat_gcj":...}, ...]
-  --output   标定结果 JSON
+  --image          真实影像路径
+  --pose           可选，包含 trajectory 的 JSON；缺省读照片 EXIF/XMP
+  --points         JSON；支持控制点列表，或 prepare_calibration_session.py 产出的会话对象
+  --output         标定结果 JSON（拟合残差与阈值）
+  --profile-output 可选，写出可直接用于 VISION_CAMERA_PROFILE_PATH 的相机配置 JSON
 
 该方法只做小范围网格搜索，不引入 scipy；输出 calibrated 仅在残差达标时为 true。
 """
@@ -32,9 +33,11 @@ def sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def _load_pose(path: Path, pose_json: Path | None) -> dict:
+def _load_pose(path: Path, pose_json: Path | None, session_pose: dict | None = None) -> dict:
     if pose_json is not None:
         data = json.loads(pose_json.read_text(encoding="utf-8"))
+    elif isinstance(session_pose, dict) and session_pose.get("trajectory"):
+        data = session_pose
     else:
         data = parse_image_pose(path)
     if not isinstance(data, dict) or not isinstance(data.get("trajectory"), list):
@@ -84,16 +87,23 @@ def main() -> None:
     parser.add_argument("--pose", type=Path)
     parser.add_argument("--points", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--profile-output", type=Path,
+                        help="可选：写出可直接用于 VISION_CAMERA_PROFILE_PATH 的相机配置 JSON")
     parser.add_argument("--max-rms-m", type=float, default=10.0)
     parser.add_argument("--max-point-m", type=float, default=15.0)
     parser.add_argument("--min-points", type=int, default=3)
     args = parser.parse_args()
 
-    pose_data = _load_pose(args.image, args.pose)
-    base = pose_data["trajectory"][0]
-    points = json.loads(args.points.read_text(encoding="utf-8"))
+    raw_points = json.loads(args.points.read_text(encoding="utf-8"))
+    session_pose = None
+    if isinstance(raw_points, dict):
+        session_pose = raw_points.get("pose")
+        raw_points = raw_points.get("points")
+    points = raw_points
     if not isinstance(points, list) or len(points) < args.min_points:
         raise ValueError(f"至少需要 {args.min_points} 个控制点")
+    pose_data = _load_pose(args.image, args.pose, session_pose)
+    base = pose_data["trajectory"][0]
     from PIL import Image
     with Image.open(args.image) as image:
         width, height = image.size
@@ -153,6 +163,25 @@ def main() -> None:
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    if args.profile_output is not None:
+        camera_profile = {
+            "name": f"{profile.get('name') or 'camera'}-calibrated",
+            "sensor_width_mm": profile.get("sensor_width_mm"),
+            "focal_35mm": round(float(profile.get("focal_35mm") or 24.0) * best["fx_scale"], 4),
+            "image_width": profile.get("image_width"),
+            "image_height": profile.get("image_height"),
+            "calibrated": calibrated,
+            "residual_m": best["rms_m"],
+            "max_residual_m": best["max_m"],
+            "ground_offset_m": best["ground_offset_m"],
+            "source_report": str(args.output),
+            "source_image_sha256": report["image_sha256"],
+            "note": "由 calibrate_camera_profile.py 生成；calibrated=false 时只能用于预演。",
+        }
+        args.profile_output.parent.mkdir(parents=True, exist_ok=True)
+        args.profile_output.write_text(
+            json.dumps(camera_profile, ensure_ascii=False, indent=2), encoding="utf-8")
+        print(str(args.profile_output))
     print(json.dumps({key: report[key] for key in (
         "fx_scale", "ground_offset_m", "rms_m", "max_m", "calibrated")}, ensure_ascii=False))
     print(str(args.output))
