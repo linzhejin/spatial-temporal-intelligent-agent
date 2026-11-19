@@ -28,9 +28,11 @@ MODEL_ROOT = Path('/home/ubuntu/luojia-models')
 BACKUP_ROOT = Path('/home/ubuntu/luojia-release-backups')
 BACKUP_SCRIPT = OPS / 'flood_backup.py'
 SERVICES = ('whu-walker', 'whu-agent-worker', 'whu-vision-worker', 'whu-vision-trial-worker')
-ASSET_VERSION = '20261109-mountain-v1'
-MANAGER_ASSET_VERSION = '20261112-auto-flood-v2'
-CACHE_NAME = 'whu-walker-v132'
+# Web asset versions and the Service Worker cache name are read from the reviewed
+# commit at release time (see expected_web_assets) instead of being pinned here,
+# so the live check cannot drift behind the frontend.
+ASSET_VERSION_PATTERN = re.compile(r"""\?v=([A-Za-z0-9._-]+)""")
+CACHE_NAME_PATTERN = re.compile(r"""var\s+CACHE_NAME\s*=\s*['"](whu-walker-v\d+)['"]""")
 GITEE_MAIN_URL = 'https://gitee.com/kim-in-cheol/campus-spatio-temporal-agent.git'
 PRESERVED_UNTRACKED = {'?? cloudflared', '?? scripts/_probe_shortest.py', '?? wget-log'}
 MODEL_SHA256 = '1ef47ccd3aef9cafee359485cfb38c65edcd6625e1552d02e23afacd98f7eb52'
@@ -87,15 +89,39 @@ def app_package_fingerprint():
             'file_sha256': hashlib.sha256(apk.read_bytes()).hexdigest()}
 
 
-def web_assets_ready():
+def parse_web_assets(index_html, manager_html, service_worker):
+    """Extract the versioned asset tokens and cache name a release must serve."""
+    cache = CACHE_NAME_PATTERN.search(service_worker)
+    web = sorted(set(ASSET_VERSION_PATTERN.findall(index_html)))
+    manager = sorted(set(ASSET_VERSION_PATTERN.findall(manager_html)))
+    if not cache or not web or not manager:
+        raise ValueError('Reviewed commit lacks versioned web assets or a Service Worker cache name')
+    if "serviceWorker.register('/sw.js')" not in index_html:
+        raise ValueError('Reviewed commit does not register the Service Worker')
+    return {'cache_name': cache.group(1), 'web_asset_versions': web, 'manager_asset_versions': manager}
+
+
+def expected_web_assets(commit):
+    def show(name):
+        return run(['git', 'show', f'{commit}:{name}'])
+    return parse_web_assets(show('static/index.html'), show('static/manager.html'), show('static/sw.js'))
+
+
+def served_assets_match(expected, html, manager, worker):
+    return ("serviceWorker.register('/sw.js')" in html
+            and all('?v=' + token in html for token in expected['web_asset_versions'])
+            and all('?v=' + token in manager for token in expected['manager_asset_versions'])
+            and expected['cache_name'] in worker)
+
+
+def web_assets_ready(expected):
     with urllib.request.urlopen('http://127.0.0.1:5000/', timeout=5) as response:
         html = response.read().decode('utf-8')
     with urllib.request.urlopen('http://127.0.0.1:5000/sw.js', timeout=5) as response:
         worker = response.read().decode('utf-8')
     with urllib.request.urlopen('http://127.0.0.1:5000/manager', timeout=5) as response:
         manager = response.read().decode('utf-8')
-    return (ASSET_VERSION in html and "serviceWorker.register('/sw.js')" in html
-            and MANAGER_ASSET_VERSION in manager and CACHE_NAME in worker)
+    return served_assets_match(expected, html, manager, worker)
 
 
 def run_public_smoke(bundle):
@@ -336,6 +362,7 @@ def main(old, new, rollback, bundle_path):
     if not gitee_ref or gitee_ref[0] != new:
         raise RuntimeError('Gitee main is not the reviewed release')
     bundle = validate_bundle(bundle_path, new)
+    web_assets = expected_web_assets(new)
     run(['git', 'cat-file', '-e', rollback + '^{commit}'])
     run(['git', 'merge-base', '--is-ancestor', old, new])
     run(['git', 'merge-base', '--is-ancestor', old, rollback])
@@ -373,7 +400,7 @@ def main(old, new, rollback, bundle_path):
         states = run(['systemctl', 'is-active', *SERVICES]).splitlines()
         if states != ['active'] * len(SERVICES):
             raise RuntimeError('A production service is inactive')
-        if not web_assets_ready():
+        if not web_assets_ready(web_assets):
             raise RuntimeError('The public web cache version or Service Worker entry point is not live')
         if not flood_worker_ready(database_url, MODEL_SHA256):
             raise RuntimeError('The approved flood worker did not become ready')
@@ -387,7 +414,9 @@ def main(old, new, rollback, bundle_path):
                   'database_migration': 'none', 'apk_version': package_after['version_name'],
                   'apk_version_code': package_after['version_code'], 'apk_sha256': package_after['file_sha256'],
                   'apk_unchanged': package_after == package_before,
-                  'service_worker_cache': CACHE_NAME, 'web_asset_version': ASSET_VERSION,
+                  'service_worker_cache': web_assets['cache_name'],
+                  'web_asset_versions': web_assets['web_asset_versions'],
+                  'manager_asset_versions': web_assets['manager_asset_versions'],
                   'flood_mode': 'assisted_review', 'flood_model_sha256': bundle['model_sha256'],
                   'public_smoke': public_smoke,
                   'completed_at': datetime.now(timezone.utc).isoformat(),
