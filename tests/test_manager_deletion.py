@@ -59,18 +59,20 @@ def test_begin_delete_jobs_locks_duplicate_rows_in_stable_order(monkeypatch):
         def execute(self, query, params):
             normalized = " ".join(query.split())
             calls.append((normalized, params))
-            if normalized.startswith("SELECT sha256 FROM manager_vision_job"):
-                return Cursor(row={"sha256": digest})
+            if normalized.startswith("SELECT sha256, purpose FROM manager_vision_job"):
+                return Cursor(row={"sha256": digest, "purpose": "trial"})
             if normalized.startswith("SELECT job_id FROM manager_vision_job"):
-                assert "WHERE sha256=%s ORDER BY job_id FOR UPDATE" in normalized
-                assert params == (digest,)
+                assert "WHERE sha256=%s AND purpose=%s ORDER BY job_id FOR UPDATE" in normalized
+                assert params == (digest, "trial")
                 return Cursor(rows=[{"job_id": job_id} for job_id in locked_ids])
             if normalized.startswith("UPDATE manager_vision_job"):
-                assert "WHERE sha256=%s AND deleted_at IS NULL" in normalized
-                assert params == (digest,)
+                assert "WHERE sha256=%s AND purpose=%s AND deleted_at IS NULL" in normalized
+                assert params == (digest, "trial")
                 return Cursor()
-            assert normalized.startswith("SELECT job_id, media_path, sha256 FROM manager_vision_job")
-            assert params == (digest,)
+            assert normalized.startswith(
+                "SELECT job_id, media_path, sha256 FROM manager_vision_job WHERE sha256=%s AND purpose=%s"
+            )
+            assert params == (digest, "trial")
             return Cursor(rows=[{"job_id": job_id, "media_path": job_id + ".png", "sha256": digest}
                                 for job_id in locked_ids])
 
@@ -81,7 +83,7 @@ def test_begin_delete_jobs_locks_duplicate_rows_in_stable_order(monkeypatch):
     assert [row["job_id"] for row in deleted] == locked_ids
     assert len(calls) == 4
     assert "ORDER BY job_id FOR UPDATE" in calls[1][0]
-    assert calls[1][1] == (digest,)
+    assert calls[1][1] == (digest, "trial")
 
 
 def install_fake_vision_repository(monkeypatch, rows):
