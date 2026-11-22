@@ -43,3 +43,21 @@ test('route progress starts at the projected position and advances along the rem
   assert.equal(n.paths[1].length, 2);
   n.nav.stop();
 });
+
+test('location updates preserve the zoom level selected by the user', () => {
+  let zoom = 14;
+  const map = { on() {}, off() {}, removeLayer() {}, getZoom() { return zoom; },
+    panTo() {}, setView(center, level) { zoom = level; } };
+  const marker = { addTo() { return this; }, setLatLng() {}, getElement() { return null; } };
+  const context = vm.createContext({ window: {}, navigator: {},
+    document: { addEventListener() {}, removeEventListener() {} },
+    L: { marker() { return marker; }, divIcon(o) { return o; } },
+    setInterval() { return 1; }, clearInterval() {}, console });
+  vm.runInContext(fs.readFileSync(require.resolve('../../static/js/navigation.js'), 'utf8'), context);
+  const nav = context.window.WhuWalkerNavigation;
+  nav.start({ map, routeData: { mode: 'walk', recommended: [{ lat: 30, lng: 114 },
+    { lat: 30, lng: 114.002 }], steps: [] }, onCard() {} });
+  nav.onFix({ gcjLat: 30, gcjLng: 114.0002, accuracy: 5 });
+  assert.equal(zoom, 14);
+  nav.stop();
+});

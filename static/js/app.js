@@ -5110,6 +5110,14 @@
                 if (window.WhuWalkerNavigation) WhuWalkerNavigation.setFollow(true);
             });
         }
+        ['in', 'out'].forEach(function (direction) {
+            var button = document.getElementById('nav-zoom-' + direction);
+            if (button) button.addEventListener('click', function () {
+                if (!state.map) return;
+                if (direction === 'in') state.map.zoomIn(1, { animate: false });
+                else state.map.zoomOut(1, { animate: false });
+            });
+        });
 
         // ===== 语音输入（按住说话；松开发送，上滑取消） =====
         var voiceBtn = document.getElementById('voice-btn');

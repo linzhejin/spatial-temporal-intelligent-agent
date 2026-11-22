@@ -411,11 +411,7 @@
         }
         setArrowHeading(nav, disp);
         if (nav.follow) {
-            if (nav.map.getZoom() < 16) {
-                nav.map.setView([gcjLat, gcjLng], 17, { animate: true });
-            } else {
-                nav.map.panTo([gcjLat, gcjLng], { animate: true, duration: 0.4 });
-            }
+            nav.map.panTo([gcjLat, gcjLng], { animate: true, duration: 0.4 });
         }
 
         // 偏航判定：精度差(>100m)时只提示不强判；连续 2 点确认

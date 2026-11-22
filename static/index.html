@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261122-navigation-v1">
+    <link rel="stylesheet" href="/css/style.css?v=20261122-voice-zoom-v1">
 </head>
 <body>
 
@@ -87,6 +87,10 @@
             <div class="nav-gps-warn" id="nav-gps-warn" hidden>GPS 信号弱，位置更新可能延迟</div>
 
             <!-- 重居中按钮（拖拽地图后出现） -->
+            <div class="nav-zoom" aria-label="地图缩放">
+                <button type="button" id="nav-zoom-in" aria-label="放大地图">+</button>
+                <button type="button" id="nav-zoom-out" aria-label="缩小地图">−</button>
+            </div>
             <button type="button" class="nav-recenter" id="nav-recenter" hidden aria-label="回到我的位置">
                 <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <circle cx="12" cy="12" r="3.5"></circle>
@@ -294,13 +298,14 @@
                 maxlength="200"
                 rows="1"
             ></textarea>
-            <button id="voice-btn" class="voice-btn" type="button" title="语音输入" aria-label="语音输入">
+            <button id="voice-btn" class="voice-btn" type="button" title="按住说话，松开发送，上滑取消" aria-label="按住说话，松开发送，上滑取消">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
                     <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path>
                     <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
                     <line x1="12" y1="19" x2="12" y2="23"></line>
                     <line x1="8" y1="23" x2="16" y2="23"></line>
                 </svg>
+                <span>按住说话</span>
             </button>
             <button id="submit-btn" class="submit-btn" type="button" title="发送 (Enter)">
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
@@ -577,12 +582,12 @@
     <!-- 语音播报：APK 原生 TTS 优先，浏览器降级 speechSynthesis -->
     <script src="/js/voice-output.js?v=20260916d"></script>
     <!-- 语音输入：Web Speech API / APK 原生 ASR -->
-    <script src="/js/voice-input.js?v=20260916d"></script>
+    <script src="/js/voice-input.js?v=20261122-voice-zoom-v1"></script>
     <!-- 实时导航引擎：投影/偏航重算/指令状态机/北朝上跟随 -->
-    <script src="/js/navigation.js?v=20261122-navigation-v1"></script>
+    <script src="/js/navigation.js?v=20261122-voice-zoom-v1"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261122-navigation-v1"></script>
+    <script src="/js/app.js?v=20261122-voice-zoom-v1"></script>
     <script>
         if ('serviceWorker' in navigator && window.isSecureContext) {
             window.addEventListener('load', function () {

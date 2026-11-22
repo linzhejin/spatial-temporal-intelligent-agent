@@ -29,6 +29,28 @@
     var srStarted = false;     // onstart 已触发
     var pendingRelease = false; // onstart 前松手
     var finalFired = false;
+    var pendingFinal = null;
+
+    function finishFinal(text) {
+        var cb = hooks;
+        active = false;
+        pendingFinal = null;
+        hideCard();
+        if (cb && text && cb.onFinal) cb.onFinal(text);
+        if (cb && cb.onStateChange) cb.onStateChange('idle');
+        hooks = null;
+    }
+
+    function receiveFinal(text) {
+        text = (text || '').trim();
+        if (!released) {
+            pendingFinal = text;
+            setInterim(text);
+            if (text && hooks && hooks.onInterim) hooks.onInterim(text);
+        } else {
+            finishFinal(text);
+        }
+    }
 
     function isWeChat() {
         return /MicroMessenger/i.test(navigator.userAgent || '');
@@ -124,12 +146,7 @@
                 if (hooks.onInterim) hooks.onInterim(ev.text);
             }
         } else if (ev.event === 'final') {
-            var text = (ev.text || '').trim();
-            active = false;
-            hideCard();
-            if (hooks.onStateChange) hooks.onStateChange('idle');
-            if (text && hooks.onFinal) hooks.onFinal(text);
-            hooks = null;
+            receiveFinal(ev.text);
         } else if (ev.event === 'error') {
             active = false;
             hideCard();
@@ -188,9 +205,7 @@
             }
             if (finalText && !finalFired) {
                 finalFired = true;
-                active = false;
-                hideCard();
-                if (cb.onFinal) cb.onFinal(finalText.trim());
+                receiveFinal(finalText);
             }
         };
 
@@ -212,6 +227,7 @@
         recognition.onend = function () {
             srStarted = false;
             if (!active) return;
+            if (!released && pendingFinal !== null) return;
             active = false;
             hideCard();
             if (cb.onStateChange) cb.onStateChange('idle');
@@ -236,6 +252,7 @@
             active = true;
             cancelled = false;
             released = false;
+            pendingFinal = null;
 
             var bridge = apkBridge();
             if (bridge) {
@@ -259,6 +276,10 @@
         release: function () {
             if (!active || released) return;
             released = true;
+            if (pendingFinal !== null) {
+                finishFinal(pendingFinal);
+                return;
+            }
             var bridge = apkBridge();
             if (bridge) {
                 try { bridge.release(); } catch (e) { /* ignore */ }
@@ -278,6 +299,7 @@
             if (!active) return;
             cancelled = true;
             released = true;
+            pendingFinal = null;
             var bridge = apkBridge();
             if (bridge) {
                 try { bridge.cancel(); } catch (e) { /* ignore */ }

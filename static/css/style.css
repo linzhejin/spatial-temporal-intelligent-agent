@@ -1161,6 +1161,7 @@ body.is-planning-mode .desktop-route-workbench {
 
 .nl-input {
     flex: 1;
+    min-width: 0;
     padding: 12px 16px;
     font-size: 0.9rem;
     font-family: inherit;
@@ -2460,15 +2461,19 @@ body.is-planning-mode .desktop-route-workbench {
 
 /* ---------- 输入栏语音麦克风（按住说话） ---------- */
 .voice-btn {
-    width: 44px;
+    min-width: 88px;
     height: 44px;
-    border-radius: 50%;
+    padding: 0 9px;
+    border-radius: 22px;
     border: 1.5px solid var(--stone);
     background: var(--surface);
     color: var(--cherry);
     display: flex;
     align-items: center;
     justify-content: center;
+    gap: 4px;
+    font-size: 12px;
+    white-space: nowrap;
     cursor: pointer;
     flex-shrink: 0;
     touch-action: none;            /* 按住时不触发滚动/缩放手势 */
@@ -2714,6 +2719,28 @@ body.nav-running .whu-locate-btn { opacity: 0; pointer-events: none; }
     box-shadow: 0 3px 12px rgba(180, 110, 0, 0.35);
 }
 .nav-gps-warn[hidden] { display: none; }
+
+/* 导航时保留明确的缩放操作，避免被顶部指令卡遮挡。 */
+.nav-zoom {
+    position: absolute;
+    right: 14px;
+    bottom: 164px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+.nav-zoom button {
+    width: 46px;
+    height: 46px;
+    border: 0;
+    border-radius: 50%;
+    background: #fff;
+    color: var(--cherry);
+    box-shadow: 0 4px 16px rgba(30, 20, 15, 0.22);
+    font-size: 26px;
+    line-height: 1;
+    cursor: pointer;
+}
 
 /* ---------- 重居中按钮 ---------- */
 .nav-recenter {
