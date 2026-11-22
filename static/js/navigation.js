@@ -305,6 +305,9 @@
         navState.offCount = 0;
         navState.progress = 0;
         navState.lastProjection = null;
+        navState.lastProjTs = 0;
+        navState.lastProgress = 0;
+        navState.speed = MODE_SPEED_MS[navState.mode] || MODE_SPEED_MS.walk;
         if (routeData.end && routeData.end.name) navState.endName = routeData.end.name;
         // 多模态路径：保存 legs 以便跨段切换 mode（每段 mode 不同，影响速度/偏航阈值）
         if (routeData.route_kind === 'multimodal' && routeData.legs && routeData.legs.length > 1) {
@@ -333,12 +336,27 @@
             var dt = (nowMs - nav.lastProjTs) / 1000;
             if (dt > 0.5 && dt < 6) {
                 var v = (proj.progress - nav.lastProgress) / dt;
-                if (v >= 0 && v < 30) nav.speed = nav.speed * 0.6 + v * 0.4;
+                // 静止或定位抖动不能作为行进速度，否则 ETA 会无限增长。
+                var typical = MODE_SPEED_MS[nav.mode] || MODE_SPEED_MS.walk;
+                if (v >= typical * 0.4 && v <= typical * 2) {
+                    nav.speed = nav.speed * 0.6 + v * 0.4;
+                }
             }
         }
         nav.lastProjTs = nowMs;
         nav.lastProgress = proj.progress;
         nav.lastProjection = proj;
+        if (nav._cb.onProgress) {
+            var a = nav.geo.pts[proj.seg], b = nav.geo.pts[proj.seg + 1];
+            var remainingPath = [{
+                lat: a.lat + (b.lat - a.lat) * proj.t,
+                lng: a.lng + (b.lng - a.lng) * proj.t,
+            }];
+            for (var p = proj.seg + 1; p < nav.geo.pts.length; p++) {
+                remainingPath.push({ lat: nav.geo.pts[p].lat, lng: nav.geo.pts[p].lng });
+            }
+            nav._cb.onProgress(remainingPath);
+        }
 
         // 航向决策：
         //   A) 沿线行进中（贴线≤30m 且在移动）→ 箭头吸附到所在路段方位角，
@@ -645,8 +663,8 @@
             }
             stopGpsHeartbeat();
             if (window.WhuWalkerVoiceOutput) window.WhuWalkerVoiceOutput.stop();
-            if (n._cb.onStateChange) n._cb.onStateChange(false);
             nav = null;
+            if (n._cb.onStateChange) n._cb.onStateChange(false);
         },
     };
 

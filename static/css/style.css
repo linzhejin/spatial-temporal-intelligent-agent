@@ -2607,7 +2607,8 @@ body.is-planning-mode .desktop-route-workbench {
     pointer-events: none;
 }
 .nav-overlay[hidden] { display: none; }
-.nav-overlay > * { pointer-events: auto; }
+.nav-overlay > * { pointer-events: none; }
+.nav-overlay button { pointer-events: auto; touch-action: manipulation; }
 
 /* 导航中收起地图杂物：图例 / 缩放 / 图层 / 选点控件组 / 定位按钮 */
 body.nav-running .map-legend { display: none; }
@@ -2732,6 +2733,7 @@ body.nav-running .whu-locate-btn { opacity: 0; pointer-events: none; }
     cursor: pointer;
     animation: recenter-in 0.2s ease;
 }
+.nav-recenter[hidden] { display: none; }
 @keyframes recenter-in {
     from { opacity: 0; transform: scale(0.7); }
     to { opacity: 1; transform: scale(1); }

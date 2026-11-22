@@ -21,7 +21,7 @@
 
     <!-- Leaflet 1.9.4（本地化部署）；底图/POI/路线全站统一 GCJ-02，OSM 路网仅在后端 WGS-84 计算 -->
     <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-    <link rel="stylesheet" href="/css/style.css?v=20261113-candidate-layout-v1">
+    <link rel="stylesheet" href="/css/style.css?v=20261122-navigation-v1">
 </head>
 <body>
 
@@ -579,10 +579,10 @@
     <!-- 语音输入：Web Speech API / APK 原生 ASR -->
     <script src="/js/voice-input.js?v=20260916d"></script>
     <!-- 实时导航引擎：投影/偏航重算/指令状态机/北朝上跟随 -->
-    <script src="/js/navigation.js?v=20260928c"></script>
+    <script src="/js/navigation.js?v=20261122-navigation-v1"></script>
     <!-- 路线状态事务：切换方式/偏好时原子提交，失败保留原路线 -->
     <script src="/js/route-state.js?v=20260928b"></script>
-    <script src="/js/app.js?v=20261109-mountain-v1"></script>
+    <script src="/js/app.js?v=20261122-navigation-v1"></script>
     <script>
         if ('serviceWorker' in navigator && window.isSecureContext) {
             window.addEventListener('load', function () {

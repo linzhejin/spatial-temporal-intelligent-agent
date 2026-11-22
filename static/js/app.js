@@ -2630,6 +2630,13 @@
                 trackEvent('nav_arrive', { mode: route.mode || 'walk' });
             },
             onToast: showNavToast,
+            onProgress: function (path) {
+                if (state.recommendedLine) {
+                    state.recommendedLine.setLatLngs(path.map(function (point) {
+                        return gcjToLatLng(point.lng, point.lat);
+                    }));
+                }
+            },
             onFollowChange: function (following) {
                 var btn = document.getElementById('nav-recenter');
                 if (btn) btn.hidden = following;
@@ -2639,6 +2646,8 @@
                     document.body.classList.remove('nav-running');
                     if (overlay) overlay.hidden = true;
                     if (state._navUnsubscribe) { state._navUnsubscribe(); state._navUnsubscribe = null; }
+                    if (state.latestRoute) renderRoute(state.latestRoute);
+                    refreshNavigationMapSize();
                 }
             },
             renderRoute: function (data) { renderRoute(data); },
@@ -2651,6 +2660,7 @@
 
         document.body.classList.add('nav-running');
         if (overlay) overlay.hidden = false;
+        refreshNavigationMapSize();
         state._navUnsubscribe = subscribeLocation(function (loc) { Nav.onFix(loc); });
 
         // 立即推一次已有位置（避免等下一个 GPS 回调）
@@ -2664,6 +2674,14 @@
             mapPanel.scrollIntoView({ block: 'start' });
         }
         trackEvent('nav_start', { mode: route.mode || state.travelMode });
+    }
+
+    function refreshNavigationMapSize() {
+        var refresh = function () {
+            if (state.map) state.map.invalidateSize({ pan: false, debounceMoveend: true });
+        };
+        if (window.requestAnimationFrame) window.requestAnimationFrame(refresh);
+        else setTimeout(refresh, 0);
     }
 
     function stopNavigation() {
@@ -4876,6 +4894,7 @@
             handle.setAttribute('aria-valuenow', String(value));
             handle.setAttribute('aria-valuetext', '地图约 ' + value + '%，对话约 ' + (100 - value) + '%');
         }
+        var mapRefreshPending = false;
         function setPaneHeight(requestedHeight) {
             if (!isMobileViewport()) return;
             var viewport = viewportHeight();
@@ -4885,12 +4904,16 @@
             document.body.style.setProperty('--mobile-map-pane-height', height + 'px');
             updateAria(height, viewport);
             var refreshMap = function () {
+                mapRefreshPending = false;
                 if (state.map && typeof state.map.invalidateSize === 'function') {
                     state.map.invalidateSize({ pan: false, debounceMoveend: true });
                 }
             };
-            if (window.requestAnimationFrame) window.requestAnimationFrame(refreshMap);
-            else setTimeout(refreshMap, 0);
+            if (!mapRefreshPending) {
+                mapRefreshPending = true;
+                if (window.requestAnimationFrame) window.requestAnimationFrame(refreshMap);
+                else setTimeout(refreshMap, 0);
+            }
         }
         function syncViewport() {
             if (!isMobileViewport()) {
