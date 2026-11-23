@@ -2,16 +2,16 @@
 
 核对时间：2026-11-23（北京时间）。本轮完成多源路况线索、管理台复核和智能体联动，已完成回归并部署；论文稿件与论文实验记录未处理。下方旧交接和研究记录按各自日期理解。
 
-**当前状态：**运行时功能提交 `2607cc3` 已同步至 GitHub、Gitee 并部署。路况线索遵循“采集 → 人工复核 → 采纳后生成道路事件”；仅人工采纳会改动道路事件库和现有路况版本。E3 双策略驱动器与图稿清理各自独立提交，没有混入线索功能提交。现场相机标定和校园独立真值验收仍未完成。
+**当前状态：**运行时功能提交 `2607cc3` 与通知截图抽取修复 `1e0cc9f` 已同步至 GitHub、Gitee 并部署。路况线索遵循“采集 → 人工复核 → 采纳后生成道路事件”；仅人工采纳会改动道路事件库和现有路况版本。E3 双策略驱动器与图稿清理各自独立提交，没有混入线索功能提交。现场相机标定和校园独立真值验收仍未完成。
 
 ## 0. 当前产品与发布状态（2026-11-23）
 
-- 生产 `/home/ubuntu/campus-spatial-intelligence-agent` 的运行时代码为 `2607cc3`；`whu-walker`、`whu-agent-worker`、`whu-vision-worker`、`whu-vision-trial-worker` 均 active，本机与公网 `/health` 返回 `ok`。管理台资源版本为 `20261123-clue-review-v2`；Android App 仍为 1.4.2（versionCode 7），本次没有修改 APK。
+- 生产 `/home/ubuntu/campus-spatial-intelligence-agent` 的运行时代码为 `1e0cc9f`；`whu-walker`、`whu-agent-worker`、`whu-vision-worker`、`whu-vision-trial-worker` 均 active，本机与公网 `/health` 返回 `ok`。管理台资源版本为 `20261123-clue-review-v2`；Android App 仍为 1.4.2（versionCode 7），本次没有修改 APK。
 - 已接入线索来源为官方通知（A 级）、网页检索（C 级）、无人机巡检影像（B 级）、用户现场上报（B 级）。天气预警、交管接口、校内电子屏和历史记录采集器保持关闭，不向管理员或用户宣称已经接入。任何来源都只产生待核线索，不会自动发布。
 - 管理台线索接口为 `GET/POST /api/manager/clues`、`POST /api/manager/clues/from-vision`、`GET/PATCH /api/manager/clues/<id>`、`POST /api/manager/clues/<id>/adopt` 和 `/reject`；采用现有双通道管理员鉴权。智能体工具总数为 17，其中新增 `query_road_clues`、`collect_road_clues`、`report_field_clue`。
 - 线索 JSON 文件尚未创建；路况事件仍使用既有 `ROAD_CONDITIONS_FILE`。本次没有数据库迁移或新增依赖。发布前的数据库与路况文件备份已恢复验证，目录为 `/home/ubuntu/luojia-release-backups/20261123T134356Z-94dbc20e`。
-- 线索与智能体测试 271/271、智能体及规划回归 351/351、线索复核浏览器 E2E 1/1、事件控件浏览器回归 27/27 通过；全量校园数据结构校验通过。路段标注仍有 9,510 条占位说明，本次未把它们当成实测数据。
-- 生产环境未配置 `NOTICE_VISION_BASE_URL`、`NOTICE_VISION_API_KEY`、`NOTICE_VISION_MODEL`，因此通知截图的模型抽取当前明确不可用；粘贴文本、网页、无人机影像和用户现场上报按各自通道工作。需配置图片通道后另行用真实通知截图验收。
+- 线索与智能体测试 273/273、智能体及规划回归 351/351、线索复核浏览器 E2E 1/1、事件控件浏览器回归 27/27 通过；全量校园数据结构校验通过。路段标注仍有 9,510 条占位说明，本次未把它们当成实测数据。
+- 生产图片通道已复用既有 DeepSeek Flash 配置，真实武汉大学通知截图抽取成功，置信度 0.95；未写入生产线索或道路事件。通知文本没有明确年份，因此生效起止时间保持空值。
 - E3 运行记录为诊断性质，`formal_ready: false`，不能作为正式论文实验结论。相机标定工具通过代码或合成测试，不等于相机已完成校园现场标定或定位精度验收。
 
 ## 历史方向重置记录（2026-11-16）
