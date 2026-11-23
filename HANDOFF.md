@@ -1,16 +1,18 @@
 # 珞珈智行：当前进度与接手交接
 
-核对时间：2026-11-20（北京时间）。本轮完成产品代码范围审查、测试和统一网页发布；论文稿件与论文实验记录未处理。下方旧交接和研究记录按各自日期理解。
+核对时间：2026-11-23（北京时间）。本轮完成多源路况线索、管理台复核和智能体联动，已完成回归并部署；论文稿件与论文实验记录未处理。下方旧交接和研究记录按各自日期理解。
 
-**当前状态：**运行时代码提交 `f1274b4` 已同步至 GitHub、Gitee 并部署到生产。影像候选区域到道路关联、离线相机标定预检/验收工具，以及 NDVI 补充属性数据已包含在发布中。道路匹配仍是供人工核验的建议；现场标定与校园独立真值验收尚未完成。NDVI 文件是独立补充数据，尚未接入正式路网属性主表或运行时。
+**当前状态：**运行时功能提交 `2607cc3` 已同步至 GitHub、Gitee 并部署。路况线索遵循“采集 → 人工复核 → 采纳后生成道路事件”；仅人工采纳会改动道路事件库和现有路况版本。E3 双策略驱动器与图稿清理各自独立提交，没有混入线索功能提交。现场相机标定和校园独立真值验收仍未完成。
 
-## 0. 当前产品与发布状态（2026-11-20）
+## 0. 当前产品与发布状态（2026-11-23）
 
-- 候选区域只有在姿态、时间和几何条件足够时才计算道路关联；有歧义时不自动选路。转入道路事件后仍须人工核对路段和现场依据，才能确认发布。
-- 标定工具提供会话预检、参数拟合和独立验收门禁。工具与合成测试通过不代表相机已完成校园现场标定，也不代表达到生产验收。
-- 生产运行时代码为 `f1274b4`；`whu-walker`、`whu-agent-worker`、`whu-vision-worker`、`whu-vision-trial-worker` 均 active，公网 `/health` 返回 200。线上 Service Worker 为 `whu-walker-v140`，管理台脚本为 `20261119-candidate-road-association-v2`。Android App 仍为 1.4.2（versionCode 7），APK 哈希未变。
-- 视觉标定/道路关联/NDVI 专项 Python 测试 70/70 通过，JavaScript 测试 246/246 通过；NDVI `--dry-run` 统计与 `实验补充/属性覆盖_20261119.json` 一致。全量 Python 测试中另有 14 个冻结受控回放用例因 `boundary_source` SHA-256 不匹配失败；该实验问题未纳入本次产品发布。
-- NDVI 文件是独立补充数据，尚未接入正式路网属性主表或运行时；本轮未切换自动定位配置，也未宣称现场标定或生产精度验收通过。
+- 生产 `/home/ubuntu/campus-spatial-intelligence-agent` 的运行时代码为 `2607cc3`；`whu-walker`、`whu-agent-worker`、`whu-vision-worker`、`whu-vision-trial-worker` 均 active，本机与公网 `/health` 返回 `ok`。管理台资源版本为 `20261123-clue-review-v2`；Android App 仍为 1.4.2（versionCode 7），本次没有修改 APK。
+- 已接入线索来源为官方通知（A 级）、网页检索（C 级）、无人机巡检影像（B 级）、用户现场上报（B 级）。天气预警、交管接口、校内电子屏和历史记录采集器保持关闭，不向管理员或用户宣称已经接入。任何来源都只产生待核线索，不会自动发布。
+- 管理台线索接口为 `GET/POST /api/manager/clues`、`POST /api/manager/clues/from-vision`、`GET/PATCH /api/manager/clues/<id>`、`POST /api/manager/clues/<id>/adopt` 和 `/reject`；采用现有双通道管理员鉴权。智能体工具总数为 17，其中新增 `query_road_clues`、`collect_road_clues`、`report_field_clue`。
+- 线索 JSON 文件尚未创建；路况事件仍使用既有 `ROAD_CONDITIONS_FILE`。本次没有数据库迁移或新增依赖。发布前的数据库与路况文件备份已恢复验证，目录为 `/home/ubuntu/luojia-release-backups/20261123T134356Z-94dbc20e`。
+- 线索与智能体测试 271/271、智能体及规划回归 351/351、线索复核浏览器 E2E 1/1、事件控件浏览器回归 27/27 通过；全量校园数据结构校验通过。路段标注仍有 9,510 条占位说明，本次未把它们当成实测数据。
+- 生产环境未配置 `NOTICE_VISION_BASE_URL`、`NOTICE_VISION_API_KEY`、`NOTICE_VISION_MODEL`，因此通知截图的模型抽取当前明确不可用；粘贴文本、网页、无人机影像和用户现场上报按各自通道工作。需配置图片通道后另行用真实通知截图验收。
+- E3 运行记录为诊断性质，`formal_ready: false`，不能作为正式论文实验结论。相机标定工具通过代码或合成测试，不等于相机已完成校园现场标定或定位精度验收。
 
 ## 历史方向重置记录（2026-11-16）
 
@@ -130,7 +132,7 @@ OGE 比赛是独立工作区和交付边界。其 2026-11-05 记录描述了腾�
 
 <!-- FACTS:BEGIN -->
 （以下为自动生成区，勿手改；更新：python scripts/docs/gen_facts.py）
-- 版本：main @ 94dbc20 ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-23 14:54
+- 版本：main @ 3f363ce ｜ origin/main 同步 ｜ gitee/main 同步 ｜ 生成于 2026-11-23 21:48
 - Agent 工具 17 ｜ POI 443（含校门 17） ｜ 路网 5,087 节点 / 14,622 有向边 ｜ 人工边覆盖 208
 - 前端 SW whu-walker-v143 ｜ Android 1.4.2 (versionCode 7) ｜ 数据库迁移 19（最新 019）
 <!-- FACTS:END -->
