@@ -27,3 +27,8 @@ def limited_timeout(default):
 
 def is_bounded():
     return _deadline.get() is not None
+
+
+def current_deadline():
+    """Return the active monotonic deadline, if the caller is bounded."""
+    return _deadline.get()

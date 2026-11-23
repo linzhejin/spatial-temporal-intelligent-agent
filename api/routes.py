@@ -73,6 +73,11 @@ from spatial.road_conditions import (
     RoadConditionBindingError, RoadConditionsUnavailableError, VisionConditionAlreadyPublishedError,
     _directional_corridor_edges,
 )
+from spatial import road_clues
+from spatial.road_clues import (
+    ClueExtractionError, ClueNotPublishable, ClueSourceUnavailable, ClueStoreUnavailable,
+    NoticeImageUnavailable,
+)
 from vision.camera_profile import calibration_status as vision_calibration_status
 from vision.camera_profile import resolve_profile as resolve_camera_profile
 from spatial.vision_suggest import score_suggested_edges
@@ -97,6 +102,13 @@ _VISION_SCENE_LINKED_REGION_KINDS = {"vehicle_lane", "pedestrian", "road_surface
 
 
 class _VisionSceneError(ValueError):
+    def __init__(self, code: str, message: str, status: int = 409):
+        super().__init__(message)
+        self.code = code
+        self.status = status
+
+
+class _VisionSuggestionError(ValueError):
     def __init__(self, code: str, message: str, status: int = 409):
         super().__init__(message)
         self.code = code
@@ -3175,14 +3187,738 @@ def delete_road_condition(cond_id):
     auth_error = _require_admin()
     if auth_error:
         return auth_error
+    identity = _admin_identity() or "unknown"
     try:
-        success = remove_condition(cond_id, actor=_admin_identity() or "unknown")
+        # Lock order is always clue store → road-condition store so an event
+        # deletion and its clue write-back cannot deadlock with adoption.
+        with road_clues.clue_store_lock():
+            success = remove_condition(cond_id, actor=identity)
+            if success:
+                road_clues.detach_condition(cond_id, actor=identity)
     except RoadConditionsUnavailableError:
         logger.exception("路况存储无效，拒绝删除")
         return _err("road_conditions_unavailable", "现有路况数据无效，已拒绝修改；请先修复数据文件", 503)
+    except ClueStoreUnavailable as error:
+        logger.exception("事件已删除但线索关联回写失败")
+        return _err("clue_store_unavailable",
+                    f"事件已删除，但线索关联回写失败：{error}。请刷新线索列表以触发修复。", 503)
     if not success:
         return _err("not_found", f"路况事件 {cond_id} 不存在", 404)
     return _ok({"message": "已永久删除路段管制", "id": cond_id})
+
+
+# ===================== 路况线索（采集 → 复核 → 采纳） =====================
+
+_NOTICE_IMAGE_MAX_BYTES = 8 * 1024 * 1024
+_NOTICE_IMAGE_MIMES = {"image/png", "image/jpeg", "image/webp", "image/gif"}
+
+
+def _notice_image_ref(body: dict):
+    """Return a model-readable screenshot reference, or None if none was given."""
+    from agents import web_evidence
+
+    raw_url = body.get("image_url")
+    if isinstance(raw_url, str) and raw_url.strip():
+        safe = web_evidence._public_url(raw_url.strip())
+        if not safe:
+            raise ValueError("截图链接必须是公开的 http/https 地址")
+        return safe
+    inline = next((
+        value for key in ("image_base64", "image", "screenshot", "media_base64")
+        if isinstance((value := body.get(key)), str) and value.strip()
+    ), None)
+    if inline:
+        limit = _NOTICE_IMAGE_MAX_BYTES * 4 // 3 + 4096
+        if inline.startswith("data:image/"):
+            if len(inline) > limit:
+                raise ValueError("截图过大，请压缩到 8MB 以内")
+            return inline
+        if len(inline) > limit:
+            raise ValueError("截图过大，请压缩到 8MB 以内")
+        mime = str(body.get("image_mime") or "image/png").strip().lower()
+        if mime not in _NOTICE_IMAGE_MIMES:
+            mime = "image/png"
+        return f"data:{mime};base64,{inline}"
+    media = body.get("media_ref")
+    if isinstance(media, str) and re.match(r"^https?://", media.strip(), re.IGNORECASE):
+        return web_evidence._public_url(media.strip())
+    return None
+
+
+def _clue_public(row: dict, *, detail: bool = False) -> dict:
+    visible = {
+        key: row.get(key) for key in (
+            "clue_id", "kind", "trust_level", "status", "summary", "source_label",
+            "source_tags", "search_query", "reported_at", "valid_from", "valid_to",
+            "draft", "edge_candidates", "condition_ids", "confidence", "need_human",
+            "duplicate_of", "vision_job_id", "vision_candidate_index", "location",
+            "created_at", "updated_at",
+        )
+    }
+    if not detail:
+        visible["draft"] = {
+            key: (row.get("draft") or {}).get(key) for key in (
+                "event_type", "name", "description", "place", "road_hint",
+                "direction", "action", "blocked_modes", "affected_modes",
+                "cost_multiplier", "valid_from", "valid_to",
+            )
+        }
+        visible["edge_candidates"] = [{
+            key: candidate.get(key) for key in (
+                "u", "v", "key", "road_name", "distance_m", "chain_length_m",
+            )
+        } for candidate in (row.get("edge_candidates") or [])]
+    visible["status_label"] = road_clues.STATUS_LABELS.get(row.get("status"), row.get("status"))
+    visible["candidate_count"] = len(row.get("edge_candidates") or [])
+    if detail:
+        visible.update({
+            "raw_text": row.get("raw_text", ""),
+            "source_url": row.get("source_url"),
+            "media_ref": row.get("media_ref"),
+            "review_note": row.get("review_note", ""),
+            "audit": row.get("audit") or [],
+            "input_crs": row.get("input_crs"),
+            "vision_flags": row.get("vision_flags"),
+            "adoption_in_progress": bool(row.get("adoption")),
+        })
+    return visible
+
+
+def _clue_failure(error: Exception):
+    if isinstance(error, NoticeImageUnavailable):
+        return _err("image_extraction_unavailable", str(error), 503)
+    if isinstance(error, ClueStoreUnavailable):
+        return _err("clue_store_unavailable", str(error), 503)
+    if isinstance(error, ClueSourceUnavailable):
+        return _err("clue_source_unavailable", str(error), 503)
+    if isinstance(error, ClueExtractionError):
+        return _err("notice_extraction_failed", str(error), 502)
+    if isinstance(error, ClueNotPublishable):
+        return _err("clue_source_not_publishable", str(error), 409)
+    if isinstance(error, KeyError):
+        return _err("clue_not_found", "线索不存在", 404)
+    return _err("invalid_field", str(error), 400)
+
+
+def _candidate_from_snap(snap: dict, distance=None) -> dict:
+    distance = snap.get("dist_m", 0) if distance is None else distance
+    return {
+        "u": int(snap["u"]),
+        "v": int(snap["v"]),
+        "key": int(snap.get("key", 0)),
+        "road_name": str(snap.get("road_name") or ""),
+        "distance_m": round(float(distance), 1),
+        "edges": [[int(a), int(b), int(k)] for a, b, k in (snap.get("edges") or [])],
+        "chain_length_m": round(float(snap.get("chain_length_m") or 0), 1),
+        "geometry_gcj": [[float(point[0]), float(point[1])]
+                         for point in (snap.get("geometry_gcj") or [])],
+        "snap_lng_gcj": snap.get("snap_lng_gcj"),
+        "snap_lat_gcj": snap.get("snap_lat_gcj"),
+    }
+
+
+def _edge_midpoint_wgs(G, u, v, data):
+    from spatial.road_conditions import _edge_line
+    point = _edge_line(G, u, v, data).interpolate(0.5, normalized=True)
+    return float(point.x), float(point.y)
+
+
+def _edge_candidates_from_name(G, hint: str, limit: int = 5) -> list:
+    needle = re.sub(r"\s+", "", str(hint or "")).casefold()
+    if len(needle) < 2:
+        return []
+    from spatial.road_conditions import _road_name_of
+    seen, results = set(), []
+    for u, v, key, data in G.edges(keys=True, data=True):
+        name = _road_name_of(data)
+        normalized = re.sub(r"\s+", "", name).casefold()
+        if not normalized or (needle not in normalized and normalized not in needle):
+            continue
+        identity = (min(u, v), max(u, v), key)
+        if identity in seen:
+            continue
+        seen.add(identity)
+        try:
+            lng_wgs, lat_wgs = _edge_midpoint_wgs(G, u, v, data)
+            lng_gcj, lat_gcj = wgs84_to_gcj02(lng_wgs, lat_wgs)
+            snap = snap_to_edge(G, lng_gcj, lat_gcj, edge_ref=(u, v, key))
+        except (ValueError, TypeError, KeyError, IndexError):
+            continue
+        if snap is None:
+            continue
+        results.append(_candidate_from_snap(snap))
+        if len(results) >= limit:
+            break
+    return results
+
+
+def _notice_edge_candidates(G, draft: dict) -> list:
+    hint = str(draft.get("road_hint") or "").strip()
+    candidates = _edge_candidates_from_name(G, hint) if hint else []
+    if candidates:
+        return candidates[:5]
+    place = str(draft.get("place") or "").strip()
+    if not place:
+        return []
+    try:
+        from spatial.poi import find_poi_ambiguous
+        poi, alternatives = find_poi_ambiguous(place)
+    except Exception:
+        logger.warning("官方通知地点解析失败", exc_info=True)
+        return []
+    if not poi or alternatives:
+        return []
+    try:
+        return [_candidate_from_snap(item) for item in nearest_edges(
+            G, float(poi["lon"]), float(poi["lat"]), max_dist_m=SNAP_MAX_DIST_M)]
+    except (ValueError, TypeError, KeyError, IndexError):
+        return []
+
+
+def _create_clues(candidates: list, identity: str) -> list:
+    return [road_clues.create_clue(candidate, actor=identity) for candidate in candidates]
+
+
+@api_bp.route("/manager/clues", methods=["GET"])
+def get_manager_clues():
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    status = (request.args.get("status") or "").strip() or None
+    statuses = None
+    if status == "unverified":
+        statuses = {"pending", "reviewing"}
+    elif status is not None and status not in road_clues.STATUSES:
+        return _err("invalid_status", "线索状态筛选无效", 400)
+    kind = (request.args.get("kind") or "").strip() or None
+    if kind is not None and kind not in road_clues.registry:
+        return _err("invalid_kind", "线索来源筛选无效", 400)
+    try:
+        limit = int(request.args.get("limit", "200"))
+    except ValueError:
+        return _err("invalid_limit", "条数上限无效", 400)
+    try:
+        rows = road_clues.list_clues(
+            status=status if statuses is None else None,
+            statuses=statuses,
+            kind=kind,
+            keyword=(request.args.get("keyword") or "").strip() or None,
+            clue_id=(request.args.get("clue_id") or "").strip() or None,
+            limit=max(1, min(limit, 500)),
+        )
+    except ClueStoreUnavailable as error:
+        return _clue_failure(error)
+    return _ok({
+        "clues": [_clue_public(row) for row in rows],
+        "count": len(rows),
+        "sources": road_clues.source_catalog(),
+    })
+
+
+@api_bp.route("/manager/clues", methods=["POST"])
+def create_manager_clue():
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    identity = _admin_identity() or "unknown"
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("invalid_json", "请求体必须为合法 JSON", 400)
+    kind = body.get("kind")
+    if kind not in {"official_notice", "web", "ugc_report"}:
+        return _err("invalid_kind", "线索来源无效；影像候选请使用 from-vision 入口", 400)
+    try:
+        if kind == "official_notice":
+            raw_text = str(body.get("raw_text") or "").strip()
+            manual = bool(body.get("manual"))
+            image_ref = _notice_image_ref(body)
+            media_ref = body.get("media_ref") or body.get("media_id") or image_ref
+            if not raw_text and not (manual and media_ref) and not image_ref:
+                if media_ref:
+                    return _err("image_extraction_unavailable",
+                                "截图引用不是可读取的图片链接；请粘贴通知原文或使用人工补录。", 400)
+                return _err("missing_raw_text", "请粘贴官方通知原文", 400)
+            source_url = body.get("source_url")
+            if source_url:
+                from agents import web_evidence
+                source_url = web_evidence._public_url(str(source_url))
+                if not source_url:
+                    return _err("invalid_source_url", "来源链接必须是公开的 http/https 地址", 400)
+            if manual:
+                draft = body.get("draft") if isinstance(body.get("draft"), dict) else {}
+                candidates = road_clues.registry["official_notice"].fetch(
+                    text=raw_text,
+                    summary=body.get("summary") or (
+                        raw_text[:road_clues.MAX_SUMMARY_CHARS] if raw_text else None),
+                    draft=draft,
+                    confidence=0.0,
+                    source_url=source_url,
+                    media_ref=media_ref,
+                    reported_at=body.get("reported_at"),
+                    manual=True,
+                )
+                for candidate in candidates:
+                    candidate["status"] = "reviewing"
+                    candidate["need_human"] = True
+            elif raw_text:
+                candidates = road_clues.registry["official_notice"].fetch(
+                    text=raw_text,
+                    source_url=source_url,
+                    media_ref=media_ref,
+                    reported_at=body.get("reported_at"),
+                )
+            else:
+                candidates = road_clues.registry["official_notice"].fetch(
+                    text="",
+                    media_ref=image_ref,
+                    source_url=source_url,
+                    reported_at=body.get("reported_at"),
+                )
+            G, err = _ensure_network()
+            if err:
+                return err
+            for candidate in candidates:
+                candidate["edge_candidates"] = _notice_edge_candidates(G, candidate["draft"])
+            created = _create_clues(candidates, identity)
+            return _ok({"clues": [_clue_public(row, detail=True) for row in created],
+                        "count": len(created)}, status=201)
+        if kind == "web":
+            query = str(body.get("query") or "").strip()
+            url = str(body.get("url") or "").strip()
+            if not query and not url:
+                return _err("missing_query", "请提供检索词或网页链接", 400)
+            candidates = road_clues.registry["web"].fetch(query=query, url=url, limit=3)
+            created = _create_clues(candidates, identity)
+            return _ok({"clues": [_clue_public(row, detail=True) for row in created],
+                        "count": len(created),
+                        "message": "" if created else "没有找到网页结果。"}, status=201)
+        coord = body.get("coord")
+        crs = str(body.get("crs") or (coord or {}).get("crs") or "").strip().upper().replace("-", "")
+        if crs and crs not in {"GCJ02", "WGS84"}:
+            return _err("invalid_crs", "坐标系只能明确写 GCJ02 或 WGS84", 400)
+        if coord is not None:
+            if not isinstance(coord, dict):
+                return _err("invalid_coord", "坐标格式无效", 400)
+            if not crs:
+                return _err("coord_crs_required", "请明确坐标是 GCJ02 还是 WGS84，不能猜测", 400)
+            try:
+                lng, lat = float(coord.get("lng")), float(coord.get("lat"))
+            except (TypeError, ValueError):
+                return _err("invalid_coord", "坐标格式无效", 400)
+            if not (math.isfinite(lng) and math.isfinite(lat)):
+                return _err("invalid_coord", "坐标格式无效", 400)
+            if crs == "WGS84":
+                lng, lat = wgs84_to_gcj02(lng, lat)
+            coord = {"lng": lng, "lat": lat}
+        G, err = _ensure_network()
+        if err:
+            return err
+        candidates = road_clues.registry["ugc_report"].fetch(
+            place=body.get("place"),
+            coord=coord,
+            description=body.get("description"),
+            media_ref=body.get("media_id") or body.get("media_ref"),
+            graph=G,
+            input_crs=crs or None,
+        )
+        created = _create_clues(candidates, identity)
+        return _ok({"clues": [_clue_public(row, detail=True) for row in created],
+                    "count": len(created)}, status=201)
+    except (ClueExtractionError, ClueSourceUnavailable, ClueNotPublishable,
+            ClueStoreUnavailable, ValueError) as error:
+        return _clue_failure(error)
+    except Exception:
+        logger.exception("登记路况线索失败")
+        return _err("clue_create_failed", "线索登记失败，请稍后重试", 500)
+
+
+def _vision_clue_blocker(clue: dict):
+    """Re-check the image task at adoption time; return (message, status) or None."""
+    if clue.get("kind") != "vision":
+        return None
+    flags = clue.get("vision_flags") or {}
+    if flags.get("trial"):
+        return "试用影像不能发布为真实路况。", 409
+    if flags.get("replay"):
+        return "历史回放只在隔离实验中使用，不能发布为当前路况。", 409
+    if flags.get("stale"):
+        return "影像拍摄时间已超出当前路况有效窗口。", 409
+    job_id = clue.get("vision_job_id")
+    try:
+        job_id = str(uuid.UUID(str(job_id)))
+    except (ValueError, TypeError, AttributeError):
+        return "影像任务标识无效。", 409
+    try:
+        from storage import database, vision_repository
+        database.initialize(current_app.config.get("DATABASE_URL"))
+        job = vision_repository.get_job(current_app.config.get("DATABASE_URL"), job_id)
+    except Exception:
+        logger.exception("影像线索采纳前核对失败")
+        raise ClueSourceUnavailable("影像任务暂时无法核对，请稍后重试")
+    if not job:
+        return "影像任务已不存在，不能采纳该线索。", 409
+    if job.get("purpose") == "trial":
+        return "试用影像不能发布为真实路况。", 409
+    if "research_replay" in (job.get("result") or {}):
+        return "历史回放只在隔离实验中使用，不能发布为当前路况。", 409
+    captured_at = job.get("captured_at")
+    if not captured_at:
+        return "影像缺少实际拍摄时间，不能发布为当前路况。", 409
+    captured_ts = captured_at.timestamp() if isinstance(captured_at, datetime) else float(captured_at)
+    age = time.time() - captured_ts
+    if age < -300 or age > config.VISION_MAX_EVENT_AGE_SECONDS:
+        return "影像拍摄时间已超出当前路况有效窗口。", 409
+    if job.get("status") != "needs_review":
+        return "影像任务当前不在待复核状态，不能采纳为路况事件。", 409
+    index = clue.get("vision_candidate_index")
+    candidates = (job.get("result") or {}).get("candidates")
+    if (isinstance(index, bool) or not isinstance(index, int)
+            or not isinstance(candidates, list) or not 0 <= index < len(candidates)):
+        return "影像候选已不存在，不能采纳该线索。", 409
+    reviews = job.get("candidate_reviews")
+    review = reviews.get(str(index)) if isinstance(reviews, dict) else None
+    legacy_confirmed = (
+        job.get("review_status") == "confirmed"
+        and (job.get("review_candidate_index") == index
+             or (job.get("review_candidate_index") is None and len(candidates) == 1))
+    )
+    if not (isinstance(review, dict) and review.get("status") == "confirmed") and not legacy_confirmed:
+        return "该影像候选尚未单独确认，不能采纳为路况事件。", 409
+    return None
+
+
+@api_bp.route("/manager/clues/from-vision", methods=["POST"])
+def create_manager_vision_clue():
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    identity = _admin_identity() or "unknown"
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("invalid_json", "请求体必须为合法 JSON", 400)
+    job_id = body.get("job_id")
+    candidate_index = body.get("candidate_index")
+    if isinstance(candidate_index, bool) or not isinstance(candidate_index, int):
+        return _err("invalid_candidate", "请明确选择影像候选编号", 400)
+    try:
+        job_id = str(uuid.UUID(str(job_id)))
+        from storage import database, vision_repository
+        database.initialize(current_app.config.get("DATABASE_URL"))
+        job = vision_repository.get_job(current_app.config.get("DATABASE_URL"), job_id)
+    except (ValueError, TypeError, AttributeError):
+        return _err("invalid_job_id", "影像任务标识无效。", 400)
+    except Exception:
+        logger.exception("读取影像线索来源失败")
+        return _err("vision_storage_unavailable", "影像任务暂时不可用，请稍后重试。", 503)
+    if not job:
+        return _err("job_not_found", "影像任务不存在。", 404)
+    candidates = (job.get("result") or {}).get("candidates")
+    if not isinstance(candidates, list) or not 0 <= candidate_index < len(candidates):
+        return _err("vision_candidate_invalid", "影像候选不存在，请重新分析。", 409)
+    candidate = candidates[candidate_index]
+    if not _valid_review_only_candidate(candidate):
+        return _err("vision_candidate_invalid", "影像候选记录无效。", 409)
+    G, err = _ensure_network()
+    if err:
+        return err
+    try:
+        suggestion = _vision_suggested_edges_for_job(job, G)
+    except _VisionSuggestionError as error:
+        return _err(error.code, error.message, error.status)
+    nearby = [item for item in (suggestion.get("suggested_edges") or [])
+              if isinstance(item, dict) and item.get("u") is not None and item.get("v") is not None]
+    if not nearby:
+        return _err("vision_road_undetermined", "影像位置或道路无法确定，不能登记可采纳的线索。", 409)
+    kind_labels = {
+        "possible_flooding": "疑似积水",
+        "possible_accident": "疑似事故或障碍",
+        "possible_congestion": "疑似拥堵",
+        "possible_crowding": "疑似人群聚集",
+        "vehicle_cluster_review": "车辆聚集待复核",
+    }
+    candidate_kind = str(candidate.get("kind") or "unknown")
+    label = kind_labels.get(candidate_kind, "影像候选")
+    road_name = str(nearby[0].get("road_name") or "").strip()
+    summary = f"{label}：{road_name}" if road_name else f"{label}，待人工核对道路"
+    event_type = {
+        "possible_flooding": "flooding",
+        "possible_accident": "accident",
+    }.get(candidate_kind, "event")
+    result = job.get("result") if isinstance(job.get("result"), dict) else {}
+    captured_at = job.get("captured_at")
+    captured_ts = captured_at.timestamp() if isinstance(captured_at, datetime) else captured_at
+    stale = False
+    if not captured_ts:
+        stale = True
+    else:
+        age = time.time() - float(captured_ts)
+        stale = age < -300 or age > config.VISION_MAX_EVENT_AGE_SECONDS
+    evidence = candidate.get("evidence") if isinstance(candidate.get("evidence"), dict) else {}
+    reason = str(candidate.get("reason") or "").strip()
+    draft = {
+        "event_type": event_type,
+        "description": reason[:200],
+        "source_excerpt": str(evidence.get("summary") or "")[:300],
+        "evidence": [reason[:300]] if reason else [],
+    }
+    media_ref = f"/api/manager/vision-jobs/{job_id}/media"
+    try:
+        clue_rows = road_clues.registry["vision"].fetch(
+            summary=summary,
+            draft=draft,
+            edge_candidates=[_candidate_from_snap(item) for item in nearby[:5]],
+            media_ref=media_ref,
+            captured_at=captured_ts,
+            job_id=job_id,
+            candidate_index=candidate_index,
+            vision_flags={
+                "trial": job.get("purpose") == "trial",
+                "replay": "research_replay" in result,
+                "stale": stale,
+                "media_kind": job.get("media_kind"),
+            },
+        )
+        created = _create_clues(clue_rows, identity)
+    except (ClueSourceUnavailable, ClueStoreUnavailable, ValueError) as error:
+        return _clue_failure(error)
+    blockers = []
+    if job.get("purpose") == "trial":
+        blockers.append("试用影像")
+    if "research_replay" in result:
+        blockers.append("历史回放")
+    if stale:
+        blockers.append("拍摄时间过期")
+    if job.get("status") != "needs_review":
+        blockers.append("影像任务不在待复核状态")
+    reviews = job.get("candidate_reviews")
+    review = reviews.get(str(candidate_index)) if isinstance(reviews, dict) else None
+    legacy_confirmed = (
+        job.get("review_status") == "confirmed"
+        and (job.get("review_candidate_index") == candidate_index
+             or (job.get("review_candidate_index") is None and len(candidates) == 1))
+    )
+    if not (isinstance(review, dict) and review.get("status") == "confirmed") and not legacy_confirmed:
+        blockers.append("候选尚未单独确认")
+    return _ok({
+        "clues": [_clue_public(row, detail=True) for row in created],
+        "count": len(created),
+        "publishable": not blockers,
+        "publish_blockers": blockers,
+        "media_url": media_ref,
+    }, status=201)
+
+
+@api_bp.route("/manager/clues/<clue_id>", methods=["GET", "PATCH"])
+def manager_clue_detail(clue_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    identity = _admin_identity() or "unknown"
+    if request.method == "PATCH":
+        body = request.get_json(silent=True)
+        if not isinstance(body, dict):
+            return _err("invalid_json", "请求体必须为合法 JSON", 400)
+        try:
+            clue = road_clues.get_clue(clue_id)
+            if clue is None:
+                raise KeyError(clue_id)
+            if "candidate_point" in body:
+                point = body.get("candidate_point")
+                try:
+                    lng, lat = float(point["lng"]), float(point["lat"])
+                except (TypeError, KeyError, ValueError):
+                    return _err("invalid_candidate_point", "补充候选路段的坐标无效", 400)
+                G, err = _ensure_network()
+                if err:
+                    return err
+                snap = snap_to_edge(G, lng, lat)
+                if snap is None:
+                    return _err("too_far_from_road",
+                                f"点击位置离最近道路超过 {int(SNAP_MAX_DIST_M)} 米", 400)
+                road_clues.add_candidate(clue_id, lng, lat, snap, actor=identity)
+            if "edge_candidates" in body:
+                if not isinstance(body["edge_candidates"], list):
+                    return _err("invalid_candidates", "候选路段必须是数组", 400)
+                G, err = _ensure_network()
+                if err:
+                    return err
+                fallback = clue.get("location") or {}
+                verified = []
+                for item in body["edge_candidates"]:
+                    if not isinstance(item, dict):
+                        return _err("invalid_candidates", "候选路段格式无效", 400)
+                    try:
+                        edge_ref = _parse_edge_ref({
+                            "u": item.get("u"), "v": item.get("v"), "key": item.get("key", 0),
+                        })
+                    except ValueError:
+                        return _err("invalid_candidates", "候选路段标识无效", 400)
+                    if not G.has_edge(*edge_ref):
+                        return _err("road_binding_changed", "候选道路已变化，请重新选择", 409)
+                    lng = item.get("lng", fallback.get("lng"))
+                    lat = item.get("lat", fallback.get("lat"))
+                    try:
+                        lng, lat = float(lng), float(lat)
+                    except (TypeError, ValueError):
+                        return _err("invalid_candidates", "候选路段缺少可核验的位置", 400)
+                    snap = snap_to_edge(G, lng, lat, edge_ref=edge_ref)
+                    if snap is None:
+                        return _err("too_far_from_road", "候选路段吸附距离超过限制", 400)
+                    verified.append(_candidate_from_snap(snap))
+                body = {**body, "edge_candidates": verified}
+                body.pop("candidate_point", None)
+            clue = road_clues.update_clue(
+                clue_id, {key: value for key, value in body.items()
+                          if key not in {"candidate_point"}}, actor=identity)
+            return _ok({"clue": _clue_public(clue, detail=True)})
+        except KeyError:
+            return _err("clue_not_found", "线索不存在", 404)
+        except (ClueStoreUnavailable, ValueError) as error:
+            return _clue_failure(error)
+    try:
+        clue = road_clues.get_clue(clue_id)
+    except ClueStoreUnavailable as error:
+        return _clue_failure(error)
+    if clue is None:
+        return _err("clue_not_found", "线索不存在", 404)
+    return _ok({"clue": _clue_public(clue, detail=True)})
+
+
+@api_bp.route("/manager/clues/<clue_id>/adopt", methods=["POST"])
+def adopt_manager_clue(clue_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    identity = _admin_identity() or "unknown"
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("invalid_json", "请求体必须为合法 JSON", 400)
+    cond_type = body.get("type")
+    if cond_type not in CONDITION_EFFECTS:
+        return _err("invalid_type", "请选择有效的事件类型", 400)
+    direction = body.get("direction", "both")
+    if direction not in CONDITION_DIRECTIONS:
+        return _err("invalid_direction", "请选择有效的道路影响方向", 400)
+    action = body.get("action")
+    affected_modes = body.get("affected_modes")
+    blocked_modes = body.get("blocked_modes")
+    cost_multiplier = body.get("cost_multiplier")
+    if action is not None:
+        if action not in CONDITION_ACTIONS:
+            return _err("invalid_action", "路况影响动作无效", 400)
+        if (not isinstance(affected_modes, list) or not affected_modes
+                or len(affected_modes) != len(set(affected_modes))
+                or any(mode not in TRAVEL_MODE_KEYS for mode in affected_modes)):
+            return _err("invalid_modes", "请选择有效且不重复的受影响出行方式", 400)
+        if action == "slowdown":
+            try:
+                cost_multiplier = float(cost_multiplier)
+            except (TypeError, ValueError):
+                return _err("invalid_cost_multiplier", "缓行成本倍数必须是数字", 400)
+            if not 1 <= cost_multiplier <= 5:
+                return _err("invalid_cost_multiplier", "缓行成本倍数必须在 1 到 5 之间", 400)
+    elif (not isinstance(blocked_modes, list) or not blocked_modes
+          or len(blocked_modes) != len(set(blocked_modes))
+          or any(mode not in TRAVEL_MODE_KEYS for mode in blocked_modes)):
+        return _err("invalid_modes", "请至少选择一种有效且不重复的禁行方式", 400)
+    try:
+        lng, lat = float(body.get("lng")), float(body.get("lat"))
+    except (TypeError, ValueError):
+        return _err("invalid_lnglat", "请先在候选路段上确认吸附点", 400)
+    if not (math.isfinite(lng) and math.isfinite(lat)):
+        return _err("invalid_lnglat", "吸附点坐标无效", 400)
+    try:
+        edge_ref = _parse_edge_ref(body.get("edge_ref"))
+    except ValueError:
+        return _err("invalid_edge_ref", "道路标识无效，请重新选择候选路段", 400)
+    G, err = _ensure_network()
+    if err:
+        return err
+    if not G.has_edge(*edge_ref):
+        return _err("road_binding_changed", "道路已变化，请重新选择候选路段", 409)
+    snap = snap_to_edge(G, lng, lat, edge_ref=edge_ref)
+    if snap is None:
+        return _err("too_far_from_road", f"吸附点离道路超过 {int(SNAP_MAX_DIST_M)} 米", 400)
+    if direction != "both":
+        try:
+            if not _directional_corridor_edges(G, snap, direction):
+                return _err("direction_unavailable", "所选方向没有可确认的路段", 422)
+        except RoadConditionBindingError:
+            return _err("direction_unverifiable", "无法可靠确认所选方向", 422)
+    supplied_token = body.get("binding_token")
+    expected_token = _road_binding_token(G, snap, direction)
+    if (not isinstance(supplied_token, str)
+            or not re.fullmatch(r"[0-9a-f]{64}", supplied_token)
+            or not hmac.compare_digest(supplied_token, expected_token)):
+        return _err("road_binding_changed", "道路绑定已变化，请重新选择候选路段", 409)
+    clue_ids = body.get("clue_ids") or []
+    if not isinstance(clue_ids, list) or any(not isinstance(item, str) for item in clue_ids):
+        return _err("invalid_clue_ids", "合并线索列表无效", 400)
+    try:
+        # Hold the clue lock across the image-job recheck and the adoption so a
+        # concurrent edit cannot invalidate the job between check and use.
+        with road_clues.clue_store_lock():
+            requested_ids = [clue_id, *clue_ids]
+            clues = [road_clues.get_clue(item) for item in requested_ids]
+            for requested_id, clue in zip(requested_ids, clues):
+                if clue is None:
+                    raise KeyError(requested_id)
+                blocker = _vision_clue_blocker(clue)
+                if blocker is not None:
+                    return _err("clue_source_not_publishable", blocker[0], blocker[1])
+            condition, adopted, already = road_clues.adopt_clues(
+                clue_id,
+                clue_ids,
+                edge=snap,
+                cond_type=cond_type,
+                name=body.get("name") or "",
+                description=body.get("description") or "",
+                start_time=body.get("start_time"),
+                end_time=body.get("end_time"),
+                action=action,
+                affected_modes=affected_modes,
+                cost_multiplier=cost_multiplier,
+                blocked_modes=blocked_modes,
+                direction=direction,
+                review_note=body.get("review_note"),
+                actor=identity,
+            )
+    except KeyError:
+        return _err("clue_not_found", "线索不存在", 404)
+    except ClueSourceUnavailable as error:
+        return _clue_failure(error)
+    except (ClueStoreUnavailable, ClueNotPublishable, ValueError) as error:
+        return _clue_failure(error)
+    condition["type_label"] = CONDITION_LABELS.get(cond_type, cond_type)
+    return _ok({
+        "condition": condition,
+        "snap": snap,
+        "clues": [_clue_public(row, detail=True) for row in adopted],
+        "already_adopted": already,
+    }, status=200 if already else 201)
+
+
+@api_bp.route("/manager/clues/<clue_id>/reject", methods=["POST"])
+def reject_manager_clue(clue_id):
+    auth_error = _require_admin()
+    if auth_error:
+        return auth_error
+    body = request.get_json(silent=True)
+    if not isinstance(body, dict):
+        return _err("invalid_json", "请求体必须为合法 JSON", 400)
+    reason = str(body.get("reason") or "").strip()
+    if not reason:
+        return _err("missing_reason", "驳回线索必须填写依据", 400)
+    try:
+        clue = road_clues.update_clue(
+            clue_id, {"status": "rejected", "review_note": reason[:1000]},
+            actor=_admin_identity() or "unknown",
+        )
+    except KeyError:
+        return _err("clue_not_found", "线索不存在", 404)
+    except (ClueStoreUnavailable, ValueError) as error:
+        return _clue_failure(error)
+    return _ok({"clue": _clue_public(clue, detail=True)})
 
 
 def _vision_upload_root() -> Path:
@@ -4329,6 +5065,62 @@ def manager_vision_job(job_id):
     return _ok({"job": _public_vision_job(job)})
 
 
+def _vision_suggested_edges_for_job(job: dict, G) -> dict:
+    """Shared road-candidate suggestion used by the preview and clue endpoints."""
+    anchor = job.get("anchor_gcj")
+    if not isinstance(anchor, dict) or "lng" not in anchor or "lat" not in anchor:
+        anchor = None
+    camera_pose = job.get("camera_pose")
+    mode = getattr(config, "VISION_AUTO_LOCALIZATION", "off")
+    if mode not in {"nominal", "calibrated"}:
+        if anchor is None:
+            raise _VisionSuggestionError(
+                "suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
+        try:
+            lng = float(anchor["lng"])
+            lat = float(anchor["lat"])
+        except (TypeError, ValueError):
+            raise _VisionSuggestionError(
+                "suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400) from None
+        try:
+            return {"suggested_edges": [
+                {**item, "score": 0.0, "basis": "radius_only"}
+                for item in nearest_edges(G, lng, lat)
+            ], "basis": "radius_only", "auto_localization": "off",
+                "anchor_source": "manual", "pose_source": None,
+                "calibration_status": "nominal", "calibration_residual_m": None}
+        except Exception:
+            logger.exception("邻近道路建议失败")
+            raise _VisionSuggestionError(
+                "road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503) from None
+    if anchor is None and not isinstance(camera_pose, dict):
+        raise _VisionSuggestionError(
+            "suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400)
+    result_data = job.get("result") if isinstance(job.get("result"), dict) else {}
+    media = result_data.get("media") if isinstance(result_data.get("media"), dict) else None
+    candidates = result_data.get("candidates")
+    profile = resolve_camera_profile()
+    calibration = vision_calibration_status(profile)
+    try:
+        result = score_suggested_edges(
+            G, anchor, camera_pose=camera_pose, media=media, candidates=candidates,
+            camera_profile=profile, calibration=calibration,
+        )
+    except ValueError as error:
+        if "anchor or camera pose required" in str(error):
+            raise _VisionSuggestionError(
+                "suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400) from None
+        logger.exception("影像道路建议参数无效")
+        raise _VisionSuggestionError(
+            "road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503) from None
+    except Exception:
+        logger.exception("影像道路建议失败")
+        raise _VisionSuggestionError(
+            "road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503) from None
+    result["auto_localization"] = mode
+    return result
+
+
 @api_bp.route("/manager/vision-jobs/<job_id>/suggested-edges", methods=["GET"])
 def manager_vision_suggested_edges(job_id):
     auth_error = _require_admin()
@@ -4346,54 +5138,13 @@ def manager_vision_suggested_edges(job_id):
         return _err("vision_storage_unavailable", "影像任务暂时不可用，请稍后重试。", 503)
     if not job:
         return _err("job_not_found", "影像任务不存在。", 404)
-    anchor = job.get("anchor_gcj")
-    if not isinstance(anchor, dict) or "lng" not in anchor or "lat" not in anchor:
-        anchor = None
-    camera_pose = job.get("camera_pose")
-    mode = getattr(config, "VISION_AUTO_LOCALIZATION", "off")
     G, err = _ensure_network()
     if err is not None:
         return err
-    if mode not in {"nominal", "calibrated"}:
-        if anchor is None:
-            return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
-        try:
-            lng = float(anchor["lng"])
-            lat = float(anchor["lat"])
-        except (TypeError, ValueError):
-            return _err("suggestion_anchor_missing", "该影像未标注校园位置，无法推荐路段。", 400)
-        try:
-            result = {"suggested_edges": [
-                {**item, "score": 0.0, "basis": "radius_only"}
-                for item in nearest_edges(G, lng, lat)
-            ], "basis": "radius_only", "auto_localization": "off",
-                "anchor_source": "manual", "pose_source": None,
-                "calibration_status": "nominal", "calibration_residual_m": None}
-        except Exception:
-            logger.exception("邻近道路建议失败")
-            return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
-        return _ok(result)
-    if anchor is None and not isinstance(camera_pose, dict):
-        return _err("suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400)
-    result_data = job.get("result") if isinstance(job.get("result"), dict) else {}
-    media = result_data.get("media") if isinstance(result_data.get("media"), dict) else None
-    candidates = result_data.get("candidates")
-    profile = resolve_camera_profile()
-    calibration = vision_calibration_status(profile)
     try:
-        result = score_suggested_edges(
-            G, anchor, camera_pose=camera_pose, media=media, candidates=candidates,
-            camera_profile=profile, calibration=calibration,
-        )
-    except ValueError as error:
-        if "anchor or camera pose required" in str(error):
-            return _err("suggestion_anchor_missing", "该影像没有姿态或位置信息，请先标注校园区域。", 400)
-        logger.exception("影像道路建议参数无效")
-        return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
-    except Exception:
-        logger.exception("影像道路建议失败")
-        return _err("road_suggestions_unavailable", "邻近道路暂时不可用，请重试。", 503)
-    result["auto_localization"] = mode
+        result = _vision_suggested_edges_for_job(job, G)
+    except _VisionSuggestionError as error:
+        return _err(error.code, error.message, error.status)
     return _ok(result)
 
 

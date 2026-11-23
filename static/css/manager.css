@@ -101,7 +101,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 /* ---------- 路况工作区 ---------- */
 
 .workspace-grid{display:grid;grid-template-columns:minmax(0,1.5fr) minmax(400px,.85fr);gap:20px;align-items:start}
-.map-card,.form-card,.protocol-card,.event-list,.vision-upload-card,.vision-jobs{border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--card);box-shadow:var(--shadow)}
+.map-card,.form-card,.clue-form-card,.protocol-card,.event-list,.vision-upload-card,.vision-jobs{border:1px solid var(--line);border-radius:var(--radius-lg);background:var(--card);box-shadow:var(--shadow)}
 .control-column{display:flex;flex-direction:column;gap:16px;min-width:0}
 
 .map-card{position:sticky;top:136px;z-index:0;height:calc(100vh - 160px);display:flex;flex-direction:column;min-height:520px;overflow:hidden}
@@ -117,7 +117,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 
 /* ---------- 路况表单 ---------- */
 
-.form-card{padding:22px}
+.form-card,.clue-form-card{padding:22px}
 .section-title{display:flex;align-items:center;gap:12px;margin-bottom:20px}
 .section-glyph{display:grid;place-items:center;flex:none;width:36px;height:36px;border-radius:10px;background:var(--pine-soft);color:var(--pine);font-size:18px;font-weight:700}
 .section-title h2{color:var(--ink);font-size:20px;font-weight:700}
@@ -125,10 +125,11 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 
 .form-card label{display:block;color:var(--ink-2);font-size:14px;font-weight:600}
 .form-card form>label{margin-top:14px}
+.clue-form-card input,.clue-form-card select,.clue-form-card textarea{width:100%;min-height:44px;margin-top:7px;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:#fff;color:var(--ink);font-size:15px;font-weight:400}
 .form-card input,.form-card select,.form-card textarea{width:100%;min-height:44px;margin-top:7px;padding:10px 12px;border:1px solid var(--line-2);border-radius:10px;background:#fff;color:var(--ink);font-size:15px;font-weight:400}
-.form-card textarea{min-height:72px;line-height:1.55;resize:vertical}
-.form-card input:focus,.form-card select:focus,.form-card textarea:focus{border-color:var(--pine);outline:3px solid rgba(23,107,91,.14)}
-.form-card small{display:block;margin-top:6px;color:var(--muted);font-size:13px;font-weight:400;line-height:1.55}
+.form-card textarea,.clue-form-card textarea{min-height:72px;line-height:1.55;resize:vertical}
+.form-card input:focus,.form-card select:focus,.form-card textarea:focus,.clue-form-card input:focus,.clue-form-card select:focus,.clue-form-card textarea:focus{border-color:var(--pine);outline:3px solid rgba(23,107,91,.14)}
+.form-card small,.clue-form-card small{display:block;margin-top:6px;color:var(--muted);font-size:13px;font-weight:400;line-height:1.55}
 .form-card #field-confirmation-wrap small{display:block;margin-top:6px;color:var(--muted);font-size:13px;font-weight:400;line-height:1.55}
 
 .source-banner{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;margin-bottom:14px;padding:12px 14px;border-left:3px solid var(--gold);border-radius:0 10px 10px 0;background:var(--gold-soft);color:#534A38;font-size:13px;line-height:1.6}
@@ -434,7 +435,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
   .login-panel{grid-template-columns:1fr;gap:24px;padding:28px 22px}
   .login-copy h1{margin:12px 0;font-size:34px}
   .login-card{max-width:none;padding:24px}
-  .workflow-nav{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px;padding:5px}
+  .workflow-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:5px}
   .workflow-nav a{padding:8px 4px;font-size:13px}
   .map-card{height:420px}
   .event-filters{grid-template-columns:1fr 1fr}
@@ -465,8 +466,8 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
   .map-card{height:360px}
   .map-topline{min-height:44px;padding:8px 12px;font-size:12px}
   .map-topline span:last-child{font-size:11px}
-  .form-card{padding:16px}
-  .form-card input,.form-card select,.form-card textarea{font-size:16px}
+  .form-card,.clue-form-card{padding:16px}
+  .form-card input,.form-card select,.form-card textarea,.clue-form-card input,.clue-form-card select,.clue-form-card textarea{font-size:16px}
   .event-validity-fieldset{padding:10px}
   .event-validity-fieldset .time-grid{grid-template-columns:1fr}
   .event-validity-fieldset .time-grid input,.event-validity-fieldset .time-grid select{font-size:16px}
@@ -504,4 +505,80 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important;scroll-behavior:auto!important}
+}
+
+/* ---------- 线索复核 ---------- */
+
+.clue-section{margin-top:32px}
+.clue-note{margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.7}
+.clue-create{margin:14px 0 18px;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm)}
+.clue-create>summary{cursor:pointer;color:var(--pine);font-size:14px;font-weight:650}
+.clue-create-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
+.clue-create-card h3{margin-bottom:10px;color:var(--ink);font-size:15px}
+.clue-create-card label{display:block;margin-top:8px;color:var(--ink-2);font-size:13px;font-weight:600}
+.clue-create-card input,.clue-create-card textarea{width:100%;margin-top:6px;padding:9px 10px;border:1px solid var(--line-2);border-radius:9px;background:#fff;font-size:14px;font-weight:400}
+.clue-create-card small{display:block;margin-top:8px;color:var(--muted);font-size:12px;line-height:1.55}
+.clue-create-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+.clue-create-actions .primary-button{width:auto;flex:1}
+.clue-create-actions .outline-button{white-space:nowrap}
+.clue-layout{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.5fr);gap:18px;align-items:start;margin-top:16px}
+.clue-list-panel,.clue-detail{min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm)}
+.clue-filters{margin-bottom:12px}
+.clue-row{padding:12px;margin-bottom:10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:#fff;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s}
+.clue-row:hover{border-color:var(--pine);background:var(--pine-soft)}
+.clue-row.is-selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(169,119,50,.18)}
+.clue-row-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
+.clue-kind{color:var(--muted);font-size:12px;font-weight:600}
+.clue-id{color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;margin-left:auto}
+.clue-summary{margin-bottom:4px;font-size:14px;font-weight:650;line-height:1.5}
+.clue-meta{color:var(--muted);font-size:12px;line-height:1.55}
+.clue-duplicate{margin-top:4px;color:var(--gold);font-size:12px;line-height:1.5}
+.clue-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.clue-detail-head h3{font-size:17px;line-height:1.4}
+.clue-id-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.clue-id-line .quiet-button{min-height:30px;padding:0 10px;font-size:12px}
+.clue-evidence,.clue-candidates,.clue-form{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
+.clue-detail-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start;margin-top:8px}
+.clue-detail-left,.clue-detail-right{min-width:0}
+.clue-detail-left .clue-evidence{margin-top:0;padding-top:0;border-top:none}
+.clue-detail-right .clue-candidates{margin-top:0;padding-top:0;border-top:none}
+.clue-evidence h4,.clue-candidates h4,.clue-form h4{margin-bottom:8px;color:var(--ink);font-size:14px}
+.clue-raw-text{max-height:220px;overflow:auto;margin:0;padding:10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:var(--paper);white-space:pre-wrap;word-break:break-word;font-family:inherit;font-size:12px;line-height:1.6}
+.clue-evidence a{display:inline-block;margin-top:6px;color:var(--pine);font-size:13px}
+.clue-media-preview{max-width:100%;max-height:220px;margin-top:8px;border:1px solid var(--line);border-radius:var(--radius-sm)}
+.clue-candidate-list{display:grid;gap:8px}
+.clue-candidate{display:flex;gap:10px;align-items:flex-start;padding:10px;border:1px solid var(--line);border-radius:var(--radius-sm);cursor:pointer}
+.clue-candidate.is-selected{border-color:var(--gold);background:var(--gold-soft)}
+.clue-candidate strong{font-size:13px}
+.clue-candidate small{color:var(--muted);font-size:12px}
+.clue-map{height:240px;margin-top:10px;border:1px solid var(--line);border-radius:var(--radius-sm)}
+.clue-form-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.clue-form-grid label{display:block;color:var(--ink-2);font-size:13px;font-weight:600}
+.clue-form-grid input,.clue-form-grid select,.clue-form-grid textarea{width:100%;margin-top:5px;padding:8px 10px;border:1px solid var(--line-2);border-radius:8px;background:#fff;font-size:14px;font-weight:400}
+.clue-form-grid label:nth-child(4),.clue-form-grid label:nth-child(11){grid-column:1/-1}
+.clue-mode-fieldset{display:flex;gap:12px;flex-wrap:wrap;padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:13px}
+.clue-mode-fieldset legend{padding:0 4px;color:var(--ink-2);font-weight:600}
+.clue-mode-fieldset label{display:flex;align-items:center;gap:5px;font-weight:400}
+.clue-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}
+.clue-actions .primary-button{width:auto;flex:1}
+.clue-adopted-note{margin-top:10px;padding:10px;border-radius:8px;background:var(--pine-soft);color:var(--pine-2);font-size:13px;line-height:1.6}
+.clue-status-pending{color:var(--gold)}
+.clue-status-reviewing{color:var(--blue)}
+.clue-status-adopted{color:#397653}
+.clue-status-rejected{color:var(--red)}
+.clue-status-expired{color:var(--muted)}
+.clue-from-vision{width:100%;margin-top:8px}
+
+@media(max-width:1200px){
+  .clue-detail-body{grid-template-columns:1fr}
+}
+@media(max-width:1100px){
+  .clue-create-grid{grid-template-columns:1fr}
+  .clue-layout{grid-template-columns:1fr}
+}
+@media(max-width:680px){
+  .clue-form-grid{grid-template-columns:1fr}
+  .clue-form-grid label:nth-child(4),.clue-form-grid label:nth-child(11){grid-column:auto}
+  .clue-create-card input,.clue-create-card textarea,.clue-form-grid input,.clue-form-grid select,.clue-form-grid textarea{font-size:16px}
+  .clue-actions .primary-button{width:100%}
 }

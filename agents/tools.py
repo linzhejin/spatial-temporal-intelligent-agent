@@ -16,6 +16,7 @@ from copy import deepcopy
 import networkx as nx
 import os
 import re
+import threading
 import time
 
 from agents import route_state as route_state_module
@@ -472,6 +473,115 @@ TOOL_SCHEMAS = [
             "name": "list_road_conditions",
             "description": "查询当前生效的封路/施工/积水/事故/活动管制等路况事件（绑定具体路段，步行也会绕封路）。用户问'哪里在修路''哪段封了''能不能走'时必须调用。",
             "parameters": {"type": "object", "properties": {}},
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "query_road_clues",
+            "description": "查询路况线索：默认返回已采纳事件和待复核线索，待复核记录保留各自原始状态。"
+                           "已采纳记录可结合来源描述为已确认；pending/reviewing 只能表述为“有线索显示……尚未核实”。"
+                           "返回线索 ID、来源标签、可信度、摘要、有效期、绑定路段名和事件 ID，不返回原文全文。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "enum": ["adopted", "pending", "reviewing", "rejected", "expired"],
+                        "description": "可选状态筛选；不填时覆盖已采纳和待复核（pending/reviewing）线索",
+                    },
+                    "kind": {
+                        "type": "string",
+                        "enum": ["official_notice", "web", "vision", "ugc_report"],
+                        "description": "可选来源筛选",
+                    },
+                    "keyword": {"type": "string", "description": "按摘要、地点或道路名筛选"},
+                    "near": {
+                        "type": "object",
+                        "description": "按已绑定候选路段做空间筛选，必须明确坐标系；未绑定路段的线索不会作为附近结果返回",
+                        "properties": {
+                            "lng": {"type": "number"},
+                            "lat": {"type": "number"},
+                            "crs": {"type": "string", "enum": ["GCJ02"]},
+                            "radius_m": {"type": "number", "minimum": 1, "maximum": 5000, "default": 300},
+                        },
+                        "required": ["lng", "lat", "crs"],
+                    },
+                    "limit": {"type": "integer", "minimum": 1, "maximum": 20, "default": 10},
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "collect_road_clues",
+            "description": "通过服务端已注册的采集器登记道路线索：source=web 时检索网页（C 级），"
+                           "source=official_notice 时把用户给出的通知原文登记为 A 级待核对线索。"
+                           "结果是待处理线索，最多登记 3 条；同一地点 10 分钟内限流，单次调用硬上限 8 秒。"
+                           "失败或超时统一返回 unavailable，不得编造道路或事件。"
+                           "采集成功也只表示已登记待核实，不代表已确认或已影响路线。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "source": {
+                        "type": "string", "enum": ["web", "official_notice"],
+                        "description": "采集来源；默认 web。网页检索用 query/url，官方通知用 notice_text",
+                    },
+                    "query": {"type": "string", "description": "道路、地点或事件关键词（web）"},
+                    "place": {"type": "string", "description": "用户关心的地点或区域，用于限流和检索"},
+                    "url": {"type": "string", "description": "用户直接给出的公开网页链接"},
+                    "notice_text": {
+                        "type": "string",
+                        "description": "官方通知原文（official_notice 必填，至少 10 字）；不得由你补写原文没有的内容",
+                    },
+                    "summary": {
+                        "type": "string",
+                        "description": "可选摘要，只能概括原文已明确说到的道路、时间与影响",
+                    },
+                    "draft": {
+                        "type": "object",
+                        "description": "可选结构化草稿；没有原文依据的字段必须留空，不得推测",
+                        "properties": {
+                            "event_type": {"type": "string"},
+                            "name": {"type": "string"},
+                            "place": {"type": "string"},
+                            "road_hint": {"type": "string"},
+                            "direction": {"type": "string"},
+                            "action": {"type": "string"},
+                            "affected_modes": {"type": "array", "items": {"type": "string"}},
+                            "valid_from": {"type": "string"},
+                            "valid_to": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "report_field_clue",
+            "description": "登记用户描述的现场路况线索（地点、坐标、描述、照片引用），只返回“已登记，待核实”和线索 ID。"
+                           "本工具没有采纳或发布权限，不能创建道路事件，也不能影响路线。"
+                           "坐标必须明确说明 GCJ02 或 WGS84；未提供坐标或图片时保留已有信息，不要自动补造。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "place": {"type": "string", "description": "现场地点或道路名"},
+                    "coord": {
+                        "type": "object",
+                        "properties": {
+                            "lng": {"type": "number"},
+                            "lat": {"type": "number"},
+                            "crs": {"type": "string", "enum": ["GCJ02", "WGS84"]},
+                        },
+                        "required": ["lng", "lat", "crs"],
+                    },
+                    "description": {"type": "string", "description": "用户描述的现场情况"},
+                    "media_id": {"type": "string", "description": "用户提供的照片或媒体引用"},
+                },
+            },
         },
     },
     {
@@ -3709,6 +3819,23 @@ def _tool_list_road_conditions(args, ctx):
         road = (c.get("edge") or {}).get("road_name", "")
         action = c.get("action")
         source = c.get("source") or {}
+        source_kind = source.get("kind", "manager_record")
+        source_labels = [str(label).strip() for label in (source.get("source_labels") or [])
+                        if str(label).strip()]
+        if source_labels:
+            source_label = "、".join(source_labels)
+        elif source_kind == "vision_job":
+            source_label = "无人机影像"
+        elif source_kind == "manager_photo":
+            source_label = "管理人员现场确认"
+        elif source_kind == "campus_notice_board":
+            source_label = "校内公告栏"
+        elif source_kind == "shuttle_notice":
+            source_label = "校车运行公告"
+        elif source_kind == "clue":
+            source_label = "路况线索"
+        else:
+            source_label = str(source.get("source_label") or "管理台事件记录")
         audit = c.get("audit") or []
         observation_time = source.get("captured_at") or c.get("created_at")
         condition = {
@@ -3732,7 +3859,8 @@ def _tool_list_road_conditions(args, ctx):
             "start_time": c.get("start_time"),
             "end_time": c.get("end_time") or None,
             "status": "confirmed_active",
-            "source_kind": (c.get("source") or {}).get("kind", "manager_record"),
+            "source_kind": source_kind,
+            "source_label": source_label,
             "confirmation_note": source.get("field_confirmation") or "",
             "route_effect": {
                 "action": action or "legacy_rule",
@@ -3762,6 +3890,12 @@ def _tool_list_road_conditions(args, ctx):
                 "associated_edge": source.get("associated_edge") or {},
                 "association_history": (source.get("association_history") or [])[-3:],
                 "field_confirmation": (source.get("field_confirmation") or "")[:300],
+            }
+        if source.get("kind") == "clue":
+            condition["clue_evidence"] = {
+                "clue_ids": list(source.get("clue_ids") or []),
+                "primary_clue_id": source.get("primary_clue_id"),
+                "source_labels": list(source.get("source_labels") or []),
             }
         out.append(condition)
     return {"conditions": out, "count": len(out),
@@ -3796,6 +3930,309 @@ def _tool_suggest_followup(args, ctx):
     return {"suggestions": suggestions}, {"suggestions": suggestions}
 
 
+def _normalize_clue_place(value) -> str:
+    return re.sub(r"[\s，。；：、,.;:!?！？/\\\-_]+", "", str(value or "").strip()).casefold()[:40]
+
+
+def _tool_query_road_clues(args, ctx):
+    from spatial import road_clues
+
+    status = args.get("status")
+    if status is not None and status not in road_clues.STATUSES:
+        return {"error": "invalid_clue_status", "message": "线索状态筛选无效"}, None
+    kind = args.get("kind")
+    if kind is not None and kind not in road_clues.registry:
+        return {"error": "invalid_clue_kind", "message": "线索来源筛选无效"}, None
+    try:
+        limit = int(args.get("limit", 10))
+    except (TypeError, ValueError):
+        return {"error": "invalid_limit", "message": "条数上限无效"}, None
+    limit = max(1, min(limit, 20))
+    statuses = None if status else {"adopted", "pending", "reviewing"}
+    try:
+        rows = road_clues.list_clues(
+            status=status, statuses=statuses, kind=kind,
+            keyword=str(args.get("keyword") or "").strip() or None,
+        )
+    except road_clues.ClueStoreUnavailable:
+        return {
+            "error": "road_clues_unavailable",
+            "message": "路况线索暂时无法读取，不能确认是否有相关线索；请稍后再试。",
+        }, None
+    near = args.get("near")
+    if near is not None:
+        if not isinstance(near, dict):
+            return {"error": "invalid_near", "message": "附近线索参数无效"}, None
+        crs = str(near.get("crs") or "").strip().upper().replace("-", "")
+        if crs != "GCJ02":
+            return {
+                "error": "near_crs_required",
+                "message": "附近线索查询必须明确坐标系为 GCJ02，不能猜测。",
+            }, None
+        try:
+            rows = road_clues.clues_near(
+                rows, float(near.get("lng")), float(near.get("lat")),
+                float(near.get("radius_m", 300)),
+            )
+        except (TypeError, ValueError):
+            return {"error": "invalid_near", "message": "附近线索坐标或半径无效"}, None
+    items = []
+    for row in rows[:limit]:
+        road_names = []
+        for candidate in row.get("edge_candidates") or []:
+            name = str(candidate.get("road_name") or "").strip()
+            if name and name not in road_names:
+                road_names.append(name)
+        adopted = row.get("status") == "adopted"
+        items.append({
+            "clue_id": row.get("clue_id"),
+            "kind": row.get("kind"),
+            "source_label": row.get("source_label"),
+            "trust_level": row.get("trust_level"),
+            "status": row.get("status"),
+            "status_label": road_clues.STATUS_LABELS.get(row.get("status"), row.get("status")),
+            "summary": row.get("summary"),
+            "confidence": row.get("confidence"),
+            "valid_from": row.get("valid_from"),
+            "valid_to": row.get("valid_to"),
+            "road_names": road_names,
+            "condition_ids": row.get("condition_ids") or [],
+            "reported_at": row.get("reported_at"),
+            "verified": adopted,
+            "verification_note": (
+                "已采纳，可在路况事件库核对" if adopted
+                else "线索尚未核实，不能当作已确认封路、施工或积水"
+            ),
+        })
+    return {
+        "clues": items,
+        "count": len(items),
+        "status_scope": sorted(statuses) if statuses else [status],
+        "message": "" if items else "没有找到符合条件的路况线索。",
+    }, None
+
+
+def _run_with_hard_deadline(work, deadline_monotonic, *, on_timeout=None):
+    """Run one work unit under a hard wall-clock limit.
+
+    The worker thread cannot be killed; ``on_timeout`` lets the caller set a
+    cancel flag so the worker stops before doing more work, and its late result
+    is discarded so the tool always answers inside the advertised window. The
+    cooperative deadline is installed inside the worker because context
+    variables do not cross threads.
+    """
+    from agents.deadline import shared_deadline
+
+    outcome: dict = {}
+
+    def worker():
+        try:
+            with shared_deadline(deadline_monotonic):
+                outcome["value"] = work()
+        except BaseException as exc:  # re-raised in the caller thread
+            outcome["error"] = exc
+
+    thread = threading.Thread(target=worker, name="road-clue-collect", daemon=True)
+    thread.start()
+    thread.join(max(0.0, deadline_monotonic - time.monotonic()))
+    if thread.is_alive():
+        if on_timeout is not None:
+            on_timeout()
+        raise TimeoutError("clue work exceeded its hard deadline")
+    if "error" in outcome:
+        raise outcome["error"]
+    return outcome.get("value")
+
+
+def _tool_collect_road_clues(args, ctx):
+    from agents.deadline import current_deadline
+    from spatial import road_clues
+
+    tool_started = time.monotonic()
+    source = str(args.get("source") or "web").strip()
+    if source not in {"web", "official_notice"}:
+        return {"error": "invalid_tool_request", "message": "采集来源不支持。"}, None
+    query = str(args.get("query") or "").strip()
+    place = str(args.get("place") or "").strip()
+    url = str(args.get("url") or "").strip()
+    notice_text = str(args.get("notice_text") or "").strip()
+    if source == "official_notice":
+        if len(notice_text) < 10:
+            return {
+                "error": "invalid_tool_request",
+                "message": "登记官方通知需要至少 10 个字的通知原文。",
+            }, None
+    elif not (query or place or url):
+        return {"error": "invalid_tool_request", "message": "请提供道路、地点或网页链接。"}, None
+    place_key = _normalize_clue_place(
+        place or (notice_text[:40] if source == "official_notice" else "") or query or url)
+    turn_key = "|".join([
+        str((ctx or {}).get("uid") or "anon"),
+        _normalize_clue_place(f"{place}|{query}|{url}|{notice_text[:40]}"),
+    ])
+    if source == "official_notice":
+        def collect():
+            confidence = args.get("confidence")
+            try:
+                confidence = 0.5 if confidence is None else float(confidence)
+            except (TypeError, ValueError):
+                confidence = 0.5
+            return road_clues.registry["official_notice"].fetch(
+                text=notice_text,
+                summary=args.get("summary"),
+                draft=args.get("draft") if isinstance(args.get("draft"), dict) else {},
+                confidence=confidence,
+                source_url=url or None,
+                source_tags=["official_notice", "agent_collected"],
+            )
+    else:
+        def collect():
+            return road_clues.registry["web"].fetch(query=query, url=url, limit=3)
+
+    # The 8 second budget covers the whole tool call: collection, persistence
+    # and the clue-store write. Persisting is inside the bounded worker so a
+    # slow store can never let the tool report success after the deadline.
+    created: list = []
+    cancelled = threading.Event()
+    collect_deadline = tool_started + 8.0
+    outer_deadline = current_deadline()
+    if outer_deadline is not None:
+        collect_deadline = min(collect_deadline, outer_deadline)
+
+    def check_deadline():
+        if cancelled.is_set() or time.monotonic() >= collect_deadline:
+            raise TimeoutError("clue collection exceeded its deadline")
+
+    def collect_and_persist():
+        check_deadline()
+        try:
+            allowed, retry_after = road_clues.claim_collect(place_key)
+        except (OSError, ValueError):
+            return {"kind": "unavailable"}
+        check_deadline()
+        if not allowed:
+            return {"kind": "rate_limited", "retry_after_seconds": retry_after}
+        if not road_clues.claim_turn_attempt(turn_key):
+            return {"kind": "already_attempted"}
+        check_deadline()
+        candidates = collect()
+        for candidate in (candidates or [])[:3]:
+            check_deadline()
+            road_clues.create_clue(
+                candidate,
+                actor="agent",
+                cancel_event=cancelled,
+                deadline_monotonic=collect_deadline,
+                on_created=created.append,
+            )
+        return {"kind": "completed"}
+
+    try:
+        work_result = _run_with_hard_deadline(
+            collect_and_persist, collect_deadline, on_timeout=cancelled.set)
+    except TimeoutError:
+        partial = [row["clue_id"] for row in list(created)]
+        return {
+            "error": "unavailable",
+            "message": ("采集或登记超过 8 秒，已停止等待，本次结果不完整；请稍后重新查询。"
+                        if partial else "暂时查不到可靠信息，请稍后再试。"),
+            **({"created_clue_ids": partial} if partial else {}),
+        }, None
+    except road_clues.ClueSourceUnavailable:
+        return {"error": "unavailable", "message": "暂时查不到可靠信息，请稍后再试。"}, None
+    except ValueError as error:
+        return {"error": "invalid_tool_request", "message": str(error)[:200]}, None
+    except road_clues.ClueStoreUnavailable:
+        partial = [row["clue_id"] for row in list(created)]
+        return {
+            "error": "unavailable",
+            "message": "暂时查不到可靠信息，请稍后再试。",
+            **({"created_clue_ids": partial} if partial else {}),
+        }, None
+    except (RuntimeError, OSError):
+        return {"error": "unavailable", "message": "暂时查不到可靠信息，请稍后再试。"}, None
+    if work_result["kind"] == "unavailable":
+        return {"error": "unavailable", "message": "暂时查不到可靠信息，请稍后再试。"}, None
+    if work_result["kind"] == "rate_limited":
+        retry_after = work_result["retry_after_seconds"]
+        return {
+            "error": "clue_collect_rate_limited",
+            "message": f"同一地点刚采集过，请约 {max(1, retry_after // 60)} 分钟后再查。",
+            "retry_after_seconds": retry_after,
+        }, None
+    if work_result["kind"] == "already_attempted":
+        return {
+            "error": "clue_collect_already_attempted",
+            "message": "同一问题本轮已经采集过；请根据已有线索回答，不要重复采集。",
+        }, None
+    return {
+        "status": "ok",
+        "source": source,
+        "clues": [{
+            "clue_id": row["clue_id"],
+            "summary": row["summary"],
+            "status": row["status"],
+            "source_label": row["source_label"],
+        } for row in created],
+        "count": len(created),
+        "message": (f"已登记 {len(created)} 条待复核线索；采纳前不会影响路线。"
+                    if created else "没有检索到可登记的线索。"),
+    }, None
+
+
+def _tool_report_field_clue(args, ctx):
+    from spatial import road_clues
+
+    place = str(args.get("place") or "").strip()
+    description = str(args.get("description") or "").strip()
+    if not place and not description:
+        return {"error": "invalid_tool_request", "message": "请提供现场地点或描述。"}, None
+    coord = args.get("coord")
+    crs = None
+    if coord is not None:
+        if not isinstance(coord, dict):
+            return {"error": "invalid_coord", "message": "坐标格式无效。"}, None
+        crs = str(coord.get("crs") or "").strip().upper().replace("-", "")
+        if crs not in {"GCJ02", "WGS84"}:
+            return {
+                "error": "coord_crs_required",
+                "message": "请明确坐标是 GCJ02 还是 WGS84，不能猜测。",
+            }, None
+        try:
+            lng, lat = float(coord.get("lng")), float(coord.get("lat"))
+        except (TypeError, ValueError):
+            return {"error": "invalid_coord", "message": "坐标格式无效。"}, None
+        if crs == "WGS84":
+            lng, lat = wgs84_to_gcj02(lng, lat)
+        coord = {"lng": lng, "lat": lat}
+    graph = None
+    try:
+        graph = _ensure_graph()
+    except Exception:
+        logger.warning("现场上报暂时无法读取路网，候选路段留空", exc_info=True)
+    try:
+        candidates = road_clues.registry["ugc_report"].fetch(
+            place=place,
+            coord=coord,
+            description=description,
+            media_ref=str(args.get("media_id") or "").strip() or None,
+            graph=graph,
+            input_crs=crs,
+        )
+        row = road_clues.create_clue(candidates[0], actor="agent")
+    except road_clues.ClueStoreUnavailable:
+        return {"error": "unavailable", "message": "线索暂时无法登记，请稍后再试。"}, None
+    except ValueError as error:
+        return {"error": "invalid_tool_request", "message": str(error)[:200]}, None
+    return {
+        "clue_id": row["clue_id"],
+        "status": row["status"],
+        "status_label": road_clues.STATUS_LABELS.get(row["status"], row["status"]),
+        "candidate_count": len(row.get("edge_candidates") or []),
+        "message": "已登记，待核实。",
+    }, None
+
+
 _EXECUTORS = {
     "resolve_poi": _tool_resolve_poi,
     "get_place_details": _tool_get_place_details,
@@ -3809,6 +4246,9 @@ _EXECUTORS = {
     "plan_tour": _tool_plan_tour,
     "get_weather": _tool_get_weather,
     "list_road_conditions": _tool_list_road_conditions,
+    "query_road_clues": _tool_query_road_clues,
+    "collect_road_clues": _tool_collect_road_clues,
+    "report_field_clue": _tool_report_field_clue,
     "ask_user": _tool_ask_user,
     "suggest_followup": _tool_suggest_followup,
 }

@@ -154,6 +154,14 @@ class VisionConditionAlreadyPublishedError(RuntimeError):
         super().__init__("影像候选已发布为路况事件")
 
 
+class ClueConditionAlreadyPublishedError(RuntimeError):
+    """Raised when the same reviewed clues already produced a road event."""
+
+    def __init__(self, condition: dict):
+        self.condition = deepcopy(condition)
+        super().__init__("线索已发布为路况事件")
+
+
 def _finite_number(value) -> bool:
     if isinstance(value, bool):
         return False
@@ -507,6 +515,17 @@ def add_condition(
                             None)
             if existing is not None:
                 raise VisionConditionAlreadyPublishedError(existing)
+        if source_kind == "clue":
+            clue_ids = set(source.get("clue_ids") or [])
+            adoption_token = source.get("adoption_token")
+            existing = next((
+                item for item in conditions
+                if (item.get("source") or {}).get("kind") == "clue"
+                and ((adoption_token and (item.get("source") or {}).get("adoption_token") == adoption_token)
+                     or clue_ids & set((item.get("source") or {}).get("clue_ids") or []))
+            ), None)
+            if existing is not None:
+                raise ClueConditionAlreadyPublishedError(existing)
         conditions.append(condition)
         _save_conditions(conditions)
     logger.info(

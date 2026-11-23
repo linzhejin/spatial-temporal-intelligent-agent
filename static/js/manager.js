@@ -2,7 +2,7 @@
   'use strict';
 
   var legacyDismissedVisionStorageKey = 'managerDismissedVisionJobs';
-  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, eventItems: [], preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, editingEventId: null, eventEditBusy: false, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, floodAssistance: { ready: false }, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null };
+  var state = { csrf: '', map: null, eventLayers: null, visionLayers: null, eventItems: [], preview: null, anchorMarker: null, pickFeedbackLayers: [], pickRequestId: 0, picked: null, anchor: null, sourceJobId: null, sourceCandidateIndex: null, reviewDrafts: {}, editingEventId: null, eventEditBusy: false, legacyDismissedVisionJobs: loadLegacyDismissedVisionJobs(), deletedVisionJobs: new Set(), visionDeleteBusy: new Set(), legacyDeleteBusy: false, picking: false, pickPurpose: null, selectedRegionForRoad: null, maxImageBytes: 24 * 1024 * 1024, maxVideoBytes: 1024 * 1024 * 1024, uploadChunkBytes: 8 * 1024 * 1024, inferenceReady: false, floodAssistance: { ready: false }, visionCapabilities: {}, visionStatusBusy: false, visionUploadBusy: false, mediaPreviewUrl: '', mediaInvalidReason: '', impactPreviewRequestId: 0, observationRegions: [], observationScenes: [], observationSceneId: null, frameSignature: null, currentRegionPoints: [], drawingRegion: false, mediaObjectUrl: null, poll: null, djiTrackPoints: [], djiTrackLayers: [], djiTrackTimedCoordinates: [], djiPlaybackLayer: null, clues: [], clueDetail: null, selectedClueId: null, clueBusy: false, clueDetailBusy: false, clueMap: null, clueMapLayers: null, clueSelectedCandidate: -1, clueBinding: null, cluePickingCandidate: false, clueForm: null, cluePendingOpen: '', clueMergeIds: new Set() };
   var pendingVisionUploadKey = 'whu-walker-pending-vision-video-v1';
   var visionPreviewStates = new Map();
   var playingVisionVideos = new Set();
@@ -1231,6 +1231,10 @@
     refreshEvents();
     refreshVisionStatus();
     refreshVisionScenes();
+    var clueHash = '';
+    try { clueHash = decodeURIComponent(String(window.location.hash || '')); } catch (_) { clueHash = ''; }
+    if (clueHash.indexOf('#clue/') === 0) state.cluePendingOpen = clueHash.slice(6);
+    refreshClues();
     migrateLegacyDismissedVisionJobs().then(function () { refreshVisionJobs(true); });
     if (!state.poll) state.poll = window.setInterval(function () {
       if (!document.hidden) {
@@ -1251,6 +1255,24 @@
     visionPreviewStates.clear();
     state.csrf = '';
     state.reviewDrafts = {};
+    state.clues = [];
+    state.clueDetail = null;
+    state.selectedClueId = null;
+    state.clueSelectedCandidate = -1;
+    state.clueBinding = null;
+    state.cluePickingCandidate = false;
+    state.clueForm = null;
+    state.cluePendingOpen = '';
+    state.clueMergeIds = new Set();
+    if (state.clueMap) {
+      try { state.clueMap.remove(); } catch (_) {}
+      state.clueMap = null;
+      state.clueMapLayers = null;
+    }
+    var clueList = byId('clue-list');
+    if (clueList) clueList.replaceChildren();
+    var clueDetail = byId('clue-detail');
+    if (clueDetail) clueDetail.replaceChildren();
     clearRoadRebind(false);
     clearVisionSource();
     if (state.map) clearPickedRoad();
@@ -1306,9 +1328,16 @@
     if (targetId === 'road-workspace' && state.map) {
       window.setTimeout(function () { state.map.invalidateSize(); }, shouldScroll ? 350 : 80);
     }
+    if (targetId === 'clue-workspace' && state.clueMap) {
+      window.setTimeout(function () { state.clueMap.invalidateSize(); }, shouldScroll ? 350 : 80);
+    }
   }
   function restoreWorkspaceSelection() {
     var hashTarget = String(window.location && window.location.hash || '').slice(1);
+    if (hashTarget.indexOf('clue/') === 0) {
+      state.cluePendingOpen = decodeURIComponent(hashTarget.slice(5));
+      hashTarget = 'clue-workspace';
+    }
     var stored = '';
     try { stored = window.sessionStorage.getItem(activeWorkspaceStorageKey) || ''; } catch (_) {}
     var target = byId(hashTarget) ? hashTarget : (byId(stored) ? stored : 'road-workspace');
@@ -1326,6 +1355,9 @@
       selectWorkspace(targetId, false);
       if (targetId === 'event-history') {
         window.setTimeout(function () { byId('event-search').focus({ preventScroll: true }); }, 350);
+      }
+      if (targetId === 'clue-workspace') {
+        window.setTimeout(function () { byId('clue-search').focus({ preventScroll: true }); }, 350);
       }
     });
   });
@@ -1754,6 +1786,23 @@
       var roadLinkText = associatedRoad ? ' → ' + associatedRoad : '';
       source.textContent = '影像来源 ' + String(item.source.job_id || '').slice(0, 8) + regionText + roadLinkText + ' · ' + (item.source.field_confirmation || '未记录核实依据');
       detailBody.appendChild(source);
+    }
+    if (item.source && item.source.kind === 'clue') {
+      var clueSource = document.createElement('div'); clueSource.className = 'event-sub';
+      var clueIds = Array.isArray(item.source.clue_ids) ? item.source.clue_ids : [];
+      clueSource.textContent = '线索来源：' + (clueIds.length ? clueIds.join('、') : '未记录线索编号');
+      if (item.source.primary_clue_id) {
+        var openClue = document.createElement('button');
+        openClue.type = 'button'; openClue.className = 'quiet-button'; openClue.textContent = '查看线索';
+        openClue.addEventListener('click', function () {
+          state.cluePendingOpen = item.source.primary_clue_id;
+          selectWorkspace('clue-workspace', true);
+          refreshClues();
+        });
+        clueSource.appendChild(document.createTextNode(' '));
+        clueSource.appendChild(openClue);
+      }
+      detailBody.appendChild(clueSource);
     }
     if (item.audit && item.audit.length) {
       var last = item.audit[item.audit.length - 1];
@@ -3107,6 +3156,15 @@
           transfer.addEventListener('click', function () { prepareVisionEvent(job, index); });
           candidate.appendChild(transfer);
         }
+        if (!isolated) {
+          var clueButton = document.createElement('button'); clueButton.type = 'button';
+          clueButton.className = 'outline-button clue-from-vision';
+          clueButton.textContent = '登记为待复核线索';
+          clueButton.addEventListener('click', function () {
+            registerVisionClue(job, index, clueButton);
+          });
+          candidate.appendChild(clueButton);
+        }
         if (automaticSummary.region_origin === 'automatic_model' && ++automaticSeen > 5) {
           if (!moreAutomatic) {
             moreAutomatic = document.createElement('details'); moreAutomatic.className = 'candidate-more';
@@ -3836,6 +3894,929 @@
   byId('vision-tab-jobs').addEventListener('click', function () { setVisionTab('jobs'); });
   byId('vision-tab-upload').addEventListener('keydown', visionTabKeydown);
   byId('vision-tab-jobs').addEventListener('keydown', visionTabKeydown);
+  // ===== 线索复核 =====
+  var CLUE_KIND_LABELS = {
+    official_notice: '官方通知', web: '网页检索', vision: '无人机影像', ugc_report: '用户现场上报',
+  };
+  var CLUE_STATUS_LABELS = {
+    pending: '待复核', reviewing: '复核中', adopted: '已采纳', rejected: '已驳回', expired: '已过期',
+  };
+  var CLUE_EVENT_TYPES = [
+    ['', '请选择实际影响类型'], ['construction', '施工'], ['event', '活动或人流密集'],
+    ['closure', '道路封闭'], ['flooding', '积水'], ['accident', '事故或临时障碍'],
+  ];
+
+  function clueKindLabel(kind) { return CLUE_KIND_LABELS[kind] || kind || '未知来源'; }
+  function clueStatusLabel(status) { return CLUE_STATUS_LABELS[status] || status || '未知状态'; }
+  function clueShortId(id) { return String(id || '').slice(0, 8); }
+  function formatClueTime(value) {
+    if (!value) return '未指定';
+    var date = new Date(value);
+    if (!Number.isFinite(date.getTime())) return '时间未知';
+    return formatBeijingDateTime(date, false);
+  }
+  function clueInputDate(value) {
+    var date = value ? new Date(value) : new Date();
+    if (!Number.isFinite(date.getTime())) return '';
+    return new Date(date.getTime() + 8 * 3600000).toISOString().slice(0, 16);
+  }
+  function clueInputToIso(value) {
+    var text = String(value || '').trim();
+    if (!text) return null;
+    if (text.length === 16) text += ':00';
+    var milliseconds = Date.parse(text + '+08:00');
+    return Number.isFinite(milliseconds) ? new Date(milliseconds).toISOString() : null;
+  }
+  function clueEdgeKey(candidate) {
+    if (!candidate) return '';
+    var u = Number(candidate.u), v = Number(candidate.v);
+    return Math.min(u, v) + ':' + Math.max(u, v) + ':' + Number(candidate.key || 0);
+  }
+  function clueEmptyState(text, retry) {
+    var node = document.createElement('div');
+    node.className = 'empty-state';
+    node.textContent = text;
+    if (retry) {
+      node.appendChild(document.createElement('br'));
+      var button = document.createElement('button');
+      button.type = 'button'; button.className = 'outline-button'; button.textContent = '重试';
+      button.addEventListener('click', retry);
+      node.appendChild(button);
+    }
+    return node;
+  }
+  function clueSearchable(row) {
+    var values = [row.clue_id, row.summary, row.source_label, row.draft && row.draft.place,
+      row.draft && row.draft.road_hint];
+    (row.edge_candidates || []).forEach(function (candidate) { values.push(candidate.road_name); });
+    return values.filter(Boolean).join(' ').toLocaleLowerCase();
+  }
+  function renderClueSourceCatalog(sources) {
+    var node = byId('clue-source-catalog');
+    if (!node) return;
+    var enabled = (sources || []).filter(function (item) { return item.enabled; });
+    var disabled = (sources || []).filter(function (item) { return !item.enabled; });
+    var text = '已接入：' + (enabled.map(function (item) {
+      return item.label + '（' + item.trust_level + ' 级）';
+    }).join('、') || '无') + '。';
+    if (disabled.length) {
+      text += ' 尚未接入：' + disabled.map(function (item) { return item.label; }).join('、')
+        + '；系统不会返回这些来源的抓取结果。';
+    }
+    node.textContent = text;
+  }
+  function renderClueRow(row) {
+    var card = document.createElement('article');
+    card.className = 'clue-row' + (row.clue_id === state.selectedClueId ? ' is-selected' : '');
+    card.tabIndex = 0;
+    card.setAttribute('role', 'button');
+    card.setAttribute('aria-label', '查看线索 ' + row.clue_id);
+    function open() { openClueDetail(row.clue_id); }
+    card.addEventListener('click', open);
+    card.addEventListener('keydown', function (event) {
+      if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); open(); }
+    });
+    var head = document.createElement('div'); head.className = 'clue-row-head';
+    var status = document.createElement('span');
+    status.className = 'event-status clue-status-' + row.status;
+    status.textContent = clueStatusLabel(row.status);
+    head.appendChild(status);
+    var kind = document.createElement('span'); kind.className = 'clue-kind';
+    kind.textContent = row.source_label || clueKindLabel(row.kind);
+    head.appendChild(kind);
+    var id = document.createElement('span'); id.className = 'clue-id';
+    id.textContent = 'clue ' + clueShortId(row.clue_id);
+    head.appendChild(id);
+    card.appendChild(head);
+    var summary = document.createElement('div'); summary.className = 'clue-summary';
+    summary.textContent = row.summary || '无摘要';
+    card.appendChild(summary);
+    var meta = document.createElement('div'); meta.className = 'clue-meta';
+    var parts = [];
+    if (row.confidence != null && Number.isFinite(Number(row.confidence))) {
+      parts.push('置信度 ' + Math.round(Number(row.confidence) * 100) + '%');
+    }
+    parts.push('发布 ' + formatClueTime(row.reported_at || row.created_at));
+    if (row.valid_to) parts.push('有效至 ' + formatClueTime(row.valid_to));
+    parts.push((row.candidate_count || 0) + ' 个候选路段');
+    if (row.condition_ids && row.condition_ids.length) parts.push('事件 ' + row.condition_ids.join('、'));
+    meta.textContent = parts.join(' · ');
+    card.appendChild(meta);
+    if (row.duplicate_of) {
+      var duplicate = document.createElement('div'); duplicate.className = 'clue-duplicate';
+      duplicate.textContent = '可能与线索 ' + clueShortId(row.duplicate_of) + ' 重复，请人工判断';
+      card.appendChild(duplicate);
+    }
+    return card;
+  }
+  function renderClueList() {
+    var list = byId('clue-list');
+    if (!list) return;
+    var query = String(byId('clue-search').value || '').trim().toLocaleLowerCase();
+    var status = byId('clue-status-filter').value || 'all';
+    var kind = byId('clue-kind-filter').value || 'all';
+    var items = (state.clues || []).filter(function (row) {
+      if (kind !== 'all' && row.kind !== kind) return false;
+      if (status === 'unverified') {
+        if (row.status !== 'pending' && row.status !== 'reviewing') return false;
+      } else if (status !== 'all' && row.status !== status) {
+        return false;
+      }
+      if (query && clueSearchable(row).indexOf(query) < 0) return false;
+      return true;
+    });
+    list.replaceChildren();
+    if (!state.clues.length) {
+      list.appendChild(clueEmptyState('目前没有线索记录。可在上方登记官方通知、网页结果或现场上报。'));
+      return;
+    }
+    if (!items.length) {
+      list.appendChild(clueEmptyState('没有符合筛选条件的线索，试试清除筛选。'));
+      return;
+    }
+    items.forEach(function (row) { list.appendChild(renderClueRow(row)); });
+  }
+  async function refreshClues() {
+    var list = byId('clue-list');
+    if (!list) return;
+    if (!state.clues.length) list.replaceChildren(clueEmptyState('正在读取线索…'));
+    try {
+      var data = await request('/api/manager/clues', 'GET');
+      state.clues = data.clues || [];
+      renderClueSourceCatalog(data.sources || []);
+      renderClueList();
+      if (state.cluePendingOpen) {
+        var pending = state.cluePendingOpen;
+        state.cluePendingOpen = '';
+        openClueDetail(pending);
+      }
+    } catch (error) {
+      list.replaceChildren(clueEmptyState(error.message || '线索列表暂时无法读取。', refreshClues));
+    }
+  }
+  async function openClueDetail(clueId) {
+    if (!clueId) return;
+    state.selectedClueId = clueId;
+    state.clueSelectedCandidate = -1;
+    state.clueBinding = null;
+    state.cluePickingCandidate = false;
+    renderClueList();
+    var panel = byId('clue-detail');
+    panel.replaceChildren(clueEmptyState('正在读取线索详情…'));
+    try {
+      var data = await request('/api/manager/clues/' + encodeURIComponent(clueId), 'GET');
+      if (state.selectedClueId !== clueId) return;
+      state.clueDetail = data.clue;
+      renderClueDetail(data.clue);
+    } catch (error) {
+      panel.replaceChildren(clueEmptyState(error.message || '线索详情暂时无法读取。', function () {
+        openClueDetail(clueId);
+      }));
+    }
+  }
+  function clueField(labelText, node) {
+    var label = document.createElement('label');
+    label.textContent = labelText;
+    label.appendChild(node);
+    return label;
+  }
+  function clueFormSelect(options, value) {
+    var select = document.createElement('select');
+    options.forEach(function (pair) {
+      var option = document.createElement('option');
+      option.value = pair[0]; option.textContent = pair[1];
+      select.appendChild(option);
+    });
+    select.value = value;
+    return select;
+  }
+  function renderClueDetail(row) {
+    if (state.clueMap) {
+      try { state.clueMap.remove(); } catch (_) {}
+      state.clueMap = null;
+      state.clueMapLayers = null;
+    }
+    state.clueDetail = row;
+    var panel = byId('clue-detail');
+    panel.replaceChildren();
+    var head = document.createElement('div'); head.className = 'clue-detail-head';
+    var title = document.createElement('h3'); title.textContent = row.summary || '线索详情';
+    var status = document.createElement('span');
+    status.className = 'event-status clue-status-' + row.status;
+    status.textContent = clueStatusLabel(row.status);
+    head.append(title, status);
+    panel.appendChild(head);
+    var meta = document.createElement('p'); meta.className = 'clue-meta';
+    meta.textContent = (row.source_label || clueKindLabel(row.kind)) + ' · 可信度 ' + (row.trust_level || '-')
+      + ' 级' + (row.confidence != null ? ' · 模型置信度 ' + Math.round(Number(row.confidence) * 100) + '%' : '')
+      + ' · 登记于 ' + formatClueTime(row.created_at);
+    panel.appendChild(meta);
+    var idLine = document.createElement('p'); idLine.className = 'clue-id-line';
+    idLine.id = 'clue-detail-id';
+    idLine.dataset.clueId = row.clue_id;
+    idLine.textContent = '线索编号：' + row.clue_id;
+    var copy = document.createElement('button');
+    copy.type = 'button'; copy.className = 'quiet-button'; copy.textContent = '复制';
+    copy.addEventListener('click', function () {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(row.clue_id).then(function () {
+          message('clue-review-message', '线索编号已复制。', true);
+        });
+      }
+    });
+    idLine.appendChild(copy);
+    panel.appendChild(idLine);
+    if (row.duplicate_of) {
+      var duplicate = document.createElement('p'); duplicate.className = 'clue-duplicate';
+      duplicate.textContent = '系统判断可能与线索 ' + row.duplicate_of + ' 重复；是否合并由复核人决定。';
+      panel.appendChild(duplicate);
+    }
+    var detailBody = document.createElement('div'); detailBody.className = 'clue-detail-body';
+    var detailLeft = document.createElement('div'); detailLeft.className = 'clue-detail-left';
+    var detailRight = document.createElement('div'); detailRight.className = 'clue-detail-right';
+    detailBody.append(detailLeft, detailRight);
+    panel.appendChild(detailBody);
+
+    var evidence = document.createElement('section'); evidence.className = 'clue-evidence';
+    var evidenceTitle = document.createElement('h4'); evidenceTitle.textContent = '原始证据';
+    evidence.appendChild(evidenceTitle);
+    if (row.raw_text) {
+      var pre = document.createElement('pre'); pre.className = 'clue-raw-text'; pre.textContent = row.raw_text;
+      evidence.appendChild(pre);
+    } else {
+      var none = document.createElement('p'); none.className = 'clue-meta';
+      none.textContent = '没有保存原文；请结合影像或来源链接核对。';
+      evidence.appendChild(none);
+    }
+    if (row.source_url) {
+      var link = document.createElement('a');
+      link.href = row.source_url; link.target = '_blank'; link.rel = 'noopener';
+      link.textContent = '打开来源网页';
+      evidence.appendChild(link);
+    }
+    if (row.media_ref) {
+      var media = document.createElement('p'); media.className = 'clue-meta';
+      media.textContent = '媒体：' + row.media_ref;
+      evidence.appendChild(media);
+      var isImageRef = row.kind === 'vision' || /^(https?:)?\/\//i.test(row.media_ref);
+      if (isImageRef) {
+        var preview = document.createElement('img');
+        preview.className = 'clue-media-preview'; preview.alt = '线索媒体预览'; preview.src = row.media_ref;
+        preview.addEventListener('error', function () {
+          preview.replaceWith(clueEmptyState('媒体预览暂时无法加载，请打开来源链接核对。'));
+        });
+        evidence.appendChild(preview);
+      }
+    }
+    detailLeft.appendChild(evidence);
+
+    var candidates = Array.isArray(row.edge_candidates) ? row.edge_candidates : [];
+    var candidateSection = document.createElement('section'); candidateSection.className = 'clue-candidates';
+    var candidateTitle = document.createElement('h4');
+    candidateTitle.textContent = '候选路段（选中后在地图上高亮并重新核对吸附）';
+    candidateSection.appendChild(candidateTitle);
+    var candidateList = document.createElement('div');
+    candidateList.className = 'clue-candidate-list'; candidateList.id = 'clue-candidate-list';
+    if (!candidates.length) {
+      var noCandidate = document.createElement('p'); noCandidate.className = 'clue-meta';
+      noCandidate.textContent = '还没有可核验的候选路段。请在地图上选路补充，或驳回该线索。';
+      candidateList.appendChild(noCandidate);
+    }
+    candidates.forEach(function (candidate, index) {
+      var label = document.createElement('label');
+      label.className = 'clue-candidate'; label.dataset.index = String(index);
+      var radio = document.createElement('input');
+      radio.type = 'radio'; radio.name = 'clue-candidate'; radio.value = String(index);
+      radio.addEventListener('change', function () { selectClueCandidate(index); });
+      var copyText = document.createElement('span');
+      var name = document.createElement('strong');
+      name.textContent = candidate.road_name || '未命名道路';
+      var detail = document.createElement('small');
+      detail.textContent = '吸附 ' + Number(candidate.distance_m || 0).toFixed(1) + ' 米 · '
+        + (candidate.chain_length_m ? Math.round(candidate.chain_length_m) + ' 米路段' : '单条边');
+      copyText.append(name, document.createElement('br'), detail);
+      label.append(radio, copyText);
+      candidateList.appendChild(label);
+    });
+    candidateSection.appendChild(candidateList);
+    var mapNode = document.createElement('div');
+    mapNode.id = 'clue-map'; mapNode.className = 'clue-map';
+    candidateSection.appendChild(mapNode);
+    var addButton = document.createElement('button');
+    addButton.type = 'button'; addButton.id = 'clue-add-candidate'; addButton.className = 'outline-button';
+    addButton.textContent = state.cluePickingCandidate ? '取消地图选路' : '在地图补充候选路段';
+    addButton.addEventListener('click', toggleClueCandidatePicking);
+    candidateSection.appendChild(addButton);
+    detailRight.appendChild(candidateSection);
+
+    var editable = row.status === 'pending' || row.status === 'reviewing';
+    var draft = row.draft || {};
+    var formSection = document.createElement('section'); formSection.className = 'clue-form';
+    var formTitle = document.createElement('h4'); formTitle.textContent = '复核与采纳';
+    formSection.appendChild(formTitle);
+    var grid = document.createElement('div'); grid.className = 'clue-form-grid';
+    var summaryInput = document.createElement('input');
+    summaryInput.maxLength = 60; summaryInput.value = row.summary || ''; summaryInput.id = 'clue-summary';
+    var typeSelect = clueFormSelect(CLUE_EVENT_TYPES, draft.event_type || '');
+    typeSelect.id = 'clue-event-type';
+    var nameInput = document.createElement('input');
+    nameInput.maxLength = 30; nameInput.value = draft.name || ''; nameInput.id = 'clue-event-name';
+    var descriptionInput = document.createElement('textarea');
+    descriptionInput.maxLength = 200; descriptionInput.rows = 2; descriptionInput.value = draft.description || '';
+    descriptionInput.id = 'clue-event-description';
+    var directionSelect = clueFormSelect(
+      [['both', '双向'], ['forward', '仅 A → B'], ['reverse', '仅 B → A']],
+      draft.direction || 'both'
+    );
+    directionSelect.id = 'clue-direction';
+    var actionSelect = clueFormSelect(
+      [['', '请选择提示、缓行或禁止通行'], ['notice', '提示，不改变路线'],
+       ['slowdown', '缓行，增加时间成本'], ['closure', '禁止通行，规划时绕开']],
+      draft.action || ''
+    );
+    actionSelect.id = 'clue-action';
+    var modesWrap = document.createElement('fieldset');
+    modesWrap.className = 'clue-mode-fieldset';
+    var modesLegend = document.createElement('legend'); modesLegend.textContent = '受影响的出行方式';
+    modesWrap.appendChild(modesLegend);
+    var modeValues = draft.affected_modes && draft.affected_modes.length
+      ? draft.affected_modes : (draft.blocked_modes && draft.blocked_modes.length ? draft.blocked_modes : []);
+    var modeInputs = {};
+    [['walk', '步行'], ['bike', '骑行'], ['drive', '驾车']].forEach(function (pair) {
+      var label = document.createElement('label');
+      var input = document.createElement('input');
+      input.type = 'checkbox'; input.value = pair[0]; input.checked = modeValues.indexOf(pair[0]) >= 0;
+      input.id = 'clue-mode-' + pair[0];
+      input.addEventListener('change', function () { updateClueAdoptState(); });
+      modeInputs[pair[0]] = input;
+      label.append(input, document.createTextNode(' ' + pair[1]));
+      modesWrap.appendChild(label);
+    });
+    var costInput = document.createElement('input');
+    costInput.type = 'number'; costInput.min = '1'; costInput.max = '5'; costInput.step = '0.1';
+    costInput.value = draft.cost_multiplier || 1.5; costInput.id = 'clue-cost';
+    var costWrap = clueField('缓行成本倍数', costInput);
+    var startInput = document.createElement('input');
+    startInput.type = 'datetime-local'; startInput.step = '60'; startInput.id = 'clue-start';
+    startInput.value = clueInputDate(row.valid_from || new Date().toISOString());
+    var endInput = document.createElement('input');
+    endInput.type = 'datetime-local'; endInput.step = '60'; endInput.id = 'clue-end';
+    endInput.value = clueInputDate(row.valid_to || new Date(Date.now() + 2 * 3600 * 1000).toISOString());
+    var noteInput = document.createElement('textarea');
+    noteInput.maxLength = 300; noteInput.rows = 2; noteInput.value = row.review_note || '';
+    noteInput.id = 'clue-review-note';
+    noteInput.placeholder = '写明查看了哪些原始证据、道路和时间如何核对（至少 8 字）';
+    var mergeSelect = document.createElement('select');
+    mergeSelect.multiple = true; mergeSelect.id = 'clue-merge-ids';
+    var mergeWrap = clueField('合并同路段线索（可选）', mergeSelect);
+    mergeWrap.id = 'clue-merge-wrap'; mergeWrap.hidden = true;
+    var rejectReason = document.createElement('textarea');
+    rejectReason.rows = 2; rejectReason.maxLength = 1000; rejectReason.id = 'clue-reject-reason';
+    rejectReason.placeholder = '驳回依据（例如：通知已撤销、道路不符、时间已过）';
+    var rejectWrap = clueField('驳回依据', rejectReason);
+
+    grid.append(
+      clueField('摘要', summaryInput),
+      clueField('事件类型', typeSelect),
+      clueField('事件名称', nameInput),
+      clueField('现场说明', descriptionInput),
+      clueField('影响方向', directionSelect),
+      clueField('对路线的处理方式', actionSelect),
+      modesWrap,
+      costWrap,
+      clueField('开始生效（北京时间）', startInput),
+      clueField('结束时间（北京时间）', endInput),
+      clueField('复核依据', noteInput),
+      mergeWrap
+    );
+    formSection.appendChild(grid);
+    if (editable) formSection.appendChild(rejectWrap);
+    var formMessage = document.createElement('p');
+    formMessage.className = 'form-message'; formMessage.id = 'clue-review-message'; formMessage.setAttribute('role', 'status');
+    formSection.appendChild(formMessage);
+    var actions = document.createElement('div'); actions.className = 'clue-actions';
+    var startReviewButton = null;
+    if (row.status === 'pending') {
+      startReviewButton = document.createElement('button');
+      startReviewButton.type = 'button'; startReviewButton.className = 'outline-button';
+      startReviewButton.id = 'clue-start-review';
+      startReviewButton.textContent = '开始复核';
+      startReviewButton.addEventListener('click', startClueReview);
+      actions.appendChild(startReviewButton);
+    }
+    var saveButton = document.createElement('button');
+    saveButton.type = 'button'; saveButton.className = 'outline-button'; saveButton.textContent = '保存草稿';
+    saveButton.id = 'clue-save';
+    saveButton.addEventListener('click', saveClueDraft);
+    var adoptButton = document.createElement('button');
+    adoptButton.type = 'button'; adoptButton.className = 'primary-button'; adoptButton.id = 'clue-adopt';
+    adoptButton.innerHTML = '采纳并发布事件 <span>→</span>';
+    adoptButton.addEventListener('click', adoptClue);
+    var rejectButton = document.createElement('button');
+    rejectButton.type = 'button'; rejectButton.className = 'quiet-button'; rejectButton.textContent = '驳回线索';
+    rejectButton.id = 'clue-reject';
+    rejectButton.addEventListener('click', rejectClue);
+    actions.append(saveButton, adoptButton);
+    if (editable) actions.appendChild(rejectButton);
+    formSection.appendChild(actions);
+    if (!editable) {
+      [summaryInput, typeSelect, nameInput, descriptionInput, directionSelect, actionSelect,
+        costInput, startInput, endInput, noteInput, mergeSelect, rejectReason].forEach(function (control) {
+        control.disabled = true;
+      });
+      Object.keys(modeInputs).forEach(function (key) { modeInputs[key].disabled = true; });
+    }
+    if (row.status === 'adopted') {
+      var adopted = document.createElement('p'); adopted.className = 'clue-adopted-note';
+      adopted.textContent = '已采纳为事件：' + (row.condition_ids || []).join('、')
+        + '。路线使用以事件记录为准。';
+      formSection.appendChild(adopted);
+      var history = document.createElement('button');
+      history.type = 'button'; history.className = 'outline-button'; history.textContent = '查看事件记录';
+      history.addEventListener('click', function () { selectWorkspace('event-history', true); });
+      formSection.appendChild(history);
+    } else if (row.status === 'rejected' || row.status === 'expired') {
+      var ended = document.createElement('p'); ended.className = 'clue-meta';
+      ended.textContent = clueStatusLabel(row.status) + (row.review_note ? '：' + row.review_note : '');
+      formSection.appendChild(ended);
+    }
+    detailRight.appendChild(formSection);
+
+    state.clueForm = {
+      summary: summaryInput, type: typeSelect, name: nameInput, description: descriptionInput,
+      direction: directionSelect, action: actionSelect, modes: modeInputs, cost: costInput,
+      costWrap: costWrap, start: startInput, end: endInput, note: noteInput, merge: mergeSelect,
+      mergeWrap: mergeWrap, rejectReason: rejectReason, message: formMessage,
+      adopt: adoptButton, save: saveButton, startReview: startReviewButton,
+    };
+    [summaryInput, nameInput, descriptionInput, startInput, endInput, noteInput].forEach(function (control) {
+      control.addEventListener('input', updateClueAdoptState);
+    });
+    [typeSelect, directionSelect, actionSelect].forEach(function (control) {
+      control.addEventListener('change', function () {
+        updateClueActionVisibility();
+        refreshClueMergeOptions();
+        if (directionSelect === control && state.clueSelectedCandidate >= 0) prepareClueBinding();
+        updateClueAdoptState();
+      });
+    });
+    mergeSelect.addEventListener('change', function () {
+      state.clueMergeIds = new Set(Array.prototype.map.call(mergeSelect.selectedOptions || [], function (option) {
+        return option.value;
+      }));
+    });
+    state.clueMergeIds = new Set();
+    updateClueActionVisibility();
+    ensureClueMap(row);
+    updateClueAdoptState();
+    if (editable && candidates.length) selectClueCandidate(0);
+  }
+  function clueSelectedModes() {
+    var form = state.clueForm;
+    if (!form) return [];
+    return ['walk', 'bike', 'drive'].filter(function (mode) {
+      return form.modes[mode] && form.modes[mode].checked;
+    });
+  }
+  function updateClueActionVisibility() {
+    var form = state.clueForm;
+    if (!form || !form.costWrap) return;
+    form.costWrap.hidden = form.action.value !== 'slowdown';
+  }
+  function updateClueAdoptState() {
+    var row = state.clueDetail, form = state.clueForm;
+    if (!row || !form || !form.adopt) return;
+    var editable = row.status === 'pending' || row.status === 'reviewing';
+    var modes = clueSelectedModes();
+    var note = form.note.value.trim();
+    var endValue = form.end.value;
+    var canAdopt = editable && row.status === 'reviewing' && !!state.clueBinding
+      && state.clueBinding.candidateIndex === state.clueSelectedCandidate
+      && note.length >= 8 && note.length <= 300
+      && !!form.type.value && !!form.action.value && modes.length > 0
+      && !!endValue && !state.clueBusy;
+    form.adopt.disabled = !canAdopt;
+    if (form.save) form.save.disabled = !editable || state.clueBusy;
+    if (form.startReview) form.startReview.disabled = state.clueBusy;
+    if (!editable) return;
+    var hints = [];
+    if (row.status === 'pending') hints.push('请先点击“开始复核”。');
+    if (!state.clueBinding) hints.push('请选择候选路段并等待道路绑定核对完成。');
+    if (note.length < 8) hints.push('请填写至少 8 个字的复核依据。');
+    if (!form.type.value) hints.push('请选择事件类型。');
+    if (!form.action.value) hints.push('请选择对路线的处理方式。');
+    if (!modes.length) hints.push('请至少选择一种受影响出行方式。');
+    if (!endValue) hints.push('请设置结束时间。');
+    if (hints.length) message('clue-review-message', hints[0]);
+  }
+  function refreshClueMergeOptions() {
+    var row = state.clueDetail, form = state.clueForm;
+    if (!row || !form || !form.merge) return;
+    var select = form.merge;
+    select.replaceChildren();
+    var selected = state.clueSelectedCandidate >= 0
+      ? (row.edge_candidates || [])[state.clueSelectedCandidate] : null;
+    var primaryType = form.type.value || (row.draft && row.draft.event_type) || '';
+    (state.clues || []).forEach(function (other) {
+      if (other.clue_id === row.clue_id || other.status !== 'reviewing') return;
+      if (primaryType && other.draft && other.draft.event_type && other.draft.event_type !== primaryType) return;
+      if (selected) {
+        var key = clueEdgeKey(selected);
+        var shared = (other.edge_candidates || []).some(function (candidate) {
+          return clueEdgeKey(candidate) === key;
+        });
+        if (!shared) return;
+      }
+      var option = document.createElement('option');
+      option.value = other.clue_id;
+      option.textContent = clueShortId(other.clue_id) + ' · ' + (other.summary || '无摘要');
+      select.appendChild(option);
+    });
+    form.mergeWrap.hidden = !select.options.length;
+  }
+  function ensureClueMap(row) {
+    var node = byId('clue-map');
+    if (!node || !window.L) return;
+    state.clueMap = L.map('clue-map', { zoomControl: true, preferCanvas: true })
+      .setView([30.5352, 114.363], 16);
+    L.tileLayer('https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}', {
+      subdomains: ['1', '2', '3', '4'], maxZoom: 18,
+      attribution: '© <a href="https://ditu.amap.com/" target="_blank" rel="noopener">高德地图</a>',
+    }).addTo(state.clueMap);
+    state.clueMapLayers = L.layerGroup().addTo(state.clueMap);
+    state.clueMap.on('click', handleClueMapClick);
+    window.setTimeout(function () { if (state.clueMap) state.clueMap.invalidateSize(); }, 60);
+    renderClueMap(row);
+  }
+  function renderClueMap(row) {
+    if (!state.clueMap || !state.clueMapLayers) return;
+    state.clueMapLayers.clearLayers();
+    var bounds = [];
+    (row.edge_candidates || []).forEach(function (candidate, index) {
+      var selected = index === state.clueSelectedCandidate;
+      var geometry = (candidate.geometry_gcj || []).map(function (point) { return [point[1], point[0]]; });
+      if (geometry.length >= 2) {
+        L.polyline(geometry, {
+          color: selected ? '#d48943' : '#9da79c', weight: selected ? 6 : 3,
+          opacity: selected ? 0.95 : 0.7,
+        }).addTo(state.clueMapLayers);
+        bounds = bounds.concat(geometry);
+      }
+      if (candidate.snap_lat_gcj != null && candidate.snap_lng_gcj != null) {
+        L.circleMarker([candidate.snap_lat_gcj, candidate.snap_lng_gcj], {
+          radius: selected ? 8 : 5, color: '#fff', weight: 2,
+          fillColor: selected ? '#d48943' : '#365f50', fillOpacity: 1,
+        }).addTo(state.clueMapLayers);
+        bounds.push([candidate.snap_lat_gcj, candidate.snap_lng_gcj]);
+      }
+    });
+    if (bounds.length) state.clueMap.fitBounds(bounds, { padding: [24, 24], maxZoom: 18 });
+  }
+  function toggleClueCandidatePicking() {
+    state.cluePickingCandidate = !state.cluePickingCandidate;
+    var button = byId('clue-add-candidate');
+    if (button) button.textContent = state.cluePickingCandidate ? '取消地图选路' : '在地图补充候选路段';
+    message('clue-review-message', state.cluePickingCandidate
+      ? '请在地图上点击要补充的道路。' : '已取消地图选路。');
+  }
+  async function handleClueMapClick(event) {
+    if (!state.cluePickingCandidate || !state.selectedClueId || state.clueBusy) return;
+    state.cluePickingCandidate = false;
+    var clueId = state.selectedClueId;
+    message('clue-review-message', '正在核对点击位置与路网…');
+    try {
+      var data = await request('/api/manager/clues/' + encodeURIComponent(clueId), 'PATCH', {
+        candidate_point: { lng: event.latlng.lng, lat: event.latlng.lat },
+      });
+      if (state.selectedClueId !== clueId) return;
+      state.clueDetail = data.clue;
+      renderClueDetail(data.clue);
+      refreshClues();
+    } catch (error) {
+      message('clue-review-message', error.message || '补充候选路段失败，请重试。');
+    }
+  }
+  function selectClueCandidate(index) {
+    var row = state.clueDetail;
+    if (!row) return;
+    state.clueSelectedCandidate = index;
+    var list = byId('clue-candidate-list');
+    if (list) {
+      Array.prototype.forEach.call(list.querySelectorAll('.clue-candidate'), function (node) {
+        var isSelected = Number(node.dataset.index) === index;
+        node.classList.toggle('is-selected', isSelected);
+        var radio = node.querySelector('input');
+        if (radio) radio.checked = isSelected;
+      });
+    }
+    renderClueMap(row);
+    refreshClueMergeOptions();
+    prepareClueBinding();
+  }
+  async function prepareClueBinding() {
+    var row = state.clueDetail, form = state.clueForm;
+    var index = state.clueSelectedCandidate;
+    if (!row || !form || index < 0) {
+      state.clueBinding = null;
+      updateClueAdoptState();
+      return;
+    }
+    var candidate = (row.edge_candidates || [])[index];
+    if (!candidate) {
+      state.clueBinding = null;
+      updateClueAdoptState();
+      return;
+    }
+    var lng = candidate.snap_lng_gcj, lat = candidate.snap_lat_gcj;
+    if (lng == null || lat == null) {
+      if (row.location) { lng = row.location.lng; lat = row.location.lat; }
+      else if (candidate.geometry_gcj && candidate.geometry_gcj.length) {
+        lng = candidate.geometry_gcj[0][0]; lat = candidate.geometry_gcj[0][1];
+      }
+    }
+    if (lng == null || lat == null) {
+      state.clueBinding = null;
+      message('clue-review-message', '该候选路段缺少可核验位置，请在地图上补充候选。');
+      updateClueAdoptState();
+      return;
+    }
+    var direction = form.direction.value || 'both';
+    message('clue-review-message', '正在核对道路绑定…');
+    try {
+      var params = new URLSearchParams({
+        lng: String(lng), lat: String(lat),
+        u: String(candidate.u), v: String(candidate.v), key: String(candidate.key),
+        direction: direction,
+      });
+      var data = await request('/api/road-conditions/snap?' + params.toString(), 'GET');
+      if (state.selectedClueId !== row.clue_id || state.clueSelectedCandidate !== index) return;
+      state.clueBinding = {
+        snap: data.snap, token: data.snap.binding_token,
+        direction: direction, candidateIndex: index,
+      };
+      updateClueAdoptState();
+      message('clue-review-message', '道路绑定已核对：' + (data.snap.road_name || '未命名道路')
+        + ' · 吸附 ' + Number(data.snap.dist_m || 0).toFixed(1) + ' 米', true);
+    } catch (error) {
+      state.clueBinding = null;
+      message('clue-review-message', error.message || '道路绑定核对失败，请重新选择候选路段。');
+      updateClueAdoptState();
+    }
+  }
+  async function startClueReview() {
+    if (state.clueBusy || !state.clueDetail) return;
+    state.clueBusy = true;
+    updateClueAdoptState();
+    try {
+      var data = await request(
+        '/api/manager/clues/' + encodeURIComponent(state.clueDetail.clue_id), 'PATCH',
+        { status: 'reviewing' }
+      );
+      state.clueBusy = false;
+      state.clueDetail = data.clue;
+      renderClueDetail(data.clue);
+      refreshClues();
+    } catch (error) {
+      state.clueBusy = false;
+      message('clue-review-message', error.message || '开始复核失败，请重试。');
+      updateClueAdoptState();
+    }
+  }
+  async function saveClueDraft() {
+    var row = state.clueDetail, form = state.clueForm;
+    if (!row || !form || state.clueBusy) return;
+    var draft = Object.assign({}, row.draft || {});
+    draft.event_type = form.type.value;
+    draft.name = form.name.value.trim();
+    draft.description = form.description.value.trim();
+    draft.direction = form.direction.value;
+    draft.action = form.action.value;
+    draft.affected_modes = clueSelectedModes();
+    draft.blocked_modes = form.action.value ? [] : clueSelectedModes();
+    draft.cost_multiplier = form.action.value === 'slowdown' ? Number(form.cost.value) : null;
+    state.clueBusy = true;
+    updateClueAdoptState();
+    try {
+      var data = await request('/api/manager/clues/' + encodeURIComponent(row.clue_id), 'PATCH', {
+        summary: form.summary.value.trim(),
+        draft: draft,
+        valid_from: clueInputToIso(form.start.value),
+        valid_to: clueInputToIso(form.end.value),
+        review_note: form.note.value.trim(),
+      });
+      state.clueBusy = false;
+      state.clueDetail = data.clue;
+      renderClueDetail(data.clue);
+      refreshClues();
+      message('clue-review-message', '草稿已保存。', true);
+    } catch (error) {
+      state.clueBusy = false;
+      message('clue-review-message', error.message || '保存失败，请重试。');
+      updateClueAdoptState();
+    }
+  }
+  async function adoptClue() {
+    var row = state.clueDetail, form = state.clueForm;
+    if (!row || !form || state.clueBusy) return;
+    if (!state.clueBinding) {
+      message('clue-review-message', '请先选择候选路段并等待道路绑定核对完成。');
+      return;
+    }
+    var modes = clueSelectedModes();
+    var note = form.note.value.trim();
+    var payload = {
+      type: form.type.value,
+      name: form.name.value.trim() || form.summary.value.trim().slice(0, 30),
+      description: form.description.value.trim(),
+      direction: form.direction.value,
+      action: form.action.value,
+      affected_modes: modes,
+      cost_multiplier: form.action.value === 'slowdown' ? Number(form.cost.value) : null,
+      start_time: clueInputToIso(form.start.value),
+      end_time: clueInputToIso(form.end.value),
+      review_note: note,
+      lng: Number(state.clueBinding.snap.snap_lng_gcj),
+      lat: Number(state.clueBinding.snap.snap_lat_gcj),
+      edge_ref: {
+        u: Number(state.clueBinding.snap.u),
+        v: Number(state.clueBinding.snap.v),
+        key: Number(state.clueBinding.snap.key),
+      },
+      binding_token: state.clueBinding.token,
+      clue_ids: Array.from(state.clueMergeIds || []),
+    };
+    state.clueBusy = true;
+    updateClueAdoptState();
+    try {
+      var data = await request(
+        '/api/manager/clues/' + encodeURIComponent(row.clue_id) + '/adopt', 'POST', payload
+      );
+      state.clueBusy = false;
+      var detail = await request('/api/manager/clues/' + encodeURIComponent(row.clue_id), 'GET');
+      state.clueDetail = detail.clue;
+      renderClueDetail(detail.clue);
+      refreshClues();
+      refreshEvents();
+      message('clue-review-message',
+        '已采纳为事件 ' + data.condition.id + '；用户端下一次路线请求会使用该事件。', true);
+    } catch (error) {
+      state.clueBusy = false;
+      message('clue-review-message', error.message || '采纳失败，请核对后重试。');
+      updateClueAdoptState();
+    }
+  }
+  async function rejectClue() {
+    var row = state.clueDetail, form = state.clueForm;
+    if (!row || !form || state.clueBusy) return;
+    var reason = form.rejectReason.value.trim();
+    if (!reason) {
+      message('clue-review-message', '请填写驳回依据。');
+      return;
+    }
+    state.clueBusy = true;
+    updateClueAdoptState();
+    try {
+      await request('/api/manager/clues/' + encodeURIComponent(row.clue_id) + '/reject', 'POST', {
+        reason: reason,
+      });
+      state.clueBusy = false;
+      var detail = await request('/api/manager/clues/' + encodeURIComponent(row.clue_id), 'GET');
+      state.clueDetail = detail.clue;
+      renderClueDetail(detail.clue);
+      refreshClues();
+    } catch (error) {
+      state.clueBusy = false;
+      message('clue-review-message', error.message || '驳回失败，请重试。');
+      updateClueAdoptState();
+    }
+  }
+  async function submitClueCreation(button, payload) {
+    if (state.clueBusy) return;
+    state.clueBusy = true;
+    var original = button.textContent;
+    button.disabled = true;
+    button.textContent = '正在登记…';
+    message('clue-create-message', '');
+    try {
+      var data = await request('/api/manager/clues', 'POST', payload);
+      state.clueBusy = false;
+      button.disabled = false;
+      button.textContent = original;
+      var clues = data.clues || [];
+      if (!clues.length) {
+        message('clue-create-message', data.message || '没有找到可登记的线索。');
+        refreshClues();
+        return;
+      }
+      message('clue-create-message', '已登记 ' + clues.length + ' 条待复核线索：'
+        + clues.map(function (clue) { return clueShortId(clue.clue_id); }).join('、'), true);
+      state.cluePendingOpen = clues[0].clue_id;
+      refreshClues();
+    } catch (error) {
+      state.clueBusy = false;
+      button.disabled = false;
+      button.textContent = original;
+      message('clue-create-message', error.message || '登记失败，请重试。');
+    }
+  }
+  async function registerVisionClue(job, candidateIndex, button) {
+    if (!button || button.disabled) return;
+    button.disabled = true;
+    var original = button.textContent;
+    button.textContent = '正在登记…';
+    try {
+      var data = await request('/api/manager/clues/from-vision', 'POST', {
+        job_id: job.job_id, candidate_index: candidateIndex,
+      });
+      var clue = data.clues && data.clues[0];
+      button.textContent = '已登记，待复核';
+      var note = document.createElement('p');
+      note.className = 'vision-job-meta';
+      note.textContent = '线索已登记：' + (clue ? clue.clue_id : '')
+        + (data.publishable ? '' : ' · ' + (data.publish_blockers || []).join('、') + '，不能发布');
+      button.parentNode.appendChild(note);
+      if (clue) {
+        state.cluePendingOpen = clue.clue_id;
+        refreshClues();
+      }
+    } catch (error) {
+      button.disabled = false;
+      button.textContent = original;
+      var failure = document.createElement('p');
+      failure.className = 'vision-job-meta';
+      failure.textContent = error.message || '线索登记失败，请重试。';
+      button.parentNode.appendChild(failure);
+    }
+  }
+
+  byId('refresh-clues').addEventListener('click', refreshClues);
+  ['clue-search', 'clue-status-filter', 'clue-kind-filter'].forEach(function (id) {
+    var control = byId(id);
+    if (control) control.addEventListener(id === 'clue-search' ? 'input' : 'change', renderClueList);
+  });
+  byId('clear-clue-filters').addEventListener('click', function () {
+    byId('clue-search').value = '';
+    byId('clue-status-filter').value = 'all';
+    byId('clue-kind-filter').value = 'all';
+    renderClueList();
+  });
+  byId('clue-notice-submit').addEventListener('click', function () {
+    var text = byId('clue-notice-text').value.trim();
+    var media = byId('clue-notice-media').value.trim();
+    if (!text && !media) {
+      message('clue-create-message', '请粘贴通知原文或填写公开截图链接。');
+      return;
+    }
+    submitClueCreation(this, {
+      kind: 'official_notice', raw_text: text,
+      source_url: byId('clue-notice-url').value.trim() || null,
+      media_ref: media || null,
+    });
+  });
+  byId('clue-notice-manual').addEventListener('click', function () {
+    var text = byId('clue-notice-text').value.trim();
+    var media = byId('clue-notice-media').value.trim();
+    if (!text && !media) {
+      message('clue-create-message', '请粘贴通知原文或填写截图引用。');
+      return;
+    }
+    submitClueCreation(this, {
+      kind: 'official_notice', raw_text: text, manual: true,
+      source_url: byId('clue-notice-url').value.trim() || null,
+      media_ref: media || null,
+    });
+  });
+  byId('clue-web-submit').addEventListener('click', function () {
+    var query = byId('clue-web-query').value.trim();
+    var url = byId('clue-web-url').value.trim();
+    if (!query && !url) {
+      message('clue-create-message', '请填写检索词或网页链接。');
+      return;
+    }
+    submitClueCreation(this, { kind: 'web', query: query, url: url });
+  });
+  byId('clue-ugc-submit').addEventListener('click', function () {
+    var place = byId('clue-ugc-place').value.trim();
+    var description = byId('clue-ugc-description').value.trim();
+    var lng = byId('clue-ugc-lng').value.trim();
+    var lat = byId('clue-ugc-lat').value.trim();
+    var crs = byId('clue-ugc-crs').value;
+    if (!place && !description) {
+      message('clue-create-message', '请至少填写地点或现场描述。');
+      return;
+    }
+    if ((lng && !lat) || (!lng && lat)) {
+      message('clue-create-message', '请同时填写经纬度。');
+      return;
+    }
+    var payload = {
+      kind: 'ugc_report', place: place, description: description, crs: crs,
+      media_id: byId('clue-ugc-media').value.trim() || null,
+    };
+    if (lng && lat) payload.coord = { lng: Number(lng), lat: Number(lat), crs: crs };
+    submitClueCreation(this, payload);
+  });
+
   byId('condition-form').addEventListener('submit', submitEvent);
   byId('refresh-events').addEventListener('click', refreshEvents);
   byId('logout').addEventListener('click', async function () {

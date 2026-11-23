@@ -26,6 +26,14 @@ def legacy_dialogue_for_legacy_contract_tests(monkeypatch):
     monkeypatch.setenv("AGENT_DIALOGUE_MODE", "legacy")
 
 
+@pytest.fixture(autouse=True)
+def isolate_road_clue_store(tmp_path, monkeypatch):
+    """Never let a test create or lock the business road-clue store."""
+    from spatial import road_clues
+
+    monkeypatch.setattr(road_clues, "_CLUES_FILE", str(tmp_path / "road_clues.json"))
+
+
 @pytest.fixture(scope="module")
 def isolated_test_database(request) -> str:
     if not _ISOLATED_DB_URL:

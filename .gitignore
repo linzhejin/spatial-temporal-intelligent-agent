@@ -301,6 +301,10 @@ data/experience_cards.json
 data/vision/uploads/
 data/runtime/
 data/road_conditions.json.lock
+data/road_clues.json
+data/road_clues.json.lock
+data/road_clue_rate.json
+data/road_clue_rate.json.lock
 models/vision/
 output/vision/
 

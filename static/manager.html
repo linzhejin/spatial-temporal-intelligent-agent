@@ -6,11 +6,11 @@
   <meta name="theme-color" content="#176B5B">
   <title>珞珈智行 · 校园运行管理台</title>
   <link rel="stylesheet" href="/vendor/leaflet/leaflet.css">
-  <link rel="stylesheet" href="/css/manager.css?v=20261116-vision-single-v1">
+  <link rel="stylesheet" href="/css/manager.css?v=20261123-clue-review-v2">
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261119-candidate-road-association-v2" defer></script>
+  <script src="/js/manager.js?v=20261123-clue-review-v2" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -47,6 +47,7 @@
       <nav class="workflow-nav" aria-label="管理流程">
         <a href="#road-workspace"><span>道路事件</span></a>
         <a href="#vision-workspace"><span>影像巡查</span></a>
+        <a href="#clue-workspace"><span>线索复核</span></a>
         <a href="#event-history"><span>事件记录</span></a>
       </nav>
 
@@ -265,6 +266,73 @@
             </details>
           </div>
           <div id="vision-jobs" class="vision-jobs" role="tabpanel" aria-labelledby="vision-tab-jobs" hidden><div class="empty-state">正在读取影像任务…</div></div>
+        </div>
+      </section>
+
+      <section id="clue-workspace" class="clue-section">
+        <div class="events-heading">
+          <div><span class="eyebrow">CLUE REVIEW</span><h2>线索复核</h2></div>
+          <div class="vision-heading-actions">
+            <span class="review-badge">人工采纳后才进入事件库并影响路线</span>
+            <button id="refresh-clues" class="quiet-button" type="button">刷新列表 ↻</button>
+          </div>
+        </div>
+        <p class="clue-note">线索来自官方通知、网页检索、影像候选和现场上报。只有核对原始证据、道路、时间和影响方式后才能采纳；待复核线索不会影响路线。</p>
+
+        <details id="clue-create" class="clue-create">
+          <summary>登记新线索</summary>
+          <div class="clue-create-grid">
+            <section class="clue-form-card clue-create-card">
+              <h3>官方通知</h3>
+              <label>通知原文<textarea id="clue-notice-text" rows="5" maxlength="20000" placeholder="粘贴学校或保卫部门的道路通知原文"></textarea></label>
+              <label>来源链接（可选）<input id="clue-notice-url" type="url" placeholder="https://..."></label>
+              <label>截图链接（可选）<input id="clue-notice-media" maxlength="500" placeholder="https://... 公开图片地址"></label>
+              <div class="clue-create-actions">
+                <button id="clue-notice-submit" class="primary-button" type="button">抽取并登记 <span>→</span></button>
+                <button id="clue-notice-manual" class="outline-button" type="button">仅保存原文待人工补录</button>
+              </div>
+              <small>粘贴文字可直接抽取；填写公开截图链接时，服务端配置了图片理解模型会自动识别，未配置会明确提示改用人工补录。</small>
+            </section>
+            <section class="clue-form-card clue-create-card">
+              <h3>网页检索</h3>
+              <label>检索词<input id="clue-web-query" maxlength="128" placeholder="如：武汉大学 珞珈山路 施工"></label>
+              <label>或直接链接<input id="clue-web-url" type="url" placeholder="https://..."></label>
+              <button id="clue-web-submit" class="primary-button" type="button">检索并登记 <span>→</span></button>
+              <small>网页结果是 C 级线索，最多登记 3 条；同一地点 10 分钟内限流。</small>
+            </section>
+            <section class="clue-form-card clue-create-card">
+              <h3>现场上报</h3>
+              <label>地点<input id="clue-ugc-place" maxlength="120" placeholder="如：桂园一路"></label>
+              <div class="time-grid">
+                <label>经度<input id="clue-ugc-lng" type="number" step="any" placeholder="114.36"></label>
+                <label>纬度<input id="clue-ugc-lat" type="number" step="any" placeholder="30.53"></label>
+                <label>坐标系<select id="clue-ugc-crs"><option value="GCJ02">GCJ02</option><option value="WGS84">WGS84</option></select></label>
+              </div>
+              <label>现场描述<textarea id="clue-ugc-description" rows="3" maxlength="2000" placeholder="描述看到的现象、位置和时间"></textarea></label>
+              <label>照片引用（可选）<input id="clue-ugc-media" maxlength="500" placeholder="媒体链接或编号"></label>
+              <button id="clue-ugc-submit" class="primary-button" type="button">登记待核实线索 <span>→</span></button>
+            </section>
+          </div>
+          <p id="clue-create-message" class="form-message" role="status"></p>
+          <details class="vision-note-collapse">
+            <summary>来源接入状态</summary>
+            <p id="clue-source-catalog" class="vision-disclaimer">正在读取来源状态…</p>
+          </details>
+        </details>
+
+        <div class="clue-layout">
+          <section class="clue-list-panel" aria-label="线索列表">
+            <div class="event-filters clue-filters" role="search" aria-label="筛选线索">
+              <label for="clue-search">编号、摘要或道路<input id="clue-search" type="search" placeholder="可按 clue_id 精确定位"></label>
+              <label for="clue-status-filter">状态<select id="clue-status-filter"><option value="all">全部状态</option><option value="unverified">待复核（含复核中）</option><option value="pending">待复核</option><option value="reviewing">复核中</option><option value="adopted">已采纳</option><option value="rejected">已驳回</option><option value="expired">已过期</option></select></label>
+              <label for="clue-kind-filter">来源<select id="clue-kind-filter"><option value="all">全部来源</option><option value="official_notice">官方通知</option><option value="web">网页检索</option><option value="vision">无人机影像</option><option value="ugc_report">现场上报</option></select></label>
+              <button id="clear-clue-filters" class="outline-button" type="button">清除筛选</button>
+            </div>
+            <div id="clue-list" class="event-list"><div class="empty-state">正在读取线索…</div></div>
+          </section>
+          <aside id="clue-detail" class="clue-detail" aria-live="polite">
+            <div class="empty-state">选择左侧线索查看详情；采纳前请核对原始证据与道路。</div>
+          </aside>
         </div>
       </section>
 

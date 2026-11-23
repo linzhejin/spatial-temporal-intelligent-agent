@@ -77,6 +77,15 @@ OPENAI_API_KEY = DEEPSEEK_API_KEY  # 兼容 openai SDK 字段名
 OPENAI_BASE_URL = os.getenv("OPENAI_BASE_URL", "https://api.deepseek.com/v1")
 LLM_MODEL = os.getenv("LLM_MODEL", "deepseek-chat")  # DeepSeek V4-Flash 别名
 
+# 官方通知截图的图片理解通道（OpenAI 兼容多模态接口）。
+# 三者都配置后才启用；未配置时截图抽取明确不可用，不会静默降级成空草稿。
+NOTICE_VISION_BASE_URL = os.getenv("NOTICE_VISION_BASE_URL", "").strip()
+NOTICE_VISION_API_KEY = os.getenv("NOTICE_VISION_API_KEY", "").strip()
+NOTICE_VISION_MODEL = os.getenv("NOTICE_VISION_MODEL", "").strip()
+NOTICE_VISION_ENABLED = bool(
+    NOTICE_VISION_BASE_URL and NOTICE_VISION_API_KEY and NOTICE_VISION_MODEL
+)
+
 # Whether a verified, unchanged earlier itinerary stage may be reused.
 # Unknown values fail closed to complete recomputation.
 RESULT_MAINTENANCE_POLICY = os.getenv("RESULT_MAINTENANCE_POLICY", "conservative").strip().lower()

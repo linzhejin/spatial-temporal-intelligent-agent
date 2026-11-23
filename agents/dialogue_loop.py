@@ -415,7 +415,8 @@ def _run_dialogue_loop(dialogue, deadline):
                     end_turn_requested |= end_turn_for_tool
                 if (dialogue.bind_task and dialogue.bound_task is None
                         and name not in {"update_task", "get_weather", "list_road_conditions", "search_web", "read_web_page",
-                                         "read_result", "browse_candidates", "resolve_poi", "get_place_details"}):
+                                         "read_result", "browse_candidates", "resolve_poi", "get_place_details",
+                                         "query_road_clues", "collect_road_clues", "report_field_clue"}):
                     raise ValueError("task_binding_required: 先用 update_task 选择或创建任务")
                 if name == "update_task":
                     answer = dialogue.update(args)
