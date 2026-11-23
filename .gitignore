@@ -324,3 +324,7 @@ output/vision/
 /tmp/
 /.codex-tmp/
 /.codex-finalizer/
+
+# ===== 论文图稿与交接中间产物（本机专用，不入库）=====
+/_build/
+/outputs/
