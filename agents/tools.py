@@ -235,6 +235,7 @@ TOOL_SCHEMAS = [
                         "type": "string",
                         "description": "细分类别：canteen 食堂 / restaurant 餐厅 / fastfood 快餐小吃 / "
                                        "coffee 咖啡 / tea_drink 奶茶饮品 / supermarket 超市 / "
+                                       "convenience_store 便利店 / market 集贸市场 / toilet 卫生间 / "
                                        "library 图书馆 / classroom 教学楼 / gym 体育馆 / field 运动场 / "
                                        "pool 游泳池 / sakura 赏樱 / lake 湖泊 / hill 山景 / park 公园广场 / "
                                        "landmark 地标 / bank 银行 / hospital 医院 / post 邮政 等",

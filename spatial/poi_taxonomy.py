@@ -36,6 +36,20 @@ ACTIVITY_SUBCATEGORIES = {
     "view_sakura": ("sakura",),
 }
 
+_AMENITY_ACTIVITY_ALIASES = {"restroom": "toilet", "shopping": "supermarket"}
+_AMENITY_ACTIVITIES = {"restroom", "shopping", "convenience_store", "market"}
+
+
+def normalize_amenity_subcategories(categories, activities=()):
+    """Accept an amenity activity code where the matching category was expected."""
+    values = [_AMENITY_ACTIVITY_ALIASES.get(value, value) if isinstance(value, str) else value
+              for value in (categories or [])]
+    if not values and activities and all(value in _AMENITY_ACTIVITIES for value in activities):
+        values = list(dict.fromkeys(category for value in activities
+                                    for category in ACTIVITY_SUBCATEGORIES[value]))
+    return values
+
+
 ACTIVITY_LABELS = {
     "basketball": "篮球场", "badminton": "羽毛球场", "table_tennis": "乒乓球馆",
     "football": "足球场", "volleyball": "排球场", "tennis": "网球场",

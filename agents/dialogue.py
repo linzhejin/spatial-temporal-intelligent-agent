@@ -15,6 +15,7 @@ import time
 from uuid import uuid4
 
 import config
+from spatial.poi_taxonomy import normalize_amenity_subcategories
 
 
 def model_dialogue_enabled() -> bool:
@@ -100,8 +101,10 @@ def tool_schemas():
              "web_page_read_requested": {"type": "boolean", "description": "仅当用户明确需要核对门店级详情（如人均、营业时间或近期评价）时设为true；一般附近推荐只需搜索摘要和地图匹配，不必读取网页正文"},
              "candidate_action": {"type": "string", "enum": ["recommend", "next_batch"],
                                   "description": "只有地点筛选条件与半径完全不变时才设为next_batch；任何范围、类别、关键词、区域或要求变化都用recommend并重新检索"},
-             "activities": {"type": "array", "items": {"type": "string"}},
-             "subcategories": {"type": "array", "items": {"type": "string"}},
+             "activities": {"type": "array", "items": {"type": "string"},
+                            "description": "地点用途，如 restroom 卫生间、shopping 超市。"},
+             "subcategories": {"type": "array", "items": {"type": "string"},
+                               "description": "地点细分类，如 toilet 卫生间、supermarket 超市、convenience_store 便利店、market 集贸市场。"},
              "budget_per_person": {"type": "number", "exclusiveMinimum": 0},
              "limit": {"type": "integer", "minimum": 1, "maximum": 20},
              "constraints": {**_PREFERENCE_SCHEMA["constraints"], "description":
@@ -821,6 +824,8 @@ class Dialogue:
             pending["strategy"] = strategy.get("name", "shortest") if isinstance(strategy, dict) else strategy
             pending.setdefault("semantic_request", {})["route_to_modify"] = deepcopy(state)
         intent = pending.setdefault("semantic_request", {}) or {}
+        if isinstance(args.get("subcategories"), list):
+            args["subcategories"] = normalize_amenity_subcategories(args["subcategories"])
         _expand_unqualified_sport_categories(args, pending, self.query)
         pruned_requirement = False
         previous_center = pending.get("search_anchor") or pending.get("start")
@@ -1420,6 +1425,10 @@ class Dialogue:
             for field in ("start", "search_anchor", "mode", "activities", "subcategories"):
                 if self.pending.get(field) and field not in args:
                     args[field] = deepcopy(self.pending[field])
+            if isinstance(args.get("subcategories"), list):
+                args["subcategories"] = normalize_amenity_subcategories(args["subcategories"], args.get("activities") or [])
+            elif args.get("subcategory") in {"restroom", "shopping"}:
+                args["subcategory"] = normalize_amenity_subcategories([args["subcategory"]])[0]
             if name == "search_poi_candidates" and args.get("search_anchor"):
                 accepted_center = self.pending.get("search_anchor") or self.pending.get("start")
                 if accepted_center and not _same_accepted_location(accepted_center, args["search_anchor"], tools):

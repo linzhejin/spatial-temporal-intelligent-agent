@@ -295,13 +295,15 @@ def test_catalog_separates_engineering_market_from_supermarket_and_canteen():
 
 
 @pytest.mark.parametrize(
-    ("subcategory", "activity", "keyword"),
-    [("toilet", "restroom", "卫生间"),
-     ("supermarket", "shopping", "超市")],
+    ("subcategory", "provider_subcategory", "activity", "keyword"),
+    [("toilet", "toilet", "restroom", "卫生间"),
+     ("restroom", "toilet", "restroom", "卫生间"),
+     (None, "toilet", "restroom", "卫生间"),
+     ("supermarket", "supermarket", "shopping", "超市")],
 )
-def test_structured_amenity_search_uses_unfiltered_nearby_provider(subcategory, activity, keyword, monkeypatch):
+def test_structured_amenity_search_uses_unfiltered_nearby_provider(subcategory, provider_subcategory, activity, keyword, monkeypatch):
     candidate = {"poi_id": "amap:PLACE1", "id": "amap:PLACE1", "name": keyword,
-                 "type_name": keyword, "subcategory": subcategory, "source": "amap_online",
+                 "type_name": keyword, "subcategory": provider_subcategory, "source": "amap_online",
                  "coordinate_system": "GCJ-02", "coordinates": {"lng": 114.365, "lat": 30.536}}
     calls = []
     monkeypatch.setattr(tools, "_search_poi_categories", lambda *_args, **_kwargs: [])
@@ -317,13 +319,22 @@ def test_structured_amenity_search_uses_unfiltered_nearby_provider(subcategory, 
 
     result, _artifact = discovery.search_places_for_dialogue(
         {"start": {"type": "poi", "poi_id": "poi_161", "name": "老斋舍"},
-         "subcategories": [subcategory], "activities": [activity], "max_distance_m": 1000},
+         "subcategories": [subcategory] if subcategory else [], "activities": [activity], "max_distance_m": 1000},
         {"_semantic_request": {"keywords": [keyword]}},
     )
 
     assert result["count"] == 1
     assert calls[0][1]["poi_type"] == "all"
     assert calls[0][1]["keywords"] == keyword
+
+
+def test_task_normalizes_restroom_activity_used_as_a_subcategory():
+    dialogue = _dialogue("老斋舍附近的卫生间", lambda *_args: ({}, {}))
+
+    dialogue.update({"relation": "new", "operation": "place_search", "constraints": {},
+                     "activities": ["restroom"], "subcategories": ["restroom"]})
+
+    assert dialogue.pending["subcategories"] == ["toilet"]
 
 
 def test_incomplete_provider_pages_are_not_marked_as_empty_or_complete(monkeypatch):

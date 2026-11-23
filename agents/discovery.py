@@ -8,7 +8,8 @@ import config
 from spatial import amap_poi
 from spatial.coord_transform import wgs84_to_gcj02
 from spatial.poi import filter_reported_absent_provider_results, has_source_backed_record, same_display_place
-from spatial.poi_taxonomy import ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi, resolve_activity_query
+from spatial.poi_taxonomy import (ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi,
+                                  normalize_amenity_subcategories, resolve_activity_query)
 
 
 _ONLINE_AMENITY_SUBCATEGORIES = {"supermarket", "convenience_store", "market", "toilet"}
@@ -113,6 +114,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     subcategories = (args.get("subcategories") or ([args["subcategory"]] if args.get("subcategory") else None)
                      or ctx.get("_semantic_request", {}).get("subcategories") or [])
     activities = args.get("activities") or ctx.get("_semantic_request", {}).get("activities") or []
+    subcategories = normalize_amenity_subcategories(subcategories, activities)
     exclusions = args.get("exclude_terms") or query_state.get("exclude_terms") or []
     raw_candidate_names = args.get("candidate_names") or []
     if not isinstance(raw_candidate_names, list):
