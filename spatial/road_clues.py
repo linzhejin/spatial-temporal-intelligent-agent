@@ -902,6 +902,8 @@ def extract_notice_draft(text: str, *, client_factory=None) -> dict:
                 {"role": "system", "content": _NOTICE_EXTRACTION_PROMPT},
                 {"role": "user", "content": text[:12000]},
             ],
+            response_format={"type": "json_object"},
+            extra_body={"thinking": {"type": "disabled"}},
             temperature=0.0,
             max_tokens=900,
         )
@@ -951,6 +953,8 @@ def extract_notice_draft_from_image(image_ref: str, *, client_factory=None) -> d
                     {"type": "image_url", "image_url": {"url": image_ref}},
                 ]},
             ],
+            response_format={"type": "json_object"},
+            extra_body={"thinking": {"type": "disabled"}},
             temperature=0.0,
             max_tokens=900,
         )

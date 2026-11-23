@@ -3,6 +3,7 @@ import subprocess
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor
+from types import SimpleNamespace
 
 import pytest
 
@@ -40,6 +41,41 @@ def edge_payload(u=1, v=2, key=0):
         "geometry_gcj": [[114.36, 30.53], [114.361, 30.53]],
         "edges": [[u, v, key]], "chain_length_m": 80.0,
     }
+
+
+@pytest.mark.parametrize("channel", ["text", "image"])
+def test_notice_extraction_uses_nonthinking_json_mode(channel, monkeypatch):
+    import config
+
+    monkeypatch.setattr(config, "DEEPSEEK_API_KEY", "test-key")
+    monkeypatch.setattr(config, "NOTICE_VISION_ENABLED", True)
+    monkeypatch.setattr(config, "NOTICE_VISION_API_KEY", "test-key")
+    monkeypatch.setattr(config, "NOTICE_VISION_BASE_URL", "https://api.deepseek.com/v1")
+    monkeypatch.setattr(config, "NOTICE_VISION_MODEL", "deepseek-flash")
+    captured = {}
+    payload = json.dumps({
+        "summary": "自强大道施工封闭",
+        "confidence": 0.9,
+        "draft": {"event_type": "construction", "place": "自强大道"},
+    }, ensure_ascii=False)
+
+    def create(**kwargs):
+        captured.update(kwargs)
+        return SimpleNamespace(choices=[SimpleNamespace(
+            message=SimpleNamespace(content=payload),
+        )])
+
+    client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=create)))
+    factory = lambda: client
+    if channel == "text":
+        result = clues.extract_notice_draft("通知：自强大道施工。", client_factory=factory)
+    else:
+        result = clues.extract_notice_draft_from_image(
+            "data:image/png;base64,AAAA", client_factory=factory)
+
+    assert result["summary"] == "自强大道施工封闭"
+    assert captured["response_format"] == {"type": "json_object"}
+    assert captured["extra_body"]["thinking"] == {"type": "disabled"}
 
 
 def reviewing(**overrides):
