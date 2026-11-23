@@ -134,6 +134,7 @@ function harness(storage = new Map(), nativeSession = null) {
             setQueuedApi: function (fn) { apiRequest = fn; submitQueuedMessage = realSubmitQueuedMessage; },
             setRawApi: function (fn) { apiRequest = fn; },
             setFocus: function (fn) { focusPoiOnMap = fn; },
+            renderFailureActions: renderFailureActions,
             clearMap: realClearMap,
             focus: focusPoiOnMap };
     })();`, context);
@@ -1337,6 +1338,30 @@ test('a failed run reports failure rather than a semantic clarification and hide
     assert.equal(result.execution_status, 'failed');
     assert.doesNotMatch(result.message, /任务没有完成|private stack|provider_internal/);
     assert.equal(h.state.activeRuns['run-failed'], undefined);
+});
+
+test('a failed run offers retry only for a known transient failure', async t => {
+    for (const [code, retryable] of [['deadline_exceeded', true], ['provider_internal', false]]) {
+        await t.test(code, async () => {
+            const h = harness();
+            h.setQueuedApi(async url => {
+                if (url === '/api/conversations') return { conversation_id: 'retryability-session' };
+                if (url.endsWith('/messages')) return { run_id: 'run-retryability', status: 'queued' };
+                if (url.includes('/api/runs/run-retryability?')) {
+                    return { status: 'failed', error: { code } };
+                }
+                throw new Error('unexpected request ' + url);
+            });
+
+            const result = await h.queued('找附近的地点', {}, { text: '' }, 0);
+            const bubble = { children: [], appendChild(child) { this.children.push(child); } };
+            h.renderFailureActions(bubble, '找附近的地点', {}, result);
+
+            assert.equal(result.retryable, retryable);
+            assert.deepEqual(bubble.children[0].children.map(child => child.textContent),
+                retryable ? ['重试', '关闭'] : ['关闭']);
+        });
+    }
 });
 
 test('a submission failure stays conversational and offers to retry the original request', async () => {

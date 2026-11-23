@@ -36,8 +36,10 @@ def test_manager_assets_survive_real_cache_upgrade_and_rollback(tmp_path):
     assert old_cache != new_cache
     # A deployed checkout gives the incoming files newer mtimes. Git archives
     # instead carry commit timestamps, which may be newer than our local edits.
-    initial_mtime = min(time.time() - 30, (new / "sw.js").stat().st_mtime - 30)
     for name in ("sw.js", "index.html", "js/app.js", "css/style.css", "manager.html"):
+        # Each incoming file has its own checkout timestamp; compare against
+        # that file rather than using sw.js for the entire asset set.
+        initial_mtime = min(time.time() - 30, (new / name).stat().st_mtime - 30)
         os.utime(old / name, (initial_mtime, initial_mtime))
 
     class Handler(SimpleHTTPRequestHandler):

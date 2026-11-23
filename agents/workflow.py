@@ -583,7 +583,7 @@ def build_agent_workflow(
         provenance_mod.persist(response.get("provenance"))
         for key in ("weather", "execution_status", "requirement_results", "requirement_errors",
                     "place_request", "candidates", "completed_place_request", "result_maintenance",
-                    "turns", "model_usage", "failure_code", "updated_task_fields"):
+                    "turns", "model_usage", "failure_code", "retryable", "updated_task_fields"):
             result[key] = response.get(key)
         if response.get("needs_input"):
             result["needs_input"] = True

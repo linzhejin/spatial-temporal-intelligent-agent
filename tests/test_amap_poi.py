@@ -152,6 +152,26 @@ def test_nearby_search_distinguishes_missing_key_from_empty_result(monkeypatch):
     assert result == {'status': 'missing_key', 'candidates': []}
 
 
+def test_nearby_keyword_search_omits_type_filter_and_reports_unfetched_pages(monkeypatch):
+    from spatial.amap_poi import search_nearby
+
+    monkeypatch.setenv('AMAP_WEB_KEY', 'test-key')
+    seen = {}
+    monkeypatch.setattr('spatial.amap_poi._nearby_pages', lambda _client, params, _pages: (
+        seen.update(params) or [{
+            'id': 'B0TOILET01', 'name': '武汉大学公共厕所', 'type': '公共设施服务;公共厕所',
+            'typecode': '200301', 'location': '114.36,30.53', 'distance': '120',
+        }], 40, None,
+    ))
+
+    result = search_nearby({'lng': 114.36, 'lat': 30.53}, keywords='卫生间',
+                           radius_m=1000, pages=3, poi_type='all')
+
+    assert 'types' not in seen
+    assert result['has_more'] is True
+    assert result['candidates'][0]['subcategory'] == 'toilet'
+
+
 def test_nearby_search_returns_provider_errors_without_echoing_credentials(monkeypatch):
     from spatial.amap_poi import search_nearby
 

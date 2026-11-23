@@ -11,6 +11,12 @@ from spatial.poi import filter_reported_absent_provider_results, has_source_back
 from spatial.poi_taxonomy import ACTIVITY_LABELS, ACTIVITY_SUBCATEGORIES, activities_for_poi, resolve_activity_query
 
 
+_ONLINE_AMENITY_SUBCATEGORIES = {"supermarket", "convenience_store", "market", "toilet"}
+_ONLINE_AMENITY_KEYWORDS = {
+    "supermarket": "超市", "convenience_store": "便利店", "market": "集贸市场", "toilet": "卫生间",
+}
+
+
 def _within_campus(poi):
     coords = poi.get("coordinates") or {}
     try:
@@ -72,6 +78,9 @@ def _provider_supports_activities(poi, activities):
     for activity in ("meal", "canteen_meal", "restaurant_meal", "fast_food", "coffee", "tea_drink"):
         if subcategory in ACTIVITY_SUBCATEGORIES[activity]:
             supported.add(activity)
+    for activity in ("shopping", "convenience_store", "market", "restroom"):
+        if subcategory in ACTIVITY_SUBCATEGORIES[activity]:
+            supported.add(activity)
     type_name = str(poi.get("type_name") or "")
     type_code = str(poi.get("type_code") or "")
     if type_name and "餐饮" not in type_name and not type_code.startswith("05"):
@@ -123,14 +132,16 @@ def search_places_for_dialogue(args: dict, ctx: dict):
              and _inside_requested_area(item, area) and not _matches_exclusions(item, exclusions)]
 
     online_status = "not_requested"
+    online_has_more = False
     online = []
     search_center_gcj = None
     generic_meal = _is_generic_meal_request(keyword, query_state.get("keywords"), activities)
     sports = [item for item in activities if item in {
         "basketball", "badminton", "table_tennis", "football", "volleyball", "tennis",
         "running", "fitness", "swimming"}]
+    amenity_categories = set(subcategories or []) & _ONLINE_AMENITY_SUBCATEGORIES
     wants_online = bool(candidate_names) or generic_meal or bool(sports) or bool(
-        set(subcategories or []) & tools._ONLINE_DINING_SUBCATEGORIES) or (
+        set(subcategories or []) & tools._ONLINE_DINING_SUBCATEGORIES) or bool(amenity_categories) or (
         not subcategories and bool(keyword))
     map_keyword = _provider_keyword(keyword, query_state.get("keywords"), activities, candidate_names)
     if not map_keyword and sports:
@@ -139,6 +150,8 @@ def search_places_for_dialogue(args: dict, ctx: dict):
         # A structured category is enough to query the provider; no sentence
         # classification or fabricated candidate name is needed.
         map_keyword = "餐饮"
+    if not map_keyword and amenity_categories:
+        map_keyword = _ONLINE_AMENITY_KEYWORDS[sorted(amenity_categories)[0]]
     provider_categories = set(subcategories or [])
     if generic_meal:
         provider_categories.update({"canteen", "restaurant", "fastfood"})
@@ -155,14 +168,21 @@ def search_places_for_dialogue(args: dict, ctx: dict):
                 search_center_gcj = {"lng": lng, "lat": lat}
                 response = amap_poi.search_nearby({"lng": lng, "lat": lat}, keywords=map_keyword,
                                                   radius_m=min(5000, max(100, int(args.get("max_distance_m") or 1000))),
-                                                  pages=3, **({"poi_type": "sports"} if sports else {}))
+                                                  pages=3, **({"poi_type": "sports"} if sports else
+                                                              {"poi_type": "all"} if amenity_categories else {}))
                 online_status = response.get("status", "provider_error")
+                online_has_more = bool(response.get("has_more"))
+                if online_status == "ok" and online_has_more:
+                    online_status = "incomplete"
                 online = list(response.get("candidates") or [])
         else:
             # Keep the venue type as the provider query and apply the requested
             # campus area separately; combining both can overconstrain retrieval.
             response = amap_poi.search_text(map_keyword, city="420100")
             online_status = response.get("status", "provider_error")
+            online_has_more = bool(response.get("has_more"))
+            if online_status == "ok" and online_has_more:
+                online_status = "incomplete"
             online = list(response.get("candidates") or [])
             if area in {"武汉大学", "武大", "校园", "校内"}:
                 online = [item for item in online if _within_campus(item)]
@@ -183,8 +203,12 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             response = amap_poi.search_nearby(
                 search_center_gcj, keywords=name,
                 radius_m=min(5000, max(100, int(args.get("max_distance_m") or 1000))), pages=2,
-                **({"poi_type": "sports"} if sports else {}),
+                **({"poi_type": "sports"} if sports else
+                   {"poi_type": "all"} if amenity_categories else {}),
             )
+            if response.get("has_more"):
+                online_has_more = True
+                online_status = "incomplete"
             candidate = amap_poi.choose_match(name, response.get("candidates") or [])
         if not candidate:
             continue
@@ -203,7 +227,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     if provider_categories:
         resolved_online = [item for item in resolved_online
                            if item.get("subcategory") in provider_categories]
-    if resolved_online:
+    if resolved_online and not online_has_more:
         online_status = "ok"
 
     by_id = {}
@@ -218,10 +242,13 @@ def search_places_for_dialogue(args: dict, ctx: dict):
     if not pool:
         return {"status": "ok" if online_status in {"ok", "not_requested"} else online_status,
                 "candidates": [], "count": 0, "online_status": online_status,
+                "online_has_more": online_has_more,
                 "message": ("没有检索到匹配的商户或校园地点；这不代表现实中不存在。"
                             if online_status in {"ok", "not_requested"} else
                             "缺少检索词，请提供具体地点类型或关键词。" if online_status == "query_required" else
                             "搜索中心未能解析，请先核对中心地点。" if online_status == "center_unavailable" else
+                            "地图检索尚未完成，仍有结果未返回，当前无法确认是否有匹配地点。"
+                            if online_status == "incomplete" else
                             "地点服务暂时不可用，请稍后重试。")}, {"candidates": []}
 
     # The same accepted route tool computes path distance and applies closure,
@@ -243,7 +270,8 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             "_route_graph_snapshot", "_route_conditions_snapshot", "_route_weather_snapshot",
         ) if key in ctx}
         route_context.update({"query": "", "_candidate_pool": pool, "_model_dialogue": True,
-                              "_excluded_candidate_ids": list(query_state.get("shown_ids") or [])})
+                              "_excluded_candidate_ids": list(query_state.get("shown_ids") or []),
+                              "_distance_first": query_state.get("destination_selection") == "nearest_route"})
         if origin_duration is not None and not separate_origin:
             route_context["_search_scope_duration_s"] = origin_duration
         result, artifact = tools._tool_find_reachable_places(distance_args, route_context)
@@ -291,7 +319,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             artifact = {"candidates": candidates}
         result.update({"candidates": candidates, "count": len(candidates),
                        "online_status": online_status, "search_area": area,
-                       "search_keyword": map_keyword})
+                       "search_keyword": map_keyword, "online_has_more": online_has_more})
     else:
         candidates = []
         shown_ids = set(query_state.get("shown_ids") or [])
@@ -303,6 +331,7 @@ def search_places_for_dialogue(args: dict, ctx: dict):
             candidates.append(item)
         candidates = candidates[:20]
         result = {"status": "ok", "candidates": candidates, "count": len(candidates),
-                  "online_status": online_status, "search_area": area, "search_keyword": map_keyword}
+                  "online_status": online_status, "online_has_more": online_has_more,
+                  "search_area": area, "search_keyword": map_keyword}
         artifact = {"candidates": candidates}
     return result, artifact

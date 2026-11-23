@@ -701,6 +701,7 @@ def _poi_public(poi: dict, with_coords: bool = True, with_provenance: bool = Fal
 _SUBCATEGORY_LABELS = {
     "canteen": "食堂", "restaurant": "餐厅", "fastfood": "快餐/小吃",
     "coffee": "咖啡", "tea_drink": "茶饮", "supermarket": "超市",
+    "convenience_store": "便利店", "market": "集贸市场", "toilet": "卫生间",
     "library": "图书馆", "classroom": "教学楼", "college": "院系楼",
     "laboratory": "实验室", "building": "建筑",
     "study_other": "学习场所", "field": "运动场", "sports_field": "运动场地",
@@ -765,8 +766,14 @@ def infer_recommendation_subcategories(query: str) -> list[str] | None:
             "自习", "学习的地方", "找地方学习", "学习场所", "想学习",
             "看书", "复习", "备考", "写作业", "安静的地方")):
         return ["library", "study_other"]
+    if any(term in text for term in ("卫生间", "厕所", "公共厕所", "洗手间", "公厕")):
+        return ["toilet"]
+    if any(term in text for term in ("集贸市场", "农贸市场", "菜市场", "菜场")):
+        return ["market"]
+    if any(term in text for term in ("便利店", "便利商店")):
+        return ["convenience_store"]
     if any(term in text for term in (
-            "超市", "便利店", "买东西", "零食", "文具", "购物")):
+            "超市", "买东西", "零食", "文具", "购物")):
         return ["supermarket"]
     if any(term in text for term in ("赏樱", "看樱花", "樱花")):
         return ["sakura"]
@@ -1895,7 +1902,8 @@ def _tool_find_reachable_places(args, ctx):
         public["estimated_duration_min"] = round(estimated_time, 1)
         reachable.append(public)
 
-    distance_first = bool(re.search(r"最近|距离优先|离.{0,12}最近|最短距离", query))
+    distance_first = (context.get("_distance_first") is True
+                      or bool(re.search(r"最近|距离优先|离.{0,12}最近|最短距离", query)))
     reachable = _diversify_candidate_categories(
         reachable, subcategories, distance_first=distance_first,
     )

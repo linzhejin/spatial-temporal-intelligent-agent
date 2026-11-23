@@ -15,6 +15,12 @@ from agents.dialogue import _model_tool_content, tool_schemas
 
 logger = logging.getLogger(__name__)
 
+_RETRYABLE_FAILURE_CODES = {
+    "deadline_exceeded", "model_empty_response", "model_rate_limited", "model_timeout",
+    "model_unavailable", "place_service_unavailable", "road_conditions_unavailable",
+    "weather_unavailable", "worker_error",
+}
+
 
 class DiagnosticCallBudgetExceeded(RuntimeError):
     """A diagnostic harness stopped before making a provider request."""
@@ -108,6 +114,7 @@ def _road_condition_summary(result):
 def _failure(dialogue, message, code):
     result = dialogue.result(message, failed=True)
     result["failure_code"] = code
+    result["retryable"] = code in _RETRYABLE_FAILURE_CODES
     return result
 
 
@@ -143,6 +150,16 @@ def _successful_terminal_reply(dialogue, tool_names):
             return "已按最短路线规划好。"
         return "路线已规划好。"
 
+    if "route_to_nearest_place" in result_tools and result_tools <= {"route_to_nearest_place"}:
+        route = dialogue.route
+        verification = (route or {}).get("route_verification") if isinstance(route, dict) else None
+        if not isinstance(verification, dict) or verification.get("status") != "pass":
+            return None
+        state = route.get("route_state") or {}
+        destination = state.get("end") or {}
+        name = str(destination.get("name") or "最近地点")
+        return f"已为你规划到{name}的路线。"
+
     return None
 
 
@@ -170,6 +187,7 @@ def _finish_with_read_failures(dialogue, text, failures, successful_reads):
     dialogue.clarify = None
     result = dialogue.result("\n\n".join(parts))
     result["failure_code"] = next(iter(failures))
+    result["retryable"] = result["failure_code"] in _RETRYABLE_FAILURE_CODES
     result["execution_status"] = "partial" if (successful_reads or dialogue.route or dialogue.candidates
                                                   or dialogue.comparison) else "failed"
     return result
@@ -181,11 +199,16 @@ def _has_verified_empty_search(dialogue):
             and isinstance(last, dict) and not last.get("error")
             and last.get("count") == 0 and last.get("candidates") == []
             and not last.get("has_more")
+            and not last.get("online_has_more") and last.get("online_status") != "incomplete"
             and not dialogue.pending.get("candidate_pool"))
 
 
 def _bounded_empty_reply(dialogue, text):
     """Avoid unverified provider claims or stale numeric conditions in an empty reply."""
+    last = dialogue.last_search
+    if (isinstance(last, dict) and (last.get("online_has_more") or last.get("online_status") == "incomplete")
+            and not dialogue.candidates and not dialogue.route and not dialogue.comparison):
+        return "周边地图查询尚未完成，仍有结果未返回，目前无法确认是否有符合条件的地点。可以缩小范围或补充关键词后再查。"
     if (_has_verified_empty_search(dialogue) and not dialogue.candidates and not dialogue.route and not dialogue.comparison):
         from agents.distance_evidence import distance_mentions_m
         constraints = dialogue.pending.get("constraints") or {}
@@ -385,7 +408,7 @@ def _run_dialogue_loop(dialogue, deadline):
                 if not isinstance(args, dict) or name not in names:
                     raise ValueError("invalid tool or arguments")
                 reported_argument_keys = sorted(args)
-                if name in {"get_weather", "plan_route"}:
+                if name in {"get_weather", "plan_route", "route_to_nearest_place"}:
                     end_turn_for_tool = args.pop("end_turn_if_success", False)
                     if type(end_turn_for_tool) is not bool:
                         raise ValueError("end_turn_if_success must be a boolean")
@@ -438,6 +461,11 @@ def _run_dialogue_loop(dialogue, deadline):
             dialogue.trace(trace_event)
             dialogue.messages.append({"role": "tool", "tool_call_id": call.id,
                                       "content": _model_tool_content(name, answer)})
+            if name == "route_to_nearest_place" and dialogue.nearest_route_outcome and not dialogue.route:
+                failure_code = dialogue.nearest_route_outcome.get("failure_code")
+                if failure_code:
+                    return _failure(dialogue, dialogue.nearest_route_outcome["message"], failure_code)
+                return dialogue.result(dialogue.nearest_route_outcome["message"])
             response_had_tool_error |= bool(answer.get("error"))
             if name in {"get_weather", "list_road_conditions"}:
                 code = answer.get("error")

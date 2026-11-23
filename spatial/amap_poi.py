@@ -96,6 +96,15 @@ def _provider_category(raw):
         else:
             subcategory = 'sports_other'
         return {'type': 'sports', 'category': 'sports', 'subcategory': subcategory}
+    evidence = ' '.join((_text(raw.get('name')), type_name))
+    if re.search(r'公共厕所|卫生间|洗手间|公厕|厕所', evidence):
+        return {'type': 'service', 'category': 'service', 'subcategory': 'toilet'}
+    if re.search(r'集贸市场|农贸市场|菜市场|菜场|生鲜市场|农副产品市场', evidence):
+        return {'type': 'service', 'category': 'service', 'subcategory': 'market'}
+    if re.search(r'便利店|便利商店', evidence):
+        return {'type': 'service', 'category': 'service', 'subcategory': 'convenience_store'}
+    if re.search(r'超市|超级市场', evidence):
+        return {'type': 'service', 'category': 'service', 'subcategory': 'supermarket'}
     return {'type': 'other', 'category': 'other', 'subcategory': 'other'}
 
 
@@ -194,8 +203,8 @@ def _text_pages(client, params, pages):
 
 
 def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None, poi_type='dining'):
-    """Search nearby dining or sports venues without retaining provider state."""
-    provider_types = {'dining': '050000', 'sports': '体育休闲服务'}
+    """Search a bounded nearby category, or keyword search without a type filter."""
+    provider_types = {'dining': '050000', 'sports': '体育休闲服务', 'all': None}
     if poi_type not in provider_types:
         return {'status': 'invalid_query', 'candidates': []}
     location = _coord(f"{center.get('lng')},{center.get('lat')}") if isinstance(center, dict) else None
@@ -216,10 +225,11 @@ def search_nearby(center, *, keywords=None, radius_m=1000, pages=2, client=None,
         'key': key,
         'location': f"{location['lng']},{location['lat']}",
         'radius': radius_m,
-        'types': provider_types[poi_type],
         'offset': 25,
         'extensions': 'all',
     }
+    if provider_types[poi_type]:
+        params['types'] = provider_types[poi_type]
     if _text(keywords):
         params['keywords'] = _text(keywords)[:80]
 

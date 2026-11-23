@@ -10581,13 +10581,13 @@
    ],
    "scenery_score": 1,
    "rating": null,
-   "subcategory": "canteen",
-   "is_minor": false,
+   "subcategory": "fastfood",
+   "is_minor": true,
    "poi_id": "poi_361",
    "activities": [
-    "canteen_meal"
+    "fast_food"
    ],
-   "activity_basis": "category_supported: category=canteen",
+   "activity_basis": "category_supported: category=fastfood",
    "activity_review_status": "source_supported"
   },
   {
@@ -12109,16 +12109,16 @@
    ],
    "scenery_score": 1,
    "rating": null,
-   "subcategory": "supermarket",
+   "subcategory": "market",
    "is_minor": false,
    "campus_boundary_refs": [
     "relation/20349097"
    ],
    "poi_id": "poi_415",
    "activities": [
-    "shopping"
+    "market"
    ],
-   "activity_basis": "category_supported: category=supermarket",
+   "activity_basis": "category_supported: category=market",
    "activity_review_status": "source_supported"
   },
   {

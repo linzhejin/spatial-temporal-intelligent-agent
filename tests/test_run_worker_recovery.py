@@ -33,6 +33,7 @@ def test_unexpected_agent_failure_keeps_task_and_returns_retryable_error(monkeyp
     assert result["response_kind"] == "chat"
     assert result["place_request"] == pending
     assert result["failure_code"] == "worker_error"
+    assert result["retryable"] is True
     assert "重试" in result["message"]
     assert "private provider detail" not in result["message"]
     assert "error" not in finished

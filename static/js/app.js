@@ -3545,8 +3545,16 @@
             var failure = (result && (result.assistant_text || result.message || result.reply))
                 || (run.error && run.error.code === 'deadline_exceeded' ? '本轮处理超时，请重试。' : null)
                 || '本轮处理未完成，请稍后重试。';
+            var failureCode = (result && result.failure_code) || (run.error && run.error.code);
+            var retryableFailureCodes = ['deadline_exceeded', 'model_empty_response', 'model_rate_limited',
+                'model_timeout', 'model_unavailable', 'place_service_unavailable',
+                'road_conditions_unavailable', 'weather_unavailable', 'worker_error'];
+            var retryable = result && typeof result.retryable === 'boolean' ? result.retryable
+                : run.error && typeof run.error.retryable === 'boolean' ? run.error.retryable
+                    : retryableFailureCodes.indexOf(failureCode) >= 0;
             result = Object.assign({}, result || {}, {task_type: 'chat', response_kind: 'chat',
-                message: failure, reply: failure, execution_status: 'failed', needs_input: false});
+                message: failure, reply: failure, execution_status: 'failed', needs_input: false,
+                retryable: retryable});
         }
         if (!result) {
             var fallback = '这一步暂时没有完成，请重试。';
@@ -4236,23 +4244,27 @@
     function renderFailureActions(bubble, query, requestBody, result) {
         if (!bubble || typeof bubble.appendChild !== 'function') return;
         var controls = document.createElement('div');
-        var retry = document.createElement('button');
         var dismiss = document.createElement('button');
-        retry.type = dismiss.type = 'button';
-        retry.className = dismiss.className = 'clarify-chip';
-        retry.textContent = '重试';
-        dismiss.textContent = '取消';
-        retry.addEventListener('click', function () {
-            retry.disabled = dismiss.disabled = true;
-            var next = Object.assign({}, requestBody, {ui_action: {type: 'retry', value: query}});
-            if (result._task_id && Number.isInteger(result._task_revision)) {
-                next.continuation_task_id = result._task_id;
-                next.base_revision = result._task_revision;
-            }
-            handleNlSubmit(query, false, null, next);
-        });
+        dismiss.type = 'button';
+        dismiss.className = 'clarify-chip';
+        dismiss.textContent = '关闭';
+        if (result && result.retryable === true) {
+            var retry = document.createElement('button');
+            retry.type = 'button';
+            retry.className = 'clarify-chip';
+            retry.textContent = '重试';
+            retry.addEventListener('click', function () {
+                retry.disabled = dismiss.disabled = true;
+                var next = Object.assign({}, requestBody, {ui_action: {type: 'retry', value: query}});
+                if (result._task_id && Number.isInteger(result._task_revision)) {
+                    next.continuation_task_id = result._task_id;
+                    next.base_revision = result._task_revision;
+                }
+                handleNlSubmit(query, false, null, next);
+            });
+            controls.appendChild(retry);
+        }
         dismiss.addEventListener('click', function () { if (controls.remove) controls.remove(); });
-        controls.appendChild(retry);
         controls.appendChild(dismiss);
         bubble.appendChild(controls);
     }

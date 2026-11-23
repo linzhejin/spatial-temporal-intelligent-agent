@@ -26,6 +26,9 @@ ACTIVITY_SUBCATEGORIES = {
     "tea_drink": ("tea_drink",),
     "study": ("library", "study_other"),
     "shopping": ("supermarket",),
+    "convenience_store": ("convenience_store",),
+    "market": ("market",),
+    "restroom": ("toilet",),
     "medical": ("hospital",),
     "package_pickup": ("service",),
     "postal_service": ("post",),
@@ -39,7 +42,8 @@ ACTIVITY_LABELS = {
     "running": "跑步场地", "fitness": "健身场馆", "swimming": "游泳场馆",
     "meal": "餐饮", "canteen_meal": "食堂", "restaurant_meal": "餐厅",
     "fast_food": "快餐小吃", "coffee": "咖啡", "tea_drink": "茶饮",
-    "study": "学习场所", "shopping": "购物", "medical": "医疗服务",
+    "study": "学习场所", "shopping": "购物", "convenience_store": "便利店",
+    "market": "集贸市场", "restroom": "卫生间", "medical": "医疗服务",
     "package_pickup": "快递服务", "postal_service": "邮政服务",
     "view_lake": "湖景", "view_sakura": "赏樱",
 }
@@ -178,8 +182,17 @@ def resolve_activity_query(query: str) -> dict | None:
             "学习的地方", "找地方学习", "学习场所", "想学习", "安静的地方")):
         return {"status": "resolved", "activities": ["study"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["study"])}
+    if any(term in text for term in ("卫生间", "厕所", "公共厕所", "洗手间", "公厕")):
+        return {"status": "resolved", "activities": ["restroom"],
+                "subcategories": list(ACTIVITY_SUBCATEGORIES["restroom"])}
+    if any(term in text for term in ("集贸市场", "菜市场", "农贸市场", "菜场")):
+        return {"status": "resolved", "activities": ["market"],
+                "subcategories": list(ACTIVITY_SUBCATEGORIES["market"])}
+    if any(term in text for term in ("便利店", "便利商店")):
+        return {"status": "resolved", "activities": ["convenience_store"],
+                "subcategories": list(ACTIVITY_SUBCATEGORIES["convenience_store"])}
     if any(term in text for term in (
-            "超市", "便利店", "买东西", "买水", "买瓶水", "买饮料", "买瓶饮料",
+            "超市", "买东西", "买水", "买瓶水", "买饮料", "买瓶饮料",
             "购买饮用水", "零食", "文具", "购物")):
         return {"status": "resolved", "activities": ["shopping"],
                 "subcategories": list(ACTIVITY_SUBCATEGORIES["shopping"])}
@@ -340,6 +353,8 @@ def audit_poi_activities(pois: list[dict]) -> list[dict]:
                 "tea_drink": ("tea_drink", "category=tea_drink"),
                 "library": ("study", "category=library"),
                 "supermarket": ("shopping", "category=supermarket"),
+                "convenience_store": ("convenience_store", "category=convenience_store"),
+                "market": ("market", "category=market"),
                 "hospital": ("medical", "category=hospital"),
                 "post": ("postal_service", "category=post"),
                 "lake": ("view_lake", "category=lake"),

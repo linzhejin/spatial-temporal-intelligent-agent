@@ -26,13 +26,14 @@ REVIEW_CSV = ROOT / "data" / "pois_subcategory_review.csv"
 # 每个 type 下的有序规则：(正则, subcategory, is_minor)
 _RULES = {
     "dining": [
-        (r"食堂", "canteen", False),
         (r"咖啡|瑞幸|库迪|[Mm]anner|星巴克|Café|café", "coffee", True),
         (r"蜜雪冰城|古茗|茶颜悦色|喜茶|霸王茶姬|书亦烧仙草|茶百道|柠季|柠檬茶"
          r"|鲜茶|饮品|酸奶|冰激淋|冰淇淋|糖水|水果捞|烧仙草|不泡茶|豆花|东方茶",
          "tea_drink", True),
         (r"餐厅|湘菜馆|川味坊|家常菜|农家小炒|宝岛小厨|小炒|孃孃出川|周麻婆"
          r"|火锅|餐吧|烤鸭|小厨", "restaurant", False),
+        (r"食堂.{0,3}(?:店|摊|档口)|(?:店|摊|档口).{0,3}食堂", "fastfood", True),
+        (r"食堂", "canteen", False),
         (r".", "fastfood", True),  # 其余餐饮一律按快餐小食
     ],
     "study": [
@@ -56,7 +57,9 @@ _RULES = {
         (r".", "landmark", False),
     ],
     "service": [
-        (r"超市|集贸市场", "supermarket", False),
+        (r"集贸市场|农贸市场|菜市场|菜场", "market", False),
+        (r"便利店|便利商店", "convenience_store", False),
+        (r"超市", "supermarket", False),
         (r"银行", "bank", False),
         (r"邮政", "post", False),
         (r"医院", "hospital", False),

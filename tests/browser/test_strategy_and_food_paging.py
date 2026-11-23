@@ -129,7 +129,7 @@ def test_failed_run_shows_retry_and_cancel_without_exposing_internal_error(stati
         elif url.path == "/api/runs/recovery-run-1":
             json_response(route, {
                 "status": "failed", "task_id": "recovery-task", "current_task_revision": 2,
-                "error": {"code": "provider_internal", "message": "private provider traceback"},
+                "error": {"code": "weather_unavailable", "message": "private provider traceback"},
             })
         elif url.path == "/api/runs/recovery-run-2":
             json_response(route, {
@@ -155,7 +155,7 @@ def test_failed_run_shows_retry_and_cancel_without_exposing_internal_error(stati
 
         expect(page.get_by_text("本轮处理未完成，请稍后重试。", exact=False)).to_be_visible(timeout=15000)
         expect(page.get_by_text("private provider traceback", exact=False)).to_have_count(0)
-        expect(page.get_by_role("button", name="取消", exact=True)).to_be_visible()
+        expect(page.get_by_role("button", name="关闭", exact=True)).to_be_visible()
         page.get_by_role("button", name="重试", exact=True).click()
         expect(page.get_by_text("已按原条件继续。", exact=False)).to_be_visible(timeout=15000)
         assert messages[1]["continuation_task_id"] == "recovery-task"
@@ -181,6 +181,7 @@ def test_partial_tool_failure_keeps_result_and_offers_retry(static_site):
             data = {"status": "partial", "events": [], "result": {
                 "task_type": "chat", "response_kind": "chat", "reply": "天气晴；路况暂不可用。",
                 "execution_status": "partial", "failure_code": "road_conditions_unavailable",
+                "retryable": True,
             }}
         elif url.path == "/api/runs/partial-run-2":
             data = {"status": "completed", "events": [], "result": {

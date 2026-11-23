@@ -46,7 +46,8 @@ QUERY_LABELS = {
     "running": "跑步场地", "fitness": "健身场馆", "swimming": "游泳场馆",
     "meal": "餐饮", "canteen_meal": "食堂", "restaurant_meal": "餐厅",
     "fast_food": "快餐小吃", "coffee": "咖啡店", "tea_drink": "茶饮店",
-    "study": "学习场所", "shopping": "超市", "medical": "医疗服务",
+    "study": "学习场所", "shopping": "超市", "convenience_store": "便利店",
+    "market": "集贸市场", "restroom": "卫生间", "medical": "医疗服务",
     "package_pickup": "快递点", "postal_service": "邮政服务",
     "view_lake": "湖景点", "view_sakura": "赏樱点",
 }

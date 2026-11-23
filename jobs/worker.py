@@ -89,7 +89,8 @@ def process_next_run(database_url, worker_id, graph, lease_seconds=30):
             run_context = {}
         message = "本轮处理遇到服务故障，已保留当前需求，请重试。"
         recovery = {"task_type": "chat", "response_kind": "chat", "message": message,
-                    "reply": message, "execution_status": "failed", "failure_code": "worker_error"}
+                    "reply": message, "execution_status": "failed", "failure_code": "worker_error",
+                    "retryable": True}
         task = run_context.get("task") or {}
         if isinstance(task, dict) and isinstance(task.get("place_request"), dict):
             recovery["place_request"] = task["place_request"]

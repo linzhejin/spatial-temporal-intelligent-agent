@@ -215,7 +215,8 @@ def test_mobile_wait_cancel_empty_retry_and_conversation_restore(local_site):
                 }}})
             elif index == 3:
                 fulfill(route, {"data": {**base, "status": "failed", "events": [], "result": {
-                    "message": "服务暂时不可用，请重试。",
+                    "message": "服务暂时不可用，请重试。", "failure_code": "place_service_unavailable",
+                    "retryable": True,
                 }}})
             elif index == 4:
                 fulfill(route, {"data": {**base, "status": "completed", "events": [],

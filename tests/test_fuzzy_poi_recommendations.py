@@ -557,7 +557,8 @@ def test_real_poi_taxonomy_categorizes_dining_types_correctly():
         "dorm": {"dormitory"}, "gate": {"gate"},
         "scenery": {"landmark", "lake", "sakura", "park", "hill", "square", "pavilion"},
         "area": {"area"},
-        "service": {"service", "activity_center", "hospital", "supermarket", "bank", "post"},
+        "service": {"service", "activity_center", "hospital", "supermarket", "convenience_store",
+                    "market", "toilet", "bank", "post"},
     }
     assert all(poi["subcategory"] in valid_subcategories[poi["type"]] for poi in pois)
     assert all(poi["subcategory"] in tools._SUBCATEGORY_LABELS for poi in pois)

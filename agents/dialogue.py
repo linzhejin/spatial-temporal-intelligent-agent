@@ -36,7 +36,8 @@ def tool_schemas():
 
     clearable_fields = ["budget_per_person", "limit", "requirements", "area", "keywords",
                         "exclude_terms", "web_page_read_requested", "start", "search_anchor",
-                        "strategy", "activities", "subcategories", "selected_poi_id", "tour_stops", "tour_scope"]
+                        "strategy", "activities", "subcategories", "selected_poi_id", "tour_stops", "tour_scope",
+                        "destination_selection"]
     clearable_fields.extend(f"constraints.{field}" for field in HardConstraints.model_fields)
     schemas = deepcopy(TOOL_SCHEMAS)
     search = next(item["function"] for item in schemas if item["function"]["name"] == "search_poi_candidates")
@@ -84,6 +85,8 @@ def tool_schemas():
                             "description": "用户明确要游览的地点名称，完整保存；不是用户的出发点。只在用户修改地点时替换。"},
              "tour_scope": {"type": "string", "enum": ["from_user", "independent"],
                             "description": "实际个人出行填 from_user；仅用户明确要求不考虑本人出发位置、只看景点间参考路线时填 independent。"},
+             "destination_selection": {"type": "string", "enum": ["nearest_route"],
+                                       "description": "仅当用户明确要前往某类别中最近的地点时设为nearest_route；之后必须调用route_to_nearest_place。"},
              "search_anchor": {**_ENDPOINT_SCHEMA, "description": "用户希望在哪个地点附近或区域内搜索的参照点。用户另行说了搜索地点时必须保留该地点，不能复制start来替代；只有用户未给搜索地点时才可省略"},
              "search_radius_m": {"type": "integer", "minimum": 100, "maximum": 5000},
              "expand_search_radius": {"type": "boolean", "description": "用户只说扩大范围且未指定幅度时设为 true；服务器翻倍，最高 5 公里"},
@@ -129,6 +132,10 @@ def tool_schemas():
                    "include_shown": {"type": "boolean"}}),
         _function("conclude_without_places", "已查看候选但没有适合本轮条件的地点时，说明无法推荐的原因；不要据此声称候选池为空。",
                   {"reason": {"type": "string", "minLength": 1, "maxLength": 1000}}, ("reason",)),
+        _function("route_to_nearest_place", "仅用于用户明确要前往最近类别地点的路线任务。先按服务器接受的起点、类别、半径和路线约束检索可达候选，再按路网距离排序并依次核验路线。必须先通过update_task保存destination_selection=nearest_route、实际起点和类别；不可直接把模型猜测的地点当终点。其他路线请求使用plan_route。",
+                  {"end_turn_if_success": {"type": "boolean",
+                                            "description": "只有本轮仅需规划这条路线时填true；有其他待办或需要继续解释时填false。"}},
+                  ("end_turn_if_success",)),
         _function("read_result", "读取本会话历史结果引用；路线几何与候选按页返回。",
                   {"run_id": {"type": "string"},
                    "section": {"type": "string", "enum": ["route_summary", "route_geometry", "candidates"]},
@@ -449,6 +456,7 @@ def _plain_activity_requirement(requirement):
     if not isinstance(requirement, str) or not re.fullmatch(
             r"\s*(?:寻找|推荐|想找|想去|找|去|吃|喝|打|踢)?"
             r"(?:咖啡|奶茶|茶饮|果茶|吃饭|用餐|餐饮|餐厅|饭店|食堂|快餐|小吃|"
+            r"卫生间|厕所|公共厕所|洗手间|公厕|便利店|集贸市场|农贸市场|菜市场|菜场|"
             r"篮球|羽毛球|乒乓球|足球|排球|网球|跑步|游泳|健身|自习|学习|购物|医疗|快递|邮政)"
             r"(?:店|馆|厅|点|场地|场|服务|的地方|场所)?\s*", requirement):
         return set()
@@ -706,7 +714,10 @@ class Dialogue:
         self.no_path, self.clarify, self.suggestions = None, None, None
         self.last_search = {}
         self._empty_search_keys = set()
+        self._incomplete_search_keys = set()
         self._map_search_completed = False
+        self._nearest_route_in_progress = False
+        self.nearest_route_outcome = None
         self.web_search_count = 0
         self.web_fetch_count = 0
         self.place_search_count = 0
@@ -939,7 +950,7 @@ class Dialogue:
         changed_search = relation == "new"
         for field in ("operation", "goal", "requirements", "area", "keywords", "exclude_terms",
                       "web_research_requested", "web_page_read_requested", "budget_per_person", "limit",
-                      "tour_stops", "tour_scope"):
+                      "tour_stops", "tour_scope", "destination_selection"):
             if field in args:
                 value = args[field]
                 if field == "operation" and (not isinstance(value, str) or value not in _OPERATIONS):
@@ -959,6 +970,8 @@ class Dialogue:
                     value = list(dict.fromkeys(x.strip() for x in value))
                 if field == "tour_scope" and value not in {"from_user", "independent"}:
                     raise ValueError("invalid tour_scope")
+                if field == "destination_selection" and value not in {"nearest_route"}:
+                    raise ValueError("invalid destination selection")
                 if field == "goal" and (not isinstance(value, str) or not 0 < len(value) <= 2000):
                     raise ValueError("invalid goal")
                 if field == "limit" and (type(value) is not int or not 1 <= value <= 20):
@@ -1067,7 +1080,7 @@ class Dialogue:
             changed_search_without_radius |= constraints_changed
         for field in args.get("clear_fields", []):
             if field in {"budget_per_person", "limit", "requirements", "area", "keywords", "exclude_terms",
-                         "web_page_read_requested", "tour_stops", "tour_scope"}:
+                         "web_page_read_requested", "tour_stops", "tour_scope", "destination_selection"}:
                 if field not in args:
                     intent.pop(field, None)
                 changed_search = True
@@ -1213,9 +1226,161 @@ class Dialogue:
             return {"type": "poi", "poi_id": identifier, "name": poi.get("name")}
         return ref
 
+    def _route_to_nearest_place(self):
+        """Route to the nearest reachable, server-searched candidate for this task."""
+        if self.intent.get("operation") != "route" or self.intent.get("destination_selection") != "nearest_route":
+            return {"error": "nearest_route_task_required",
+                    "message": "请先用update_task保存前往最近地点的路线任务。"}
+        start = self.pending.get("start")
+        categories = self.pending.get("subcategories") or []
+        activities = self.pending.get("activities") or []
+        if not isinstance(start, dict):
+            question = "请告诉我从哪里出发，或在地图上选取当前位置。"
+            self.clarify = {"question": question, "options": ["地图上选起点", "告诉我所在地点"], "slot": "start"}
+            self.pending["pending_slot"] = "start"
+            self.modified_fields.add("place_request.pending_slot")
+            return {**self.clarify, "needs_input": True}
+        if not categories and not activities and not self.intent.get("keywords"):
+            question = "请告诉我想去的地点类型，例如食堂、超市或卫生间。"
+            self.clarify = {"question": question, "options": [], "slot": "destination"}
+            self.pending["pending_slot"] = "destination"
+            self.modified_fields.add("place_request.pending_slot")
+            return {**self.clarify, "needs_input": True}
+
+        search_args = {
+            "start": deepcopy(start),
+            "mode": self.pending.get("mode", "walk"),
+            "constraints": self._constraints(),
+            "max_distance_m": self.pending.get("search_radius_m") or 1000,
+            "limit": 20,
+        }
+        if self.pending.get("search_anchor"):
+            search_args["search_anchor"] = deepcopy(self.pending["search_anchor"])
+        if categories:
+            search_args["subcategories"] = deepcopy(categories)
+        if activities:
+            search_args["activities"] = deepcopy(activities)
+        if self.intent.get("keywords"):
+            search_args["keyword"] = " ".join(self.intent["keywords"])
+        if self.intent.get("area"):
+            search_args["area"] = self.intent["area"]
+
+        result = self.spatial("search_poi_candidates", search_args)
+        if result.get("needs_input"):
+            return result
+        if result.get("error"):
+            self.nearest_route_outcome = {
+                "status": "search_error",
+                "failure_code": result["error"],
+                "message": str(result.get("message") or "地点搜索未完成，请调整条件后重试。"),
+            }
+            return result
+        provider_status = self.last_search.get("online_status")
+        if (self.place_service_error or provider_status not in
+                {None, "ok", "not_requested", "incomplete", "query_required", "center_unavailable"}):
+            self.nearest_route_outcome = {
+                "status": "service_error",
+                "failure_code": "place_service_unavailable",
+                "message": "地图地点服务暂时不可用，目前无法确认最近地点，请稍后重试。",
+            }
+            return {"error": "place_service_unavailable",
+                    "message": self.nearest_route_outcome["message"]}
+        if (self.last_search.get("online_has_more") or provider_status in
+                {"incomplete", "query_required", "center_unavailable"}):
+            self.nearest_route_outcome = {
+                "status": "incomplete",
+                "message": "周边地图查询尚未完成，仍有结果未返回，目前无法确认最近地点。可以缩小范围或补充关键词后再查。",
+            }
+            return self.nearest_route_outcome
+
+        candidates = [row for row in self.last_search.get("candidates") or []
+                      if isinstance(row, dict) and (row.get("poi_id") or row.get("id"))]
+        if not candidates:
+            self.nearest_route_outcome = {
+                "status": "no_candidate",
+                "message": "当前搜索范围内没有查到可达的匹配地点，可以扩大范围或调整地点类型。",
+            }
+            return self.nearest_route_outcome
+
+        def route_distance(row):
+            value = row.get("network_distance_m")
+            if not isinstance(value, (int, float)) or isinstance(value, bool):
+                return math.inf
+            distance = float(value)
+            return distance if math.isfinite(distance) and distance >= 0 else math.inf
+
+        candidates.sort(key=lambda row: (route_distance(row), str(row.get("name") or "")))
+        if any(not math.isfinite(route_distance(row)) for row in candidates):
+            self.nearest_route_outcome = {
+                "status": "incomplete",
+                "message": "候选地点缺少可比较的路网距离，暂时无法确认最近地点。",
+            }
+            return self.nearest_route_outcome
+
+        failures = []
+        selected_id_before = self.pending.get("selected_poi_id")
+        selected_place_before = deepcopy(self.pending.get("selected_place"))
+        selection_fields = {"place_request.selected_poi_id", "place_request.selected_place"}
+        previously_modified_selection_fields = selection_fields & self.modified_fields
+        self._nearest_route_in_progress = True
+        try:
+            for candidate in candidates[:3]:
+                candidate_id = candidate.get("poi_id") or candidate.get("id")
+                if not isinstance(candidate_id, str) or candidate_id not in self.known:
+                    continue
+                self.pending["selected_poi_id"] = candidate_id
+                self.pending["selected_place"] = deepcopy(self.known[candidate_id])
+                route_args = {
+                    "start": deepcopy(start),
+                    "end": {"type": "poi", "poi_id": candidate_id,
+                            "name": str(candidate.get("name") or "")},
+                    "mode": self.pending.get("mode", "walk"),
+                    "strategy": self.pending.get("strategy", "shortest"),
+                    "constraints": self._constraints(),
+                    "end_turn_if_success": True,
+                }
+                route_result = self.spatial("plan_route", route_args)
+                if not route_result.get("error") and self.route:
+                    self.modified_fields.update(selection_fields)
+                    return {"status": "routed", "poi_id": candidate_id,
+                            "name": candidate.get("name"), "route": route_result}
+                failures.append(self.route_tool_failure or {
+                    "code": route_result.get("error", "route_unavailable"),
+                    "message": route_result.get("message", "路线未通过核验。"),
+                })
+                # Only a confirmed graph disconnection rules out this closer
+                # candidate. A verification or service failure leaves its
+                # reachability unknown, so a farther place cannot be called nearest.
+                if (route_result.get("reason_code") != "graph_no_path"
+                        and route_result.get("error") != "graph_no_path"):
+                    break
+        finally:
+            self._nearest_route_in_progress = False
+
+        if selected_id_before:
+            self.pending["selected_poi_id"] = selected_id_before
+        else:
+            self.pending.pop("selected_poi_id", None)
+        if selected_place_before:
+            self.pending["selected_place"] = selected_place_before
+        else:
+            self.pending.pop("selected_place", None)
+        for field in selection_fields - previously_modified_selection_fields:
+            self.modified_fields.discard(field)
+
+        failed_name = candidates[0].get("name") or "最近候选地点"
+        reason = str((failures[-1] if failures else {}).get("message") or "路线核验未通过。")[:160]
+        self.nearest_route_outcome = {
+            "status": "route_unavailable",
+            "message": f"已找到{failed_name}，但路线未能通过核验。{reason}",
+        }
+        return self.nearest_route_outcome
+
     def spatial(self, name, args):
         from agents import tools
         args = deepcopy(args)
+        if name == "route_to_nearest_place":
+            return self._route_to_nearest_place()
         if name == "ask_user" and _unconfirmed_previous_end_as_current(
                 self.query, args.get("question"), self.pending.get("start"),
                 self.intent.get("route_to_modify") or self.previous_route, tools):
@@ -1248,6 +1413,9 @@ class Dialogue:
                         "message": "本轮地点检索次数已达上限，请根据已有结果回答。"}
         context = {"query": self.query, "uid": self.uid, "_model_dialogue": True,
                    "_semantic_request": self.intent, "_known_places": self.known}
+        if (name == "search_poi_candidates"
+                and self.intent.get("destination_selection") == "nearest_route"):
+            context["_distance_first"] = True
         if name in {"search_poi_candidates", "find_reachable_places"}:
             for field in ("start", "search_anchor", "mode", "activities", "subcategories"):
                 if self.pending.get(field) and field not in args:
@@ -1313,6 +1481,10 @@ class Dialogue:
                 args["constraints"] = self._constraints(args.get("constraints"))
         route_tools = {"plan_route", "plan_via_route", "plan_itinerary", "plan_multimodal_route", "plan_tour", "compare_routes"}
         if name in route_tools:
+            if (self.intent.get("destination_selection") == "nearest_route"
+                    and not self._nearest_route_in_progress):
+                return {"error": "nearest_search_required",
+                        "message": "该任务要求先按当前范围搜索并排序可达地点，请调用route_to_nearest_place。"}
             if name == "plan_tour":
                 stops = self.intent.get("tour_stops")
                 if not stops and isinstance(args.get("poi_names"), list):
@@ -1401,12 +1573,19 @@ class Dialogue:
         if name in {"search_poi_candidates", "find_reachable_places"}:
             search_args = {key: value for key, value in args.items() if key != "limit"}
             semantics = {key: self.intent.get(key) for key in
-                         ("operation", "area", "keywords", "exclude_terms", "requirements", "shown_ids")}
+                         ("operation", "destination_selection", "area", "keywords", "exclude_terms",
+                          "requirements", "shown_ids")}
             search_key = json.dumps([name, search_args, semantics, context.get("_search_scope_distance_m")],
                                     ensure_ascii=False, sort_keys=True, default=str)
             if search_key in self._empty_search_keys:
                 return {"error": "duplicate_empty_search", "message":
                         "相同条件的查询已完成且没有候选；请如实说明，或处理其他尚未完成的要求。"}
+            if search_key in self._incomplete_search_keys:
+                self.last_search = {"status": "ok", "online_status": "incomplete", "online_has_more": True,
+                                    "candidates": [], "count": 0}
+                return {"status": "incomplete", "online_status": "incomplete", "online_has_more": True,
+                        "candidates": [], "count": 0,
+                        "message": "上次地图检索仍有分页未完成，当前条件尚不能确认无匹配地点。"}
             self.place_search_count += 1
         result, artifact = self.execute_tool(name, args, context)
         if not isinstance(result, dict):
@@ -1430,15 +1609,22 @@ class Dialogue:
             self.last_search = result
             if (search_key and not result.get("error") and result.get("count") == 0
                     and result.get("candidates") == [] and not result.get("has_more")
+                    and not result.get("online_has_more")
                     and result.get("online_status") in (None, "ok", "not_requested")):
                 self._empty_search_keys.add(search_key)
+            elif (search_key and not result.get("error") and result.get("count") == 0
+                  and result.get("candidates") == []
+                  and (result.get("online_has_more") or result.get("online_status") == "incomplete")):
+                self._incomplete_search_keys.add(search_key)
             if result.get("candidates") and result.get("data_version") and result.get("road_condition_version"):
                 from agents.result_maintenance import record_candidate_snapshot
                 record_candidate_snapshot(self.pending, result)
             provider_status = result.get("online_status")
-            if provider_status == "ok":
+            online_incomplete = bool(result.get("online_has_more") or provider_status == "incomplete")
+            if provider_status == "ok" and not online_incomplete:
                 self._map_search_completed = True
-            if (provider_status and provider_status not in {"ok", "not_requested", "query_required", "center_unavailable"}
+            if (provider_status and provider_status not in {"ok", "not_requested", "query_required",
+                                                             "center_unavailable", "incomplete"}
                     and not result.get("candidates")):
                 self.place_service_error = provider_status
             if self.intent.get("operation") == "place_search" and result.get("candidates"):
