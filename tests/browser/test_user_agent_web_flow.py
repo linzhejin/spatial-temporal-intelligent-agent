@@ -304,6 +304,9 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         assert messages[1]["travel_mode"] == "bike"
         assert messages[1]["continuation_task_id"] == "local-basketball-task"
         assert messages[1]["base_revision"] == 1
+        expect(page.locator(".clarify-chips")).to_have_count(0)
+        expect(page.locator("#chat-content")).to_contain_text("想打什么球？")
+        expect(page.locator("#chat-content .chat-bubble-user").last).to_contain_text("篮球")
 
         candidate.click()
         expect(page.locator("#results-section")).to_be_visible(timeout=10000)
@@ -325,7 +328,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
         input_box.fill("\u53bb\u6253\u7403")
         with page.expect_response(lambda response: "/api/runs/local-run-4?" in response.url):
             page.locator("#submit-btn").click()
-        expect(page.locator(".clarify-chips")).to_have_count(2, timeout=10000)
+        expect(page.locator(".clarify-chips")).to_have_count(1, timeout=10000)
         latest_clarification = page.locator(".clarify-chips").last
         expect(latest_clarification.locator(".clarify-chip")).to_have_count(5, timeout=10000)
         assert len(messages) == 4
@@ -334,6 +337,7 @@ def test_user_keeps_clarification_and_candidate_task_when_switching_mode(
 
         latest_clarification.locator(".clarify-chip").nth(4).click()
         expect(input_box).to_be_focused()
+        expect(page.locator(".clarify-chips")).to_have_count(0)
         assert "\u8865\u5145\u7403\u7c7b" in input_box.get_attribute("placeholder")
         assert len(messages) == 4, "the catch-all option should ask for free text, not submit a task"
         input_box.fill("\u6a44\u6984\u7403")

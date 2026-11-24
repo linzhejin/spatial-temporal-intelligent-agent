@@ -44,7 +44,7 @@ test('coarse-pointer phones do not display keyboard shortcut hints', () => {
 
 test('phone guidance uses plain wording and removes slang', () => {
   assert.equal(html.includes('\u8bf4\u4eba\u8bdd'), false);
-  assert.ok(html.includes('\u8f93\u5165\u8d77\u70b9\u3001\u7ec8\u70b9\u6216\u8def\u7ebf\u8981\u6c42'));
+  assert.ok(html.includes('\u8bf4\u8bf4\u4f60\u7684\u51fa\u884c\u60f3\u6cd5\uff0c\u6211\u6765\u89c4\u5212'));
 });
 
 test('chat bubbles wrap long words and URLs', () => {

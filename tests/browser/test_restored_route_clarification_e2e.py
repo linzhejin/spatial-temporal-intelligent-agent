@@ -109,6 +109,8 @@ def test_restored_route_clarification_preserves_question_and_task(static_site, v
         question_visible = question in page.locator("#chat-content").inner_text()
         with page.expect_response(lambda response: response.url.endswith('/messages')):
             option.click()
+        expect(page.locator(".clarify-chips")).to_have_count(0)
+        expect(page.locator("#chat-content")).to_contain_text(question)
         assert len(submissions) == 1
         assert submissions[0]["query"] == "食堂"
         assert submissions[0]["continuation_task_id"] == task_id

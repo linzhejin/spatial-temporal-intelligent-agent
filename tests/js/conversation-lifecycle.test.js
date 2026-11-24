@@ -31,12 +31,13 @@ function harness(storage = new Map(), nativeSession = null) {
         removeItem: k => storage.delete('test-tab:' + k),
     };
     const noop = () => {};
-    const element = () => ({ hidden: false, style: {}, children: [], innerHTML: '', scrollTop: 0, clientHeight: 100, scrollHeight: 100,
+    const element = () => ({ parentNode: null, hidden: false, style: {}, children: [], innerHTML: '', scrollTop: 0, clientHeight: 100, scrollHeight: 100,
         scrollTo: noop, classList: { add: noop, remove: noop, toggle: noop },
         setAttribute: noop,
         querySelectorAll: () => [],
         querySelector(selector) { return this.children.find(child => selector.includes(child.dataset && child.dataset.action)) || null; },
-        appendChild(child) { this.children.push(child); } });
+        appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
+        removeChild(child) { const index = this.children.indexOf(child); if (index >= 0) this.children.splice(index, 1); child.parentNode = null; return child; } });
     const elements = new Map();
     const context = vm.createContext({
         console, AbortController, setTimeout, clearTimeout, setInterval, clearInterval,
@@ -44,10 +45,10 @@ function harness(storage = new Map(), nativeSession = null) {
         window: { localStorage, sessionStorage, WHURouteState: routeState, location: { reload: () => { reloads++; } },
             WhuWalkerSession: nativeSession ? { getId: () => nativeSession } : undefined },
         document: { readyState: 'loading', body: { classList: { add: noop, remove: noop, toggle: noop } }, addEventListener: noop, querySelectorAll: () => [],
-            createElement: tag => ({ tagName: tag.toUpperCase(), dataset: {}, children: [], textContent: '', disabled: false,
+            createElement: tag => ({ tagName: tag.toUpperCase(), parentNode: null, dataset: {}, children: [], textContent: '', disabled: false,
                 setAttribute: noop,
                 addEventListener(name, fn) { this['on' + name] = fn; },
-                appendChild(child) { this.children.push(child); },
+                appendChild(child) { child.parentNode = this; this.children.push(child); return child; },
                 querySelectorAll: () => [] }), getElementById: id => {
             if (!elements.has(id)) elements.set(id, element()); return elements.get(id);
         } },
@@ -1038,6 +1039,7 @@ test('ball clarification renders all five choices and leaves other ball types fo
     input.focus = () => { focused = true; };
     buttons[4].onclick();
 
+    assert.equal(chat.children.length, 0, 'choosing custom input should remove the obsolete option row');
     assert.equal(focused, true);
     assert.match(input.placeholder, /补充球类/);
 });
@@ -1049,8 +1051,10 @@ test('route retry button continues the pending task without choosing a POI', asy
     let sent;
     h.setApi(async (_url, body) => { sent = body; return routeResult('retried'); });
     h.renderClarifyOptions(['重试'], 'route-task', 7);
-    const button = h.context.document.getElementById('chat-content').children[0].children[0].children[0];
+    const chat = h.context.document.getElementById('chat-content');
+    const button = chat.children[0].children[0].children[0];
     button.onclick();
+    assert.equal(chat.children.length, 0, 'submitting a choice should remove its option row immediately');
     await new Promise(resolve => setTimeout(resolve, 10));
     assert.equal(sent.query, '重试');
     assert.equal(sent.continuation_task_id, 'route-task');

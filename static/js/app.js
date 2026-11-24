@@ -4735,6 +4735,12 @@
         row.appendChild(wrap);
         chatContent.appendChild(row);
 
+        function dismissOptions() {
+            var followLatest = chatIsNearLatest(chatContent);
+            if (row.parentNode) row.parentNode.removeChild(row);
+            scrollChatToLatest(chatContent, followLatest);
+        }
+
         options.slice(0, 5).forEach(function (opt) {
             var label = typeof opt === 'string' ? opt : opt && opt.label;
             if (!label) return;
@@ -4745,8 +4751,9 @@
             btn.textContent = label;
             btn.addEventListener('click', function () {
                 // “其他”不是一个地点。把输入焦点交还给用户，并保留
-                // 当前澄清任务，避免把它提交成固定 POI 查询。
+                // 当前澄清任务，避免把它提交成固定 POI 查询；选项行已回答，立即收起。
                 if (/^其他(?:球类|运动)?$/.test(String(label || '').trim())) {
+                    dismissOptions();
                     var input = document.getElementById('nl-input');
                     if (input) {
                         input.placeholder = /球/.test(label)
@@ -4754,11 +4761,10 @@
                             : '请补充运动类型，例如游泳、瑜伽…';
                         input.focus();
                     }
-                    wrap.querySelectorAll('.clarify-chip').forEach(function (b) { b.disabled = false; });
                     trackEvent('clarify_custom_input', { answer: opt });
                     return;
                 }
-                wrap.querySelectorAll('.clarify-chip').forEach(function (b) { b.disabled = true; });
+                dismissOptions();
                 trackEvent('clarify_answer', { answer: label });
                 var continuation = taskId && Number.isInteger(taskRevision)
                     ? { continuation_task_id: taskId, base_revision: taskRevision,
