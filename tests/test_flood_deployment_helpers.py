@@ -226,3 +226,40 @@ def test_rollback_rejects_changed_backup_before_stopping_services(monkeypatch, t
     monkeypatch.setattr(flood_release, 'run', lambda *_args: pytest.fail('must not stop or switch services'))
     with pytest.raises(ValueError, match='has changed'):
         flood_release.rollback_to_backup('new', 'old', backup)
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _current_static():
+    read = lambda name: (ROOT / 'static' / name).read_text(encoding='utf-8')
+    return read('index.html'), read('manager.html'), read('sw.js')
+
+
+def test_expected_web_assets_follow_current_frontend():
+    index_html, manager_html, worker = _current_static()
+    expected = flood_release.parse_web_assets(index_html, manager_html, worker)
+    assert expected['cache_name'] in worker
+    assert expected['cache_name'].startswith('whu-walker-v')
+    assert any('mountain' in token for token in expected['web_asset_versions'])
+    assert expected['manager_asset_versions']
+    assert flood_release.served_assets_match(expected, index_html, manager_html, worker)
+
+
+def test_served_assets_reject_stale_cache_or_manager_version():
+    index_html, manager_html, worker = _current_static()
+    expected = flood_release.parse_web_assets(index_html, manager_html, worker)
+    stale_worker = worker.replace(expected['cache_name'], 'whu-walker-v1')
+    assert not flood_release.served_assets_match(expected, index_html, manager_html, stale_worker)
+    token = expected['manager_asset_versions'][0]
+    stale_manager = manager_html.replace('?v=' + token, '?v=old-release')
+    assert not flood_release.served_assets_match(expected, index_html, stale_manager, worker)
+
+
+def test_parse_web_assets_requires_cache_and_registration():
+    index_html, manager_html, worker = _current_static()
+    with pytest.raises(ValueError):
+        flood_release.parse_web_assets(index_html, manager_html, 'var x = 1;')
+    with pytest.raises(ValueError):
+        flood_release.parse_web_assets(index_html.replace("register('/sw.js')", "register('/old.js')"),
+                                       manager_html, worker)
