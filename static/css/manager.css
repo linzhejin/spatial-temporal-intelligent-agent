@@ -99,7 +99,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 .workflow-nav a:hover,.workflow-nav a:focus-visible{border-color:var(--pine-line);background:var(--pine-soft);color:var(--pine)}
 .workflow-nav a.is-active{border-color:var(--pine);background:var(--pine);color:#fff}
 .workflow-nav span{font-size:14px}
-#road-workspace,#vision-workspace,#event-history{scroll-margin-top:148px}
+#road-workspace,#vision-workspace,#clue-workspace,#event-history{scroll-margin-top:148px}
 
 /* ---------- 路况工作区 ---------- */
 
@@ -440,6 +440,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
   .login-card{max-width:none;padding:24px}
   .workflow-nav{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:5px;padding:5px}
   .workflow-nav a{padding:8px 4px;font-size:13px}
+  #road-workspace,#vision-workspace,#clue-workspace,#event-history{scroll-margin-top:185px}
   .map-card{height:420px}
   .event-filters{grid-template-columns:1fr 1fr}
   .event-filters label:first-child{grid-column:1/-1}
@@ -466,6 +467,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
   .login-copy p{font-size:14px}
   .login-rule{margin-top:20px}
   .workflow-nav{top:56px}
+  #road-workspace,#vision-workspace,#clue-workspace,#event-history{scroll-margin-top:177px}
   .map-card{height:360px}
   .map-topline{min-height:44px;padding:8px 12px;font-size:12px}
   .map-topline span:last-child{font-size:11px}
@@ -514,6 +516,7 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 
 .clue-section{margin-top:32px}
 .clue-note{margin:10px 0 0;color:var(--muted);font-size:13px;line-height:1.7}
+.clue-section + .events-section{margin-top:44px;padding-top:28px;border-top:1px solid var(--line)}
 .clue-create{margin:14px 0 18px;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm)}
 .clue-create>summary{cursor:pointer;color:var(--pine);font-size:14px;font-weight:650}
 .clue-create-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-top:14px}
@@ -526,19 +529,27 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
 .clue-create-actions .outline-button{white-space:nowrap}
 .clue-layout{display:grid;grid-template-columns:minmax(0,.85fr) minmax(0,1.5fr);gap:18px;align-items:start;margin-top:16px}
 .clue-list-panel,.clue-detail{min-width:0;padding:16px;border:1px solid var(--line);border-radius:var(--radius);background:var(--card);box-shadow:var(--shadow-sm)}
-.clue-filters{margin-bottom:12px}
+.clue-filters{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:12px}
+.clue-filters label{min-width:0}
+.clue-filters label:first-child{grid-column:1/-1}
+.clue-filters input,.clue-filters select{min-width:0}
+.clue-filters .outline-button{grid-column:1/-1;justify-self:end}
+.clue-list-panel .clue-filters{margin-bottom:14px;padding:0 0 14px;border:0;border-bottom:1px solid var(--line);border-radius:0;background:transparent}
+.clue-list-panel .event-list{border:0;border-radius:0;background:transparent;box-shadow:none}
+.clue-list-panel .event-list .empty-state{min-height:128px;display:grid;place-items:center;padding:20px 12px}
+.clue-list-panel .event-list .clue-row:last-child{margin-bottom:0}
 .clue-row{padding:12px;margin-bottom:10px;border:1px solid var(--line);border-radius:var(--radius-sm);background:#fff;cursor:pointer;transition:border-color .16s,background .16s,box-shadow .16s}
 .clue-row:hover{border-color:var(--pine);background:var(--pine-soft)}
 .clue-row.is-selected{border-color:var(--gold);box-shadow:0 0 0 2px rgba(169,119,50,.18)}
 .clue-row-head{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px}
 .clue-kind{color:var(--muted);font-size:12px;font-weight:600}
-.clue-id{color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;margin-left:auto}
-.clue-summary{margin-bottom:4px;font-size:14px;font-weight:650;line-height:1.5}
+.clue-id{max-width:100%;margin-left:auto;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;overflow-wrap:anywhere}
+.clue-summary{margin-bottom:4px;font-size:14px;font-weight:650;line-height:1.5;overflow-wrap:anywhere}
 .clue-meta{color:var(--muted);font-size:12px;line-height:1.55}
 .clue-duplicate{margin-top:4px;color:var(--gold);font-size:12px;line-height:1.5}
 .clue-detail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
-.clue-detail-head h3{font-size:17px;line-height:1.4}
-.clue-id-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:4px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px}
+.clue-detail-head h3{min-width:0;font-size:17px;line-height:1.4;overflow-wrap:anywhere}
+.clue-id-line{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;margin-top:4px;color:var(--muted);font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:12px;overflow-wrap:anywhere}
 .clue-id-line .quiet-button{min-height:30px;padding:0 10px;font-size:12px}
 .clue-evidence,.clue-candidates,.clue-form{margin-top:16px;padding-top:12px;border-top:1px solid var(--line)}
 .clue-detail-body{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:16px;align-items:start;margin-top:8px}
@@ -584,4 +595,5 @@ main{width:min(1500px,calc(100% - 48px));min-height:calc(100vh - 128px);margin:0
   .clue-form-grid label:nth-child(4),.clue-form-grid label:nth-child(11){grid-column:auto}
   .clue-create-card input,.clue-create-card textarea,.clue-form-grid input,.clue-form-grid select,.clue-form-grid textarea{font-size:16px}
   .clue-actions .primary-button{width:100%}
+  .clue-section + .events-section{margin-top:34px;padding-top:22px}
 }
