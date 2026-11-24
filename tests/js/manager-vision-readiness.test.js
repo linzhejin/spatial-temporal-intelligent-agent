@@ -328,8 +328,10 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261123-clue-review-v2/);
+  assert.match(managerHtml, /manager\.css\?v=20261124-brand-route-mark-v1/);
   assert.match(managerHtml, /manager\.js\?v=20261124-event-fields-removed-v1/);
+  assert.match(managerHtml, /class="brand-mark" aria-hidden="true"/);
+  assert.match(managerHtml, /<svg viewBox="0 0 24 24" focusable="false">/);
   assert.doesNotMatch(managerHtml, /id="event-name"/);
   assert.doesNotMatch(managerHtml, /id="event-description"/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
