@@ -328,8 +328,10 @@ test('manager media summary has responsive preview styling and no rough-location
   assert.match(managerHtml, /id="selected-media"[^>]*aria-live="polite"/);
   assert.match(managerCss, /\.selected-media-preview\{[^}]*object-fit:contain/);
   assert.match(managerCss, /\.selected-media-copy strong\{[^}]*overflow-wrap:anywhere/);
-  assert.match(managerHtml, /manager\.css\?v=20261116-vision-single-v1/);
-  assert.match(managerHtml, /manager\.js\?v=20261119-candidate-road-association-v2/);
+  assert.match(managerHtml, /manager\.css\?v=20261123-clue-review-v2/);
+  assert.match(managerHtml, /manager\.js\?v=20261124-event-fields-removed-v1/);
+  assert.doesNotMatch(managerHtml, /id="event-name"/);
+  assert.doesNotMatch(managerHtml, /id="event-description"/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapCenter = \[114\.363, 30\.5352\]/);
   assert.match(managerHtml, /WHU_WALKER_CONFIG\.mapZoom = 15/);
   assert.match(managerHtml, /class="vision-tabs" role="tablist"/);
@@ -1114,7 +1116,6 @@ test('a selected road can be explicitly cleared before publishing', async () => 
   elements.get('event-type').value = 'closure';
   elements.get('event-action').value = 'closure';
   elements.get('event-mode-walk').checked = true;
-  elements.get('event-name').value = '测试路封闭';
   elements.get('pick-road').listeners.click();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
 
@@ -1151,7 +1152,6 @@ test('road event preview and publication use an action and affected travel modes
   elements.get('event-type').value = 'construction';
   elements.get('event-type').listeners.change();
   elements.get('event-action').value = 'closure';
-  elements.get('event-name').value = '测试路施工';
   const walkMode = elements.get('event-mode-walk');
   elements.get('event-action').listeners.change();
   elements.get('pick-road').listeners.click();
@@ -1673,7 +1673,6 @@ test('confirmed visual evidence transfers to an explicitly verified road event',
   elements.get('event-type').value = 'event';
   elements.get('event-type').listeners.change();
   elements.get('event-action').value = 'notice';
-  elements.get('event-name').value = '测试人流提示';
   elements.get('event-mode-walk').checked = true;
   elements.get('event-action').listeners.change();
   await mapListeners.click({ latlng: { lng: 114.36, lat: 30.53 } });
@@ -2344,7 +2343,6 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
   const transfer = descendants(card).find((node) => node.tagName === 'button'
     && node.textContent === '将此候选转入道路事件');
   transfer.listeners.click();
-  harness.elements.get('event-name').value = '保留已有草稿';
   harness.elements.get('field-confirmation').value = '管理员已现场核实这条道路';
   const locate = descendants(card).find((node) => node.tagName === 'button'
     && node.textContent === '在地图定位并预填发布落点');
@@ -2361,7 +2359,6 @@ test('picking a suggested edge re-snaps it to reconfirm the road binding', async
   assert.match(snapCalls[0].url, /lat=30\.53/,
     'the re-snap must re-check the suggested edge snap latitude');
   assert.match(snapCalls[0].url, /[?&]u=1&v=2&key=0/);
-  assert.equal(harness.elements.get('event-name').value, '保留已有草稿');
   assert.equal(harness.elements.get('field-confirmation').value, '管理员已现场核实这条道路');
   assert.match(harness.elements.get('vision-source-label').textContent, /已复核影像候选 1/);
 });
@@ -2432,7 +2429,7 @@ test('vision list refresh still runs when focus sits on the workspace form, not 
   await flush();
   const root = harness.elements.get('vision-jobs');
   const firstCard = root.children[0];
-  harness.document.activeElement = harness.elements.get('event-name');
+  harness.document.activeElement = harness.elements.get('event-type');
   harness.setVisionJobs([{
     job_id: 'job-workspace-focus', status: 'needs_review', media_kind: 'image', original_name: '卡片-更新.png',
     result: { candidates: [] },

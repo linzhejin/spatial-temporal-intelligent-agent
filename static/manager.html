@@ -10,7 +10,7 @@
   <script src="/js/config.js"></script>
   <script>/* 管理台初始视野：文理/工学/信息三学部大致同框（文理学部居中），GCJ-02 */window.WHU_WALKER_CONFIG.mapCenter = [114.363, 30.5352];window.WHU_WALKER_CONFIG.mapZoom = 15;</script>
   <script src="/vendor/leaflet/leaflet.js"></script>
-  <script src="/js/manager.js?v=20261123-clue-review-v2" defer></script>
+  <script src="/js/manager.js?v=20261124-event-fields-removed-v1" defer></script>
 </head>
 <body>
   <header class="masthead">
@@ -53,7 +53,7 @@
 
       <div id="road-workspace" class="workspace-grid">
         <section class="map-card" aria-label="校园道路地图">
-          <div class="map-topline"><span>武汉大学校园</span><label class="map-layer-toggle"><input id="manager-satellite" type="checkbox"> 卫星底图</label><span id="pick-state">选择路段后再填写事件</span></div>
+          <div class="map-topline"><span>武汉大学校园</span><label class="map-layer-toggle"><input id="manager-satellite" type="checkbox"> 卫星底图</label><span id="pick-state">选择路段后再设置影响和时效</span></div>
           <div id="manager-map"></div>
           <div class="map-caption"><span class="map-key"></span>选中路段 <span class="caption-separator">·</span> 绿点为点击位置，橙点为吸附位置，虚线表示两点间距</div>
         </section>
@@ -76,8 +76,6 @@
                   <option value="accident">事故或临时障碍</option>
                 </select>
               </label>
-              <label>事件名称<input id="event-name" maxlength="30" placeholder="例如：珞珈山路临时施工" required></label>
-              <label>现场说明<textarea id="event-description" maxlength="200" rows="2" placeholder="描述影响范围或现场情况"></textarea></label>
               <label id="field-confirmation-wrap" hidden>具体道路的现场核实依据
                 <textarea id="field-confirmation" maxlength="300" minlength="8" rows="3" placeholder="例如：保卫部门现场确认该路段在该时段拥堵，车辆通行明显受影响。"></textarea>
                 <small>影像只能提供候选线索。请说明谁在现场或通过什么渠道确认了道路与通行影响。</small>

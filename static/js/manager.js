@@ -1021,7 +1021,6 @@
   function publishBlocker(timeRange) {
     if (state.eventPublishBusy) return '正在发布，请稍候，勿重复提交。';
     if (!byId('event-type').value) return '请选择事件类型。';
-    if (!byId('event-name').value.trim()) return '请填写事件名称。';
     if (!byId('event-action').value) return '请选择对路线的处理方式。';
     if (!selectedEventModes().length) return '请至少勾选一种受影响的出行方式。';
     if (byId('event-action').value === 'slowdown') {
@@ -1042,6 +1041,20 @@
     }
     if (state.sourceJobId && byId('field-confirmation').value.trim().length < 8) return '请填写道路现场核实依据（至少 8 字）。';
     return '';
+  }
+
+  function generatedEventName() {
+    var typeNames = {
+      construction: '临时施工',
+      event: '活动或人流密集',
+      closure: '道路封闭',
+      flooding: '积水',
+      accident: '事故或临时障碍',
+    };
+    var roadName = state.picked && state.picked.snap && state.picked.snap.road_name;
+    var subject = typeof roadName === 'string' && roadName.trim() && roadName !== '未命名道路'
+      ? roadName.trim() : '校园道路';
+    return (subject + ' · ' + (typeNames[byId('event-type').value] || '路况事件')).slice(0, 200);
   }
 
   function updatePublishState() {
@@ -1151,9 +1164,6 @@
     byId('event-action').value = floodAssistance && floodAssistance.mode === 'assisted_review'
       ? 'notice' : '';
     resetEventModes();
-    byId('event-name').value = floodAssistance && floodAssistance.mode === 'assisted_review'
-      ? '疑似积水（已现场核实）' : '';
-    byId('event-description').value = '';
     resetEventValidity();
     byId('field-confirmation').value = '';
     if (job.anchor_gcj) state.map.setView([job.anchor_gcj.lat, job.anchor_gcj.lng], 17);
@@ -1182,8 +1192,6 @@
     byId('event-type').value = '';
     byId('event-action').value = '';
     resetEventModes();
-    byId('event-name').value = '';
-    byId('event-description').value = '';
     resetEventValidity();
     byId('field-confirmation').value = '';
     if (job.anchor_gcj) state.map.setView([job.anchor_gcj.lat, job.anchor_gcj.lng], 17);
@@ -1277,8 +1285,6 @@
     clearVisionSource();
     if (state.map) clearPickedRoad();
     byId('event-type').value = '';
-    byId('event-name').value = '';
-    byId('event-description').value = '';
     byId('event-action').value = '';
     resetEventModes();
     resetEventValidity();
@@ -1372,7 +1378,7 @@
       byId('pick-road').textContent = active && state.pickPurpose === 'road' ? '取消选路' : '⌖ 选取路段';
       byId('pick-state').textContent = active
         ? '请在地图道路上点选，系统会吸附到正式路网'
-        : '选择路段后再填写事件';
+        : '选择路段后再设置影响和时效';
     }
     updatePublishState();
   }
@@ -3721,8 +3727,8 @@
       action: byId('event-action').value,
       affected_modes: selectedEventModes(),
       direction: byId('event-direction').value,
-      name: byId('event-name').value.trim(),
-      description: byId('event-description').value.trim(),
+      name: generatedEventName(),
+      description: '',
       lng: state.picked.lng, lat: state.picked.lat,
     };
     if (state.picked.edgeRef) body.edge_ref = state.picked.edgeRef;
@@ -3740,7 +3746,6 @@
       message('form-message', publication && publication.already_published
         ? '这个影像候选已经关联到路况，没有重复新增事件。'
         : '事件已发布，路线规划会按该路段状态处理。', true);
-      byId('event-name').value = ''; byId('event-description').value = '';
       resetEventValidity();
       resetEventModes();
       byId('event-action').value = '';
@@ -3792,7 +3797,6 @@
   eventModeInputs().forEach(function (input) {
     input.addEventListener('change', function () { updatePublishState(); return refreshImpactPreview(); });
   });
-  byId('event-name').addEventListener('input', updatePublishState);
   ['event-start-mode', 'event-duration', 'event-start-date', 'event-start-clock', 'event-end-date', 'event-end-clock'].forEach(function (id) {
     byId(id).addEventListener('input', updatePublishState);
     byId(id).addEventListener('change', updatePublishState);

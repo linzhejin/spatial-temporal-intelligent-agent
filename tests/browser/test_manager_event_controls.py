@@ -430,7 +430,6 @@ class ManagerEventControlsTest(unittest.TestCase):
 
     def prepare_event(self):
         self.page.locator("#event-type").select_option("construction")
-        self.page.locator("#event-name").fill("测试路临时施工")
         self.page.locator("#event-action").select_option("closure")
         self.page.get_by_role("checkbox", name="步行", exact=True).check()
         self.page.locator("#pick-road").click()
@@ -439,6 +438,7 @@ class ManagerEventControlsTest(unittest.TestCase):
 
     def test_empty_state_and_independent_touch_friendly_modes(self):
         self.open_manager()
+        expect(self.page.locator("#event-name, #event-description")).to_have_count(0)
         expect(self.page.locator("#publish-event")).to_be_disabled()
         expect(self.page.locator("#publish-guidance")).to_contain_text("请选择事件类型")
         self.assertEqual(self.page.locator("select[multiple]").count(), 0)
@@ -456,12 +456,13 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page.locator("#publish-event").click()
         expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
         body = self.posts[0]
+        self.assertEqual(body["name"], "测试路 · 临时施工")
+        self.assertEqual(body["description"], "")
         self.assertEqual(body["affected_modes"], ["walk"])
         start = datetime.fromisoformat(body["start_time"].replace("Z", "+00:00"))
         end = datetime.fromisoformat(body["end_time"].replace("Z", "+00:00"))
         self.assertAlmostEqual((end - start).total_seconds(), 1800, delta=1)
         self.assertLess(abs((datetime.now(timezone.utc) - start).total_seconds()), 10)
-        expect(self.page.locator("#event-name")).to_have_value("")
         expect(self.page.get_by_role("checkbox", name="步行", exact=True)).not_to_be_checked()
         expect(self.page.locator("#publish-event")).to_be_disabled()
 
@@ -573,16 +574,16 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.fail_posts = True
         self.page.locator("#publish-event").click()
         expect(self.page.locator("#form-message")).to_contain_text("发布失败")
-        expect(self.page.locator("#event-name")).to_have_value("测试路临时施工")
+        self.assertEqual(self.posts[0]["name"], "测试路 · 临时施工")
         expect(self.page.locator("#publish-event")).to_be_enabled()
         self.fail_posts = False
         self.hold_posts = True
         self.page.locator("#publish-event").click()
         expect(self.page.locator("#publish-event")).to_have_text("正在发布…")
-        self.page.locator("#event-name").dispatch_event("input")
         expect(self.page.locator("#publish-event")).to_be_disabled()
         self.page.locator("#condition-form").evaluate("form => form.requestSubmit()")
         self.assertEqual(len(self.posts), 2)
+        self.assertEqual(self.posts[1]["name"], self.posts[0]["name"])
         self.pending_posts.pop().fulfill(json={"data": {"id": "test-event"}})
         expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
 
@@ -784,7 +785,6 @@ class ManagerEventControlsTest(unittest.TestCase):
         expect(self.page.locator("#event-duration")).to_have_value("30")
         expect(self.page.locator("#event-ongoing-option")).to_have_js_property("disabled", True)
         self.page.locator("#event-type").select_option("event")
-        self.page.locator("#event-name").fill("测试路人流提示")
         self.page.locator("#event-action").select_option("notice")
         self.page.get_by_role("checkbox", name="步行", exact=True).check()
         self.page.locator("#manager-map").click(position={"x": 180, "y": 180})
@@ -796,6 +796,7 @@ class ManagerEventControlsTest(unittest.TestCase):
         self.page.locator("#publish-event").click()
         expect(self.page.locator("#form-message")).to_contain_text("事件已发布")
         body = self.posts[0]
+        self.assertEqual(body["name"], "测试路 · 活动或人流密集")
         self.assertEqual(body["source_vision_job_id"], self.vision_jobs[0]["job_id"])
         self.assertIsNone(body["source_vision_candidate_index"])
         self.assertIn("end_time", body)

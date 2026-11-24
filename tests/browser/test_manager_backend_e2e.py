@@ -75,7 +75,7 @@ def test_manager_publication_persists_and_user_route_avoids_closed_edge(tmp_path
             page.locator("#event-type").select_option("event")
             page.locator("#event-action").select_option("closure")
             page.locator("#event-mode-walk").check()
-            page.locator("#event-name").fill("本地浏览器联动封路验收")
+            expect(page.locator("#event-name, #event-description")).to_have_count(0)
             page.locator("#pick-road").click()
             map_element = page.locator("#manager-map")
             map_box = map_element.bounding_box()
@@ -128,7 +128,7 @@ def test_manager_publication_persists_and_user_route_avoids_closed_edge(tmp_path
             stored = road_conditions.list_conditions(include_inactive=True, strict=True)
             assert len(stored) == 1
             event = stored[0]
-            assert event["name"] == "本地浏览器联动封路验收"
+            assert event["name"] == f"{snapped_roads[-1]['road_name']} · 活动或人流密集"
             assert event["action"] == "closure"
             assert event["affected_modes"] == ["walk"]
 
